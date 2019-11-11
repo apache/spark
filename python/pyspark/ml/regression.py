@@ -2145,7 +2145,7 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>>
-    >>> fm = FMRegressor(numFactors=2, maxIter=1000)
+    >>> fm = FMRegressor(factorSize=2, maxIter=1000)
     >>> model = fm.fit(df)
     >>> test0 = spark.createDataFrame([
     ...     (Vectors.dense(-2.0),),
@@ -2165,7 +2165,7 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
     .. versionadded:: 3.0.0
     """
 
-    numFactors = Param(Params._dummy(), "numFactors", "Dimensionality of the factor vectors, " +
+    factorSize = Param(Params._dummy(), "factorSize", "Dimensionality of the factor vectors, " +
                        "which are used to get pairwise interactions between variables",
                        typeConverter=TypeConverters.toInt)
 
@@ -2190,19 +2190,19 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+                 factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                  tol=1e-6, solver="adamW"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                 factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                  tol=1e-6, solver="adamW")
         """
         super(FMRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.FMRegressor", self.uid)
-        self._setDefault(numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+        self._setDefault(factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                          miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                          tol=1e-6, solver="adamW")
         kwargs = self._input_kwargs
@@ -2211,12 +2211,12 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
     @keyword_only
     @since("3.0.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                   tol=1e-6, solver="adamW"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                   tol=1e-6, solver="adamW")
         Sets Params for FMRegressor.
@@ -2228,11 +2228,11 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
         return FMRegressorModel(java_model)
 
     @since("3.0.0")
-    def setNumFactors(self, value):
+    def setFactorSize(self, value):
         """
-        Sets the value of :py:attr:`numFactors`.
+        Sets the value of :py:attr:`factorSize`.
         """
-        return self._set(numFactors=value)
+        return self._set(factorSize=value)
 
     @since("3.0.0")
     def setFitBias(self, value):
@@ -2280,19 +2280,19 @@ class FMRegressorModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
 
     @property
     @since("3.0.0")
-    def linearVector(self):
+    def linear(self):
         """
         Model linear term.
         """
-        return self._call_java("linearVector")
+        return self._call_java("linear")
 
     @property
     @since("3.0.0")
-    def factorMatrix(self):
+    def factors(self):
         """
         Model factor term.
         """
-        return self._call_java("factorMatrix")
+        return self._call_java("factors")
 
 
 if __name__ == "__main__":

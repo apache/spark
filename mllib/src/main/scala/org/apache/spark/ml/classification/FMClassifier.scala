@@ -53,8 +53,8 @@ private[classification] trait FMClassifierParams extends ProbabilisticClassifier
  * (like advertising and recommendation system).
  * FM formula is:
  * {{{
- *   y = w_0 + \sum\limits^n_{i-1} w_i x_i +
- *     \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
+ *   y = \sigma\left( w_0 + \sum\limits^n_{i-1} w_i x_i +
+ *     \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j \right)
  * }}}
  * First two terms denote global bias and linear term (as same as linear regression),
  * and last term denotes pairwise interactions term. {{{v_i}}} describes the i-th variable
@@ -81,8 +81,8 @@ class FMClassifier @Since("3.0.0") (
    * @group setParam
    */
   @Since("3.0.0")
-  def setNumFactors(value: Int): this.type = set(numFactors, value)
-  setDefault(numFactors -> 8)
+  def setFactorSize(value: Int): this.type = set(factorSize, value)
+  setDefault(factorSize -> 8)
 
   /**
    * Set whether to fit global bias term.
@@ -166,7 +166,8 @@ class FMClassifier @Since("3.0.0") (
 
   /**
    * Set the solver algorithm used for optimization.
-   * Default is adamW.
+   * Supported options: "gd", "adamW".
+   * Default: "adamW"
    *
    * @group setParam
    */
@@ -194,21 +195,19 @@ class FMClassifier @Since("3.0.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, numFactors, fitBias, fitLinear, regParam,
+    instr.logParams(this, factorSize, fitBias, fitLinear, regParam,
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
     instr.logNumClasses(numClasses)
 
     val numFeatures = data.first()._2.size
     instr.logNumFeatures(numFeatures)
 
-    val coefficients = _train(data, numFeatures, LogisticLoss)
+    val coefficients = trainImpl(data, numFeatures, LogisticLoss)
 
-    val (bias, linearVector, factorMatrix) = splitCoefficients(
-      coefficients, numFeatures, $(numFactors), $(fitBias), $(fitLinear))
+    val (bias, linear, factors) = splitCoefficients(
+      coefficients, numFeatures, $(factorSize), $(fitBias), $(fitLinear))
 
-    val model = copyValues(new FMClassifierModel(uid,
-      bias, linearVector, factorMatrix, numFeatures, numClasses))
-    model
+    copyValues(new FMClassifierModel(uid, bias, linear, factors))
   }
 
   @Since("3.0.0")
@@ -226,21 +225,25 @@ object FMClassifier extends DefaultParamsReadable[FMClassifier] {
  * Model produced by [[FMClassifier]]
  */
 @Since("3.0.0")
-class FMClassifierModel (
+class FMClassifierModel private[classification] (
   @Since("3.0.0") override val uid: String,
   @Since("3.0.0") val bias: Double,
-  @Since("3.0.0") val linearVector: Vector,
-  @Since("3.0.0") val factorMatrix: Matrix,
-  @Since("3.0.0") override val numFeatures: Int,
-  @Since("3.0.0") override val numClasses: Int)
+  @Since("3.0.0") val linear: Vector,
+  @Since("3.0.0") val factors: Matrix)
   extends ProbabilisticClassificationModel[Vector, FMClassifierModel]
     with FMClassifierParams with MLWritable {
 
+  @Since("3.0.0")
+  override val numClasses: Int = 2
+
+  @Since("3.0.0")
+  override val numFeatures: Int = linear.size
+
   @transient private lazy val oldCoefficients: OldVector =
-    combineCoefficients(bias, linearVector, factorMatrix, $(fitBias), $(fitLinear))
+    combineCoefficients(bias, linear, factors, $(fitBias), $(fitLinear))
 
   @transient private lazy val gradient = parseLoss(
-    LogisticLoss, $(numFactors), $(fitBias), $(fitLinear), numFeatures)
+    LogisticLoss, $(factorSize), $(fitBias), $(fitLinear), numFeatures)
 
   override protected def predictRaw(features: Vector): Vector = {
     val rawPrediction: Double = gradient.getRawPrediction(features, oldCoefficients)
@@ -261,8 +264,7 @@ class FMClassifierModel (
 
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMClassifierModel = {
-    copyValues(new FMClassifierModel(
-      uid, bias, linearVector, factorMatrix, numFeatures, numClasses), extra)
+    copyValues(new FMClassifierModel(uid, bias, linear, factors), extra)
   }
 
   @Since("3.0.0")
@@ -272,7 +274,7 @@ class FMClassifierModel (
   override def toString: String = {
     s"FMClassifierModel: " +
       s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures, " +
-      s"numFactors = ${$(numFactors)}, fitLinear = ${$(fitLinear)}, fitBias = ${$(fitBias)}"
+      s"factorSize = ${$(factorSize)}, fitLinear = ${$(fitLinear)}, fitBias = ${$(fitBias)}"
   }
 }
 
@@ -290,16 +292,13 @@ object FMClassifierModel extends MLReadable[FMClassifierModel] {
     instance: FMClassifierModel) extends MLWriter with Logging {
 
     private case class Data(
-      numFeatures: Int,
-      numClasses: Int,
       bias: Double,
-      linearVector: Vector,
-      factorMatrix: Matrix)
+      linear: Vector,
+      factors: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.numFeatures, instance.numClasses,
-        instance.bias, instance.linearVector, instance.factorMatrix)
+      val data = Data(instance.bias, instance.linear, instance.factors)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -314,11 +313,9 @@ object FMClassifierModel extends MLReadable[FMClassifierModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val Row(numFeatures: Int, numClasses: Int,
-          bias: Double, linearVector: Vector, factorMatrix: Matrix) =
-        data.select("numFeatures", "numClasses", "bias", "linearVector", "factorMatrix").head()
-      val model = new FMClassifierModel(
-        metadata.uid, bias, linearVector, factorMatrix, numFeatures, numClasses)
+      val Row(bias: Double, linear: Vector, factors: Matrix) =
+        data.select("bias", "linear", "factors").head()
+      val model = new FMClassifierModel(metadata.uid, bias, linear, factors)
       metadata.getAndSetParams(model)
       model
     }

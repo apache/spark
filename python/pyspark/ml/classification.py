@@ -2378,7 +2378,7 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> fm = FMClassifier(numFactors=2)
+    >>> fm = FMClassifier(factorSize=2)
     >>> model = fm.fit(df)
     >>> test0 = spark.createDataFrame([
     ...     (Vectors.dense(-1.0),),
@@ -2398,7 +2398,7 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     .. versionadded:: 3.0.0
     """
 
-    numFactors = Param(Params._dummy(), "numFactors", "Dimensionality of the factor vectors, " +
+    factorSize = Param(Params._dummy(), "factorSize", "Dimensionality of the factor vectors, " +
                        "which are used to get pairwise interactions between variables",
                        typeConverter=TypeConverters.toInt)
 
@@ -2424,20 +2424,20 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
-                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+                 factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                  tol=1e-6, solver="adamW", thresholds=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                 factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                  tol=1e-6, solver="adamW", thresholds=None)
         """
         super(FMClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.FMClassifier", self.uid)
-        self._setDefault(numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+        self._setDefault(factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                          miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                          tol=1e-6, solver="adamW")
         kwargs = self._input_kwargs
@@ -2447,13 +2447,13 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     @since("3.0.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
-                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                   tol=1e-6, solver="adamW", thresholds=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                   tol=1e-6, solver="adamW", thresholds=None)
         Sets Params for FMClassifier.
@@ -2465,11 +2465,11 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
         return FMClassifierModel(java_model)
 
     @since("3.0.0")
-    def setNumFactors(self, value):
+    def setFactorSize(self, value):
         """
-        Sets the value of :py:attr:`numFactors`.
+        Sets the value of :py:attr:`factorSize`.
         """
-        return self._set(numFactors=value)
+        return self._set(factorSize=value)
 
     @since("3.0.0")
     def setFitBias(self, value):
@@ -2517,19 +2517,19 @@ class FMClassifierModel(JavaProbabilisticClassificationModel, JavaMLWritable, Ja
 
     @property
     @since("3.0.0")
-    def linearVector(self):
+    def linear(self):
         """
         Model linear term.
         """
-        return self._call_java("linearVector")
+        return self._call_java("linear")
 
     @property
     @since("3.0.0")
-    def factorMatrix(self):
+    def factors(self):
         """
         Model factor term.
         """
-        return self._call_java("factorMatrix")
+        return self._call_java("factors")
 
 
 if __name__ == "__main__":

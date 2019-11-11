@@ -41,7 +41,7 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("params") {
     ParamsSuite.checkParams(new FMClassifier)
     val model = new FMClassifierModel("fmc_test", 0.0, Vectors.dense(0.0),
-      new DenseMatrix(1, 8, new Array[Double](8)), 1, 2)
+      new DenseMatrix(1, 8, new Array[Double](8)))
     ParamsSuite.checkParams(model)
   }
 
@@ -105,8 +105,8 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
       model2: FMClassifierModel
     ): Unit = {
       assert(model.bias === model2.bias)
-      assert(model.linearVector.toArray === model2.linearVector.toArray)
-      assert(model.factorMatrix.toArray === model2.factorMatrix.toArray)
+      assert(model.linear.toArray === model2.linear.toArray)
+      assert(model.factors.toArray === model2.factors.toArray)
       assert(model.numFeatures === model2.numFeatures)
     }
     val fm = new FMClassifier()
@@ -131,7 +131,7 @@ object FMClassifierSuite {
     "predictionCol" -> "prediction",
     "rawPredictionCol" -> "rawPrediction",
     "probabilityCol" -> "probability",
-    "numFactors" -> 4,
+    "factorSize" -> 4,
     "fitBias" -> false,
     "fitLinear" -> false,
     "regParam" -> 0.01,

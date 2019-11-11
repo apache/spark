@@ -45,23 +45,23 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
   test("params") {
     ParamsSuite.checkParams(new FMRegressor)
     val model = new FMRegressorModel("fmr_test", 0.0, Vectors.dense(0.0),
-      new DenseMatrix(1, 8, new Array[Double](8)), 1)
+      new DenseMatrix(1, 8, new Array[Double](8)))
     ParamsSuite.checkParams(model)
   }
 
   test("factorization machines squaredError") {
     val numFeatures = 10
-    val numFactors = 4
+    val factorSize = 4
     val (data, coefficients) = generateFactorInteractionInput(
-      spark, numFactors, numFeatures, 1000, seed)
+      spark, factorSize, numFeatures, 1000, seed)
     val (b, w, v) = splitCoefficients(new DenseVector(coefficients),
-      numFeatures, numFactors, true, true)
+      numFeatures, factorSize, true, true)
 
     val fm = new FMRegressor()
       .setSolver("adamW")
       .setFeaturesCol("features")
       .setLabelCol("label")
-      .setNumFactors(numFactors)
+      .setFactorSize(factorSize)
       .setInitStd(0.01)
       .setMaxIter(1000)
       .setMiniBatchFraction(1.0)
@@ -80,15 +80,15 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
 
     // check coefficients
     assert(b ~== fmModel.bias absTol 1E-4)
-    assert(w ~== fmModel.linearVector absTol 1E-4)
+    assert(w ~== fmModel.linear absTol 1E-4)
     (0 until numFeatures).foreach { i =>
       ((i + 1) until numFeatures).foreach { j =>
         // assert <v_i, v_j> is same
         var innerProd1 = 0.0
         var innerProd2 = 0.0
-        (0 until numFactors).foreach { k =>
+        (0 until factorSize).foreach { k =>
           innerProd1 += v(i, k) * v(j, k)
-          innerProd2 += fmModel.factorMatrix(i, k) * fmModel.factorMatrix(j, k)
+          innerProd2 += fmModel.factors(i, k) * fmModel.factors(j, k)
         }
         assert(innerProd1 ~== innerProd2 absTol 1E-4)
       }
@@ -101,8 +101,8 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
       model2: FMRegressorModel
     ): Unit = {
       assert(model.bias === model2.bias)
-      assert(model.linearVector.toArray === model2.linearVector.toArray)
-      assert(model.factorMatrix.toArray === model2.factorMatrix.toArray)
+      assert(model.linear.toArray === model2.linear.toArray)
+      assert(model.factors.toArray === model2.factors.toArray)
       assert(model.numFeatures === model2.numFeatures)
     }
     val fm = new FMRegressor()
@@ -125,7 +125,7 @@ object FMRegressorSuite {
     "featuresCol" -> "myFeatures",
     "labelCol" -> "myLabel",
     "predictionCol" -> "prediction",
-    "numFactors" -> 2,
+    "factorSize" -> 2,
     "fitBias" -> false,
     "fitLinear" -> false,
     "regParam" -> 0.01,
@@ -139,7 +139,7 @@ object FMRegressorSuite {
 
   def generateFactorInteractionInput(
     spark: SparkSession,
-    numFactors: Int,
+    factorSize: Int,
     numFeatures: Int,
     numSamples: Int,
     seed: Int
@@ -148,10 +148,10 @@ object FMRegressorSuite {
     val sc = spark.sparkContext
 
     val rnd = new Random(seed)
-    val coefficientsSize = numFactors * numFeatures + numFeatures + 1
+    val coefficientsSize = factorSize * numFeatures + numFeatures + 1
     val coefficients = Array.fill(coefficientsSize)(rnd.nextDouble() - 0.5)
-    val (bias, linearVector, factorMatrix) = splitCoefficients(
-      Vectors.dense(coefficients), numFeatures, numFactors, true, true)
+    val (bias, linear, factors) = splitCoefficients(
+      Vectors.dense(coefficients), numFeatures, factorSize, true, true)
 
     val X: DataFrame = sc.parallelize(0 until numSamples).map { i =>
       val x = new DenseVector(Array.fill(numFeatures)(rnd.nextDouble() - 0.5))
@@ -159,8 +159,8 @@ object FMRegressorSuite {
     }.toDF("id", "features")
 
     val fmModel = new FMRegressorModel(
-      "fmr_test", bias, linearVector, factorMatrix, numFeatures)
-    fmModel.set(fmModel.numFactors, numFactors)
+      "fmr_test", bias, linear, factors)
+    fmModel.set(fmModel.factorSize, factorSize)
     fmModel.set(fmModel.fitBias, true)
     fmModel.set(fmModel.fitLinear, true)
     val data = fmModel.transform(X)
