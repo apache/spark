@@ -927,6 +927,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
 
+    ratings.persist()
     val sc = ratings.sparkContext
 
     // Precompute the rating dependencies of each partition
