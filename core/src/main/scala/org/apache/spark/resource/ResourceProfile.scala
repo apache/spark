@@ -141,7 +141,7 @@ private[spark] object ResourceProfile extends Logging {
   // executors
   case class ResourceProfileInternalConf(componentName: String,
       id: Int, resourceName: String) {
-    def confPrefix: String = s"$componentName.$id.${RESOURCE_DOT}$resourceName."
+    def confPrefix: String = s"$componentName.$id.$resourceName."
     def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
     def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
     def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
@@ -261,7 +261,7 @@ private[spark] object ResourceProfile extends Logging {
     val taskConfs = sparkConf.getAllWithPrefix(taskRpIdConfPrefix).toMap
     val taskResourceNames = listResourceNames(taskConfs)
     taskResourceNames.foreach { resource =>
-      val amount = taskConfs.get(s"${resource}.amount").get.toInt
+      val amount = taskConfs.get(s"${resource}.amount").get.toDouble
       rp.require(new TaskResourceRequest(resource, amount))
     }
     rp
