@@ -90,7 +90,7 @@ class GaussianMixtureModel private[ml] (
   with HasTrainingSummary[GaussianMixtureSummary] {
 
   @Since("3.0.0")
-  val numFeatures: Int = gaussians.head.mean.size
+  lazy val numFeatures: Int = gaussians.head.mean.size
 
   /** @group setParam */
   @Since("2.1.0")

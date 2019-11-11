@@ -162,7 +162,7 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
 
   @Since("3.0.0")
   override def toString: String = {
-    s"VectorSlicer: uid=$uid," +
+    s"VectorSlicer: uid=$uid" +
       get(indices).map(i => s", numSelectedFeatures=${i.length}").getOrElse("")
   }
 }

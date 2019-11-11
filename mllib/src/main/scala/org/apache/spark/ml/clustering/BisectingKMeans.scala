@@ -92,7 +92,7 @@ class BisectingKMeansModel private[ml] (
   with HasTrainingSummary[BisectingKMeansSummary] {
 
   @Since("3.0.0")
-  val numFeatures: Int = parentModel.clusterCenters.head.size
+  lazy val numFeatures: Int = parentModel.clusterCenters.head.size
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
