@@ -180,7 +180,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "window function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT percent_rank(a) filter (where b > 1) over () FROM TaBlE"),
-    "FILTER predicate specified, but percent_rank is not an aggregate funciton" :: Nil)
+    "FILTER predicate specified, but percent_rank is not an aggregate function" :: Nil)
 
   errorTest(
     "nested aggregate functions",
