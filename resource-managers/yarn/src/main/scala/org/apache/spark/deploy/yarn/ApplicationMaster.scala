@@ -781,14 +781,10 @@ private[spark] class ApplicationMaster(
         logWarning("in Request Executors: " + r)
         Option(allocator) match {
           case Some(a) =>
-            // temporary until we implement YARN allocator pieces, pass default
-            // profile number requested to allocator
-            val numRequest = r.resourceProfileToTotalExecs.getOrElse(defaultProfile, 0)
-            val numAware = r.numLocalityAwareTasksPerResourceProfileId.
-                getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, 0)
-            if (a.requestTotalExecutorsWithPreferredLocalities(numRequest,
-              numAware,
-              r.hostToLocalTaskCount(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
+            if (a.requestTotalExecutorsWithPreferredLocalities(
+              r.resourceProfileToTotalExecs,
+              r.numLocalityAwareTasksPerResourceProfileId,
+              r.hostToLocalTaskCount,
               r.nodeBlacklist)) {
               resetAllocatorInterval()
             }
