@@ -487,36 +487,6 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 }
 
-case class ExistsSubquery(child: Expression,
-                          subQuery: String,
-                          result: Boolean) extends UnaryExpression with Predicate {
-
-  override def toString: String = s"Exists ${subQuery}"
-
-  override def nullable: Boolean = child.nullable
-
-  protected override def nullSafeEval(value: Any): Any = {
-    true
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    genCodeWithSet(ctx, ev)
-  }
-
-  private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      val setTerm = ctx.addReferenceObj("result", result)
-      s"""
-         |${ev.value} = $setTerm;
-       """.stripMargin
-    })
-  }
-
-  override def sql: String = {
-    s"(EXISTS (${subQuery}))"
-  }
-}
-
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Logical AND.")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
