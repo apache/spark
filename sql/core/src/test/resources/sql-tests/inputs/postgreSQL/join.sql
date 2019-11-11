@@ -7,6 +7,7 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/join.sql
 --
 
+-- List of configuration the test suite is run against:
 --SET spark.sql.autoBroadcastJoinThreshold=10485760
 --SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
 --SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
