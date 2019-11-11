@@ -952,16 +952,12 @@ class Analyzer(
         case oldVersion @ Project(projectList, _)
             if hasConflict(projectList, conflictingAttributes) =>
           (oldVersion,
-            oldVersion.copy(
-              projectList =
-                newNamedExpression(projectList, conflictingAttributes)))
+            oldVersion.copy(projectList = newNamedExpression(projectList, conflictingAttributes)))
 
         case oldVersion @ Aggregate(_, aggregateExpressions, _)
             if hasConflict(aggregateExpressions, conflictingAttributes) =>
-          (oldVersion,
-            oldVersion.copy(
-              aggregateExpressions =
-                newNamedExpression(aggregateExpressions, conflictingAttributes)))
+          val newExprs = newNamedExpression(aggregateExpressions, conflictingAttributes)
+          (oldVersion, oldVersion.copy(aggregateExpressions = newExprs))
 
         case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
