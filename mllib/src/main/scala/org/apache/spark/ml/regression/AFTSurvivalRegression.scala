@@ -312,7 +312,7 @@ class AFTSurvivalRegressionModel private[ml] (
   extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with MLWritable {
 
   @Since("3.0.0")
-  val numFeatures: Int = coefficients.size
+  lazy val numFeatures: Int = coefficients.size
 
   /** @group setParam */
   @Since("1.6.0")
