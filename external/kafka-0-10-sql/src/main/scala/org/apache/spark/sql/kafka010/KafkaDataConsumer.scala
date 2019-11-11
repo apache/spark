@@ -628,6 +628,8 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
       val cacheKey = new CacheKey(topicPartition, kafkaParams)
 
+      logDebug(s"Task re-attempt detected, invalidating consumers with key $cacheKey")
+
       // If this is reattempt at running the task, then invalidate cached consumer if any.
       consumerPool.invalidateKey(cacheKey)
 

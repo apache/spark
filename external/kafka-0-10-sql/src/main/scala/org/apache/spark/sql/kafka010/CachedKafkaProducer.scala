@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord}
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
 import org.apache.spark.sql.kafka010.InternalKafkaProducerPool._
@@ -93,6 +93,10 @@ private[kafka010] object CachedKafkaProducer extends Logging {
         .setAuthenticationConfigIfNeeded()
         .build()
     val key = toCacheKey(updatedKafkaParams)
+    if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
+      logDebug(s"Task re-attempt detected, invalidating producers with key $key")
+      producerPool.invalidateKey(key)
+    }
     producerPool.borrowObject(key, updatedKafkaParams)
   }
 

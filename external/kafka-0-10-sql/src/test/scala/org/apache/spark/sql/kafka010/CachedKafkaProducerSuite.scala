@@ -97,6 +97,27 @@ class CachedKafkaProducerSuite extends SharedSparkSession with PrivateMethodTest
     assert(producerPool.size(toCacheKey(kafkaParams2)) === 1)
   }
 
+  test("acquire should return a new instance with Task retry") {
+    try {
+      val kafkaParams = getKafkaParams()
+
+      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+      TaskContext.setTaskContext(context1)
+      val producer1 = CachedKafkaProducer.acquire(kafkaParams)
+      CachedKafkaProducer.release(producer1)
+
+      val context2 = new TaskContextImpl(0, 0, 0, 0, 1, null, null, null)
+      TaskContext.setTaskContext(context2)
+      val producer2 = CachedKafkaProducer.acquire(kafkaParams)
+      CachedKafkaProducer.release(producer2)
+
+      assert(producer1 !== producer2)
+      assert(producerPool.size(toCacheKey(kafkaParams)) === 1)
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
   test("Concurrent use of CachedKafkaProducer") {
     val data = (1 to 1000).map(_.toString)
     testUtils.createTopic(topic, 1)
