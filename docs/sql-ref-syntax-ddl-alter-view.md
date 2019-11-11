@@ -20,19 +20,20 @@ license: |
 ---
 
 ### Description
+
 The `ALTER VIEW` statement can alter metadata associated with the view. It can change the definition of the view, change
 the name of a view to a different name, set and unset the metadata of the view by setting `TBLPROPERTIES`.
 
-#### Rename VIEW
-Renames the existing view. If the view name already exists in the source database, a TableAlreadyExistsException is thrown. This operation
-does not support moving the views cross databases.
+#### RENAME View
+Renames the existing view. If the new view name already exists in the source database, a `TableAlreadyExistsException` is thrown. This operation
+does not support moving the views across databases.
 
-##### Syntax
+#### Syntax
 {% highlight sql %}
 ALTER VIEW view_identifier RENAME TO view_identifier
 {% endhighlight %}
 
-##### Parameters
+#### Parameters
 <dl>
   <dt><code><em>view_identifier</em></code></dt>
   <dd>
@@ -44,18 +45,18 @@ ALTER VIEW view_identifier RENAME TO view_identifier
   </dd>
 </dl>
 
-#### Set VIEW Properties
+#### SET View Properties
 Set one or more properties of an existing view. The properties are the key value pairs. If the properties' keys exist, 
 the values are replaced with the new values. If the properties' keys do not exist, the key value pairs are added into
 the properties.
 
-##### Syntax
+#### Syntax
 {% highlight sql %}
 ALTER VIEW view_identifier SET TBLPROPERTIES
   (property_key=property_val [, ...])
 {% endhighlight %}
 
-##### Parameters
+#### Parameters
 <dl>
   <dt><code><em>view_identifier</em></code></dt>
   <dd>
@@ -75,17 +76,17 @@ ALTER VIEW view_identifier SET TBLPROPERTIES
   </dd>
 </dl>
 
-#### Drop VIEW properties
+#### UNSET View Properties
 Drop one or more properties of an existing view. If the specified keys do not exist, an exception is thrown. Use 
 `IF EXISTS` to avoid the exception. 
 
-##### Syntax
+#### Syntax
 {% highlight sql %}
 ALTER VIEW view_identifier UNSET TBLPROPERTIES [IF EXISTS]
   (property_key [, ...])
 {% endhighlight %}
 
-##### Parameters
+#### Parameters
 <dl>
   <dt><code><em>view_identifier</em></code></dt>
   <dd>
@@ -105,16 +106,16 @@ ALTER VIEW view_identifier UNSET TBLPROPERTIES [IF EXISTS]
   </dd>
 </dl>
 
-#### Alter VIEW As Select
+#### ALTER View AS SELECT
 `ALTER VIEW view_identifier AS SELECT` statement changes the definition of a view, the `SELECT` statement must be valid,
 and the `view_identifier` must exist.
 
-##### Syntax
+#### Syntax
 {% highlight sql %}
 ALTER VIEW view_identifier AS select_statement
 {% endhighlight %}
 
-##### Parameters
+#### Parameters
 <dl>
   <dt><code><em>view_identifier</em></code></dt>
   <dd>
@@ -130,11 +131,13 @@ ALTER VIEW view_identifier AS select_statement
   </dd>
 </dl>
 
-#### Examples
+### Examples
+
 {% highlight sql %}
 -- Rename only changes the view name.
--- The source and target databases of the view have to be the same, use qualified or unqualified name for the target view  
-ALTER VIEW tempdb1.v1 RENAME TO v2;
+-- The source and target databases of the view have to be the same.
+-- Use qualified or unqualified name for the source and target view  
+ALTER VIEW tempdb1.v1 RENAME TO tempdb1.v2;
 
 -- Verify that the new view is created.
 DESCRIBE TABLE EXTENDED tempdb1.v2;
@@ -185,7 +188,7 @@ DESC TABLE EXTENDED tempdb1.v2;
 +----------------------------+-----------------------------------------------------+-------+
 
 -- Use `DESC TABLE EXTENDED tempdb1.v2` before and after the `ALTER VIEW` to verify the change.
--- Remove the key created.by.user and created.date from TBLPROPERTIES
+-- Remove the key `created.by.user` and `created.date` from `TBLPROPERTIES`
 ALTER VIEW tempdb1.v2 UNSET TBLPROPERTIES ('created.by.user', 'created.date');
 
 --Use `DESC TABLE EXTENDED tempdb1.v2` to verify the changes
@@ -203,7 +206,7 @@ DESC TABLE EXTENDED tempdb1.v2;
 |Table Properties            |[....]    |       |
 +----------------------------+----------+-------+
 
--- Do the select on tempdb.view1 before and after the `ALTER VIEW` statement to verify.
+-- Use `DESC TABLE EXTENDED tempdb1.v2` before and after the `ALTER VIEW` statement to verify.
 -- Change the view definition
 ALTER VIEW tempdb1.v2 AS SELECT * FROM tempdb1.v1;
 
@@ -225,11 +228,13 @@ DESC TABLE EXTENDED tempdb1.v2;
 +----------------------------+---------------------------+-------+
 {% endhighlight %}
 
-#### Related Statements
+### Related Statements
+
 - [describe-table](sql-ref-syntax-aux-describe-table.html)
 - [create-view](sql-ref-syntax-ddl-create-view.html)
 - [drop-view](sql-ref-syntax-ddl-drop-view.html)
-- [select](sql-ref-syntax-qry-select.md)
-##### Note:
+
+#### Note:
+
 `ALTER VIEW` statement does not support `SET SERDE` or `SET SERDEPROPERTIES` properties
 
