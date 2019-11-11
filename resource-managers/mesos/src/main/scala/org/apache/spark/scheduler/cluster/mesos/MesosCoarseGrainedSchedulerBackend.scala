@@ -596,13 +596,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   private def satisfiesLocality(offerHostname: String): Boolean = {
-    if (!Utils.isDynamicAllocationEnabled(conf) || hostToLocalTaskCount.isEmpty) {
+    if (!Utils.isDynamicAllocationEnabled(conf) || rpHostToLocalTaskCount.isEmpty) {
       return true
     }
 
     // Check the locality information
     val currentHosts = slaves.values.filter(_.taskIDs.nonEmpty).map(_.hostname).toSet
-    val allDesiredHosts = hostToLocalTaskCount.map { case (k, v) => k._1 }.toSet
+    val allDesiredHosts = rpHostToLocalTaskCount.flatMap { case (k, v) => v.keys }.toSet
 
     // Try to match locality for hosts which do not have executors yet, to potentially
     // increase coverage.

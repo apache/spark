@@ -113,6 +113,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
       resourceInfo
     } else {
+      // TODO - seems like a lot to send these task confs and then only use it here as sanity test
+      // perhaps remove
       val taskResourceProf = getTaskRequirementsFromInternalConfs(env.conf, resourceProfileId)
       val resourceInfo = if (taskResourceProf.taskResources.nonEmpty) {
         val resources = getOrDiscoverAllResourcesForResourceProfile(resourceProfileId, env.conf,

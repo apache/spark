@@ -141,7 +141,7 @@ private[spark] object ResourceProfile extends Logging {
   // executors
   case class ResourceProfileInternalConf(componentName: String,
       id: Int, resourceName: String) {
-    def confPrefix: String = s"$componentName.$id.${RESOURCE_DOT}$resourceName."
+    def confPrefix: String = s"$componentName.$id.$resourceName."
     def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
     def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
     def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
@@ -231,7 +231,6 @@ private[spark] object ResourceProfile extends Logging {
     // executor resources
     rp.executorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
       val execIntConf = ResourceProfileInternalConf(SPARK_RP_EXEC_PREFIX, rp.id, name)
-
       res(execIntConf.amountConf) = req.amount.toString
       if (req.vendor.nonEmpty) res(execIntConf.vendorConf) = req.vendor
       if (req.discoveryScript.nonEmpty) res(execIntConf.discoveryScriptConf) = req.discoveryScript
@@ -261,8 +260,8 @@ private[spark] object ResourceProfile extends Logging {
     val taskConfs = sparkConf.getAllWithPrefix(taskRpIdConfPrefix).toMap
     val taskResourceNames = listResourceNames(taskConfs)
     taskResourceNames.foreach { resource =>
-      val amount = taskConfs.get(s"${resource}.amount").get.toInt
-      rp.require(new TaskResourceRequest(resource, amount))
+      val amount = taskConfs.get(s"${resource}.amount").get.toDouble
+      rp.require(new TaskResourceRequest(s"${RESOURCE_DOT}$resource", amount))
     }
     rp
   }
