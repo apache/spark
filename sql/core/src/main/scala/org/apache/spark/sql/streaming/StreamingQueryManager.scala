@@ -352,8 +352,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         }
       }
 
-      // Make sure no other query with same id is active
-      if (activeQueries.values.exists(_.id == query.id)) {
+      // Make sure no other query with same id is active across all sessions
+      val activeOption =
+        Option(sparkSession.sharedState.activeStreamingQueries.putIfAbsent(query.id, this))
+      if (activeOption.isDefined || activeQueries.values.exists(_.id == query.id)) {
         throw new IllegalStateException(
           s"Cannot start query with id ${query.id} as another query with same id is " +
             s"already active. Perhaps you are attempting to restart a query from checkpoint " +
@@ -370,9 +372,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       query.streamingQuery.start()
     } catch {
       case e: Throwable =>
-        activeQueriesLock.synchronized {
-          activeQueries -= query.id
-        }
+        unregisterTerminatedStream(query.id)
         throw e
     }
     query
@@ -380,9 +380,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   /** Notify (by the StreamingQuery) that the query has been terminated */
   private[sql] def notifyQueryTermination(terminatedQuery: StreamingQuery): Unit = {
-    activeQueriesLock.synchronized {
-      activeQueries -= terminatedQuery.id
-    }
+    unregisterTerminatedStream(terminatedQuery.id)
     awaitTerminationLock.synchronized {
       if (lastTerminatedQuery == null || terminatedQuery.exception.nonEmpty) {
         lastTerminatedQuery = terminatedQuery
@@ -390,5 +388,13 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       awaitTerminationLock.notifyAll()
     }
     stateStoreCoordinator.deactivateInstances(terminatedQuery.runId)
+  }
+
+  private def unregisterTerminatedStream(terminatedQueryId: UUID): Unit = {
+    activeQueriesLock.synchronized {
+      // remove from shared state only if the streaming query manager also matches
+      sparkSession.sharedState.activeStreamingQueries.remove(terminatedQueryId, this)
+      activeQueries -= terminatedQueryId
+    }
   }
 }

@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.MILLIS_PER_MONTH
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -27,7 +29,7 @@ object EventTimeWatermark {
   val delayKey = "spark.watermarkDelayMs"
 
   def getDelayMs(delay: CalendarInterval): Long = {
-    delay.milliseconds + delay.months * MILLIS_PER_MONTH
+    IntervalUtils.getDuration(delay, TimeUnit.MILLISECONDS)
   }
 }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.sql.{DriverManager, Statement, Timestamp}
+import java.sql.{DriverManager, SQLException, Statement, Timestamp}
 import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.{Random, Try}
@@ -28,7 +28,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{AnalysisException, SQLQueryTestSuite}
+import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
@@ -75,16 +75,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  override def sparkConf: SparkConf = super.sparkConf
-    // Hive Thrift server should not executes SQL queries in an asynchronous way
-    // because we may set session configuration.
-    .set(HiveUtils.HIVE_THRIFT_SERVER_ASYNC, false)
-
   override val isTestWithConfigSets = false
 
   /** List of test cases to ignore, in lower cases. */
-  override def blackList: Set[String] = Set(
-    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+  override def blackList: Set[String] = super.blackList ++ Set(
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",
@@ -123,7 +117,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
       // Run the SQL queries preparing them for comparison.
       val outputs: Seq[QueryOutput] = queries.map { sql =>
-        val output = getNormalizedResult(statement, sql)
+        val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
         // We might need to do some query canonicalization in the future.
         QueryOutput(
           sql = sql,
@@ -142,8 +136,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
             "Try regenerate the result files.")
         Seq.tabulate(outputs.size) { i =>
           val sql = segments(i * 3 + 1).trim
+          val schema = segments(i * 3 + 2).trim
           val originalOut = segments(i * 3 + 3)
-          val output = if (isNeedSort(sql)) {
+          val output = if (schema != emptySchema && isNeedSort(sql)) {
             originalOut.split("\n").sorted.mkString("\n")
           } else {
             originalOut
@@ -208,6 +203,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
               s"Exception did not match for query #$i\n${expected.sql}, " +
                 s"expected: ${expected.output}, but got: ${output.output}")
 
+          // SQLException should not exactly match. We only assert the result contains Exception.
+          case _ if output.output.startsWith(classOf[SQLException].getName) =>
+            assert(expected.output.contains("Exception"),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
           case _ =>
             assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
               output.output
@@ -254,32 +255,30 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  private def getNormalizedResult(statement: Statement, sql: String): Seq[String] = {
-    try {
-      val rs = statement.executeQuery(sql)
-      val cols = rs.getMetaData.getColumnCount
-      val buildStr = () => (for (i <- 1 to cols) yield {
-        getHiveResult(rs.getObject(i))
-      }).mkString("\t")
-
-      val answer = Iterator.continually(rs.next()).takeWhile(identity).map(_ => buildStr()).toSeq
-        .map(replaceNotIncludedMsg)
-      if (isNeedSort(sql)) {
-        answer.sorted
-      } else {
-        answer
+  /** ThriftServer wraps the root exception, so it needs to be extracted. */
+  override def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
+    super.handleExceptions {
+      try {
+        result
+      } catch {
+        case NonFatal(e) => throw ExceptionUtils.getRootCause(e)
       }
-    } catch {
-      case a: AnalysisException =>
-        // Do not output the logical plan tree which contains expression IDs.
-        // Also implement a crude way of masking expression IDs in the error message
-        // with a generic pattern "###".
-        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")).sorted
-      case NonFatal(e) =>
-        val rootCause = ExceptionUtils.getRootCause(e)
-        // If there is an exception, put the exception class followed by the message.
-        Seq(rootCause.getClass.getName, rootCause.getMessage)
+    }
+  }
+
+  private def getNormalizedResult(statement: Statement, sql: String): (String, Seq[String]) = {
+    val rs = statement.executeQuery(sql)
+    val cols = rs.getMetaData.getColumnCount
+    val buildStr = () => (for (i <- 1 to cols) yield {
+      getHiveResult(rs.getObject(i))
+    }).mkString("\t")
+
+    val answer = Iterator.continually(rs.next()).takeWhile(identity).map(_ => buildStr()).toSeq
+      .map(replaceNotIncludedMsg)
+    if (isNeedSort(sql)) {
+      ("", answer.sorted)
+    } else {
+      ("", answer)
     }
   }
 

@@ -48,7 +48,7 @@ to return the metadata pertaining to a partition or column respectively.
   <dt><code><em>partition_spec</em></code></dt>
   <dd>
     An optional parameter that specifies a comma separated list of key and value pairs
-    for paritions. When specified, additional partition metadata is returned.<br><br>
+    for partitions. When specified, additional partition metadata is returned.<br><br>
     <b>Syntax:</b>
       <code>
         PARTITION (partition_col_name  = partition_col_val [ , ... ])
@@ -56,7 +56,7 @@ to return the metadata pertaining to a partition or column respectively.
   </dd>  
   <dt><code><em>col_name</em></code></dt>
   <dd>
-    An optional paramter that specifies the column name that needs to be described.
+    An optional parameter that specifies the column name that needs to be described.
     The supplied column name may be optionally qualified. Parameters `partition_spec`
     and `col_name` are  mutually exclusive and can not be specified together. Currently
     nested columns are not allowed to be specified.<br><br>

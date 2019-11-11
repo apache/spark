@@ -290,15 +290,15 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val t2 = Timestamp.valueOf("2015-12-31 00:00:00")
     val d1 = Date.valueOf("2015-07-31")
     val d2 = Date.valueOf("2015-12-31")
-    val i = new CalendarInterval(2, 2000000L)
+    val i = new CalendarInterval(2, 2, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.selectExpr(s"d + $i"),
-      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2016-02-29"))))
+      df.selectExpr(s"d + INTERVAL'$i'"),
+      Seq(Row(Date.valueOf("2015-10-02")), Row(Date.valueOf("2016-03-02"))))
     checkAnswer(
-      df.selectExpr(s"t + $i"),
-      Seq(Row(Timestamp.valueOf("2015-10-01 00:00:01")),
-        Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
+      df.selectExpr(s"t + INTERVAL'$i'"),
+      Seq(Row(Timestamp.valueOf("2015-10-03 00:00:01")),
+        Row(Timestamp.valueOf("2016-03-02 00:00:02"))))
   }
 
   test("time_sub") {
@@ -306,15 +306,15 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
     val d1 = Date.valueOf("2015-09-30")
     val d2 = Date.valueOf("2016-02-29")
-    val i = new CalendarInterval(2, 2000000L)
+    val i = new CalendarInterval(2, 2, 2000000L)
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.selectExpr(s"d - $i"),
-      Seq(Row(Date.valueOf("2015-07-29")), Row(Date.valueOf("2015-12-28"))))
+      df.selectExpr(s"d - INTERVAL'$i'"),
+      Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-12-26"))))
     checkAnswer(
-      df.selectExpr(s"t - $i"),
-      Seq(Row(Timestamp.valueOf("2015-07-31 23:59:59")),
-        Row(Timestamp.valueOf("2015-12-29 00:00:00"))))
+      df.selectExpr(s"t - INTERVAL'$i'"),
+      Seq(Row(Timestamp.valueOf("2015-07-29 23:59:59")),
+        Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
   }
 
   test("function add_months") {
