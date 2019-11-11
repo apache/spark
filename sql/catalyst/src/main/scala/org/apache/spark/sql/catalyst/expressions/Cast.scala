@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.IntervalStyle
+import org.apache.spark.sql.internal.SQLConf.IntervalStyle._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -282,9 +282,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
-    case CalendarIntervalType if SQLConf.get.intervalOutputStyle == IntervalStyle.SQL_STANDARD =>
-      buildCast[CalendarInterval](_, i =>
+    case CalendarIntervalType => SQLConf.get.intervalOutputStyle match {
+      case SQL_STANDARD => buildCast[CalendarInterval](_, i =>
         UTF8String.fromString(IntervalUtils.toSqlStandardString(i)))
+      case ISO_8601 => buildCast[CalendarInterval](_, i =>
+        UTF8String.fromString(IntervalUtils.toIso8601String(i)))
+      case _ => buildCast[CalendarInterval](_, i =>
+        UTF8String.fromString(i.toString))
+    }
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
     case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType => buildCast[Long](_,

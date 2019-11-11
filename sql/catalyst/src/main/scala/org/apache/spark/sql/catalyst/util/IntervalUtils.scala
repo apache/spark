@@ -447,11 +447,11 @@ object IntervalUtils {
       sb.append(minutes)
       sb.append(':')
       rest %= MICROS_PER_MINUTE
-      val db = BigDecimal.valueOf(rest, 6)
-      if (db.compareTo(new BigDecimal(10)) < 0) {
+      val bd = BigDecimal.valueOf(rest, 6)
+      if (bd.compareTo(new BigDecimal(10)) < 0) {
         sb.append(0)
       }
-      val s = db.stripTrailingZeros().toPlainString
+      val s = bd.stripTrailingZeros().toPlainString
       sb.append(s)
       sb.toString()
     } else {
@@ -460,6 +460,35 @@ object IntervalUtils {
 
     val intervalList = Seq(yearMonthPart, dayPart, timePart).filter(_.nonEmpty)
     if (intervalList.nonEmpty) intervalList.mkString(" ") else "0"
+  }
+
+  def toIso8601String(interval: CalendarInterval): String = {
+    val sb = new StringBuilder("P")
+
+    val year = interval.months / 12
+    if (year != 0) sb.append(year + "Y")
+    val month = interval.months % 12
+    if (month != 0) sb.append(month + "M")
+
+    if (interval.days != 0) sb.append(interval.days + "D")
+
+    if (interval.microseconds != 0) {
+      sb.append('T')
+      var rest = interval.microseconds
+      val hour = rest / MICROS_PER_HOUR
+      if (hour != 0) sb.append(hour + "H")
+      rest %= MICROS_PER_HOUR
+      val minute = rest / MICROS_PER_MINUTE
+      if (minute != 0) sb.append(minute + "M")
+      rest %= MICROS_PER_MINUTE
+      if (rest != 0) {
+        val bd = BigDecimal.valueOf(rest, 6)
+        sb.append(bd.stripTrailingZeros().toPlainString + "S")
+      }
+    } else if (interval.days == 0 && interval.months == 0) {
+      sb.append("T0S")
+    }
+    sb.toString()
   }
 
   private object ParseState extends Enumeration {

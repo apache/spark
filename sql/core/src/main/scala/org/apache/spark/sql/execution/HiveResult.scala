@@ -24,7 +24,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.IntervalStyle
+import org.apache.spark.sql.internal.SQLConf.IntervalStyle._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -99,10 +99,12 @@ object HiveResult {
     case (null, _) => "null"
     case (s: String, StringType) => "\"" + s + "\""
     case (decimal, DecimalType()) => decimal.toString
-    case (interval: CalendarInterval, CalendarIntervalType)
-      if SQLConf.get.intervalOutputStyle == IntervalStyle.SQL_STANDARD =>
-      IntervalUtils.toSqlStandardString(interval)
-    case (interval, CalendarIntervalType) => interval.toString
+    case (interval: CalendarInterval, CalendarIntervalType) =>
+      SQLConf.get.intervalOutputStyle match {
+        case SQL_STANDARD => IntervalUtils.toSqlStandardString(interval)
+        case ISO_8601 => IntervalUtils.toIso8601String(interval)
+        case _ => interval.toString
+      }
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 
@@ -125,9 +127,12 @@ object HiveResult {
       DateTimeUtils.timestampToString(timestampFormatter, DateTimeUtils.fromJavaTimestamp(t))
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
-    case (interval: CalendarInterval, CalendarIntervalType)
-      if SQLConf.get.intervalOutputStyle == IntervalStyle.SQL_STANDARD =>
-      IntervalUtils.toSqlStandardString(interval)
+    case (interval: CalendarInterval, CalendarIntervalType) =>
+      SQLConf.get.intervalOutputStyle match {
+        case SQL_STANDARD => IntervalUtils.toSqlStandardString(interval)
+        case ISO_8601 => IntervalUtils.toIso8601String(interval)
+        case _ => interval.toString
+      }
     case (interval, CalendarIntervalType) => interval.toString
     case (other, _ : UserDefinedType[_]) => other.toString
     case (other, tpe) if primitiveTypes.contains(tpe) => other.toString

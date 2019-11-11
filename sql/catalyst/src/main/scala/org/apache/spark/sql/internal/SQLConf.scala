@@ -1774,13 +1774,14 @@ object SQLConf {
     .createWithDefault(false)
 
   object IntervalStyle extends Enumeration {
-    val SQL_STANDARD, MULTI_UNITS = Value
+    val SQL_STANDARD, ISO_8601, MULTI_UNITS = Value
   }
 
-  val INTERVAL_STYLE = buildConf("spark.sql.IntervalOutputStyle")
+  val INTERVAL_STYLE = buildConf("spark.sql.intervalOutputStyle")
     .doc("Display format for interval values. The value SQL_STANDARD will produce output" +
-      " matching SQL standard interval literals. The value MULTI_UNITS (which is the default)" +
-      " will produce output in form of value unit pairs, i.e. '3 year 2 months 10 days'")
+      " matching SQL standard interval literals. The value ISO_8601 will produce output matching" +
+      " the ISO 8601 standard. The value MULTI_UNITS (which is the default) will produce output" +
+      " in form of value unit pairs, i.e. '3 year 2 months 10 days'")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(IntervalStyle.values.map(_.toString))
