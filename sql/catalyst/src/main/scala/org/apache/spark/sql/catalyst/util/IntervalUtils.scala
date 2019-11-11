@@ -184,10 +184,10 @@ object IntervalUtils {
   }
 
   private val signRe = "(?<sign>[+|-])"
-  private val dayRe = "((?<day>\\d+)\\s+)"
-  private val hourRe = "(?<hour>\\d{1,2}+)"
-  private val minuteRe = "(?<minute>\\d{1,2}+)"
-  private val secondRe = "(?<second>(\\d{1,2}+)(\\.(\\d{1,9}+))?)"
+  private val dayRe = "(?<day>\\d+)"
+  private val hourRe = "(?<hour>\\d{1,2})"
+  private val minuteRe = "(?<minute>\\d{1,2})"
+  private val secondRe = "(?<second>(\\d{1,2})(\\.(\\d{1,9}))?)"
 
   private val dayTimePattern = Map(
     (MINUTE, SECOND) -> s"^$signRe?$minuteRe:$secondRe$$".r,
@@ -195,7 +195,7 @@ object IntervalUtils {
     (HOUR, SECOND) -> s"^$signRe?$hourRe:$minuteRe:$secondRe$$".r,
     (DAY, HOUR) -> s"^$signRe?$dayRe $hourRe$$".r,
     (DAY, MINUTE) -> s"^$signRe?$dayRe $hourRe:$minuteRe$$".r,
-    (DAY, SECOND) -> s"^$signRe?$dayRe $hourRe:$minuteRe$secondRe$$".r
+    (DAY, SECOND) -> s"^$signRe?$dayRe $hourRe:$minuteRe:$secondRe$$".r
   )
 
   private def unitsRange(start: IntervalUnit, end: IntervalUnit): Seq[IntervalUnit] = {

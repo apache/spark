@@ -266,4 +266,51 @@ class IntervalUtilsSuite extends SparkFunSuite {
         assert(e.getMessage.contains("divide by zero"))
     }
   }
+
+  test("strict parsing from day-time string to interval") {
+    def check(input: String, from: IntervalUnit, to: IntervalUnit, expected: String): Unit = {
+      withClue(s"from = $from, to = $to") {
+        assert(fromDayTimeString(input, from, to) === fromString(expected))
+      }
+    }
+    def checkFail(input: String, from: IntervalUnit, to: IntervalUnit): Unit = {
+      try {
+        fromDayTimeString(input, from, to)
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("must match day-time format"))
+      }
+    }
+
+    check("12:40", HOUR, MINUTE, "12 hours 40 minutes")
+    check("+12:40", HOUR, MINUTE, "12 hours 40 minutes")
+    check("-12:40", HOUR, MINUTE, "-12 hours -40 minutes")
+    checkFail("5 12:40", HOUR, MINUTE)
+
+    check("12:40:30.999999999", HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
+    check("+12:40:30.999999999", HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
+    check("-12:40:30.999999999", HOUR, SECOND, "-12 hours -40 minutes -30.999999 seconds")
+    checkFail("5 12:40:30", HOUR, SECOND)
+
+    check("40:30.999999999", MINUTE, SECOND, "40 minutes 30.999999 seconds")
+    check("+40:30.999999999", MINUTE, SECOND, "40 minutes 30.999999 seconds")
+    check("-40:30.999999999", MINUTE, SECOND, "-40 minutes -30.999999 seconds")
+    checkFail("12:40:30", MINUTE, SECOND)
+
+    check("5 12", DAY, HOUR, "5 days 12 hours")
+    check("+5 12", DAY, HOUR, "5 days 12 hours")
+    check("-5 12", DAY, HOUR, "-5 days -12 hours")
+    checkFail("5 12:30", DAY, HOUR)
+
+    check("5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
+    check("+5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
+    check("-5 12:40", DAY, MINUTE, "-5 days -12 hours -40 minutes")
+    checkFail("5 12", DAY, MINUTE)
+
+    check("5 12:40:30.999999999", DAY, SECOND, "5 days 12 hours 40 minutes 30.999999 seconds")
+    check("+5 12:40:30.999999999", DAY, SECOND, "5 days 12 hours 40 minutes 30.999999 seconds")
+    check("-5 12:40:30.999999999", DAY, SECOND, "-5 days -12 hours -40 minutes -30.999999 seconds")
+    checkFail("5 12", DAY, SECOND)
+  }
 }
