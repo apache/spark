@@ -1590,8 +1590,8 @@ class Analyzer(
                     failAnalysis(
                       s"DISTINCT specified, but ${wf.prettyName} is not an aggregate function")
                   } else if (filter.isDefined) {
-                    failAnalysis(
-                      s"FILTER predicate specified, but ${wf.prettyName} is not an aggregate function")
+                    failAnalysis("FILTER predicate specified, " +
+                      s"but ${wf.prettyName} is not an aggregate function")
                   } else {
                     wf
                   }
@@ -1604,8 +1604,8 @@ class Analyzer(
                     failAnalysis(
                       s"DISTINCT specified, but ${other.prettyName} is not an aggregate function")
                   } else if (filter.isDefined) {
-                    failAnalysis(
-                      s"FILTER predicate specified, but ${other.prettyName} is not an aggregate function")
+                    failAnalysis("FILTER predicate specified, " +
+                      s"but ${other.prettyName} is not an aggregate function")
                   } else {
                     other
                   }
