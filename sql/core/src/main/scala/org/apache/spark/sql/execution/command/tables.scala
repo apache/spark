@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
 import java.net.{URI, URISyntaxException}
-import java.nio.file.FileSystems
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -29,7 +27,7 @@ import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -57,15 +55,19 @@ import org.apache.spark.sql.util.SchemaUtils
  * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
  * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
  *
+ * Use "CREATE TABLE t1 LIKE t2 USING file_format"
+ * to specify new file format for t1 from a data source table t2.
+ *
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name [locationSpec]
+ *   LIKE [other_db_name.]existing_table_name [USING provider] [locationSpec]
  * }}}
  */
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
+    provider: Option[String],
     location: Option[String],
     ifNotExists: Boolean) extends RunnableCommand {
 
@@ -73,7 +75,14 @@ case class CreateTableLikeCommand(
     val catalog = sparkSession.sessionState.catalog
     val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
 
-    val newProvider = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+    val newProvider = if (provider.isDefined) {
+      if (!DDLUtils.isHiveTable(provider)) {
+        // check the validation of provider input, invalid provider will throw
+        // AnalysisException, ClassNotFoundException, or NoClassDefFoundError
+        DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
+      }
+      provider
+    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else {
       sourceTableDesc.provider
