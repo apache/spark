@@ -430,10 +430,10 @@ object IntervalUtils {
     val PREFIX,
         BEGIN_VALUE,
         PARSE_SIGN,
-        TRIM_VALUE,
+        TRIM_BEFORE_PARSE_VALUE,
         PARSE_UNIT_VALUE,
         FRACTIONAL_PART,
-        TRIM_UNIT,
+        TRIM_BEFORE_PARSE_UNIT,
         BEGIN_UNIT_NAME,
         UNIT_NAME_SUFFIX,
         END_UNIT_NAME = Value
@@ -512,8 +512,8 @@ object IntervalUtils {
           // Sets the scale to an invalid value to track fraction presence
           // in the BEGIN_UNIT_NAME state
           fractionScale = -1
-          state = TRIM_VALUE
-        case TRIM_VALUE => trimToNextState(b, PARSE_UNIT_VALUE)
+          state = TRIM_BEFORE_PARSE_VALUE
+        case TRIM_BEFORE_PARSE_VALUE => trimToNextState(b, PARSE_UNIT_VALUE)
         case PARSE_UNIT_VALUE =>
           b match {
             case _ if '0' <= b && b <= '9' =>
@@ -522,7 +522,7 @@ object IntervalUtils {
               } catch {
                 case _: ArithmeticException => return null
               }
-            case ' ' => state = TRIM_UNIT
+            case ' ' => state = TRIM_BEFORE_PARSE_UNIT
             case '.' =>
               fractionScale = (NANOS_PER_SECOND / 10).toInt
               state = FRACTIONAL_PART
@@ -536,11 +536,11 @@ object IntervalUtils {
               fractionScale /= 10
             case ' ' =>
               fraction /= NANOS_PER_MICROS.toInt
-              state = TRIM_UNIT
+              state = TRIM_BEFORE_PARSE_UNIT
             case _ => return null
           }
           i += 1
-        case TRIM_UNIT => trimToNextState(b, BEGIN_UNIT_NAME)
+        case TRIM_BEFORE_PARSE_UNIT => trimToNextState(b, BEGIN_UNIT_NAME)
         case BEGIN_UNIT_NAME =>
           // Checks that only seconds can have the fractional part
           if (b != 's' && fractionScale >= 0) {
