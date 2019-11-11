@@ -425,14 +425,18 @@ object IntervalUtils {
   }
 
   private object ParseState extends Enumeration {
+    type ParseState = Value
+
     val PREFIX,
-        BEGIN_VALUE,
-        PARSE_SIGN,
-        PARSE_UNIT_VALUE,
-        FRACTIONAL_PART,
-        BEGIN_UNIT_NAME,
-        UNIT_NAME_SUFFIX,
-        END_UNIT_NAME = Value
+        TRIM_BEFORE_SIGN,
+        SIGN,
+        TRIM_BEFORE_VALUE,
+        VALUE,
+        VALUE_FRACTIONAL_PART,
+        TRIM_BEFORE_UNIT,
+        UNIT_BEGIN,
+        UNIT_SUFFIX,
+        UNIT_END = Value
   }
   private final val intervalStr = UTF8String.fromString("interval ")
   private def unitToUtf8(unit: IntervalUnit): UTF8String = {
@@ -458,7 +462,7 @@ object IntervalUtils {
     val s = input.trim.toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
-    if (bytes.length == 0) {
+    if (bytes.isEmpty) {
       return null
     }
     var state = PREFIX
@@ -471,6 +475,13 @@ object IntervalUtils {
     var fractionScale: Int = 0
     var fraction: Int = 0
 
+    def trimToNextState(b: Byte, next: ParseState): Unit = {
+      b match {
+        case ' ' => i += 1
+        case _ => state = next
+      }
+    }
+
     while (i < bytes.length) {
       val b = bytes(i)
       state match {
@@ -482,13 +493,9 @@ object IntervalUtils {
               i += intervalStr.numBytes()
             }
           }
-          state = BEGIN_VALUE
-        case BEGIN_VALUE =>
-          b match {
-            case ' ' => i += 1
-            case _ => state = PARSE_SIGN
-          }
-        case PARSE_SIGN =>
+          state = TRIM_BEFORE_SIGN
+        case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
+        case SIGN =>
           b match {
             case '-' =>
               isNegative = true
@@ -505,8 +512,9 @@ object IntervalUtils {
           // Sets the scale to an invalid value to track fraction presence
           // in the BEGIN_UNIT_NAME state
           fractionScale = -1
-          state = PARSE_UNIT_VALUE
-        case PARSE_UNIT_VALUE =>
+          state = TRIM_BEFORE_VALUE
+        case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
+        case VALUE =>
           b match {
             case _ if '0' <= b && b <= '9' =>
               try {
@@ -514,102 +522,98 @@ object IntervalUtils {
               } catch {
                 case _: ArithmeticException => return null
               }
-            case ' ' =>
-              state = BEGIN_UNIT_NAME
+            case ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = (NANOS_PER_SECOND / 10).toInt
-              state = FRACTIONAL_PART
+              state = VALUE_FRACTIONAL_PART
             case _ => return null
           }
           i += 1
-        case FRACTIONAL_PART =>
+        case VALUE_FRACTIONAL_PART =>
           b match {
             case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
               fraction += (b - '0') * fractionScale
               fractionScale /= 10
             case ' ' =>
               fraction /= NANOS_PER_MICROS.toInt
-              state = BEGIN_UNIT_NAME
+              state = TRIM_BEFORE_UNIT
             case _ => return null
           }
           i += 1
-        case BEGIN_UNIT_NAME =>
-          if (b == ' ') {
-            i += 1
-          } else {
-            // Checks that only seconds can have the fractional part
-            if (b != 's' && fractionScale >= 0) {
-              return null
-            }
-            if (isNegative) {
-              currentValue = -currentValue
-              fraction = -fraction
-            }
-            try {
-              b match {
-                case 'y' if s.matchAt(yearStr, i) =>
-                  val monthsInYears = Math.multiplyExact(MONTHS_PER_YEAR, currentValue)
-                  months = Math.toIntExact(Math.addExact(months, monthsInYears))
-                  i += yearStr.numBytes()
-                case 'w' if s.matchAt(weekStr, i) =>
-                  val daysInWeeks = Math.multiplyExact(DAYS_PER_WEEK, currentValue)
-                  days = Math.toIntExact(Math.addExact(days, daysInWeeks))
-                  i += weekStr.numBytes()
-                case 'd' if s.matchAt(dayStr, i) =>
-                  days = Math.addExact(days, Math.toIntExact(currentValue))
-                  i += dayStr.numBytes()
-                case 'h' if s.matchAt(hourStr, i) =>
-                  val hoursUs = Math.multiplyExact(currentValue, MICROS_PER_HOUR)
-                  microseconds = Math.addExact(microseconds, hoursUs)
-                  i += hourStr.numBytes()
-                case 's' if s.matchAt(secondStr, i) =>
-                  val secondsUs = Math.multiplyExact(currentValue, MICROS_PER_SECOND)
-                  microseconds = Math.addExact(Math.addExact(microseconds, secondsUs), fraction)
-                  i += secondStr.numBytes()
-                case 'm' =>
-                  if (s.matchAt(monthStr, i)) {
-                    months = Math.addExact(months, Math.toIntExact(currentValue))
-                    i += monthStr.numBytes()
-                  } else if (s.matchAt(minuteStr, i)) {
-                    val minutesUs = Math.multiplyExact(currentValue, MICROS_PER_MINUTE)
-                    microseconds = Math.addExact(microseconds, minutesUs)
-                    i += minuteStr.numBytes()
-                  } else if (s.matchAt(millisStr, i)) {
-                    val millisUs = Math.multiplyExact(
-                      currentValue,
-                      MICROS_PER_MILLIS)
-                    microseconds = Math.addExact(microseconds, millisUs)
-                    i += millisStr.numBytes()
-                  } else if (s.matchAt(microsStr, i)) {
-                    microseconds = Math.addExact(microseconds, currentValue)
-                    i += microsStr.numBytes()
-                  } else return null
-                case _ => return null
-              }
-            } catch {
-              case _: ArithmeticException => return null
-            }
-            state = UNIT_NAME_SUFFIX
+        case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
+        case UNIT_BEGIN =>
+          // Checks that only seconds can have the fractional part
+          if (b != 's' && fractionScale >= 0) {
+            return null
           }
-        case UNIT_NAME_SUFFIX =>
+          if (isNegative) {
+            currentValue = -currentValue
+            fraction = -fraction
+          }
+          try {
+            b match {
+              case 'y' if s.matchAt(yearStr, i) =>
+                val monthsInYears = Math.multiplyExact(MONTHS_PER_YEAR, currentValue)
+                months = Math.toIntExact(Math.addExact(months, monthsInYears))
+                i += yearStr.numBytes()
+              case 'w' if s.matchAt(weekStr, i) =>
+                val daysInWeeks = Math.multiplyExact(DAYS_PER_WEEK, currentValue)
+                days = Math.toIntExact(Math.addExact(days, daysInWeeks))
+                i += weekStr.numBytes()
+              case 'd' if s.matchAt(dayStr, i) =>
+                days = Math.addExact(days, Math.toIntExact(currentValue))
+                i += dayStr.numBytes()
+              case 'h' if s.matchAt(hourStr, i) =>
+                val hoursUs = Math.multiplyExact(currentValue, MICROS_PER_HOUR)
+                microseconds = Math.addExact(microseconds, hoursUs)
+                i += hourStr.numBytes()
+              case 's' if s.matchAt(secondStr, i) =>
+                val secondsUs = Math.multiplyExact(currentValue, MICROS_PER_SECOND)
+                microseconds = Math.addExact(Math.addExact(microseconds, secondsUs), fraction)
+                i += secondStr.numBytes()
+              case 'm' =>
+                if (s.matchAt(monthStr, i)) {
+                  months = Math.addExact(months, Math.toIntExact(currentValue))
+                  i += monthStr.numBytes()
+                } else if (s.matchAt(minuteStr, i)) {
+                  val minutesUs = Math.multiplyExact(currentValue, MICROS_PER_MINUTE)
+                  microseconds = Math.addExact(microseconds, minutesUs)
+                  i += minuteStr.numBytes()
+                } else if (s.matchAt(millisStr, i)) {
+                  val millisUs = Math.multiplyExact(
+                    currentValue,
+                    MICROS_PER_MILLIS)
+                  microseconds = Math.addExact(microseconds, millisUs)
+                  i += millisStr.numBytes()
+                } else if (s.matchAt(microsStr, i)) {
+                  microseconds = Math.addExact(microseconds, currentValue)
+                  i += microsStr.numBytes()
+                } else return null
+              case _ => return null
+            }
+          } catch {
+            case _: ArithmeticException => return null
+          }
+          state = UNIT_SUFFIX
+        case UNIT_SUFFIX =>
           b match {
-            case 's' => state = END_UNIT_NAME
-            case ' ' => state = BEGIN_VALUE
+            case 's' => state = UNIT_END
+            case ' ' => state = TRIM_BEFORE_SIGN
             case _ => return null
           }
           i += 1
-        case END_UNIT_NAME =>
+        case UNIT_END =>
           b match {
             case ' ' =>
               i += 1
-              state = BEGIN_VALUE
+              state = TRIM_BEFORE_SIGN
             case _ => return null
           }
       }
     }
 
     val result = state match {
-      case UNIT_NAME_SUFFIX | END_UNIT_NAME | BEGIN_VALUE =>
+      case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
         new CalendarInterval(months, days, microseconds)
       case _ => null
     }

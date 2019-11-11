@@ -83,7 +83,8 @@ object IntervalBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 1000000
     val timeUnits = Seq(
-      "13 months", "100 weeks", "9 days", "12 hours",
+      "13 months", "                      1                     months",
+      "100 weeks", "9 days", "12 hours", "-                    3 hours",
       "5 minutes", "45 seconds", "123 milliseconds", "567 microseconds")
     val intervalToTest = ListBuffer[String]()
 
