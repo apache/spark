@@ -261,7 +261,7 @@ private[spark] object ResourceProfile extends Logging {
     val taskResourceNames = listResourceNames(taskConfs)
     taskResourceNames.foreach { resource =>
       val amount = taskConfs.get(s"${resource}.amount").get.toDouble
-      rp.require(new TaskResourceRequest(s"${RESOURCE_DOT}$resource", amount))
+      rp.require(new TaskResourceRequest(resource, amount))
     }
     rp
   }
