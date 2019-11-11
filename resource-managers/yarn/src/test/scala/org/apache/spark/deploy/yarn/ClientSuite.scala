@@ -477,7 +477,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     withTempDir { dir =>
       val conf = new SparkConf().set(SPARK_JARS, Seq(dir.getAbsolutePath + "/test"))
       val client = new Client(new ClientArguments(Array()), conf, null)
-      withTempDir{ distDir =>
+      withTempDir { distDir =>
         intercept[FileNotFoundException] {
           client.prepareLocalResources(new Path(distDir.getAbsolutePath), Nil)
         }
