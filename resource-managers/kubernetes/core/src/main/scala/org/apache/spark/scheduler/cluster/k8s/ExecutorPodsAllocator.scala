@@ -37,7 +37,7 @@ private[spark] class ExecutorPodsAllocator(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     clock: Clock) extends Logging {
 
-  private val EXIT_MAX_EXECUTOR_FAILURES = 10
+  private val EXIT_MAX_EXECUTOR_FAILURES = 11
 
   private val EXECUTOR_ID_COUNTER = new AtomicLong(0L)
 
@@ -55,7 +55,7 @@ private[spark] class ExecutorPodsAllocator(
       math.max(3, if (totalExpectedExecutors.get() > Int.MaxValue / 2) {
         Int.MaxValue
       } else {
-        (2 * totalExpectedExecutors.get())
+        2 * totalExpectedExecutors.get()
       })
     }
 
@@ -100,7 +100,6 @@ private[spark] class ExecutorPodsAllocator(
   private def onNewSnapshots(
       applicationId: String,
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = synchronized {
-
     newlyCreatedExecutors --= snapshots.flatMap(_.executorPods.keys)
     // For all executors we've created against the API but have not seen in a snapshot
     // yet - check the current time. If the current time has exceeded some threshold,
@@ -159,9 +158,9 @@ private[spark] class ExecutorPodsAllocator(
         s"${currentPendingExecutors.size} pending, " +
         s"${newlyCreatedExecutors.size} unacknowledged.")
 
-      val numExecutorFailed =
+      val numFailedExecutors =
         EXECUTOR_ID_COUNTER.get() - currentPendingExecutors.size - currentRunningCount
-      if (numExecutorFailed >= maxNumExecutorFailures) {
+      if (numFailedExecutors >= maxNumExecutorFailures) {
         logError(s"Max number of executor failures ($maxNumExecutorFailures) reached")
         System.exit(EXIT_MAX_EXECUTOR_FAILURES)
       }
