@@ -257,3 +257,69 @@ case class MakeInterval(
 
   override def prettyName: String = "make_interval"
 }
+
+abstract class IntervalJustifyLike(
+    child: Expression,
+    justify: CalendarInterval => CalendarInterval,
+    justifyType: String) extends UnaryExpression with ExpectsInputTypes {
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
+
+  override def dataType: DataType = CalendarIntervalType
+
+  override def nullSafeEval(input: Any): Any = {
+    try {
+      justify(input.asInstanceOf[CalendarInterval])
+    } catch {
+      case _: ArithmeticException => null
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, child => {
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      s"""
+         |try {
+         |  ${ev.value} = $iu.justify$justifyType($child);
+         |} catch (java.lang.ArithmeticException e) {
+         |  ${ev.isNull} = true;
+         |}
+         |""".stripMargin
+    })
+  }
+
+  override def prettyName: String = s"justify_${justifyType.toLowerCase(Locale.ROOT)}"
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Adjust interval so 30-day time periods are represented as months",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(cast('1 month -59 day 25 hour' as interval);
+       -29 days 25 hours
+  """,
+  since = "3.0.0")
+case class JustifyDays(child: Expression)
+  extends IntervalJustifyLike(child, justifyDays, "Days")
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Adjust interval so 24-hour time periods are represented as days",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(cast(''1 month -59 day 25 hour' as interval);
+       1 months -57 days -23 hours
+  """,
+  since = "3.0.0")
+case class JustifyHours(child: Expression)
+  extends IntervalJustifyLike(child, justifyHours, "Hours")
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Adjust interval using justifyHours and justifyDays, with additional" +
+    " sign adjustments",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(cast('1 month -59 day 25 hour' as interval);
+       -27 days -23 hours
+  """,
+  since = "3.0.0")
+case class JustifyInterval(child: Expression)
+  extends IntervalJustifyLike(child, justifyInterval, "Interval")

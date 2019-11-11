@@ -65,3 +65,17 @@ select make_interval(1, 2, 3, 4);
 select make_interval(1, 2, 3, 4, 5);
 select make_interval(1, 2, 3, 4, 5, 6);
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
+
+-- justify intervals
+select justify_days(cast(null as interval));
+select justify_hours(cast(null as interval));
+select justify_interval(cast(null as interval));
+select justify_days(cast('1 month 59 day 25 hour' as interval));
+select justify_hours(cast('1 month 59 day 25 hour' as interval));
+select justify_interval(cast('1 month 59 day 25 hour' as interval));
+select justify_days(cast('1 month -59 day 25 hour' as interval));
+select justify_hours(cast('1 month -59 day 25 hour' as interval));
+select justify_interval(cast('1 month -59 day 25 hour' as interval));
+select justify_days(cast('1 month 59 day -25 hour' as interval));
+select justify_hours(cast('1 month 59 day -25 hour' as interval));
+select justify_interval(cast('1 month 59 day -25 hour' as interval));
