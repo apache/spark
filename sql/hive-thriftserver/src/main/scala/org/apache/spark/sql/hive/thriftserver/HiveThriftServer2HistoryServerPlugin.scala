@@ -31,7 +31,7 @@ class HiveThriftServer2HistoryServerPlugin extends AppHistoryServerPlugin {
 
   override def setupUI(ui: SparkUI): Unit = {
     val store = new HiveThriftServer2AppStatusStore(ui.store.store)
-    if (store.getSessionCount() > 0) {
+    if (store.getSessionCount > 0) {
       new ThriftServerTab(store, ui)
     }
   }
