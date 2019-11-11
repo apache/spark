@@ -251,8 +251,8 @@ object IntervalUtils {
     var months: Int = 0
     var days: Int = 0
     var us: Long = 0L
-    var array = """-\s+""".r.replaceAllIn(str.stripPrefix("interval "), "-")
-      .toLowerCase(Locale.ROOT)
+    val unitValuePart = str.trim.stripPrefix("interval ").trim
+    var array = "-\\s+".r.replaceAllIn(unitValuePart, "-").toLowerCase(Locale.ROOT)
       .split("\\s+").filter(_ != "+").toList
     require(array.nonEmpty && array.length % 2 == 0,
       "Interval string should be value and unit pairs")
