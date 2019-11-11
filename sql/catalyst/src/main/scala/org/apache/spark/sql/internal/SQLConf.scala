@@ -1794,7 +1794,7 @@ object SQLConf {
         "reading unnecessary nested column data. Currently Parquet and ORC are the " +
         "data sources that implement this optimization.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
@@ -1803,7 +1803,7 @@ object SQLConf {
         "satisfying a query. This optimization allows object serializers to avoid " +
         "executing unnecessary nested expressions.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val NESTED_PRUNING_ON_EXPRESSIONS =
     buildConf("spark.sql.optimizer.expression.nestedPruning.enabled")
@@ -1813,7 +1813,7 @@ object SQLConf {
         "physical data source scanning. For pruning nested fields from scanning, please use " +
         "`spark.sql.optimizer.nestedSchemaPruning.enabled` config.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
