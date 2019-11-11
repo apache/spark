@@ -150,7 +150,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
 
   // Name of the function for the exact version of this expression in [[Math]].
-  // If the option "spark.sql.ansi.enabled" is enabled and there is corresponding
+  // If the option "spark.sql.dialect.ansi.enabled" is enabled and there is corresponding
   // function in [[Math]], the exact function will be called instead of evaluation with [[symbol]].
   def exactMathMethod: Option[String] = None
 

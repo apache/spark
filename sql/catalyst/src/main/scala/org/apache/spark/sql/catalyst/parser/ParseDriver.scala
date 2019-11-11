@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.DIALECT_SPARK_ANSI_ENABLED
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -102,7 +101,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.ansi = conf.getConf(DIALECT_SPARK_ANSI_ENABLED)
+    lexer.ansi = conf.dialectSparkAnsiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -110,7 +109,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    parser.ansi = conf.getConf(DIALECT_SPARK_ANSI_ENABLED)
+    parser.ansi = conf.dialectSparkAnsiEnabled
 
     try {
       try {

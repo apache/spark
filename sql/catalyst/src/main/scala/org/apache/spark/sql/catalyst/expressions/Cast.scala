@@ -592,7 +592,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
    * Change the precision / scale in a given decimal to those set in `decimalType` (if any),
    * modifying `value` in-place and returning it if successful. If an overflow occurs, it
    * either returns null or throws an exception according to the value set for
-   * `spark.sql.ansi.enabled`.
+   * `spark.sql.dialect.ansi.enabled`.
    *
    * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
@@ -611,7 +611,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   /**
    * Create new `Decimal` with precision and scale given in `decimalType` (if any).
-   * If overflow occurs, if `spark.sql.ansi.enabled` is false, null is returned;
+   * If overflow occurs, if `spark.sql.dialect.ansi.enabled` is false, null is returned;
    * otherwise, an `ArithmeticException` is thrown.
    */
   private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =

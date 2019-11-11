@@ -3,6 +3,17 @@
 
 
 -- !query 0
+<<<<<<< HEAD
+=======
+SET spark.sql.dialect.ansi.enabled=true
+-- !query 0 schema
+struct<key:string,value:string>
+-- !query 0 output
+spark.sql.dialect.ansi.enabled	true
+
+
+-- !query 1
+>>>>>>> Address comments
 select
   '1' second,
   2  seconds,
