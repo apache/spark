@@ -428,7 +428,7 @@ object IntervalUtils {
     type ParseState = Value
 
     val PREFIX,
-        NEXT_VALUE_UNIT,
+        TRIM_BEFORE_SIGN,
         SIGN,
         TRIM_BEFORE_VALUE,
         VALUE,
@@ -493,8 +493,8 @@ object IntervalUtils {
               i += intervalStr.numBytes()
             }
           }
-          state = NEXT_VALUE_UNIT
-        case NEXT_VALUE_UNIT => trimToNextState(b, SIGN)
+          state = TRIM_BEFORE_SIGN
+        case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
         case SIGN =>
           b match {
             case '-' =>
@@ -598,7 +598,7 @@ object IntervalUtils {
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
-            case ' ' => state = NEXT_VALUE_UNIT
+            case ' ' => state = TRIM_BEFORE_SIGN
             case _ => return null
           }
           i += 1
@@ -606,14 +606,14 @@ object IntervalUtils {
           b match {
             case ' ' =>
               i += 1
-              state = NEXT_VALUE_UNIT
+              state = TRIM_BEFORE_SIGN
             case _ => return null
           }
       }
     }
 
     val result = state match {
-      case UNIT_SUFFIX | UNIT_END | NEXT_VALUE_UNIT =>
+      case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
         new CalendarInterval(months, days, microseconds)
       case _ => null
     }
