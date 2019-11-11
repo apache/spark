@@ -41,6 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class SQLQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -1556,7 +1557,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     import org.apache.spark.unsafe.types.CalendarInterval
 
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
+    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123 )))
     withTempPath(f => {
       // Currently we don't yet support saving out values of interval data type.
       val e = intercept[AnalysisException] {
@@ -1564,35 +1565,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       }
       e.message.contains("Cannot save interval data type into external storage")
     })
-
-    val e1 = intercept[AnalysisException] {
-      sql("select interval")
-    }
-    assert(e1.message.contains("at least one time unit should be given for interval literal"))
-
-    // Currently we don't yet support nanosecond
-    val e2 = intercept[AnalysisException] {
-      sql("select interval 23 nanosecond")
-    }
-    assert(e2.message.contains("no viable alternative at input 'interval 23 nanosecond'"))
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
-    import org.apache.spark.unsafe.types.CalendarInterval
-    import org.apache.spark.unsafe.types.CalendarInterval.MICROS_PER_WEEK
-
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * MICROS_PER_WEEK + 123)))
+    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
 
-    checkAnswer(df.select(df("i") + new CalendarInterval(2, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 + 2, 7L * MICROS_PER_WEEK + 123 + 123)))
+    checkAnswer(df.select(df("i") + new CalendarInterval(2, 1, 123)),
+      Row(new CalendarInterval(12 * 3 - 3 + 2, 7 * 7 + 1, 123 + 123)))
 
-    checkAnswer(df.select(df("i") - new CalendarInterval(2, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 - 2, 7L * MICROS_PER_WEEK + 123 - 123)))
+    checkAnswer(df.select(df("i") - new CalendarInterval(2, 1, 123)),
+      Row(new CalendarInterval(12 * 3 - 3 - 2, 7 * 7 - 1, 123 - 123)))
 
     // unary minus
     checkAnswer(df.select(-df("i")),
-      Row(new CalendarInterval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
+      Row(new CalendarInterval(-(12 * 3 - 3), -7 * 7, -123)))
   }
 
   test("aggregation with codegen updates peak execution memory") {

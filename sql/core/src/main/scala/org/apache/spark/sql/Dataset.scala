@@ -51,7 +51,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
@@ -732,7 +732,7 @@ class Dataset[T] private[sql](
             s"Unable to parse time delay '$delayThreshold'",
             cause = Some(e))
       }
-    require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
+    require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
       EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
@@ -3218,7 +3218,7 @@ class Dataset[T] private[sql](
         fr.inputFiles
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
-      case DataSourceV2Relation(table: FileTable, _, _) =>
+      case DataSourceV2ScanRelation(table: FileTable, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray

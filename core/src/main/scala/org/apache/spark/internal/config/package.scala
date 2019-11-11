@@ -615,6 +615,12 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val METRICS_STATIC_SOURCES_ENABLED =
+    ConfigBuilder("spark.metrics.static.sources.enabled")
+      .doc("Whether to register static sources with the metrics system.")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
     .stringConf
     .createOptional
@@ -1158,6 +1164,17 @@ package object config {
       .checkValue(v => 1024 * 1024 <= v && v <= MAX_BUFFER_SIZE_BYTES,
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
       .createWithDefault(1024 * 1024)
+
+  private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
+
+  private[spark] val PLUGINS =
+    ConfigBuilder("spark.plugins")
+      .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
+      .doc("Comma-separated list of class names implementing " +
+        "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[spark] val EXECUTOR_PLUGINS =
     ConfigBuilder("spark.executor.plugins")

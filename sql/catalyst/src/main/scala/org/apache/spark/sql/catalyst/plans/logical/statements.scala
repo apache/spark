@@ -179,6 +179,7 @@ case class AlterTableUnsetPropertiesStatement(
  */
 case class AlterTableSetLocationStatement(
     tableName: Seq[String],
+    partitionSpec: Option[TablePartitionSpec],
     location: String) extends ParsedStatement
 
 /**
@@ -186,6 +187,41 @@ case class AlterTableSetLocationStatement(
  */
 case class AlterTableRecoverPartitionsStatement(
     tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... ADD PARTITION command, as parsed from SQL
+ */
+case class AlterTableAddPartitionStatement(
+    tableName: Seq[String],
+    partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
+    ifNotExists: Boolean) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... RENAME PARTITION command, as parsed from SQL.
+ */
+case class AlterTableRenamePartitionStatement(
+    tableName: Seq[String],
+    from: TablePartitionSpec,
+    to: TablePartitionSpec) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... DROP PARTITION command, as parsed from SQL
+ */
+case class AlterTableDropPartitionStatement(
+    tableName: Seq[String],
+    specs: Seq[TablePartitionSpec],
+    ifExists: Boolean,
+    purge: Boolean,
+    retainData: Boolean) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... SERDEPROPERTIES command, as parsed from SQL
+ */
+case class AlterTableSerDePropertiesStatement(
+    tableName: Seq[String],
+    serdeClassName: Option[String],
+    serdeProperties: Option[Map[String, String]],
+    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
  * ALTER VIEW ... SET TBLPROPERTIES command, as parsed from SQL.
@@ -202,6 +238,13 @@ case class AlterViewUnsetPropertiesStatement(
     propertyKeys: Seq[String],
     ifExists: Boolean) extends ParsedStatement
 
+/**
+ * ALTER VIEW ... Query command, as parsed from SQL.
+ */
+case class AlterViewAsStatement(
+    viewName: Seq[String],
+    originalText: String,
+    query: LogicalPlan) extends ParsedStatement
 
 /**
  * A DROP TABLE statement, as parsed from SQL.
@@ -393,3 +436,15 @@ case class ShowPartitionsStatement(
  * A REFRESH TABLE statement, as parsed from SQL
  */
 case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * A SHOW COLUMNS statement, as parsed from SQL
+ */
+case class ShowColumnsStatement(
+    table: Seq[String],
+    namespace: Option[Seq[String]]) extends ParsedStatement
+
+/**
+ * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
+ */
+case class ShowCurrentNamespaceStatement() extends ParsedStatement

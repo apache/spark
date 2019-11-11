@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -102,20 +103,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   override def visitSingleInterval(ctx: SingleIntervalContext): CalendarInterval = {
-    withOrigin(ctx) {
-      val units = ctx.intervalUnit().asScala.map {
-        u => normalizeInternalUnit(u.getText.toLowerCase(Locale.ROOT))
-      }.toArray
-      val values = ctx.intervalValue().asScala.map(getIntervalValue).toArray
-      try {
-        IntervalUtils.fromUnitStrings(units, values)
-      } catch {
-        case i: IllegalArgumentException =>
-          val e = new ParseException(i.getMessage, ctx)
-          e.setStackTrace(i.getStackTrace)
-          throw e
-      }
-    }
+    withOrigin(ctx)(visitMultiUnitsInterval(ctx.multiUnitsInterval))
   }
 
   /* ********************************************************************************************
@@ -354,21 +342,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
   }
 
-  override def visitDeleteFromTable(
-      ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
-
-    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val tableAlias = if (ctx.tableAlias() != null) {
-      val ident = ctx.tableAlias().strictIdentifier()
-      // We do not allow columns aliases after table alias.
-      if (ctx.tableAlias().identifierList() != null) {
-        throw new ParseException("Columns aliases is not allowed in DELETE.",
-          ctx.tableAlias().identifierList())
+  private def getTableAliasWithoutColumnAlias(
+      ctx: TableAliasContext, op: String): Option[String] = {
+    if (ctx == null) {
+      None
+    } else {
+      val ident = ctx.strictIdentifier()
+      if (ctx.identifierList() != null) {
+        throw new ParseException(s"Columns aliases are not allowed in $op.", ctx.identifierList())
       }
       if (ident != null) Some(ident.getText) else None
-    } else {
-      None
     }
+  }
+
+  override def visitDeleteFromTable(
+      ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
+    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
     val predicate = if (ctx.whereClause() != null) {
       Some(expression(ctx.whereClause().booleanExpression()))
     } else {
@@ -380,18 +370,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val tableAlias = if (ctx.tableAlias() != null) {
-      val ident = ctx.tableAlias().strictIdentifier()
-      // We do not allow columns aliases after table alias.
-      if (ctx.tableAlias().identifierList() != null) {
-        throw new ParseException("Columns aliases is not allowed in UPDATE.",
-          ctx.tableAlias().identifierList())
-      }
-      if (ident != null) Some(ident.getText) else None
-    } else {
-      None
-    }
-    val (attrs, values) = ctx.setClause().assign().asScala.map {
+    val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
+    val (attrs, values) = ctx.setClause().assignmentList().assignment().asScala.map {
       kv => visitMultipartIdentifier(kv.key) -> expression(kv.value)
     }.unzip
     val predicate = if (ctx.whereClause() != null) {
@@ -406,6 +386,95 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       attrs,
       values,
       predicate)
+  }
+
+  private def withAssignments(assignCtx: SqlBaseParser.AssignmentListContext): Seq[Assignment] =
+    withOrigin(assignCtx) {
+      assignCtx.assignment().asScala.map { assign =>
+        Assignment(UnresolvedAttribute(visitMultipartIdentifier(assign.key)),
+          expression(assign.value))
+      }
+    }
+
+  override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
+    val targetTable = UnresolvedRelation(visitMultipartIdentifier(ctx.target))
+    val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
+    val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
+
+    val sourceTableOrQuery = if (ctx.source != null) {
+      UnresolvedRelation(visitMultipartIdentifier(ctx.source))
+    } else if (ctx.sourceQuery != null) {
+      visitQuery(ctx.sourceQuery)
+    } else {
+      throw new ParseException("Empty source for merge: you should specify a source" +
+          " table/subquery in merge.", ctx.source)
+    }
+    val sourceTableAlias = getTableAliasWithoutColumnAlias(ctx.sourceAlias, "MERGE")
+    val aliasedSource =
+      sourceTableAlias.map(SubqueryAlias(_, sourceTableOrQuery)).getOrElse(sourceTableOrQuery)
+
+    val mergeCondition = expression(ctx.mergeCondition)
+
+    val matchedClauses = ctx.matchedClause()
+    if (matchedClauses.size() > 2) {
+      throw new ParseException("There should be at most 2 'WHEN MATCHED' clauses.",
+        matchedClauses.get(2))
+    }
+    val matchedActions = matchedClauses.asScala.map {
+      clause => {
+        if (clause.matchedAction().DELETE() != null) {
+          DeleteAction(Option(clause.matchedCond).map(expression))
+        } else if (clause.matchedAction().UPDATE() != null) {
+          val condition = Option(clause.matchedCond).map(expression)
+          if (clause.matchedAction().ASTERISK() != null) {
+            UpdateAction(condition, Seq())
+          } else {
+            UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
+          }
+        } else {
+          // It should not be here.
+          throw new ParseException(
+            s"Unrecognized matched action: ${clause.matchedAction().getText}",
+            clause.matchedAction())
+        }
+      }
+    }
+    val notMatchedClauses = ctx.notMatchedClause()
+    if (notMatchedClauses.size() > 1) {
+      throw new ParseException("There should be at most 1 'WHEN NOT MATCHED' clause.",
+        notMatchedClauses.get(1))
+    }
+    val notMatchedActions = notMatchedClauses.asScala.map {
+      clause => {
+        if (clause.notMatchedAction().INSERT() != null) {
+          val condition = Option(clause.notMatchedCond).map(expression)
+          if (clause.notMatchedAction().ASTERISK() != null) {
+            InsertAction(condition, Seq())
+          } else {
+            val columns = clause.notMatchedAction().columns.multipartIdentifier()
+                .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
+            val values = clause.notMatchedAction().expression().asScala.map(expression)
+            if (columns.size != values.size) {
+              throw new ParseException("The number of inserted values cannot match the fields.",
+                clause.notMatchedAction())
+            }
+            InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)))
+          }
+        } else {
+          // It should not be here.
+          throw new ParseException(
+            s"Unrecognized not matched action: ${clause.notMatchedAction().getText}",
+            clause.notMatchedAction())
+        }
+      }
+    }
+
+    MergeIntoTable(
+      aliasedTarget,
+      aliasedSource,
+      mergeCondition,
+      matchedActions,
+      notMatchedActions)
   }
 
   /**
@@ -1544,14 +1613,31 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+
+  /**
+   * Create a function database (optional) and name pair, for multipartIdentifier.
+   * This is used in CREATE FUNCTION, DROP FUNCTION, SHOWFUNCTIONS.
+   */
+  protected def visitFunctionName(ctx: MultipartIdentifierContext): FunctionIdentifier = {
+    visitFunctionName(ctx, ctx.parts.asScala.map(_.getText))
+  }
+
   /**
    * Create a function database (optional) and name pair.
    */
   protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
-    ctx.identifier().asScala.map(_.getText) match {
+    visitFunctionName(ctx, ctx.identifier().asScala.map(_.getText))
+  }
+
+  /**
+   * Create a function database (optional) and name pair.
+   */
+  private def visitFunctionName(ctx: ParserRuleContext, texts: Seq[String]): FunctionIdentifier = {
+    texts match {
       case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
       case Seq(fn) => FunctionIdentifier(fn, None)
-      case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
+      case other =>
+        throw new ParseException(s"Unsupported function name '${texts.mkString(".")}'", ctx)
     }
   }
 
@@ -1559,7 +1645,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create an [[LambdaFunction]].
    */
   override def visitLambda(ctx: LambdaContext): Expression = withOrigin(ctx) {
-    val arguments = ctx.IDENTIFIER().asScala.map { name =>
+    val arguments = ctx.identifier().asScala.map { name =>
       UnresolvedNamedLambdaVariable(UnresolvedAttribute.quoted(name.getText).nameParts)
     }
     val function = expression(ctx.expression).transformUp {
@@ -1795,7 +1881,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(interval, CalendarIntervalType)
+          Literal(applyNegativeSign(ctx.negativeSign, interval), CalendarIntervalType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -1939,70 +2025,113 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  private def applyNegativeSign(sign: Token, interval: CalendarInterval): CalendarInterval = {
+    if (sign != null && sign.getText == "-") {
+      IntervalUtils.negate(interval)
+    } else {
+      interval
+    }
+  }
+
   /**
-   * Create a [[CalendarInterval]] literal expression. An interval expression can contain multiple
-   * unit value pairs, for instance: interval 2 months 2 days.
+   * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
+   * - multiple unit value pairs, for instance: interval 2 months 2 days.
+   * - from-to unit, for instance: interval '1-2' year to month.
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
-    val intervals = ctx.intervalField.asScala.map(visitIntervalField)
-    validate(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
-    Literal(intervals.reduce(_.add(_)))
+    if (ctx.errorCapturingMultiUnitsInterval != null) {
+      val innerCtx = ctx.errorCapturingMultiUnitsInterval
+      if (innerCtx.unitToUnitInterval != null) {
+        throw new ParseException(
+          "Can only have a single from-to unit in the interval literal syntax",
+          innerCtx.unitToUnitInterval)
+      }
+      val interval = applyNegativeSign(
+        ctx.negativeSign,
+        visitMultiUnitsInterval(innerCtx.multiUnitsInterval))
+      Literal(interval, CalendarIntervalType)
+    } else if (ctx.errorCapturingUnitToUnitInterval != null) {
+      val innerCtx = ctx.errorCapturingUnitToUnitInterval
+      if (innerCtx.error1 != null || innerCtx.error2 != null) {
+        val errorCtx = if (innerCtx.error1 != null) innerCtx.error1 else innerCtx.error2
+        throw new ParseException(
+          "Can only have a single from-to unit in the interval literal syntax",
+          errorCtx)
+      }
+      val interval = applyNegativeSign(ctx.negativeSign, visitUnitToUnitInterval(innerCtx.body))
+      Literal(interval, CalendarIntervalType)
+    } else {
+      throw new ParseException("at least one time unit should be given for interval literal", ctx)
+    }
   }
 
   /**
-   * Create a [[CalendarInterval]] for a unit value pair. Two unit configuration types are
-   * supported:
-   * - Single unit.
-   * - From-To unit ('YEAR TO MONTH', 'DAY TO HOUR', 'DAY TO MINUTE', 'DAY TO SECOND',
-   * 'HOUR TO MINUTE', 'HOUR TO SECOND' and 'MINUTE TO SECOND' are supported).
+   * Creates a [[CalendarInterval]] with multiple unit value pairs, e.g. 1 YEAR 2 DAYS.
    */
-  override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
-    import ctx._
-    val s = getIntervalValue(value)
-    try {
-      val unitText = unit.getText.toLowerCase(Locale.ROOT)
-      val interval = (unitText, Option(to).map(_.getText.toLowerCase(Locale.ROOT))) match {
-        case (u, None) =>
-          IntervalUtils.fromUnitStrings(Array(normalizeInternalUnit(u)), Array(s))
-        case ("year", Some("month")) =>
-          IntervalUtils.fromYearMonthString(s)
-        case ("day", Some("hour")) =>
-          IntervalUtils.fromDayTimeString(s, "day", "hour")
-        case ("day", Some("minute")) =>
-          IntervalUtils.fromDayTimeString(s, "day", "minute")
-        case ("day", Some("second")) =>
-          IntervalUtils.fromDayTimeString(s, "day", "second")
-        case ("hour", Some("minute")) =>
-          IntervalUtils.fromDayTimeString(s, "hour", "minute")
-        case ("hour", Some("second")) =>
-          IntervalUtils.fromDayTimeString(s, "hour", "second")
-        case ("minute", Some("second")) =>
-          IntervalUtils.fromDayTimeString(s, "minute", "second")
-        case (from, Some(t)) =>
-          throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
+  override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
+    withOrigin(ctx) {
+      val units = ctx.intervalUnit().asScala.map { unit =>
+        val u = unit.getText.toLowerCase(Locale.ROOT)
+        // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
+        if (u.endsWith("s")) u.substring(0, u.length - 1) else u
+      }.map(IntervalUtils.IntervalUnit.withName).toArray
+
+      val values = ctx.intervalValue().asScala.map { value =>
+        if (value.STRING() != null) {
+          string(value.STRING())
+        } else {
+          value.getText
+        }
+      }.toArray
+
+      try {
+        IntervalUtils.fromUnitStrings(units, values)
+      } catch {
+        case i: IllegalArgumentException =>
+          val e = new ParseException(i.getMessage, ctx)
+          e.setStackTrace(i.getStackTrace)
+          throw e
       }
-      validate(interval != null, "No interval can be constructed", ctx)
-      interval
-    } catch {
-      // Handle Exceptions thrown by CalendarInterval
-      case e: IllegalArgumentException =>
-        val pe = new ParseException(e.getMessage, ctx)
-        pe.setStackTrace(e.getStackTrace)
-        throw pe
     }
   }
 
-  private def getIntervalValue(value: IntervalValueContext): String = {
-    if (value.STRING() != null) {
-      string(value.STRING())
-    } else {
-      value.getText
+  /**
+   * Creates a [[CalendarInterval]] with from-to unit, e.g. '2-1' YEAR TO MONTH.
+   */
+  override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): CalendarInterval = {
+    withOrigin(ctx) {
+      val value = Option(ctx.intervalValue.STRING).map(string).getOrElse {
+        throw new ParseException("The value of from-to unit must be a string", ctx.intervalValue)
+      }
+      try {
+        val from = ctx.from.getText.toLowerCase(Locale.ROOT)
+        val to = ctx.to.getText.toLowerCase(Locale.ROOT)
+        (from, to) match {
+          case ("year", "month") =>
+            IntervalUtils.fromYearMonthString(value)
+          case ("day", "hour") =>
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.HOUR)
+          case ("day", "minute") =>
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.MINUTE)
+          case ("day", "second") =>
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.SECOND)
+          case ("hour", "minute") =>
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.MINUTE)
+          case ("hour", "second") =>
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.SECOND)
+          case ("minute", "second") =>
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.MINUTE, IntervalUnit.SECOND)
+          case _ =>
+            throw new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
+        }
+      } catch {
+        // Handle Exceptions thrown by CalendarInterval
+        case e: IllegalArgumentException =>
+          val pe = new ParseException(e.getMessage, ctx)
+          pe.setStackTrace(e.getStackTrace)
+          throw pe
+      }
     }
-  }
-
-  // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
-  private def normalizeInternalUnit(s: String): String = {
-    if (s.endsWith("s")) s.substring(0, s.length - 1) else s
   }
 
   /* ********************************************************************************************
@@ -2455,7 +2584,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
 
-    val provider = ctx.tableProvider.qualifiedName.getText
+    val provider = ctx.tableProvider.multipartIdentifier.getText
     val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
     val comment = Option(ctx.comment).map(string)
 
@@ -2526,7 +2655,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
 
-    val provider = ctx.tableProvider.qualifiedName.getText
+    val provider = ctx.tableProvider.multipartIdentifier.getText
     val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
     val comment = Option(ctx.comment).map(string)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
@@ -2572,6 +2701,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
     UseStatement(ctx.NAMESPACE != null, nameParts)
+  }
+
+  /**
+   * Create a [[ShowCurrentNamespaceStatement]].
+   */
+  override def visitShowCurrentNamespace(
+      ctx: ShowCurrentNamespaceContext) : LogicalPlan = withOrigin(ctx) {
+    ShowCurrentNamespaceStatement()
   }
 
   /**
@@ -2625,8 +2762,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitRenameTableColumn(
       ctx: RenameTableColumnContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRenameColumnStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      ctx.from.identifier.asScala.map(_.getText),
+      visitMultipartIdentifier(ctx.table),
+      ctx.from.parts.asScala.map(_.getText),
       ctx.to.getText)
   }
 
@@ -2652,8 +2789,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     AlterTableAlterColumnStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      typedVisit[Seq[String]](ctx.qualifiedName),
+      visitMultipartIdentifier(ctx.table),
+      typedVisit[Seq[String]](ctx.column),
       Option(ctx.dataType).map(typedVisit[DataType]),
       Option(ctx.comment).map(string))
   }
@@ -2669,7 +2806,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitDropTableColumns(
       ctx: DropTableColumnsContext): LogicalPlan = withOrigin(ctx) {
-    val columnsToDrop = ctx.columns.qualifiedName.asScala.map(typedVisit[Seq[String]])
+    val columnsToDrop = ctx.columns.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
     AlterTableDropColumnsStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
       columnsToDrop)
@@ -2727,6 +2864,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
     AlterTableSetLocationStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
   }
 
@@ -2923,6 +3061,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * A command for users to list the column names for a table.
+   * This function creates a [[ShowColumnsStatement]] logical plan.
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW COLUMNS (FROM | IN) tableName=multipartIdentifier
+   *        ((FROM | IN) namespace=multipartIdentifier)?
+   * }}}
+   */
+  override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitMultipartIdentifier(ctx.table)
+    val namespace = Option(ctx.namespace).map(visitMultipartIdentifier)
+    ShowColumnsStatement(table, namespace)
+  }
+
+  /**
    * Create an [[AlterTableRecoverPartitionsStatement]]
    *
    * For example:
@@ -2933,5 +3087,110 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitRecoverPartitions(
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRecoverPartitionsStatement(visitMultipartIdentifier(ctx.multipartIdentifier))
+  }
+
+  /**
+   * Create an [[AlterTableAddPartitionStatement]].
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
+   *   ALTER VIEW multi_part_name ADD [IF NOT EXISTS] PARTITION spec
+   * }}}
+   *
+   * ALTER VIEW ... ADD PARTITION ... is not supported because the concept of partitioning
+   * is associated with physical tables
+   */
+  override def visitAddTablePartition(
+      ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.VIEW != null) {
+      operationNotAllowed("ALTER VIEW ... ADD PARTITION", ctx)
+    }
+    // Create partition spec to location mapping.
+    val specsAndLocs = ctx.partitionSpecLocation.asScala.map { splCtx =>
+      val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
+      val location = Option(splCtx.locationSpec).map(visitLocationSpec)
+      spec -> location
+    }
+    AlterTableAddPartitionStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      specsAndLocs,
+      ctx.EXISTS != null)
+  }
+
+  /**
+   * Create an [[AlterTableRenamePartitionStatement]]
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name PARTITION spec1 RENAME TO PARTITION spec2;
+   * }}}
+   */
+  override def visitRenameTablePartition(
+      ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRenamePartitionStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      visitNonOptionalPartitionSpec(ctx.from),
+      visitNonOptionalPartitionSpec(ctx.to))
+  }
+
+  /**
+   * Create an [[AlterTableDropPartitionStatement]]
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...]
+   *     [PURGE];
+   *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+   * }}}
+   *
+   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
+   * is associated with physical tables
+   */
+  override def visitDropTablePartitions(
+      ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.VIEW != null) {
+      operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
+    }
+    AlterTableDropPartitionStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
+      ifExists = ctx.EXISTS != null,
+      purge = ctx.PURGE != null,
+      retainData = false)
+  }
+
+  /**
+   * Create an [[AlterTableSerDePropertiesStatement]]
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name [PARTITION spec] SET SERDE serde_name
+   *     [WITH SERDEPROPERTIES props];
+   *   ALTER TABLE multi_part_name [PARTITION spec] SET SERDEPROPERTIES serde_properties;
+   * }}}
+   */
+  override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableSerDePropertiesStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      Option(ctx.STRING).map(string),
+      Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
+      // TODO a partition spec is allowed to have optional values. This is currently violated.
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+  }
+
+  /**
+   * Alter the query of a view. This creates a [[AlterViewAsStatement]]
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW multi_part_name AS SELECT ...;
+   * }}}
+   */
+  override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
+    AlterViewAsStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      originalText = source(ctx.query),
+      query = plan(ctx.query))
   }
 }

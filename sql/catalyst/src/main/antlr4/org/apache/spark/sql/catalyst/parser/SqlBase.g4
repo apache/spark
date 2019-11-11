@@ -80,7 +80,7 @@ singleTableSchema
     ;
 
 singleInterval
-    : INTERVAL? (intervalValue intervalUnit)+ EOF
+    : INTERVAL? multiUnitsInterval EOF
     ;
 
 statement
@@ -119,7 +119,7 @@ statement
         (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
-        LIKE source=tableIdentifier locationSpec?                      #createTableLike
+        LIKE source=tableIdentifier tableProvider? locationSpec?       #createTableLike
     | replaceTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitioning=transformList) |
@@ -136,40 +136,35 @@ statement
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
         '(' columns=qualifiedColTypeWithPositionList ')'               #addTableColumns
+    | ALTER TABLE table=multipartIdentifier
+        RENAME COLUMN
+        from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
     | ALTER TABLE multipartIdentifier
-        RENAME COLUMN from=qualifiedName TO to=identifier              #renameTableColumn
+        DROP (COLUMN | COLUMNS)
+        '(' columns=multipartIdentifierList ')'                        #dropTableColumns
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS) '(' columns=qualifiedNameList ')'      #dropTableColumns
-    | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS) columns=qualifiedNameList              #dropTableColumns
+        DROP (COLUMN | COLUMNS) columns=multipartIdentifierList        #dropTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
         RENAME TO to=tableIdentifier                                   #renameTable
     | ALTER (TABLE | VIEW) multipartIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
     | ALTER (TABLE | VIEW) multipartIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
-    | ALTER TABLE multipartIdentifier
-        (ALTER | CHANGE) COLUMN? qualifiedName
+    | ALTER TABLE table=multipartIdentifier
+        (ALTER | CHANGE) COLUMN? column=multipartIdentifier
         (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
-    | ALTER TABLE tableIdentifier partitionSpec?
-        CHANGE COLUMN?
-        colName=errorCapturingIdentifier colType colPosition?          #changeColumn
-    | ALTER TABLE tableIdentifier (partitionSpec)?
+    | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
-    | ALTER TABLE tableIdentifier (partitionSpec)?
+    | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDEPROPERTIES tablePropertyList                          #setTableSerDe
-    | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
+    | ALTER (TABLE | VIEW) multipartIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
-    | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
-        partitionSpec+                                                 #addTablePartition
-    | ALTER TABLE tableIdentifier
+    | ALTER TABLE multipartIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
-    | ALTER TABLE tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
-    | ALTER VIEW tableIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
-    | ALTER TABLE multipartIdentifier SET locationSpec                 #setTableLocation
-    | ALTER TABLE tableIdentifier partitionSpec SET locationSpec       #setPartitionLocation
+    | ALTER TABLE multipartIdentifier
+        (partitionSpec)? SET locationSpec                              #setTableLocation
     | ALTER TABLE multipartIdentifier RECOVER PARTITIONS               #recoverPartitions
     | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
@@ -183,11 +178,11 @@ statement
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
-    | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
+    | ALTER VIEW multipartIdentifier AS? query                         #alterViewQuery
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
-        qualifiedName AS className=STRING
+        multipartIdentifier AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
-    | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
+    | DROP TEMPORARY? FUNCTION (IF EXISTS)? multipartIdentifier        #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) multipartIdentifier)?
@@ -196,12 +191,13 @@ statement
         LIKE pattern=STRING partitionSpec?                             #showTable
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
-    | SHOW COLUMNS (FROM | IN) tableIdentifier
-        ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
+    | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
+        ((FROM | IN) namespace=multipartIdentifier)?                   #showColumns
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
-        (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
+        (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
+    | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
@@ -223,6 +219,12 @@ statement
     | RESET                                                            #resetConfiguration
     | DELETE FROM multipartIdentifier tableAlias whereClause?          #deleteFromTable
     | UPDATE multipartIdentifier tableAlias setClause whereClause?     #updateTable
+    | MERGE INTO target=multipartIdentifier targetAlias=tableAlias
+        USING (source=multipartIdentifier |
+          '(' sourceQuery=query')') sourceAlias=tableAlias
+        ON mergeCondition=booleanExpression
+        matchedClause*
+        notMatchedClause*                                              #mergeIntoTable
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -347,7 +349,7 @@ namedQuery
     ;
 
 tableProvider
-    : USING qualifiedName
+    : USING multipartIdentifier
     ;
 
 tablePropertyList
@@ -483,10 +485,33 @@ selectClause
     ;
 
 setClause
-    : SET assign (',' assign)*
+    : SET assignmentList
     ;
 
-assign
+matchedClause
+    : WHEN MATCHED (AND matchedCond=booleanExpression)? THEN matchedAction
+    ;
+notMatchedClause
+    : WHEN NOT MATCHED (AND notMatchedCond=booleanExpression)? THEN notMatchedAction
+    ;
+
+matchedAction
+    : DELETE
+    | UPDATE SET ASTERISK
+    | UPDATE SET assignmentList
+    ;
+
+notMatchedAction
+    : INSERT ASTERISK
+    | INSERT '(' columns=multipartIdentifierList ')'
+        VALUES '(' expression (',' expression)* ')'
+    ;
+
+assignmentList
+    : assignment (',' assignment)*
+    ;
+
+assignment
     : key=multipartIdentifier EQ value=expression
     ;
 
@@ -636,6 +661,10 @@ rowFormat
       (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
     ;
 
+multipartIdentifierList
+    : multipartIdentifier (',' multipartIdentifier)*
+    ;
+
 multipartIdentifier
     : parts+=errorCapturingIdentifier ('.' parts+=errorCapturingIdentifier)*
     ;
@@ -720,8 +749,8 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | IDENTIFIER '->' expression                                                               #lambda
-    | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
+    | identifier '->' expression                                                               #lambda
+    | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -738,7 +767,7 @@ primaryExpression
 constant
     : NULL                                                                                     #nullLiteral
     | interval                                                                                 #intervalLiteral
-    | identifier STRING                                                                        #typeConstructor
+    | negativeSign=MINUS? identifier STRING                                                    #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | STRING+                                                                                  #stringLiteral
@@ -761,12 +790,24 @@ booleanValue
     ;
 
 interval
-    : {ansi}? INTERVAL? intervalField+
-    | {!ansi}? INTERVAL intervalField*
+    : negativeSign=MINUS? INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
+    | {ansi}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
-intervalField
-    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
+errorCapturingMultiUnitsInterval
+    : multiUnitsInterval unitToUnitInterval?
+    ;
+
+multiUnitsInterval
+    : (intervalValue intervalUnit)+
+    ;
+
+errorCapturingUnitToUnitInterval
+    : body=unitToUnitInterval (error1=multiUnitsInterval | error2=unitToUnitInterval)?
+    ;
+
+unitToUnitInterval
+    : value=intervalValue from=intervalUnit TO to=intervalUnit
     ;
 
 intervalValue
@@ -796,7 +837,7 @@ intervalUnit
     ;
 
 colPosition
-    : FIRST | AFTER qualifiedName
+    : FIRST | AFTER multipartIdentifier
     ;
 
 dataType
@@ -811,7 +852,7 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=qualifiedName dataType (COMMENT comment=STRING)? colPosition?
+    : name=multipartIdentifier dataType (COMMENT comment=STRING)? colPosition?
     ;
 
 colTypeList
@@ -1015,6 +1056,8 @@ ansiNonReserved
     | LOGICAL
     | MACRO
     | MAP
+    | MATCHED
+    | MERGE
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND
@@ -1266,6 +1309,8 @@ nonReserved
     | LOGICAL
     | MACRO
     | MAP
+    | MATCHED
+    | MERGE
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND
@@ -1530,6 +1575,8 @@ LOCKS: 'LOCKS';
 LOGICAL: 'LOGICAL';
 MACRO: 'MACRO';
 MAP: 'MAP';
+MATCHED: 'MATCHED';
+MERGE: 'MERGE';
 MICROSECOND: 'MICROSECOND';
 MICROSECONDS: 'MICROSECONDS';
 MILLISECOND: 'MILLISECOND';

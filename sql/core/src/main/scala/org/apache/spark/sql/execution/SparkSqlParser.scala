@@ -123,19 +123,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * A command for users to list the column names for a table.
-   * This function creates a [[ShowColumnsCommand]] logical plan.
-   *
-   * The syntax of using this command in SQL is:
-   * {{{
-   *   SHOW COLUMNS (FROM | IN) table_identifier [(FROM | IN) database];
-   * }}}
-   */
-  override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
-    ShowColumnsCommand(Option(ctx.db).map(_.getText), visitTableIdentifier(ctx.tableIdentifier))
-  }
-
-  /**
    * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
@@ -248,7 +235,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       }
 
       val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-      val provider = ctx.tableProvider.qualifiedName.getText
+      val provider = ctx.tableProvider.multipartIdentifier.getText
       val schema = Option(ctx.colTypeList()).map(createSchema)
 
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
@@ -269,7 +256,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       userSpecifiedSchema = Option(ctx.colTypeList()).map(createSchema),
       replace = ctx.REPLACE != null,
       global = ctx.GLOBAL != null,
-      provider = ctx.tableProvider.qualifiedName.getText,
+      provider = ctx.tableProvider.multipartIdentifier.getText,
       options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
@@ -344,8 +331,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
     }
 
-    val (db, pat) = if (qualifiedName != null) {
-      val name = visitFunctionName(qualifiedName)
+    val (db, pat) = if (multipartIdentifier != null) {
+      val name = visitFunctionName(multipartIdentifier)
       (name.database, Some(name.funcName))
     } else if (pattern != null) {
       (None, Some(string(pattern)))
@@ -377,7 +364,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     }
 
     // Extract database, name & alias.
-    val functionIdentifier = visitFunctionName(ctx.qualifiedName)
+    val functionIdentifier = visitFunctionName(ctx.multipartIdentifier)
     CreateFunctionCommand(
       functionIdentifier.database,
       functionIdentifier.funcName,
@@ -397,7 +384,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val functionIdentifier = visitFunctionName(ctx.qualifiedName)
+    val functionIdentifier = visitFunctionName(ctx.multipartIdentifier)
     DropFunctionCommand(
       functionIdentifier.database,
       functionIdentifier.funcName,
@@ -419,143 +406,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       visitTableIdentifier(ctx.from),
       visitTableIdentifier(ctx.to),
       ctx.VIEW != null)
-  }
-
-  /**
-   * Create an [[AlterTableSerDePropertiesCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table [PARTITION spec] SET SERDE serde_name [WITH SERDEPROPERTIES props];
-   *   ALTER TABLE table [PARTITION spec] SET SERDEPROPERTIES serde_properties;
-   * }}}
-   */
-  override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSerDePropertiesCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.STRING).map(string),
-      Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
-      // TODO a partition spec is allowed to have optional values. This is currently violated.
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
-  }
-
-  /**
-   * Create an [[AlterTableAddPartitionCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
-   *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
-   * }}}
-   *
-   * ALTER VIEW ... ADD PARTITION ... is not supported because the concept of partitioning
-   * is associated with physical tables
-   */
-  override def visitAddTablePartition(
-      ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.VIEW != null) {
-      operationNotAllowed("ALTER VIEW ... ADD PARTITION", ctx)
-    }
-    // Create partition spec to location mapping.
-    val specsAndLocs = if (ctx.partitionSpec.isEmpty) {
-      ctx.partitionSpecLocation.asScala.map {
-        splCtx =>
-          val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
-          val location = Option(splCtx.locationSpec).map(visitLocationSpec)
-          spec -> location
-      }
-    } else {
-      // Alter View: the location clauses are not allowed.
-      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec(_) -> None)
-    }
-    AlterTableAddPartitionCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      specsAndLocs,
-      ctx.EXISTS != null)
-  }
-
-  /**
-   * Create an [[AlterTableRenamePartitionCommand]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table PARTITION spec1 RENAME TO PARTITION spec2;
-   * }}}
-   */
-  override def visitRenameTablePartition(
-      ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenamePartitionCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitNonOptionalPartitionSpec(ctx.from),
-      visitNonOptionalPartitionSpec(ctx.to))
-  }
-
-  /**
-   * Create an [[AlterTableDropPartitionCommand]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
-   *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
-   * }}}
-   *
-   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
-   * is associated with physical tables
-   */
-  override def visitDropTablePartitions(
-      ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.VIEW != null) {
-      operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
-    }
-    AlterTableDropPartitionCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
-      ifExists = ctx.EXISTS != null,
-      purge = ctx.PURGE != null,
-      retainData = false)
-  }
-
-  /**
-   * Create an [[AlterTableSetLocationCommand]] command for a partition.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table PARTITION spec SET LOCATION "loc";
-   * }}}
-   */
-  override def visitSetPartitionLocation(
-      ctx: SetPartitionLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetLocationCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Some(visitNonOptionalPartitionSpec(ctx.partitionSpec)),
-      visitLocationSpec(ctx.locationSpec))
-  }
-
-  /**
-   * Create a [[AlterTableChangeColumnCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table [PARTITION partition_spec]
-   *   CHANGE [COLUMN] column_old_name column_new_name column_dataType [COMMENT column_comment]
-   *   [FIRST | AFTER column_name];
-   * }}}
-   */
-  override def visitChangeColumn(ctx: ChangeColumnContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.partitionSpec != null) {
-      operationNotAllowed("ALTER TABLE table PARTITION partition_spec CHANGE COLUMN", ctx)
-    }
-
-    if (ctx.colPosition != null) {
-      operationNotAllowed(
-        "ALTER TABLE table [PARTITION partition_spec] CHANGE COLUMN ... FIRST | AFTER otherCol",
-        ctx)
-    }
-
-    AlterTableChangeColumnCommand(
-      tableName = visitTableIdentifier(ctx.tableIdentifier),
-      columnName = ctx.colName.getText,
-      newColumn = visitColType(ctx.colType))
   }
 
   /**
@@ -782,14 +632,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * For example:
    * {{{
    *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
-   *   LIKE [other_db_name.]existing_table_name [locationSpec]
+   *   LIKE [other_db_name.]existing_table_name [USING provider] [locationSpec]
    * }}}
    */
   override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
     val targetTable = visitTableIdentifier(ctx.target)
     val sourceTable = visitTableIdentifier(ctx.source)
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
-    CreateTableLikeCommand(targetTable, sourceTable, location, ctx.EXISTS != null)
+    CreateTableLikeCommand(targetTable, sourceTable, provider, location, ctx.EXISTS != null)
   }
 
   /**
@@ -1009,21 +860,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Alter the query of a view. This creates a [[AlterViewAsCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER VIEW [db_name.]view_name AS SELECT ...;
-   * }}}
-   */
-  override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
-    AlterViewAsCommand(
-      name = visitTableIdentifier(ctx.tableIdentifier),
-      originalText = source(ctx.query),
-      query = plan(ctx.query))
-  }
-
-  /**
    * Create a [[ScriptInputOutputSchema]].
    */
   override protected def withScriptIOSchema(
@@ -1142,7 +978,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       storage = storage.copy(locationUri = customLocation)
     }
 
-    val provider = ctx.tableProvider.qualifiedName.getText
+    val provider = ctx.tableProvider.multipartIdentifier.getText
 
     (false, storage, Some(provider))
   }

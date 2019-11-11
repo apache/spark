@@ -370,7 +370,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return Platform.getByte(base, offset + i);
   }
 
-  private boolean matchAt(final UTF8String s, int pos) {
+  public boolean matchAt(final UTF8String s, int pos) {
     if (s.numBytes + pos > numBytes || pos < 0) {
       return false;
     }

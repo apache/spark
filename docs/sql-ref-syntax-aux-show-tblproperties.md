@@ -21,7 +21,7 @@ license: |
 
 ### Description
 This statement returns the value of a table property given an optional value for
-a property key. If no key is specified then all the proerties are returned. 
+a property key. If no key is specified then all the properties are returned. 
 
 ### Syntax
 {% highlight sql %}
@@ -56,11 +56,11 @@ SHOW TBLPROPERTIES table_identifier
 </dl>
 
 **Note**
-- Property value returned by this statement exludes some properties 
+- Property value returned by this statement excludes some properties 
   that are internal to spark and hive. The excluded properties are :
   - All the properties that start with prefix `spark.sql`
-  - Propery keys such as:  `EXTERNAL`, `comment`
-  - All the properties generated intenally by hive to store statistics. Some of these
+  - Property keys such as:  `EXTERNAL`, `comment`
+  - All the properties generated internally by hive to store statistics. Some of these
     properties are: `numFiles`, `numPartitions`, `numRows`.
 
 ### Examples
