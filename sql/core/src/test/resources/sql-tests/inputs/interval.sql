@@ -67,10 +67,10 @@ select make_interval(1, 2, 3, 4, 5, 6);
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
 
 -- cast string to intervals
-select cast(v as interval) from values ('1 second') t(v);
-select cast(v as interval) from values ('+1 second') t(v);
-select cast(v as interval) from values ('-1 second') t(v);
-select cast(v as interval) from values ('+     1 second') t(v);
-select cast(v as interval) from values ('-     1 second') t(v);
-select cast(v as interval) from values ('- -1 second') t(v);
-select cast(v as interval) from values ('- +1 second') t(v);
+select cast('1 second' as interval);
+select cast('+1 second' as interval);
+select cast('-1 second' as interval);
+select cast('+     1 second' as interval);
+select cast('-     1 second' as interval);
+select cast('- -1 second' as interval);
+select cast('- +1 second' as interval);
