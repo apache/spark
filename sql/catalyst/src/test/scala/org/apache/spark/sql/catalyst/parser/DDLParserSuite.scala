@@ -1026,6 +1026,31 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
+  test("show table extended") {
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED LIKE '*test*'"),
+      ShowTableStatement(None, "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*'"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*'"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09', hr=11)"),
+      ShowTableStatement(None, "*test*", Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
+        Some(Map("ds" -> "2008-04-09"))))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
+        Some(Map("ds" -> "2008-04-09"))))
+  }
+
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
     val expected = CreateNamespaceStatement(
       Seq("a", "b", "c"),
