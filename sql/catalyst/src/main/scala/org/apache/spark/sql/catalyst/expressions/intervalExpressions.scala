@@ -294,7 +294,7 @@ abstract class IntervalJustifyLike(
   usage = "_FUNC_(expr) - Adjust interval so 30-day time periods are represented as months",
   examples = """
     Examples:
-      > SELECT _FUNC_(cast('1 month -59 day 25 hour' as interval);
+      > SELECT _FUNC_(interval '1 month -59 day 25 hour');
        -29 days 25 hours
   """,
   since = "3.0.0")
@@ -305,7 +305,7 @@ case class JustifyDays(child: Expression)
   usage = "_FUNC_(expr) - Adjust interval so 24-hour time periods are represented as days",
   examples = """
     Examples:
-      > SELECT _FUNC_(cast(''1 month -59 day 25 hour' as interval);
+      > SELECT _FUNC_(interval '1 month -59 day 25 hour');
        1 months -57 days -23 hours
   """,
   since = "3.0.0")
@@ -317,7 +317,7 @@ case class JustifyHours(child: Expression)
     " sign adjustments",
   examples = """
     Examples:
-      > SELECT _FUNC_(cast('1 month -59 day 25 hour' as interval);
+      > SELECT _FUNC_(interval '1 month -59 day 25 hour');
        -27 days -23 hours
   """,
   since = "3.0.0")
