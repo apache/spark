@@ -230,16 +230,16 @@ select max(min(unique1)) from tenk1;
 -- [SPARK-27986] Support Aggregate Expressions with filter
 -- FILTER tests
 
--- select min(unique1) filter (where unique1 > 100) from tenk1;
+select min(unique1) filter (where unique1 > 100) from tenk1;
 
--- select sum(1/ten) filter (where ten > 0) from tenk1;
+select sum(1/ten) filter (where ten > 0) from tenk1;
 
 -- select ten, sum(distinct four) filter (where four::text ~ '123') from onek a
 -- group by ten;
 
--- select ten, sum(distinct four) filter (where four > 10) from onek a
--- group by ten
--- having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+select ten, sum(distinct four) filter (where four > 10) from onek a
+group by ten
+having exists (select 1 from onek b where sum(distinct a.four) = b.four);
 
 -- [SPARK-28682] ANSI SQL: Collation Support
 -- select max(foo COLLATE "C") filter (where (bar collate "POSIX") > '0')
