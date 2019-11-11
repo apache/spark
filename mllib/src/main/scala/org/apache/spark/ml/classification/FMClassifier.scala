@@ -246,7 +246,7 @@ class FMClassifierModel private[classification] (
     LogisticLoss, $(factorSize), $(fitBias), $(fitLinear), numFeatures)
 
   override protected def predictRaw(features: Vector): Vector = {
-    val rawPrediction: Double = gradient.getRawPrediction(features, oldCoefficients)
+    val (rawPrediction, _) = gradient.getRawPrediction(features, oldCoefficients)
     Vectors.dense(Array(-rawPrediction, rawPrediction))
   }
 

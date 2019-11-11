@@ -447,7 +447,7 @@ class FMRegressorModel private[regression] (
     SquaredError, $(factorSize), $(fitBias), $(fitLinear), numFeatures)
 
   override def predict(features: Vector): Double = {
-    val rawPrediction = gradient.getRawPrediction(features, oldCoefficients)
+    val (rawPrediction, _) = gradient.getRawPrediction(features, oldCoefficients)
     gradient.getPrediction(rawPrediction)
   }
 
@@ -566,8 +566,8 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
       label: Double,
       weights: OldVector,
       cumGradient: OldVector): Double = {
-    val rawPrediction = getRawPrediction(data, weights)
-    val rawGradient = getRawGradient(data, weights)
+    val (rawPrediction, sumVX) = getRawPrediction(data, weights)
+    val rawGradient = getRawGradient(data, weights, sumVX)
     val multiplier = getMultiplier(rawPrediction, label)
     axpy(multiplier, rawGradient, cumGradient)
     val loss = getLoss(rawPrediction, label)
@@ -580,9 +580,8 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 
   protected def getLoss(rawPrediction: Double, label: Double): Double
 
-  private val sumVX = Array.fill(factorSize)(0.0)
-
-  def getRawPrediction(data: OldVector, weights: OldVector): Double = {
+  def getRawPrediction(data: OldVector, weights: OldVector): (Double, Array[Double]) = {
+    val sumVX = new Array[Double](factorSize)
     var rawPrediction = 0.0
     val vWeightsSize = numFeatures * factorSize
 
@@ -604,10 +603,14 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
       rawPrediction += 0.5 * (sum * sum - sumSquare)
     }
 
-    rawPrediction
+    (rawPrediction, sumVX)
   }
 
-  private def getRawGradient(data: OldVector, weights: OldVector): OldVector = {
+  private def getRawGradient(
+      data: OldVector,
+      weights: OldVector,
+      sumVX: Array[Double]
+    ): OldVector = {
     data match {
       // Usually Factorization Machines is used, there will be a lot of sparse features.
       // So need to optimize the gradient descent of sparse vector.
