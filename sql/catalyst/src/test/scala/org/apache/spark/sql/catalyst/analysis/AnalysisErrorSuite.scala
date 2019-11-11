@@ -169,7 +169,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "non aggregate function with filter predicate",
-    CatalystSqlParser.parsePlan("SELECT hex(a) filter (b = 1) FROM TaBlE"),
+    CatalystSqlParser.parsePlan("SELECT hex(a) filter (where b = 1) FROM TaBlE"),
     "FILTER predicate specified, but hex is not an aggregate function" :: Nil)
 
   errorTest(
@@ -179,7 +179,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "window function with filter predicate",
-    CatalystSqlParser.parsePlan("SELECT percent_rank(a) filter (b > 1) over () FROM TaBlE"),
+    CatalystSqlParser.parsePlan("SELECT percent_rank(a) filter (where b > 1) over () FROM TaBlE"),
     "FILTER predicate specified, but percent_rank is not an aggregate funciton" :: Nil)
 
   errorTest(
