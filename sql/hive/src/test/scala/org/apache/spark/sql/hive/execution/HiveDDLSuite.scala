@@ -2567,9 +2567,8 @@ class HiveDDLSuite
 
   test("Create Table LIKE STORED AS Hive Format") {
     val catalog = spark.sessionState.catalog
-    withTable("s", "f") {
+    withTable("s") {
       sql("CREATE TABLE s(a INT, b INT) STORED AS ORC")
-
       hiveFormats.foreach { tableType =>
         val expectedSerde = HiveSerDe.sourceToSerDe(tableType)
         withTable("t") {
