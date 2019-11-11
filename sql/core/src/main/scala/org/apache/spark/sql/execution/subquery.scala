@@ -177,23 +177,22 @@ case class InSubqueryExec(
  * The physical node of exists-subquery. This is for support use exists in join's on condition,
  * since some join type we can't pushdown exists condition, we plan it here
  */
-case class ExistsExec(child: Expression,
-                      subQuery: String,
-                      plan: BaseSubqueryExec,
-                      exprId: ExprId,
-                      private var resultBroadcast: Broadcast[Boolean] = null)
+case class ExistsExec(
+    plan: BaseSubqueryExec,
+    exprId: ExprId,
+    private var resultBroadcast: Broadcast[Boolean] = null)
   extends ExecSubqueryExpression {
 
   @transient private var result: Boolean = _
 
   override def dataType: DataType = BooleanType
-  override def children: Seq[Expression] = child :: Nil
-  override def nullable: Boolean = child.nullable
+  override def children: Seq[Expression] = Nil
+  override def nullable: Boolean = false
   override def toString: String = s"EXISTS ${plan.name}"
   override def withNewPlan(plan: BaseSubqueryExec): ExistsExec = copy(plan = plan)
 
   override def semanticEquals(other: Expression): Boolean = other match {
-    case in: ExistsExec => child.semanticEquals(in.child) && plan.sameResult(in.plan)
+    case in: ExistsExec => plan.sameResult(in.plan)
     case _ => false
   }
 
@@ -216,8 +215,6 @@ case class ExistsExec(child: Expression,
 
   override lazy val canonicalized: ExistsExec = {
     copy(
-      child = child.canonicalized,
-      subQuery = subQuery,
       plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
       exprId = ExprId(0),
       resultBroadcast = null)
@@ -225,27 +222,16 @@ case class ExistsExec(child: Expression,
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     prepareResult()
-    val childGen = child.genCode(ctx)
     val setTerm = ctx.addReferenceObj("result", result)
     val resultCode =
       s"""
          |${ev.value} = $setTerm;
        """.stripMargin
 
-    if (nullable) {
-      val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
-      ev.copy(code = code"""
-        ${childGen.code}
-        boolean ${ev.isNull} = ${childGen.isNull};
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $nullSafeEval
-      """)
-    } else {
-      ev.copy(code = code"""
-        ${childGen.code}
+    ev.copy(code =
+      code"""
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
-    }
   }
 }
 
@@ -273,18 +259,8 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         val executedPlan = new QueryExecution(sparkSession, query).executedPlan
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
       case expressions.Exists(sub, children, exprId) =>
-        val expr = if (children.length == 1) {
-          children.head
-        } else {
-          CreateNamedStruct(
-            children.zipWithIndex.flatMap { case (v, index) =>
-              Seq(Literal(s"col_$index"), v)
-            }
-          )
-        }
         val executedPlan = new QueryExecution(sparkSession, Project(Nil, sub)).executedPlan
-        ExistsExec(expr, sub.treeString,
-          SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
+        ExistsExec(SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
     }
   }
 }

@@ -64,9 +64,9 @@ object SubqueryExpression {
   /**
    * Returns true when an expression contains an IN or EXISTS subquery and false otherwise.
    */
-  def hasInOrExistsSubquery(e: Expression): Boolean = {
+  def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
     e.find {
-      case _: ListQuery | _: Exists => true
+      case _: ListQuery | _: Exists if e.children.nonEmpty => true
       case _ => false
     }.isDefined
   }
