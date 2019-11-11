@@ -37,6 +37,7 @@ import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
 class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
+  import ListenerEventsTestHelper._
 
   private val conf = new SparkConf()
     .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
@@ -1693,41 +1694,5 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     def blockId: BlockId = RDDBlockId(rddId, partId)
 
-  }
-
-  /** Create a stage submitted event for the specified stage Id. */
-  private def createStageSubmittedEvent(stageId: Int) = {
-    SparkListenerStageSubmitted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
-  }
-
-  /** Create a stage completed event for the specified stage Id. */
-  private def createStageCompletedEvent(stageId: Int) = {
-    SparkListenerStageCompleted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
-  }
-
-  /** Create an executor added event for the specified executor Id. */
-  private def createExecutorAddedEvent(executorId: Int) = {
-    SparkListenerExecutorAdded(0L, executorId.toString,
-      new ExecutorInfo("host1", 1, Map.empty, Map.empty))
-  }
-
-  /** Create an executor added event for the specified executor Id. */
-  private def createExecutorRemovedEvent(executorId: Int) = {
-    SparkListenerExecutorRemoved(10L, executorId.toString, "test")
-  }
-
-  /** Create an executor metrics update event, with the specified executor metrics values. */
-  private def createExecutorMetricsUpdateEvent(
-      stageId: Int,
-      executorId: Int,
-      executorMetrics: Array[Long]): SparkListenerExecutorMetricsUpdate = {
-    val taskMetrics = TaskMetrics.empty
-    taskMetrics.incDiskBytesSpilled(111)
-    taskMetrics.incMemoryBytesSpilled(222)
-    val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
-    val executorUpdates = Map((stageId, 0) -> new ExecutorMetrics(executorMetrics))
-    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, executorUpdates)
   }
 }

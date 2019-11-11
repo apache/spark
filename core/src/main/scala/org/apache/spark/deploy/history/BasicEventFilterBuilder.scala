@@ -22,67 +22,82 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 
-class BasicEventFilterBuilder extends SparkListener with EventFilterBuilder {
-  val liveJobToStages = new mutable.HashMap[Int, Seq[Int]]
-  val stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
-  val stageToRDDs = new mutable.HashMap[Int, mutable.Set[Int]]
-  val liveExecutors = new mutable.HashSet[String]
+private[spark] class BasicEventFilterBuilder extends SparkListener with EventFilterBuilder {
+  private val _liveJobToStages = new mutable.HashMap[Int, Seq[Int]]
+  private val _stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
+  private val _stageToRDDs = new mutable.HashMap[Int, Seq[Int]]
+  private val _liveExecutors = new mutable.HashSet[String]
+
+  def liveJobToStages: Map[Int, Seq[Int]] = _liveJobToStages.toMap
+  def stageToTasks: Map[Int, Set[Long]] = _stageToTasks.mapValues(_.toSet).toMap
+  def stageToRDDs: Map[Int, Seq[Int]] = _stageToRDDs.toMap
+  def liveExecutors: Set[String] = _liveExecutors.toSet
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-    liveJobToStages += jobStart.jobId -> jobStart.stageIds
+    _liveJobToStages += jobStart.jobId -> jobStart.stageIds
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-    val stages = liveJobToStages.getOrElse(jobEnd.jobId, Seq.empty[Int])
-    liveJobToStages -= jobEnd.jobId
+    val stages = _liveJobToStages.getOrElse(jobEnd.jobId, Seq.empty[Int])
+    _liveJobToStages -= jobEnd.jobId
     stages.foreach { stage =>
-      stageToTasks -= stage
-      stageToRDDs -= stage
+      _stageToTasks -= stage
+      _stageToRDDs -= stage
     }
   }
 
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
+    _stageToRDDs.getOrElseUpdate(stageSubmitted.stageInfo.stageId,
+      stageSubmitted.stageInfo.rddInfos.map(_.id))
+  }
+
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-    val curTasks = stageToTasks.getOrElseUpdate(taskStart.stageId,
+    val curTasks = _stageToTasks.getOrElseUpdate(taskStart.stageId,
       mutable.HashSet[Long]())
     curTasks += taskStart.taskInfo.taskId
   }
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
-    liveExecutors += executorAdded.executorId
+    _liveExecutors += executorAdded.executorId
   }
 
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
-    liveExecutors -= executorRemoved.executorId
+    _liveExecutors -= executorRemoved.executorId
   }
 
-  override def createFilter(): EventFilter = new BasicEventFilter(this)
+  override def createFilter(): EventFilter = BasicEventFilter(this)
 }
 
-class BasicEventFilter(trackListener: BasicEventFilterBuilder) extends EventFilter with Logging {
+private[spark] class BasicEventFilter(
+    liveJobToStages: Map[Int, Seq[Int]],
+    stageToTasks: Map[Int, Set[Long]],
+    stageToRDDs: Map[Int, Seq[Int]],
+    liveExecutors: Set[String]) extends EventFilter with Logging {
 
-  private val liveTasks: Set[Long] = trackListener.stageToTasks.values match {
+  private val liveTasks: Set[Long] = stageToTasks.values match {
     case xs if xs.isEmpty => Set.empty[Long]
     case xs => xs.reduce(_ ++ _).toSet
   }
 
-  private val liveRDDs: Set[Int] = trackListener.stageToRDDs.values match {
+  private val liveRDDs: Set[Int] = stageToRDDs.values match {
     case xs if xs.isEmpty => Set.empty[Int]
     case xs => xs.reduce(_ ++ _).toSet
   }
 
   if (log.isDebugEnabled) {
-    logDebug(s"live jobs : ${trackListener.liveJobToStages.keySet}")
-    logDebug(s"stages in jobs : ${trackListener.liveJobToStages.values.flatten}")
-    logDebug(s"stages : ${trackListener.stageToTasks.keySet}")
-    logDebug(s"tasks in stages : ${trackListener.stageToTasks.values.flatten}")
+    logDebug(s"live jobs : ${liveJobToStages.keySet}")
+    logDebug(s"stages in jobs : ${liveJobToStages.values.flatten}")
+    logDebug(s"stages : ${stageToTasks.keySet}")
+    logDebug(s"tasks in stages : ${stageToTasks.values.flatten}")
+    logDebug(s"RDDs in stages : ${stageToRDDs.values.flatten}")
   }
 
   override def filterStageCompleted(event: SparkListenerStageCompleted): Option[Boolean] = {
-    Some(trackListener.stageToTasks.contains(event.stageInfo.stageId))
+    Some(stageToTasks.contains(event.stageInfo.stageId))
   }
 
   override def filterStageSubmitted(event: SparkListenerStageSubmitted): Option[Boolean] = {
-    Some(trackListener.stageToTasks.contains(event.stageInfo.stageId))
+    Some(stageToTasks.contains(event.stageInfo.stageId))
   }
 
   override def filterTaskStart(event: SparkListenerTaskStart): Option[Boolean] = {
@@ -98,11 +113,11 @@ class BasicEventFilter(trackListener: BasicEventFilterBuilder) extends EventFilt
   }
 
   override def filterJobStart(event: SparkListenerJobStart): Option[Boolean] = {
-    Some(trackListener.liveJobToStages.contains(event.jobId))
+    Some(liveJobToStages.contains(event.jobId))
   }
 
   override def filterJobEnd(event: SparkListenerJobEnd): Option[Boolean] = {
-    Some(trackListener.liveJobToStages.contains(event.jobId))
+    Some(liveJobToStages.contains(event.jobId))
   }
 
   override def filterUnpersistRDD(event: SparkListenerUnpersistRDD): Option[Boolean] = {
@@ -111,29 +126,39 @@ class BasicEventFilter(trackListener: BasicEventFilterBuilder) extends EventFilt
 
   override def filterStageExecutorMetrics(
       event: SparkListenerStageExecutorMetrics): Option[Boolean] = {
-    Some(trackListener.liveExecutors.contains(event.execId))
+    Some(liveExecutors.contains(event.execId))
   }
 
   override def filterExecutorAdded(event: SparkListenerExecutorAdded): Option[Boolean] = {
-    Some(trackListener.liveExecutors.contains(event.executorId))
+    Some(liveExecutors.contains(event.executorId))
   }
 
   override def filterExecutorRemoved(event: SparkListenerExecutorRemoved): Option[Boolean] = {
-    Some(trackListener.liveExecutors.contains(event.executorId))
+    Some(liveExecutors.contains(event.executorId))
   }
 
   override def filterExecutorBlacklisted(
       event: SparkListenerExecutorBlacklisted): Option[Boolean] = {
-    Some(trackListener.liveExecutors.contains(event.executorId))
+    Some(liveExecutors.contains(event.executorId))
   }
 
   override def filterExecutorUnblacklisted(
       event: SparkListenerExecutorUnblacklisted): Option[Boolean] = {
-    Some(trackListener.liveExecutors.contains(event.executorId))
+    Some(liveExecutors.contains(event.executorId))
   }
 
   override def filterSpeculativeTaskSubmitted(
       event: SparkListenerSpeculativeTaskSubmitted): Option[Boolean] = {
-    Some(trackListener.stageToTasks.contains(event.stageId))
+    Some(stageToTasks.contains(event.stageId))
+  }
+}
+
+private[spark] object BasicEventFilter {
+  def apply(builder: BasicEventFilterBuilder): BasicEventFilter = {
+    new BasicEventFilter(
+      builder.liveJobToStages,
+      builder.stageToTasks,
+      builder.stageToRDDs,
+      builder.liveExecutors)
   }
 }

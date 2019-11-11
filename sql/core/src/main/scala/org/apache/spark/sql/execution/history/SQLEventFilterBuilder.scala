@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.ui._
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
+// FIXME: UTs
 class SQLEventFilterBuilder extends SparkListener with EventFilterBuilder {
   val liveExecutionToJobs = new mutable.HashMap[Long, mutable.Set[Int]]
   val jobToStages = new mutable.HashMap[Int, Seq[Int]]
@@ -80,6 +81,7 @@ class SQLEventFilterBuilder extends SparkListener with EventFilterBuilder {
   }
 }
 
+// FIXME: UTs
 class SQLLiveEntitiesEventFilter(trackListener: SQLEventFilterBuilder)
   extends EventFilter with Logging {
 

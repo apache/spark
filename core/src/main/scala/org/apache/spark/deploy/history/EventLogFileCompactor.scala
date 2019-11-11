@@ -35,6 +35,7 @@ import org.apache.spark.internal.config.EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, Utils}
 
+// FIXME: UTs
 class EventLogFileCompactor(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
@@ -111,6 +112,7 @@ class EventLogFileCompactor(
   }
 }
 
+// FIXME: UTs
 class FilteredEventLogFileRewriter(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
