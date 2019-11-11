@@ -738,7 +738,8 @@ object DataSource extends Logging {
       pathStrings: Seq[String],
       hadoopConf: Configuration,
       checkEmptyGlobPath: Boolean,
-      checkFilesExist: Boolean): Seq[Path] = {
+      checkFilesExist: Boolean,
+      numThreads: Integer = 40): Seq[Path] = {
     val qualifiedPaths = pathStrings.map { pathString =>
       val path = new Path(pathString)
       val fs = path.getFileSystem(hadoopConf)
@@ -751,7 +752,7 @@ object DataSource extends Logging {
 
     val globbedPaths =
       try {
-        ThreadUtils.parmap(globPaths, "globPath", 20) { globPath =>
+        ThreadUtils.parmap(globPaths, "globPath", numThreads) { globPath =>
           val fs = globPath.getFileSystem(hadoopConf)
           val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
 
@@ -767,7 +768,7 @@ object DataSource extends Logging {
 
     if (checkFilesExist) {
       try {
-        ThreadUtils.parmap(nonGlobPaths, "checkPathsExist", 20) { path =>
+        ThreadUtils.parmap(nonGlobPaths, "checkPathsExist", numThreads) { path =>
           val fs = path.getFileSystem(hadoopConf)
           if (!fs.exists(path)) {
             throw new AnalysisException(s"Path does not exist: $path")
