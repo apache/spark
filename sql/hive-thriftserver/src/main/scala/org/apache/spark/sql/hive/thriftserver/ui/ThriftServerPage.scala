@@ -355,7 +355,9 @@ private[ui] class SqlStatsPagedTable(
         {formatDurationVerbose(duration)}
       </td>
       <td>
-        {info.statement}
+        <span class="description-input">
+          {info.statement}
+        </span>
       </td>
       <td>
         {info.state}

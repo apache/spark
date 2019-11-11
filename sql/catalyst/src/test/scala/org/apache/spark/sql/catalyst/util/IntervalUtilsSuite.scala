@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite {
@@ -78,6 +79,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
       "-1 MONTH 1 day -1 microseconds" -> new CalendarInterval(-1, 1, -1),
       " 123 MONTHS        123 DAYS  123 Microsecond    " -> new CalendarInterval(123, 123, 123),
       "interval -1 day +3 Microseconds" -> new CalendarInterval(0, -1, 3),
+      "interval -   1 day +     3 Microseconds" -> new CalendarInterval(0, -1, 3),
       "  interval  8  years -11 months 123  weeks   -1 day " +
         "23 hours -22 minutes 1 second  -123  millisecond    567 microseconds " ->
         new CalendarInterval(85, 860, 81480877567L)).foreach { case (input, expected) =>
@@ -161,7 +163,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
 
     try {
-      fromDayTimeString("5 1:12:20", "hour", "microsecond")
+      fromDayTimeString("5 1:12:20", HOUR, MICROSECOND)
       fail("Expected to throw an exception for the invalid convention type")
     } catch {
       case e: IllegalArgumentException =>
@@ -201,6 +203,29 @@ class IntervalUtilsSuite extends SparkFunSuite {
     assert(!isNegative("0 months", 28))
     assert(!isNegative("1 year -360 days", 31))
     assert(!isNegative("-1 year 380 days", 31))
+  }
+
+  test("negate") {
+    assert(negate(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
+  }
+
+  test("subtract one interval by another") {
+    val input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR)
+    val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
+    assert(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR) === subtract(input1, input2))
+    val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
+    val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
+    assert(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR) === subtract(input3, input4))
+  }
+
+  test("add two intervals") {
+    val input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR)
+    val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
+    assert(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR) === add(input1, input2))
+
+    val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
+    val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
+    assert(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR) === add(input3, input4))
   }
 
   test("multiply by num") {
