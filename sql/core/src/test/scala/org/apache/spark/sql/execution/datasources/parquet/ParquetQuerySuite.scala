@@ -988,6 +988,13 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
       val hdfsSize = fs.getFileStatus(new Path(path)).getLen
       assert(statistics.numRows().getAsLong == 1024L)
       assert(statistics.sizeInBytes().getAsLong != hdfsSize)
+
+      // test fallback
+      withSQLConf("spark.sql.parquet.collectStatistics.timeout" -> "0") {
+        val fallbackStatistic = parquetScan2.estimateStatistics()
+        assert(!fallbackStatistic.numRows().isPresent)
+        assert(fallbackStatistic.sizeInBytes().getAsLong == hdfsSize)
+      }
     }
   }
 }

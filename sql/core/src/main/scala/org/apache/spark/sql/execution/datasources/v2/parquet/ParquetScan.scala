@@ -80,8 +80,14 @@ case class ParquetScan(
 
   override def estimateStatistics(): Statistics = {
     try {
-      // Use the parquet api to get Statistics.
-      ParquetUtils.getStatistics(fileIndex.inputFiles, hadoopConf)
+      val timeout = hadoopConf.getInt("spark.sql.parquet.collectStatistics.timeout", 5)
+      if (timeout <= 0) {
+        super.estimateStatistics()
+      } else {
+        val parallelism = hadoopConf.getInt("spark.sql.parquet.collectStatistics.parallelism", 8)
+        // Use the parquet api to get Statistics.
+        ParquetUtils.getStatistics(fileIndex.inputFiles, parallelism, timeout, hadoopConf)
+      }
     } catch {
       case _ =>
         logWarning(s"Can not collect statistics with parquet metadata, " +

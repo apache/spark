@@ -118,10 +118,11 @@ object ParquetUtils {
     ParquetFileFormat.mergeSchemasInParallel(filesToTouch, sparkSession)
   }
 
-  def getStatistics(files: Array[String], configuration: Configuration): Statistics = {
-    val parallelism = configuration.getInt("spark.sql.parquet.collectStatistics.parallelism", 8)
+  def getStatistics(files: Array[String],
+                    parallelism: Int,
+                    timeout: Int,
+                    configuration: Configuration): Statistics = {
     val pool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "parquet-collect-statistics-pool")
-
     try {
       implicit val executionContext = ExecutionContext.fromExecutor(pool)
       val future = files.map{ file =>
@@ -138,8 +139,8 @@ object ParquetUtils {
         }
       }.toSeq
       val (bytes, rows) =
-        ThreadUtils.awaitResult(Future.sequence(future), Duration.Inf)
-        .reduce{case (s1, s2) =>
+        ThreadUtils.awaitResult(Future.sequence(future), Duration(s"$timeout second"))
+        .reduce{ (s1, s2) =>
           (s1._1 + s2._1, s1._2 + s2._2)
         }
       new Statistics {
