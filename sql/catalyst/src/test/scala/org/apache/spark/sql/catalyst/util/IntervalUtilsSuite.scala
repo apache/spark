@@ -287,4 +287,25 @@ class IntervalUtilsSuite extends SparkFunSuite {
     val i9 = new CalendarInterval(0, 0, -3000 * MICROS_PER_HOUR)
     assert(IntervalUtils.toSqlStandardString(i9) === "-3000:00:00")
   }
+
+  test("to iso 8601 string") {
+    val i1 = new CalendarInterval(0, 0, 0)
+    assert(IntervalUtils.toIso8601String(i1) === "PT0S")
+    val i2 = new CalendarInterval(34, 0, 0)
+    assert(IntervalUtils.toIso8601String(i2) === "P2Y10M")
+    val i3 = new CalendarInterval(-34, 0, 0)
+    assert(IntervalUtils.toIso8601String(i3) === "P-2Y-10M")
+    val i4 = new CalendarInterval(0, 31, 0)
+    assert(IntervalUtils.toIso8601String(i4) === "P31D")
+    val i5 = new CalendarInterval(0, -31, 0)
+    assert(IntervalUtils.toIso8601String(i5) === "P-31D")
+    val i6 = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toIso8601String(i6) === "PT3H13M0.000123S")
+    val i7 = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123)
+    assert(IntervalUtils.toIso8601String(i7) === "PT-3H-13M-0.000123S")
+    val i8 = new CalendarInterval(-34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toIso8601String(i8) === "P-2Y-10M31DT3H13M0.000123S")
+    val i9 = new CalendarInterval(0, 0, -3000 * MICROS_PER_HOUR)
+    assert(IntervalUtils.toIso8601String(i9) === "PT-3000H")
+  }
 }
