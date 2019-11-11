@@ -76,9 +76,11 @@ case class CreateTableLikeCommand(
     val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
 
     val newProvider = if (provider.isDefined) {
-      // check the validation of provider input, invalid provider will throw
-      // AnalysisException or ClassNotFoundException or NoSuchMethodException
-      DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
+      if (!DDLUtils.isHiveTable(provider)) {
+        // check the validation of provider input, invalid provider will throw
+        // AnalysisException, ClassNotFoundException, or NoClassDefFoundError
+        DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
+      }
       provider
     } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)

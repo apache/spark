@@ -360,6 +360,18 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
         Row(2147483648L, "AAA", 3.14, false) :: Row(2147483649L, "BBB", 3.142, true) :: Nil)
     }
   }
+
+  test("Create Table LIKE USING Hive built-in ORC") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t") {
+      sql("CREATE TABLE s(a INT, b INT) USING parquet")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.provider == Some("parquet"))
+      sql("CREATE TABLE t LIKE s USING org.apache.spark.sql.hive.orc")
+      val table = catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.provider == Some("org.apache.spark.sql.hive.orc"))
+    }
+  }
 }
 
 class HiveDDLSuite
@@ -1223,7 +1235,7 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE a temporary view") {
-    Seq(None, Some("parquet"), Some("orc")) foreach { provider =>
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
       // CREATE TABLE LIKE a temporary view.
       withCreateTableLikeTempView(location = None, provider)
 
@@ -1258,7 +1270,7 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE a data source table") {
-    Seq(None, Some("parquet"), Some("orc")) foreach { provider =>
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
       // CREATE TABLE LIKE a data source table.
       withCreateTableLikeDSTable(location = None, provider)
 
@@ -1296,7 +1308,7 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE an external data source table") {
-    Seq(None, Some("parquet"), Some("orc")) foreach { provider =>
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
       // CREATE TABLE LIKE an external data source table.
       withCreateTableLikeExtDSTable(location = None, provider)
 
@@ -1337,7 +1349,7 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE a managed Hive serde table") {
-    Seq(None, Some("parquet"), Some("orc")) foreach { provider =>
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
       // CREATE TABLE LIKE a managed Hive serde table.
       withCreateTableLikeManagedHiveTable(location = None, provider)
 
@@ -1372,7 +1384,7 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE an external Hive serde table") {
-    Seq(None, Some("parquet"), Some("orc")) foreach { provider =>
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
       // CREATE TABLE LIKE an external Hive serde table.
       withCreateTableLikeExtHiveTable(location = None, provider)
 
@@ -1425,7 +1437,7 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE a view") {
-    Seq(None, Some("parquet"), Some("orc")) foreach { provider =>
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
       // CREATE TABLE LIKE a view.
       withCreateTableLikeView(location = None, provider)
 
@@ -1501,10 +1513,15 @@ class HiveDDLSuite
     assert(targetTable.properties.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
       "the table properties of source tables should not be copied in the created table")
 
-    if (DDLUtils.isDatasourceTable(sourceTable) ||
-        sourceTable.tableType == CatalogTableType.VIEW) {
-      assert(DDLUtils.isDatasourceTable(targetTable),
-        "the target table should be a data source table")
+    if (DDLUtils.isHiveTable(provider)) {
+      assert(DDLUtils.isHiveTable(targetTable),
+        "the target table should be a hive table")
+    } else {
+      if (DDLUtils.isDatasourceTable(sourceTable) ||
+          sourceTable.tableType == CatalogTableType.VIEW) {
+        assert(DDLUtils.isDatasourceTable(targetTable),
+          "the target table should be a data source table")
+      }
     }
 
     provider match {
