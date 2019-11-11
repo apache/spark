@@ -275,7 +275,7 @@ private[spark] class ExecutorAllocationManager(
    * The maximum number of executors we would need under the current load to satisfy all running
    * and pending tasks, rounded up.
    */
-  private def maxNumExecutorsNeededPerResourceProfile(rp: Int): Int = {
+  private def maxNumExecutorsNeededPerResourceProfileId(rp: Int): Int = {
     val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp) +
       listener.totalRunningTasksPerResourceProfile(rp)
     logWarning(s"max needed executor rp: $rp numpending $numRunningOrPendingTasks")
@@ -333,7 +333,7 @@ private[spark] class ExecutorAllocationManager(
 
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
       listener.resourceProfileIdToResourceProfile.foreach { case (rProfId, resourceProfile) =>
-        val maxNeeded = maxNumExecutorsNeededPerResourceProfile(rProfId)
+        val maxNeeded = maxNumExecutorsNeededPerResourceProfileId(rProfId)
         val targetExecs =
           numExecutorsTargetPerResourceProfile.getOrElseUpdate(resourceProfile, initialNumExecutors)
         if (maxNeeded < targetExecs) {
@@ -627,9 +627,7 @@ private[spark] class ExecutorAllocationManager(
     private val stageAttemptToSpeculativeTaskIndices =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
 
-    // private val stageAttemptToResourceProfile =
-      // new mutable.HashMap[StageAttempt, ResourceProfile]
-    val resourceProfileIdToStageAttempt =
+    private val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
     val resourceProfileIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
 
@@ -662,7 +660,7 @@ private[spark] class ExecutorAllocationManager(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
         logInfo("adding to execResourceReqsToNumTasks: " + numTasks)
         numExecutorsToAddPerResourceProfileId.getOrElseUpdate(profId, 1)
-        // TODO - currently never remove, we could remove is all executors using a profile exit
+        // Note we never remove profiles from resourceProfileIdToResourceProfile
         resourceProfileIdToResourceProfile.getOrElseUpdate(profId, stageResourceProf)
         numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, 0)
 
@@ -694,8 +692,7 @@ private[spark] class ExecutorAllocationManager(
       val stageAttemptId = stageCompleted.stageInfo.attemptNumber()
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       allocationManager.synchronized {
-        // do NOT remove stageAttempt from stageAttemptToNumRunningTasks
-        // or resourceProfileIdToStageAttempt,
+        // do NOT remove stageAttempt from stageAttemptToNumRunningTask
         // because the attempt may still have running tasks,
         // even after another attempt for the stage is submitted.
         val numTasks = stageAttemptToNumTasks(stageAttempt)
@@ -704,10 +701,6 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToTaskIndices -= stageAttempt
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
-        // TODO - need to do this somewhere but have to be careful about late events
-        // val rp = stageAttemptToResourceProfile(stageAttempt)
-        // resourceProfileIdToStageAttempt(rp.id) -= stageAttempt
-        // stageAttemptToResourceProfile -= stageAttempt
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
@@ -755,6 +748,21 @@ private[spark] class ExecutorAllocationManager(
           if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
             logWarning("stage attempt num running 0: " + stageAttempt)
             stageAttemptToNumRunningTask -= stageAttempt
+            if (!stageAttemptToNumTasks.contains(stageAttempt)) {
+              val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
+                v.contains(stageAttempt)
+              }.keys
+              if (rpForStage.size == 1) {
+                logWarning(s"removing stage attmpe $stageAttempt for rp: ${rpForStage.head}")
+                // be careful about the removal from here due to late tasks, make sure stage is
+                // really complete and no tasks left
+                resourceProfileIdToStageAttempt(rpForStage.head) -= stageAttempt
+              } else {
+                logWarning(s"Should have exactly one resource profile for stage $stageAttempt," +
+                  s" but have $rpForStage")
+              }
+            }
+
           }
         }
         // If the task failed, we expect it to be resubmitted later. To ensure we have
@@ -847,8 +855,6 @@ private[spark] class ExecutorAllocationManager(
 
     def totalRunningTasksPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
-      logWarning(s"totalRunningTasksPerResourceProfile resource profile is: $rp attempts $attempts")
-
       // attempts is a Set, change to Seq so we keep all values
       attempts.map { attempt =>
         stageAttemptToNumRunningTask.getOrElseUpdate(attempt, 0)
@@ -906,13 +912,14 @@ private[spark] class ExecutorAllocationManager(
       })
     }
 
-    // TODO - how to do metrics per stage????
-    registerGauge("numberExecutorsToAdd", 0, 0)
+    // the metrics are going to return the numbers for the default ResourceProfile
+    registerGauge("numberExecutorsToAdd",
+      numExecutorsToAddPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
     registerGauge("numberExecutorsPendingToRemove", executorMonitor.pendingRemovalCount, 0)
     registerGauge("numberAllExecutors", executorMonitor.executorCount, 0)
-    // TODO - fix
-    registerGauge("numberTargetExecutors", 0, 0)
-    registerGauge("numberMaxNeededExecutors", 0, 0)
+    registerGauge("numberTargetExecutors", numExecutorsTargetPerResourceProfile(defaultProfile), 0)
+    registerGauge("numberMaxNeededExecutors",
+      maxNumExecutorsNeededPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
   }
 }
 
