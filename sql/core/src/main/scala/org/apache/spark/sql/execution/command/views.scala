@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.execution.command
 
-import scala.collection.mutable
-
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
-import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+
+import scala.collection.mutable
 
 
 /**
@@ -201,10 +201,16 @@ case class CreateViewCommand(
         case UnresolvedRelation(AsTableIdentifier(ident))
             if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
           // Temporary views are only stored in the session catalog
-          logInfo(s"View $name is based on temporary view $ident."
-            + s" $name will be created as temporary view")
-          verifyTempView()
-          isTempReferred = true
+          if (sparkSession.sqlContext.conf.usePostgreSQLDialect) {
+            logInfo(s"View $name is based on temporary view $ident."
+              + s" $name will be created as temporary view")
+            verifyTempView()
+            isTempReferred = true
+          }
+          else {
+            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+              s"referencing a temporary view $ident")
+          }
 
         case other if !other.resolved => other.expressions.flatMap(_.collect {
           // Disallow creating permanent views based on temporary UDFs.
