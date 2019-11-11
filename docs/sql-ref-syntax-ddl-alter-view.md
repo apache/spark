@@ -139,59 +139,32 @@ ALTER VIEW tempdb1.v1 RENAME TO v2;
 -- Verify that the new view is created.
 DESCRIBE TABLE EXTENDED tempdb1.v2;
 
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|col_name                    |data_type                                                                                                                                    |comment|
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|c1                          |int                                                                                                                                          |null   |
-|c2                          |string                                                                                                                                       |null   |
-|                            |                                                                                                                                             |       |
-|# Detailed Table Information|                                                                                                                                             |       |
-|Database                    |tempdb1                                                                                                                                      |       |
-|Table                       |v2                                                                                                                                           |       |
-|Owner                       |qianyangyu                                                                                                                                   |       |
-|Created Time                |Fri Nov 08 20:29:53 PST 2019                                                                                                                 |       |
-|Last Access                 |Wed Dec 31 16:00:00 PST 1969                                                                                                                 |       |
-|Created By                  |Spark 2.2 or prior                                                                                                                           |       |
-|Type                        |VIEW                                                                                                                                         |       |
-|View Text                   |select * from tbl1                                                                                                                           |       |
-|View Original Text          |select * from tbl1                                                                                                                           |       |
-|View Default Database       |default                                                                                                                                      |       |
-|View Query Output Columns   |[c1, c2]                                                                                                                                     |       |
-|Table Properties            |[transient_lastDdlTime=1573366432, view.query.out.col.0=c1, view.query.out.numCols=2, view.default.database=default, view.query.out.col.1=c2]|       |
-|Serde Library               |org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe                                                                                           |       |
-|InputFormat                 |org.apache.hadoop.mapred.SequenceFileInputFormat                                                                                             |       |
-|OutputFormat                |org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat                                                                                    |       |
-|Storage Properties          |[serialization.format=1]                                                                                                                     |       |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
++----------------------------+----------+-------+
+|col_name                    |data_type |comment|
++----------------------------+----------+-------+
+|c1                          |int       |null   |
+|c2                          |string    |null   |
+|                            |          |       |
+|# Detailed Table Information|          |       |
+|Database                    |tempdb1   |       |
+|Table                       |v2        |       |
++----------------------------+----------+-------+
 
 -- Use `DESC TABLE EXTENDED tempdb1.v2` before and after the `ALTER VIEW` statement to verify the changes.
 -- Before ALTER VIEW SET TBLPROPERTIES
 DESC TABLE EXTENDED tempdb1.v2;
 
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|col_name                    |data_type                                                                                                                                    |comment|
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|c1                          |int                                                                                                                                          |null   |
-|c2                          |string                                                                                                                                       |null   |
-|                            |                                                                                                                                             |       |
-|# Detailed Table Information|                                                                                                                                             |       |
-|Database                    |tempdb1                                                                                                                                      |       |
-|Table                       |v2                                                                                                                                           |       |
-|Owner                       |qianyangyu                                                                                                                                   |       |
-|Created Time                |Fri Nov 08 20:29:53 PST 2019                                                                                                                 |       |
-|Last Access                 |Wed Dec 31 16:00:00 PST 1969                                                                                                                 |       |
-|Created By                  |Spark 2.2 or prior                                                                                                                           |       |
-|Type                        |VIEW                                                                                                                                         |       |
-|View Text                   |select * from tbl1                                                                                                                           |       |
-|View Original Text          |select * from tbl1                                                                                                                           |       |
-|View Default Database       |default                                                                                                                                      |       |
-|View Query Output Columns   |[c1, c2]                                                                                                                                     |       |
-|Table Properties            |[transient_lastDdlTime=1573366432, view.query.out.col.0=c1, view.query.out.numCols=2, view.default.database=default, view.query.out.col.1=c2]|       |
-|Serde Library               |org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe                                                                                           |       |
-|InputFormat                 |org.apache.hadoop.mapred.SequenceFileInputFormat                                                                                             |       |
-|OutputFormat                |org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat                                                                                    |       |
-|Storage Properties          |[serialization.format=1]                                                                                                                     |       |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
++----------------------------+----------+-------+
+|col_name                    |data_type |comment|
++----------------------------+----------+-------+
+|c1                          |int       |null   |
+|c2                          |string    |null   |
+|                            |          |       |
+|# Detailed Table Information|          |       |
+|Database                    |tempdb1   |       |
+|Table                       |v2        |       |
+|Table Properties            |[....]    |       |
++----------------------------+----------+-------+
 
 -- Set properties in TBLPROPERTIES
 ALTER VIEW tempdb1.v2 SET TBLPROPERTIES ('created.by.user' = "John", 'created.date' = '01-01-2001' );
@@ -199,30 +172,17 @@ ALTER VIEW tempdb1.v2 SET TBLPROPERTIES ('created.by.user' = "John", 'created.da
 -- Use `DESCRIBE TABLE EXTENDED tempdb1.v2` to verify
 DESC TABLE EXTENDED tempdb1.v2;
 
-+----------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|col_name                    |data_type                                                                                                                                                                                   |comment|
-+----------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|c1                          |int                                                                                                                                                                                         |null   |
-|c2                          |string                                                                                                                                                                                      |null   |
-|                            |                                                                                                                                                                                            |       |
-|# Detailed Table Information|                                                                                                                                                                                            |       |
-|Database                    |tempdb1                                                                                                                                                                                     |       |
-|Table                       |v2                                                                                                                                                                                          |       |
-|Owner                       |qianyangyu                                                                                                                                                                                  |       |
-|Created Time                |Fri Nov 08 20:29:53 PST 2019                                                                                                                                                                |       |
-|Last Access                 |Wed Dec 31 16:00:00 PST 1969                                                                                                                                                                |       |
-|Created By                  |Spark 2.2 or prior                                                                                                                                                                          |       |
-|Type                        |VIEW                                                                                                                                                                                        |       |
-|View Text                   |select * from tbl1                                                                                                                                                                          |       |
-|View Original Text          |select * from tbl1                                                                                                                                                                          |       |
-|View Default Database       |default                                                                                                                                                                                     |       |
-|View Query Output Columns   |[c1, c2]                                                                                                                                                                                    |       |
-|Table Properties            |[created.by.user=John, created.date=01-01-2001, transient_lastDdlTime=1573367607, view.query.out.col.0=c1, view.query.out.numCols=2, view.default.database=default, view.query.out.col.1=c2]|       |
-|Serde Library               |org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe                                                                                                                                          |       |
-|InputFormat                 |org.apache.hadoop.mapred.SequenceFileInputFormat                                                                                                                                            |       |
-|OutputFormat                |org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat                                                                                                                                   |       |
-|Storage Properties          |[serialization.format=1]                                                                                                                                                                    |       |
-+----------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------+
++----------------------------+-----------------------------------------------------+-------+
+|col_name                    |data_type                                            |comment|
++----------------------------+-----------------------------------------------------+-------+
+|c1                          |int                                                  |null   |
+|c2                          |string                                               |null   |
+|                            |                                                     |       |
+|# Detailed Table Information|                                                     |       |
+|Database                    |tempdb1                                              |       |
+|Table                       |v2                                                   |       |
+|Table Properties            |[created.by.user=John, created.date=01-01-2001, ....]|       |
++----------------------------+-----------------------------------------------------+-------+
 
 -- Use `DESC TABLE EXTENDED tempdb1.v2` before and after the `ALTER VIEW` to verify the change.
 -- Remove the key created.by.user and created.date from TBLPROPERTIES
@@ -231,30 +191,17 @@ ALTER VIEW tempdb1.v2 UNSET TBLPROPERTIES ('created.by.user', 'created.date');
 --Use `DESC TABLE EXTENDED tempdb1.v2` to verify the changes
 DESC TABLE EXTENDED tempdb1.v2;
 
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|col_name                    |data_type                                                                                                                                    |comment|
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|c1                          |int                                                                                                                                          |null   |
-|c2                          |string                                                                                                                                       |null   |
-|                            |                                                                                                                                             |       |
-|# Detailed Table Information|                                                                                                                                             |       |
-|Database                    |tempdb1                                                                                                                                      |       |
-|Table                       |v2                                                                                                                                           |       |
-|Owner                       |qianyangyu                                                                                                                                   |       |
-|Created Time                |Fri Nov 08 20:29:53 PST 2019                                                                                                                 |       |
-|Last Access                 |Wed Dec 31 16:00:00 PST 1969                                                                                                                 |       |
-|Created By                  |Spark 2.2 or prior                                                                                                                           |       |
-|Type                        |VIEW                                                                                                                                         |       |
-|View Text                   |select * from tbl1                                                                                                                           |       |
-|View Original Text          |select * from tbl1                                                                                                                           |       |
-|View Default Database       |default                                                                                                                                      |       |
-|View Query Output Columns   |[c1, c2]                                                                                                                                     |       |
-|Table Properties            |[transient_lastDdlTime=1573367731, view.query.out.col.0=c1, view.query.out.numCols=2, view.default.database=default, view.query.out.col.1=c2]|       |
-|Serde Library               |org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe                                                                                           |       |
-|InputFormat                 |org.apache.hadoop.mapred.SequenceFileInputFormat                                                                                             |       |
-|OutputFormat                |org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat                                                                                    |       |
-|Storage Properties          |[serialization.format=1]                                                                                                                     |       |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
++----------------------------+----------+-------+
+|col_name                    |data_type |comment|
++----------------------------+----------+-------+
+|c1                          |int       |null   |
+|c2                          |string    |null   |
+|                            |          |       |
+|# Detailed Table Information|          |       |
+|Database                    |tempdb1   |       |
+|Table                       |v2        |       |
+|Table Properties            |[....]    |       |
++----------------------------+----------+-------+
 
 -- Do the select on tempdb.view1 before and after the `ALTER VIEW` statement to verify.
 -- Change the view definition
@@ -263,30 +210,19 @@ ALTER VIEW tempdb1.v2 AS SELECT * FROM tempdb1.v1;
 -- Use `DESC TABLE EXTENDED` to verify
 DESC TABLE EXTENDED tempdb1.v2;
 
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|col_name                    |data_type                                                                                                                                    |comment|
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
-|c1                          |int                                                                                                                                          |null   |
-|c2                          |string                                                                                                                                       |null   |
-|                            |                                                                                                                                             |       |
-|# Detailed Table Information|                                                                                                                                             |       |
-|Database                    |tempdb1                                                                                                                                      |       |
-|Table                       |v2                                                                                                                                           |       |
-|Owner                       |qianyangyu                                                                                                                                   |       |
-|Created Time                |Fri Nov 08 20:29:53 PST 2019                                                                                                                 |       |
-|Last Access                 |Wed Dec 31 16:00:00 PST 1969                                                                                                                 |       |
-|Created By                  |Spark 2.2 or prior                                                                                                                           |       |
-|Type                        |VIEW                                                                                                                                         |       |
-|View Text                   |select * from tempdb1.v1                                                                                                                     |       |
-|View Original Text          |select * from tempdb1.v1                                                                                                                     |       |
-|View Default Database       |default                                                                                                                                      |       |
-|View Query Output Columns   |[c1, c2]                                                                                                                                     |       |
-|Table Properties            |[transient_lastDdlTime=1573368347, view.query.out.col.0=c1, view.query.out.numCols=2, view.default.database=default, view.query.out.col.1=c2]|       |
-|Serde Library               |org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe                                                                                           |       |
-|InputFormat                 |org.apache.hadoop.mapred.SequenceFileInputFormat                                                                                             |       |
-|OutputFormat                |org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat                                                                                    |       |
-|Storage Properties          |[serialization.format=1]                                                                                                                     |       |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+-------+
++----------------------------+---------------------------+-------+
+|col_name                    |data_type                  |comment|
++----------------------------+---------------------------+-------+
+|c1                          |int                        |null   |
+|c2                          |string                     |null   |
+|                            |                           |       |
+|# Detailed Table Information|                           |       |
+|Database                    |tempdb1                    |       |
+|Table                       |v2                         |       |
+|Type                        |VIEW                       |       |
+|View Text                   |select * from tempdb1.v1   |       |
+|View Original Text          |select * from tempdb1.v1   |       |
++----------------------------+---------------------------+-------+
 {% endhighlight %}
 
 #### Related Statements
