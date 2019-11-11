@@ -79,6 +79,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
       "-1 MONTH 1 day -1 microseconds" -> new CalendarInterval(-1, 1, -1),
       " 123 MONTHS        123 DAYS  123 Microsecond    " -> new CalendarInterval(123, 123, 123),
       "interval -1 day +3 Microseconds" -> new CalendarInterval(0, -1, 3),
+      "interval -   1 day +     3 Microseconds" -> new CalendarInterval(0, -1, 3),
       "  interval  8  years -11 months 123  weeks   -1 day " +
         "23 hours -22 minutes 1 second  -123  millisecond    567 microseconds " ->
         new CalendarInterval(85, 860, 81480877567L)).foreach { case (input, expected) =>

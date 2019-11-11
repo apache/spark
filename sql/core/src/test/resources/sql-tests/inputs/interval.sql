@@ -66,6 +66,15 @@ select make_interval(1, 2, 3, 4, 5);
 select make_interval(1, 2, 3, 4, 5, 6);
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
 
+-- cast string to intervals
+select cast('1 second' as interval);
+select cast('+1 second' as interval);
+select cast('-1 second' as interval);
+select cast('+     1 second' as interval);
+select cast('-     1 second' as interval);
+select cast('- -1 second' as interval);
+select cast('- +1 second' as interval);
+
 -- justify intervals
 select justify_days(cast(null as interval));
 select justify_hours(cast(null as interval));
