@@ -196,30 +196,35 @@ case class CreateViewCommand(
       // added/generated from a temporary view.
       // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
       // package (e.g., HiveGenericUDF).
-      child.collect {
-        // Permanent views will be created as temporary view if based on temporary view.
-        case UnresolvedRelation(AsTableIdentifier(ident))
+      def verify(child: LogicalPlan) {
+        child.collect {
+          // Permanent views will be created as temporary view if based on temporary view.
+          case UnresolvedRelation(AsTableIdentifier(ident))
             if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
-          // Temporary views are only stored in the session catalog
-          if (sparkSession.sqlContext.conf.usePostgreSQLDialect) {
-            logInfo(s"View $name is based on temporary view $ident."
-              + s" $name will be created as temporary view")
-            verifyTempView()
-            isTempReferred = true
-          }
-          else {
-            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-              s"referencing a temporary view $ident")
-          }
+            // Temporary views are only stored in the session catalog
+            if (sparkSession.sqlContext.conf.usePostgreSQLDialect) {
+              logInfo(s"View $name is based on temporary view $ident."
+                + s" $name will be created as temporary view")
+              verifyTempView()
+              isTempReferred = true
+            }
+            else {
+              throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+                s"referencing a temporary view $ident")
+            }
 
-        case other if !other.resolved => other.expressions.flatMap(_.collect {
-          // Disallow creating permanent views based on temporary UDFs.
-          case e: UnresolvedFunction
-            if sparkSession.sessionState.catalog.isTemporaryFunction(e.name) =>
-            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-              s"referencing a temporary function `${e.name}`")
-        })
+          case other if !other.resolved => other.expressions.flatMap(_.collect {
+            // Traverse subquery plan for any unresolved relations.
+            case e: SubqueryExpression => verify(e.plan)
+            // Disallow creating permanent views based on temporary UDFs.
+            case e: UnresolvedFunction
+              if sparkSession.sessionState.catalog.isTemporaryFunction(e.name) =>
+              throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+                s"referencing a temporary function `${e.name}`")
+          })
+        }
       }
+      verify(child)
     }
   }
 
