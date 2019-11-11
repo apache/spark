@@ -694,7 +694,7 @@ class Analyzer(
       case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName)
           .map(rel => show.copy(table = rel))
-          .getOrElse(u)
+          .getOrElse(show)
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
