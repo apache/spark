@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.collection.mutable
+
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -25,9 +28,6 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-
-import scala.collection.mutable
 
 
 /**
