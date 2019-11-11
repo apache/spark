@@ -128,7 +128,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
         if (maybeTimerContext != null) {
           val elapsed = maybeTimerContext.stop()
           if (logSlowEventEnabled && elapsed > logSlowEventThreshold) {
-            logError(s"Process of event ${event} by listener ${listenerName} took " +
+            logInfo(s"Process of event ${event} by listener ${listenerName} took " +
               s"${elapsed / 1000000000d}s.")
           }
         }
