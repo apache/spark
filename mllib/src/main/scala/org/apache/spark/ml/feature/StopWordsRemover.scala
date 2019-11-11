@@ -156,6 +156,12 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): StopWordsRemover = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"StopWordsRemover: uid=$uid, numStopWords=${$(stopWords).length}, locale=${$(locale)}, " +
+      s"caseSensitive=${$(caseSensitive)}"
+  }
 }
 
 @Since("1.6.0")
