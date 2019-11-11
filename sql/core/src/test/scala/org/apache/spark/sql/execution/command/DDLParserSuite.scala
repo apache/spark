@@ -1107,8 +1107,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
-    val (target, source, provider, location, exists) = parser.parsePlan(v1).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
+    val (target, source, provider, hiveFormat, location, exists) = parser.parsePlan(v1).collect {
+      case CreateTableLikeCommand(t, s, p, h, l, allowExisting) => (t, s, p, h, l, allowExisting)
     }.head
     assert(exists == false)
     assert(target.database.isEmpty)
@@ -1119,9 +1119,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(provider.isEmpty)
 
     val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
-    val (target2, source2, provider2, location2, exists2) = parser.parsePlan(v2).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target2, source2, provider2, hiveFormat2, location2, exists2) =
+      parser.parsePlan(v2).collect {
+        case CreateTableLikeCommand(t, s, p, h, l, allowExisting) => (t, s, p, h, l, allowExisting)
+      }.head
     assert(exists2)
     assert(target2.database.isEmpty)
     assert(target2.table == "table1")
@@ -1131,9 +1132,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(provider2.isEmpty)
 
     val v3 = "CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"
-    val (target3, source3, provider3, location3, exists3) = parser.parsePlan(v3).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target3, source3, provider3, hiveFormat3, location3, exists3) =
+      parser.parsePlan(v3).collect {
+        case CreateTableLikeCommand(t, s, p, h, l, allowExisting) => (t, s, p, h, l, allowExisting)
+      }.head
     assert(!exists3)
     assert(target3.database.isEmpty)
     assert(target3.table == "table1")
@@ -1143,9 +1145,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(provider3.isEmpty)
 
     val v4 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 LOCATION '/spark/warehouse'"
-    val (target4, source4, provider4, location4, exists4) = parser.parsePlan(v4).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target4, source4, provider4, hiveFormat4, location4, exists4) =
+      parser.parsePlan(v4).collect {
+        case CreateTableLikeCommand(t, s, p, h, l, allowExisting) => (t, s, p, h, l, allowExisting)
+      }.head
     assert(exists4)
     assert(target4.database.isEmpty)
     assert(target4.table == "table1")
@@ -1155,9 +1158,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(provider4.isEmpty)
 
     val v5 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING parquet"
-    val (target5, source5, provider5, location5, exists5) = parser.parsePlan(v5).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target5, source5, provider5, hiveFormat5, location5, exists5) =
+      parser.parsePlan(v5).collect {
+        case CreateTableLikeCommand(t, s, p, h, l, allowExisting) => (t, s, p, h, l, allowExisting)
+      }.head
     assert(exists5)
     assert(target5.database.isEmpty)
     assert(target5.table == "table1")
@@ -1167,9 +1171,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(provider5 == Some("parquet"))
 
     val v6 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING ORC"
-    val (target6, source6, provider6, location6, exists6) = parser.parsePlan(v6).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target6, source6, provider6, hiveFormat6, location6, exists6) =
+      parser.parsePlan(v6).collect {
+        case CreateTableLikeCommand(t, s, p, h, l, allowExisting) => (t, s, p, h, l, allowExisting)
+      }.head
     assert(exists6)
     assert(target6.database.isEmpty)
     assert(target6.table == "table1")

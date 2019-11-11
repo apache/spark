@@ -2564,4 +2564,23 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("Create Table LIKE STORED AS Hive Format") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "f") {
+      sql("CREATE TABLE s(a INT, b INT) STORED AS ORC")
+
+      hiveFormats.foreach { tableType =>
+        val expectedSerde = HiveSerDe.sourceToSerDe(tableType)
+        withTable("t") {
+          sql(s"CREATE TABLE t LIKE s STORED AS $tableType")
+          val table = catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.provider == Some("hive"))
+          assert(table.storage.serde == expectedSerde.get.serde)
+          assert(table.storage.inputFormat == expectedSerde.get.inputFormat)
+          assert(table.storage.outputFormat == expectedSerde.get.outputFormat)
+        }
+      }
+    }
+  }
 }

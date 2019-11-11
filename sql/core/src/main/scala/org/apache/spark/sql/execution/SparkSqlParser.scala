@@ -632,15 +632,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * For example:
    * {{{
    *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
-   *   LIKE [other_db_name.]existing_table_name [USING provider] [locationSpec]
+   *   LIKE [other_db_name.]existing_table_name [USING provider | STORED AS hiveFormat]
+   *   [locationSpec]
    * }}}
    */
   override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
     val targetTable = visitTableIdentifier(ctx.target)
     val sourceTable = visitTableIdentifier(ctx.source)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
+    val hiveFormat = Option(ctx.createFileFormat).map(visitCreateFileFormat)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
-    CreateTableLikeCommand(targetTable, sourceTable, provider, location, ctx.EXISTS != null)
+    CreateTableLikeCommand(
+      targetTable, sourceTable, provider, hiveFormat, location, ctx.EXISTS != null)
   }
 
   /**

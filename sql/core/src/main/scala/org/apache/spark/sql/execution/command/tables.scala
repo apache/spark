@@ -53,23 +53,29 @@ import org.apache.spark.sql.util.SchemaUtils
  * are identical to the ones defined in the source table.
  *
  * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
- * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
+ * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec by default.
  *
- * Use "CREATE TABLE t1 LIKE t2 USING file_format"
- * to specify new file format for t1 from a data source table t2.
+ * Use "CREATE TABLE t1 LIKE t2 USING file_format" to specify new provider for t1.
+ * For Hive compatibility, use "CREATE TABLE t1 LIKE t2 STORED AS hiveFormat"
+ * to specify new file storage format (inputFormat, outputFormat, serde) for t1.
  *
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name [USING provider] [locationSpec]
+ *   LIKE [other_db_name.]existing_table_name [USING provider | STORED AS hiveFormat]
+ *   [locationSpec]
  * }}}
  */
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
     provider: Option[String],
+    hiveFormat: Option[CatalogStorageFormat],
     location: Option[String],
     ifNotExists: Boolean) extends RunnableCommand {
+
+  assert(!(hiveFormat.isDefined && provider.isDefined),
+    "'STORED AS hiveFormats' and 'USING provider' should not be specified both")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -88,6 +94,18 @@ case class CreateTableLikeCommand(
       sourceTableDesc.provider
     }
 
+    val newStorage = hiveFormat match {
+      case Some(f) =>
+        sourceTableDesc.storage.copy(
+          inputFormat = f.inputFormat,
+          outputFormat = f.outputFormat,
+          serde = f.serde,
+          locationUri = location.map(CatalogUtils.stringToURI(_)))
+      case None =>
+        sourceTableDesc.storage.copy(
+          locationUri = location.map(CatalogUtils.stringToURI(_)))
+    }
+
     // If the location is specified, we create an external table internally.
     // Otherwise create a managed table.
     val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
@@ -96,8 +114,7 @@ case class CreateTableLikeCommand(
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
-        storage = sourceTableDesc.storage.copy(
-          locationUri = location.map(CatalogUtils.stringToURI(_))),
+        storage = newStorage,
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
