@@ -169,7 +169,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     }
   }
 
-  test("Create Table LIKE USING Hive built-in ORC") {
+  test("throw exception if Create Table LIKE USING Hive built-in ORC in in-memory catalog") {
     val catalog = spark.sessionState.catalog
     withTable("s", "t") {
       sql("CREATE TABLE s(a INT, b INT) USING parquet")

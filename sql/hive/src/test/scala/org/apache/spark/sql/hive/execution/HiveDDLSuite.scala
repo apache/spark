@@ -361,7 +361,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     }
   }
 
-  test("Create Table LIKE USING Hive built-in ORC") {
+  test("Create Table LIKE USING Hive built-in ORC in Hive catalog") {
     val catalog = spark.sessionState.catalog
     withTable("s", "t") {
       sql("CREATE TABLE s(a INT, b INT) USING parquet")
@@ -1513,19 +1513,13 @@ class HiveDDLSuite
     assert(targetTable.properties.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
       "the table properties of source tables should not be copied in the created table")
 
-    if (DDLUtils.isHiveTable(provider)) {
-      assert(DDLUtils.isHiveTable(targetTable),
-        "the target table should be a hive table")
-    } else {
-      if (DDLUtils.isDatasourceTable(sourceTable) ||
-          sourceTable.tableType == CatalogTableType.VIEW) {
-        assert(DDLUtils.isDatasourceTable(targetTable),
-          "the target table should be a data source table")
-      }
-    }
-
     provider match {
-      case Some(_) => assert(targetTable.provider == provider)
+      case Some(_) =>
+        assert(targetTable.provider == provider)
+        if (DDLUtils.isHiveTable(provider)) {
+          assert(DDLUtils.isHiveTable(targetTable),
+            "the target table should be a hive table if provider is hive")
+        }
       case None =>
         if (sourceTable.tableType == CatalogTableType.VIEW) {
           // Source table is a temporary/permanent view, which does not have a provider.
@@ -1533,6 +1527,14 @@ class HiveDDLSuite
           assert(targetTable.provider == Option(spark.sessionState.conf.defaultDataSourceName))
         } else {
           assert(targetTable.provider == sourceTable.provider)
+        }
+        if (DDLUtils.isDatasourceTable(sourceTable) ||
+            sourceTable.tableType == CatalogTableType.VIEW) {
+          assert(DDLUtils.isDatasourceTable(targetTable),
+            "the target table should be a data source table")
+        } else {
+          assert(!DDLUtils.isDatasourceTable(targetTable),
+            "the target table should be a Hive serde table")
         }
     }
 
