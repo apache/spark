@@ -1301,6 +1301,91 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("MERGE INTO TABLE") {
+    val target = "testcat.ns1.ns2.target"
+    val source = "testcat.ns1.ns2.source"
+    withTable(target, source) {
+      sql(
+        s"""
+           |CREATE TABLE $target (id bigint, name string, age int, p int)
+           |USING foo
+           |PARTITIONED BY (id, p)
+         """.stripMargin)
+      sql(
+        s"""
+           |CREATE TABLE $source (id bigint, name string, age int, p int)
+           |USING foo
+           |PARTITIONED BY (id, p)
+         """.stripMargin)
+
+      // MERGE INTO non-existing table
+      assertAnalysisError(
+        s"""
+           |MERGE INTO testcat.ns1.ns2.dummy AS target
+           |USING testcat.ns1.ns2.source AS source
+           |ON target.id = source.id
+           |WHEN MATCHED AND (target.age < 10) THEN DELETE
+           |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET *
+           |WHEN NOT MATCHED AND (target.col2='insert')
+           |THEN INSERT *
+         """.stripMargin,
+        "Table or view not found")
+
+      // USING non-existing table
+      assertAnalysisError(
+        s"""
+           |MERGE INTO testcat.ns1.ns2.target AS target
+           |USING testcat.ns1.ns2.dummy AS source
+           |ON target.id = source.id
+           |WHEN MATCHED AND (target.age < 10) THEN DELETE
+           |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET *
+           |WHEN NOT MATCHED AND (target.col2='insert')
+           |THEN INSERT *
+         """.stripMargin,
+        "Table or view not found")
+
+      // UPDATE non-existing column
+      assertAnalysisError(
+        s"""
+           |MERGE INTO testcat.ns1.ns2.target AS target
+           |USING testcat.ns1.ns2.source AS source
+           |ON target.id = source.id
+           |WHEN MATCHED AND (target.age < 10) THEN DELETE
+           |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET target.dummy = source.age
+           |WHEN NOT MATCHED AND (target.col2='insert')
+           |THEN INSERT *
+         """.stripMargin,
+        "cannot resolve")
+
+      // UPDATE using non-existing column
+      assertAnalysisError(
+        s"""
+           |MERGE INTO testcat.ns1.ns2.target AS target
+           |USING testcat.ns1.ns2.source AS source
+           |ON target.id = source.id
+           |WHEN MATCHED AND (target.age < 10) THEN DELETE
+           |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET target.age = source.dummy
+           |WHEN NOT MATCHED AND (target.col2='insert')
+           |THEN INSERT *
+         """.stripMargin,
+        "cannot resolve")
+
+      // MERGE INTO is not implemented yet.
+      val e = intercept[UnsupportedOperationException] {
+        sql(
+          s"""
+             |MERGE INTO testcat.ns1.ns2.target AS target
+             |USING testcat.ns1.ns2.source AS source
+             |ON target.id = source.id
+             |WHEN MATCHED AND (target.p < 0) THEN DELETE
+             |WHEN MATCHED AND (target.p > 0) THEN UPDATE SET *
+             |WHEN NOT MATCHED THEN INSERT *
+           """.stripMargin)
+      }
+      assert(e.getMessage.contains("MERGE INTO TABLE is not supported temporarily"))
+    }
+  }
+
   test("ANALYZE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1467,6 +1552,14 @@ class DataSourceV2SQLSuite
       }
       assert(e.message.contains("ALTER TABLE SerDe Properties is only supported with v1 tables"))
     }
+  }
+
+  test("ALTER VIEW AS QUERY") {
+    val v = "testcat.ns1.ns2.v"
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER VIEW $v AS SELECT 1")
+    }
+    assert(e.message.contains("ALTER VIEW QUERY is only supported with v1 tables"))
   }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
