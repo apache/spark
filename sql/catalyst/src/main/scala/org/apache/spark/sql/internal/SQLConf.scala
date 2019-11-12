@@ -2050,6 +2050,16 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+
+  val LEGACY_FROM_DAYTIME_STRING =
+    buildConf("spark.sql.legacy.fromDayTimeString.enabled")
+      .doc("When true, the `from` bound is not taken into account in conversion of " +
+        "a day-time string to an interval, and the `to` bound is used to skip" +
+        "all interval units out of the specified range. If it is set to `false`, " +
+        "`ParseException` is thrown if the input does not match to the pattern " +
+        "defined by `from` and `to`.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
