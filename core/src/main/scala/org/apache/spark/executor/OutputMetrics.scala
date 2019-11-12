@@ -29,7 +29,9 @@ import org.apache.spark.util.LongAccumulator
 @DeveloperApi
 object DataWriteMethod extends Enumeration with Serializable {
   type DataWriteMethod = Value
-  val Hadoop = Value
+  val HADOOP = Value
+  @deprecated("Use HADOOP instead.", "3.0.0")
+  val Hadoop = HADOOP
 }
 
 
