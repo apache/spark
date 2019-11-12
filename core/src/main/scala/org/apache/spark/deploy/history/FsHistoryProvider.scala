@@ -544,7 +544,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           // to take any more submissions at this time
           case e: Exception =>
             logError(s"Exception while submitting event log for replay", e)
-            None
         }
       }
 
