@@ -36,7 +36,7 @@ object DenseKMeans {
 
   object InitializationMode extends Enumeration {
     type InitializationMode = Value
-    val Random, Parallel = Value
+    val RANDOM, PARALLEL = Value
   }
 
   import InitializationMode._
@@ -45,7 +45,7 @@ object DenseKMeans {
       input: String = null,
       k: Int = -1,
       numIterations: Int = 10,
-      initializationMode: InitializationMode = Parallel) extends AbstractParams[Params]
+      initializationMode: InitializationMode = PARALLEL) extends AbstractParams[Params]
 
   def main(args: Array[String]): Unit = {
     val defaultParams = Params()
@@ -90,8 +90,8 @@ object DenseKMeans {
     println(s"numExamples = $numExamples.")
 
     val initMode = params.initializationMode match {
-      case Random => KMeans.RANDOM
-      case Parallel => KMeans.K_MEANS_PARALLEL
+      case RANDOM => KMeans.RANDOM
+      case PARALLEL => KMeans.K_MEANS_PARALLEL
     }
 
     val model = new KMeans()
