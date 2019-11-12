@@ -321,7 +321,7 @@ class RowMatrix @Since("1.0.0") (
     require(k > 0 && k <= n, s"Requested k singular values but got k=$k and numCols=$n.")
 
     object SVDMode extends Enumeration {
-      val LocalARPACK, LocalLAPACK, DistARPACK = Value
+      val LOCAL_ARPACK, LOCAL_LAPACK, DIST_ARPACK = Value
     }
 
     val computeMode = mode match {
@@ -335,33 +335,33 @@ class RowMatrix @Since("1.0.0") (
           // If n is small or k is large compared with n, we better compute the Gramian matrix first
           // and then compute its eigenvalues locally, instead of making multiple passes.
           if (k < n / 3) {
-            SVDMode.LocalARPACK
+            SVDMode.LOCAL_ARPACK
           } else {
-            SVDMode.LocalLAPACK
+            SVDMode.LOCAL_LAPACK
           }
         } else {
           // If k is small compared with n, we use ARPACK with distributed multiplication.
-          SVDMode.DistARPACK
+          SVDMode.DIST_ARPACK
         }
-      case "local-svd" => SVDMode.LocalLAPACK
-      case "local-eigs" => SVDMode.LocalARPACK
-      case "dist-eigs" => SVDMode.DistARPACK
+      case "local-svd" => SVDMode.LOCAL_LAPACK
+      case "local-eigs" => SVDMode.LOCAL_ARPACK
+      case "dist-eigs" => SVDMode.DIST_ARPACK
       case _ => throw new IllegalArgumentException(s"Do not support mode $mode.")
     }
 
     // Compute the eigen-decomposition of A' * A.
     val (sigmaSquares: BDV[Double], u: BDM[Double]) = computeMode match {
-      case SVDMode.LocalARPACK =>
+      case SVDMode.LOCAL_ARPACK =>
         require(k < n, s"k must be smaller than n in local-eigs mode but got k=$k and n=$n.")
         val G = computeGramianMatrix().asBreeze.asInstanceOf[BDM[Double]]
         EigenValueDecomposition.symmetricEigs(v => G * v, n, k, tol, maxIter)
-      case SVDMode.LocalLAPACK =>
+      case SVDMode.LOCAL_LAPACK =>
         // breeze (v0.10) svd latent constraint, 7 * n * n + 4 * n < Int.MaxValue
         require(n < 17515, s"$n exceeds the breeze svd capability")
         val G = computeGramianMatrix().asBreeze.asInstanceOf[BDM[Double]]
         val brzSvd.SVD(uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
         (sigmaSquaresFull, uFull)
-      case SVDMode.DistARPACK =>
+      case SVDMode.DIST_ARPACK =>
         if (rows.getStorageLevel == StorageLevel.NONE) {
           logWarning("The input data is not directly cached, which may hurt performance if its"
             + " parent RDDs are also uncached.")
@@ -392,7 +392,7 @@ class RowMatrix @Since("1.0.0") (
     }
 
     // Warn at the end of the run as well, for increased visibility.
-    if (computeMode == SVDMode.DistARPACK && rows.getStorageLevel == StorageLevel.NONE) {
+    if (computeMode == SVDMode.DIST_ARPACK && rows.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data was not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }
