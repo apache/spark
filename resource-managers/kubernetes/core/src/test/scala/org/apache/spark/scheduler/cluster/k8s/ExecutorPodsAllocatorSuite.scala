@@ -130,7 +130,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-29771: shutdown application while too many executors failed.") {
     // define a NoExitSecurityManager to capture System.exit
-    case class ExitException(status: Int) extends SecurityException("There is no escape!")
+    case class ExitException(status: Int) extends SecurityException("No escape")
     class NoExitSecurityManager extends java.lang.SecurityManager {
       override def checkPermission(perm: Permission): Unit = {}
       override def checkExit(status: Int): Unit = throw ExitException(status)
@@ -150,7 +150,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     } catch {
       case e: ExitException =>
         assert(podsAllocatorUnderTest.EXIT_MAX_EXECUTOR_FAILURES == e.status,
-          s"exit num show be ${podsAllocatorUnderTest.EXIT_MAX_EXECUTOR_FAILURES}")
+          s"Exit status should be ${podsAllocatorUnderTest.EXIT_MAX_EXECUTOR_FAILURES}")
     } finally {
       // reset SecurityManager
       System.setSecurityManager(preSecurityManager)
