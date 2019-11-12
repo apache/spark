@@ -112,6 +112,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
           statement.execute(s"SET ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
+          statement.execute(s"SET ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} = true")
         case _ =>
       }
 
