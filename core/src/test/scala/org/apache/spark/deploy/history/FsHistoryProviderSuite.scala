@@ -1166,7 +1166,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     // FileStatus.getLen is more than logInfo fileSize
     var fileStatus = new FileStatus(200, false, 0, 0, 0, path)
     when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
-    var logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
+    var logInfo = new LogInfo(path.toString, 0, LogType.EVENT_LOGS, Some("appId"),
       Some("attemptId"), 100, None, false)
     var reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
@@ -1176,14 +1176,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     fileStatus.setPath(path)
     when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
     // DFSInputStream.getFileLength is more than logInfo fileSize
-    logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
+    logInfo = new LogInfo(path.toString, 0, LogType.EVENT_LOGS, Some("appId"),
       Some("attemptId"), 100, None, false)
     reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(mockedProvider.shouldReloadLog(logInfo, reader.get))
 
     // DFSInputStream.getFileLength is equal to logInfo fileSize
-    logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
+    logInfo = new LogInfo(path.toString, 0, LogType.EVENT_LOGS, Some("appId"),
       Some("attemptId"), 200, None, false)
     reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)

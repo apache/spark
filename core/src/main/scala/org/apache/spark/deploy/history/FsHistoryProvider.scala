@@ -495,7 +495,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // If the file is currently not being tracked by the SHS, add an entry for it and try
               // to parse it. This will allow the cleaner code to detect the file as stale later on
               // if it was not possible to parse it.
-              listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime, LogType.EventLogs,
+              listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime, LogType.EVENT_LOGS,
                 None, None, reader.fileSizeForLastIndex, reader.lastIndex,
                 reader.completed))
               reader.fileSizeForLastIndex > 0
@@ -744,7 +744,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // listing data is good.
         invalidateUI(app.info.id, app.attempts.head.info.attemptId)
         addListing(app)
-        listing.write(LogInfo(logPath.toString(), scanTime, LogType.EventLogs, Some(app.info.id),
+        listing.write(LogInfo(logPath.toString(), scanTime, LogType.EVENT_LOGS, Some(app.info.id),
           app.attempts.head.info.attemptId, reader.fileSizeForLastIndex,
           reader.lastIndex, reader.completed))
 
@@ -777,7 +777,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // listing db, with an empty ID. This will make the log eligible for deletion if the app
         // does not make progress after the configured max log age.
         listing.write(
-          LogInfo(logPath.toString(), scanTime, LogType.EventLogs, None, None,
+          LogInfo(logPath.toString(), scanTime, LogType.EVENT_LOGS, None, None,
             reader.fileSizeForLastIndex, reader.lastIndex, reader.completed))
     }
   }
@@ -822,7 +822,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .reverse()
       .first(maxTime)
       .asScala
-      .filter { l => l.logType == null || l.logType == LogType.EventLogs }
+      .filter { l => l.logType == null || l.logType == LogType.EVENT_LOGS }
       .toList
     stale.foreach { log =>
       if (log.appId.isEmpty) {
@@ -912,7 +912,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         } catch {
           case e: NoSuchElementException =>
             // For every new driver log file discovered, create a new entry in listing
-            listing.write(LogInfo(f.getPath().toString(), currentTime, LogType.DriverLogs, None,
+            listing.write(LogInfo(f.getPath().toString(), currentTime, LogType.DRIVER_LOGS, None,
               None, f.getLen(), None, false))
           false
         }
@@ -930,7 +930,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .reverse()
       .first(maxTime)
       .asScala
-      .filter { l => l.logType != null && l.logType == LogType.DriverLogs }
+      .filter { l => l.logType != null && l.logType == LogType.DRIVER_LOGS }
       .toList
     stale.foreach { log =>
       logInfo(s"Deleting invalid driver log ${log.logPath}")
@@ -1152,7 +1152,7 @@ private[history] case class FsHistoryProviderMetadata(
     logDir: String)
 
 private[history] object LogType extends Enumeration {
-  val DriverLogs, EventLogs = Value
+  val DRIVER_LOGS, EVENT_LOGS = Value
 }
 
 /**
