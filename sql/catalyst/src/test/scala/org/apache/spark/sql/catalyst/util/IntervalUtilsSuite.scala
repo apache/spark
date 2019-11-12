@@ -300,6 +300,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     check("+12:40:30.999999999", HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
     check("-12:40:30.999999999", HOUR, SECOND, "-12 hours -40 minutes -30.999999 seconds")
     checkFail("5 12:40:30", HOUR, SECOND, "must match day-time format")
+    checkFail("12:40:30.0123456789", HOUR, SECOND, "must match day-time format")
 
     check("40:30.999999999", MINUTE, SECOND, "40 minutes 30.999999 seconds")
     check("+40:30.999999999", MINUTE, SECOND, "40 minutes 30.999999 seconds")
