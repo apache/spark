@@ -325,6 +325,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
+        localSparkSession.conf.set(SQLConf.LEGACY_FROM_DAYTIME_STRING.key, true)
       case _ =>
     }
 
