@@ -77,7 +77,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     val table = new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties)
     tables.put(ident, table)
-    namespaces.put(ident.namespace.toList, Map())
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
   }
 

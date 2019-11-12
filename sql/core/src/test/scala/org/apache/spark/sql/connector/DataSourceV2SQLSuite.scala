@@ -828,7 +828,7 @@ class DataSourceV2SQLSuite
     testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
     testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
 
-    def verifyDropFails(): Unit = {
+    def assertDropFails(): Unit = {
       val e = intercept[SparkException] {
         sql("DROP NAMESPACE testcat.ns1")
       }
@@ -836,15 +836,15 @@ class DataSourceV2SQLSuite
     }
 
     // testcat.ns1.table is present, thus testcat.ns1 cannot be dropped.
-    verifyDropFails()
+    assertDropFails()
     sql("DROP TABLE testcat.ns1.table")
 
     // testcat.ns1.ns2.table is present, thus testcat.ns1 cannot be dropped.
-    verifyDropFails()
+    assertDropFails()
     sql("DROP TABLE testcat.ns1.ns2.table")
 
     // testcat.ns1.ns2 namespace is present, thus testcat.ns1 cannot be dropped.
-    verifyDropFails()
+    assertDropFails()
     sql("DROP NAMESPACE testcat.ns1.ns2")
 
     // Now that testcat.ns1 is empty, it can be dropped.

@@ -44,7 +44,8 @@ case class DropNamespaceExec(
         if (catalog.asTableCatalog.listTables(ns).nonEmpty
           || nsCatalog.listNamespaces(ns).nonEmpty) {
           throw new SparkException(
-            s"Cannot drop a non-empty namespace: ${namespace.quoted}.")
+            s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
+              "Use CASCADE option to drop a non-empty namespace.")
         }
       }
 
