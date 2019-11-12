@@ -195,16 +195,28 @@ object IntervalUtils {
    */
   def fromDayTimeString(input: String, from: IntervalUnit, to: IntervalUnit): CalendarInterval = {
     if (SQLConf.get.getConf(SQLConf.LEGACY_FROM_DAYTIME_STRING)) {
-      fromDayTimeLegacy(input, from, to)
+      parseDayTimeLegacy(input, from, to)
     } else {
-      fromDayTime(input, from, to)
+      parseDayTime(input, from, to)
     }
   }
 
   private val dayTimePatternLegacy =
     "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$".r
 
-  private def fromDayTimeLegacy(
+  /**
+   * Legacy method of parsing a string in a day-time format. It ignores the `from` bound,
+   * and takes into account only the `to` bound by truncating the result. For example,
+   * if the input string is "2 12:30:15", `from` is "hour" and `to` is "second", the result
+   * is "2 days 12 hours 30 minutes".
+   *
+   * @param input The day-time string
+   * @param from The interval units from which the input strings begins
+   * @param to The interval units at which the input string ends
+   * @return an instance of `CalendarInterval` if parsing completes successfully otherwise
+   *         the exception `IllegalArgumentException` is raised.
+   */
+  private def parseDayTimeLegacy(
       input: String,
       from: IntervalUnit,
       to: IntervalUnit): CalendarInterval = {
@@ -281,7 +293,7 @@ object IntervalUtils {
     (start.id to end.id).map(IntervalUnit(_))
   }
 
-  private def fromDayTime(
+  private def parseDayTime(
       input: String,
       from: IntervalUnit,
       to: IntervalUnit): CalendarInterval = {
