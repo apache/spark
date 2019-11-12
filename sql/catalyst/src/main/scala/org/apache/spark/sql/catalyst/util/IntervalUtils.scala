@@ -329,17 +329,15 @@ object IntervalUtils {
     var days: Int = 0
     unitsRange(to, from).foreach {
       case unit @ DAY =>
-        val parsed = toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue)
-        days = Math.toIntExact(parsed)
+        days = toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue).toInt
       case unit @ HOUR =>
         val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 23)
-        micros = Math.addExact(micros, Math.multiplyExact(parsed, MICROS_PER_HOUR))
+        micros = Math.addExact(micros, parsed * MICROS_PER_HOUR)
       case unit @ MINUTE =>
         val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 59)
-        micros = Math.addExact(micros, Math.multiplyExact(parsed, MICROS_PER_MINUTE))
+        micros = Math.addExact(micros, parsed * MICROS_PER_MINUTE)
       case unit @ SECOND =>
-        val parsed = parseSecondNano(m.group(unit.toString))
-        micros = Math.addExact(micros, parsed)
+        micros = Math.addExact(micros, parseSecondNano(m.group(unit.toString)))
       case _ =>
         throw new IllegalArgumentException(
           s"Cannot support (interval '$input' $from to $to) expression")
