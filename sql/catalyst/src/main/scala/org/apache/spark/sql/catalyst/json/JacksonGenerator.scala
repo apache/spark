@@ -119,6 +119,10 @@ private[sql] class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeNumber(row.getDouble(ordinal))
 
+    case _: CalendarIntervalType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeString(IntervalUtils.toMultiUnitsString(row.getInterval(ordinal)))
+
     case StringType =>
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeString(row.getUTF8String(ordinal).toString)
