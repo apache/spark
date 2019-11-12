@@ -24,6 +24,7 @@ import java.net.{URI, URL}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent._
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -65,7 +66,7 @@ private[spark] class Executor(
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
-  @volatile private var executorShutdown = false
+  private val executorShutdown = new AtomicBoolean(false)
   ShutdownHookManager.addShutdownHook(
     () => stop()
   )
@@ -282,8 +283,8 @@ private[spark] class Executor(
   }
 
   def stop(): Unit = {
-    if (!executorShutdown) {
-      executorShutdown = true
+    if (!executorShutdown.get()) {
+      executorShutdown.compareAndSet(false, true)
       env.metricsSystem.report()
       try {
         metricsPoller.stop()
