@@ -191,6 +191,9 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
         """
         return self._call_java("predictProbability", value)
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 @inherit_doc
 class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable):
@@ -234,7 +237,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> model.getFeaturesCol()
     'features'
     >>> model.setPredictionCol("newPrediction")
-    GaussianMixture...
+    GaussianMixtureModel...
     >>> model.predict(df.head().features)
     2
     >>> model.predictProbability(df.head().features)
@@ -509,6 +512,9 @@ class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadabl
         """
         return self._call_java("predict", value)
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 @inherit_doc
 class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
@@ -532,7 +538,7 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     >>> model.getDistanceMeasure()
     'euclidean'
     >>> model.setPredictionCol("newPrediction")
-    KMeans...
+    KMeansModel...
     >>> model.predict(df.head().features)
     0
     >>> centers = model.clusterCenters()
@@ -762,6 +768,9 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
         """
         return self._call_java("predict", value)
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 @inherit_doc
 class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, JavaMLReadable):
@@ -794,7 +803,7 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     >>> model.getMaxIter()
     20
     >>> model.setPredictionCol("newPrediction")
-    BisectingKMeans...
+    BisectingKMeansModel...
     >>> model.predict(df.head().features)
     0
     >>> centers = model.clusterCenters()
@@ -1152,6 +1161,9 @@ class LDAModel(JavaModel, _LDAParams):
         """
         return self._call_java("estimatedDocConcentration")
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 @inherit_doc
 class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
@@ -1265,6 +1277,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     10
     >>> lda.clear(lda.maxIter)
     >>> model = lda.fit(df)
+    >>> model.setSeed(1)
+    DistributedLDAModel...
     >>> model.getTopicDistributionCol()
     'topicDistribution'
     >>> model.isDistributed()

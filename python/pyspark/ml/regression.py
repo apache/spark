@@ -105,9 +105,9 @@ class LinearRegression(JavaPredictor, _LinearRegressionParams, JavaMLWritable, J
     LinearRegression...
     >>> model = lr.fit(df)
     >>> model.setFeaturesCol("features")
-    LinearRegression...
+    LinearRegressionModel...
     >>> model.setPredictionCol("newPrediction")
-    LinearRegression...
+    LinearRegressionModel...
     >>> model.getMaxIter()
     5
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
@@ -309,6 +309,9 @@ class LinearRegressionModel(JavaPredictionModel, _LinearRegressionParams, Genera
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lr_summary = self._call_java("evaluate", dataset)
         return LinearRegressionSummary(java_lr_summary)
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 class LinearRegressionSummary(JavaWrapper):
@@ -591,7 +594,7 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
     >>> model.setFeaturesCol("features")
-    IsotonicRegression...
+    IsotonicRegressionModel...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -725,6 +728,9 @@ class IsotonicRegressionModel(JavaModel, _IsotonicRegressionParams, JavaMLWritab
         regression.
         """
         return self._call_java("predictions")
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, HasVarianceCol):
@@ -1546,7 +1552,7 @@ class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
     >>> aftsr.clear(aftsr.maxIter)
     >>> model = aftsr.fit(df)
     >>> model.setFeaturesCol("features")
-    AFTSurvivalRegression...
+    AFTSurvivalRegressionModel...
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
@@ -1760,6 +1766,9 @@ class AFTSurvivalRegressionModel(JavaModel, _AFTSurvivalRegressionParams,
         """
         return self._call_java("predict", features)
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 class _GeneralizedLinearRegressionParams(_JavaPredictorParams, HasFitIntercept, HasMaxIter,
                                          HasTol, HasRegParam, HasWeightCol, HasSolver,
@@ -1881,7 +1890,7 @@ class GeneralizedLinearRegression(JavaPredictor, _GeneralizedLinearRegressionPar
     >>> glr.clear(glr.maxIter)
     >>> model = glr.fit(df)
     >>> model.setFeaturesCol("features")
-    GeneralizedLinearRegression...
+    GeneralizedLinearRegressionModel...
     >>> model.getMaxIter()
     25
     >>> model.getAggregationDepth()
@@ -2103,6 +2112,9 @@ class GeneralizedLinearRegressionModel(JavaPredictionModel, _GeneralizedLinearRe
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_glr_summary = self._call_java("evaluate", dataset)
         return GeneralizedLinearRegressionSummary(java_glr_summary)
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 class GeneralizedLinearRegressionSummary(JavaWrapper):

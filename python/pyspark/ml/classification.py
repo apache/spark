@@ -192,11 +192,11 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     0.01
     >>> model = svm.fit(df)
     >>> model.setPredictionCol("newPrediction")
-    LinearSVC...
+    LinearSVCModel...
     >>> model.getPredictionCol()
     'newPrediction'
     >>> model.setThreshold(0.5)
-    LinearSVC...
+    LinearSVCModel...
     >>> model.getThreshold()
     0.5
     >>> model.coefficients
@@ -355,6 +355,9 @@ class LinearSVCModel(JavaClassificationModel, _LinearSVCParams, JavaMLWritable, 
         Model intercept of Linear SVM Classifier.
         """
         return self._call_java("intercept")
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 class _LogisticRegressionParams(_JavaProbabilisticClassifierParams, HasRegParam,
@@ -1921,7 +1924,7 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
     >>> model = nb.fit(df)
     >>> model.setFeaturesCol("features")
-    NaiveBayes_...
+    NaiveBayesModel...
     >>> model.getSmoothing()
     1.0
     >>> model.pi
@@ -2040,6 +2043,9 @@ class NaiveBayesModel(JavaProbabilisticClassificationModel, _NaiveBayesParams, J
         """
         return self._call_java("theta")
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, HasMaxIter,
                                   HasTol, HasStepSize, HasSolver):
@@ -2114,7 +2120,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     100
     >>> model = mlp.fit(df)
     >>> model.setFeaturesCol("features")
-    MultilayerPerceptronClassifier...
+    MultilayerPerceptronClassificationModel...
     >>> model.layers
     [2, 2, 2]
     >>> model.weights.size
@@ -2267,6 +2273,9 @@ class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationMod
         the weights of layers.
         """
         return self._call_java("weights")
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 class _OneVsRestParams(_JavaClassifierParams, HasWeightCol):
