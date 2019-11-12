@@ -53,7 +53,7 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
   // Null hypothesis for the type of KS test to be included in the result.
   object NullHypothesis extends Enumeration {
     type NullHypothesis = Value
-    val OneSampleTwoSided = Value("Sample follows theoretical distribution")
+    val ONE_SAMPLE_TWO_SIDED = Value("Sample follows theoretical distribution")
   }
 
   /**
@@ -189,7 +189,7 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
 
   private def evalOneSampleP(ksStat: Double, n: Long): KolmogorovSmirnovTestResult = {
     val pval = 1 - new CommonMathKolmogorovSmirnovTest().cdf(ksStat, n.toInt)
-    new KolmogorovSmirnovTestResult(pval, ksStat, NullHypothesis.OneSampleTwoSided.toString)
+    new KolmogorovSmirnovTestResult(pval, ksStat, NullHypothesis.ONE_SAMPLE_TWO_SIDED.toString)
   }
 }
 
