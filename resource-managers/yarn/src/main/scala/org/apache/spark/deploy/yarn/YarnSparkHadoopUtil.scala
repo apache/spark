@@ -41,10 +41,6 @@ object YarnSparkHadoopUtil {
 
   val ANY_HOST = "*"
 
-  // All RM requests are issued with same priority : we do not (yet) have any distinction between
-  // request types (like map/reduce in hadoop for example)
-  val RM_REQUEST_PRIORITY = Priority.newInstance(1)
-
   /**
    * Add a path variable to the given environment map.
    * If the map already contains this key, append the value to the existing value instead.

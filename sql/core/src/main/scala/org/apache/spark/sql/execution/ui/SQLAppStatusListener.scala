@@ -181,25 +181,10 @@ class SQLAppStatusListener(
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
     val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
-
-    val stageID = exec.stages.toSeq.flatMap {stageId => Option(stageMetrics.get(stageId)) }
-
-    val metrics1 = exec.stages.toSeq.flatMap { stageId => Option(stageMetrics.get(stageId)) }
-
-
-    val stageStringToTaskMetrics =
-      metrics1.map( lsm => (s"${lsm.stageId}:${lsm.attemptId}", lsm.taskMetrics.asScala)).toSeq
-    val stageAndTaskIdStrToTaskMettrics =
-      stageStringToTaskMetrics.flatMap { case (k, v) => v.map { case (id, m) => (s"$k:$id", m)}}
-
-    val metricsvar = stageAndTaskIdStrToTaskMettrics.flatMap { case (sid, metrics) =>
-      metrics.ids.zip(metrics.values).map { case (mid, m) => (sid, mid, m)}}
-
-    val metrics2 = metrics1.flatMap(_.taskMetrics.values().asScala)
-    val metrics = metrics2.flatMap { metrics =>
-      val foo = metrics.ids.zip(metrics.values)
-      foo }
-
+    val metrics = exec.stages.toSeq
+      .flatMap { stageId => Option(stageMetrics.get(stageId)) }
+      .flatMap(_.taskMetrics.values().asScala)
+      .flatMap { metrics => metrics.ids.zip(metrics.values) }
     val aggregatedMetrics = (metrics ++ exec.driverAccumUpdates.toSeq)
       .filter { case (id, _) => metricTypes.contains(id) }
       .groupBy(_._1)
