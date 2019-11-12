@@ -1562,6 +1562,63 @@ class DataSourceV2SQLSuite
     assert(e.message.contains("ALTER VIEW QUERY is only supported with v1 tables"))
   }
 
+  test("SHOW TBLPROPERTIES: v2 table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      val owner = "andrew"
+      val status = "new"
+      val provider = "foo"
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
+        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+
+      val properties = sql(s"SHOW TBLPROPERTIES $t")
+
+      val schema = new StructType()
+        .add("key", StringType, nullable = false)
+        .add("value", StringType, nullable = false)
+
+      val expected = Seq(
+        Row("owner", owner),
+        Row("provider", provider),
+        Row("status", status))
+
+      assert(properties.schema === schema)
+      assert(expected === properties.collect())
+    }
+  }
+
+  test("SHOW TBLPROPERTIES(key): v2 table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      val owner = "andrew"
+      val status = "new"
+      val provider = "foo"
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
+        s"TBLPROPERTIES ('owner'='$owner', 'status'='$status')")
+
+      val properties = sql(s"SHOW TBLPROPERTIES $t ('status')")
+
+      val expected = Seq(Row("status", status))
+
+      assert(expected === properties.collect())
+    }
+  }
+
+  test("SHOW TBLPROPERTIES(key): v2 table, key not found") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      val nonExistingKey = "nonExistingKey"
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo " +
+        s"TBLPROPERTIES ('owner'='andrew', 'status'='new')")
+
+      val properties = sql(s"SHOW TBLPROPERTIES $t ('$nonExistingKey')")
+
+      val expected = Seq(Row(nonExistingKey, s"Table $t does not have property: $nonExistingKey"))
+
+      assert(expected === properties.collect())
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")

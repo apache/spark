@@ -532,15 +532,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  test("show tblproperties") {
-    val parsed1 = parser.parsePlan("SHOW TBLPROPERTIES tab1")
-    val expected1 = ShowTablePropertiesCommand(TableIdentifier("tab1", None), None)
-    val parsed2 = parser.parsePlan("SHOW TBLPROPERTIES tab1('propKey1')")
-    val expected2 = ShowTablePropertiesCommand(TableIdentifier("tab1", None), Some("propKey1"))
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
   test("SPARK-14383: DISTRIBUTE and UNSET as non-keywords") {
     val sql = "SELECT distribute, unset FROM x"
     val parsed = parser.parsePlan(sql)
