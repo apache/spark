@@ -41,7 +41,7 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Enumeration to identify current state of the Receiver */
   object ReceiverState extends Enumeration {
     type CheckpointState = Value
-    val Initialized, Started, Stopped = Value
+    val INITIALIZED, STARTED, STOPPED = Value
   }
   import ReceiverState._
 
@@ -67,7 +67,7 @@ private[streaming] abstract class ReceiverSupervisor(
   @volatile protected var stoppingError: Throwable = null
 
   /** State of the receiver */
-  @volatile private[streaming] var receiverState = Initialized
+  @volatile private[streaming] var receiverState = INITIALIZED
 
   /** Push a single data item to backend data store. */
   def pushSingle(data: Any): Unit
@@ -145,7 +145,7 @@ private[streaming] abstract class ReceiverSupervisor(
     try {
       if (onReceiverStart()) {
         logInfo(s"Starting receiver $streamId")
-        receiverState = Started
+        receiverState = STARTED
         receiver.onStart()
         logInfo(s"Called receiver $streamId onStart")
       } else {
@@ -163,14 +163,14 @@ private[streaming] abstract class ReceiverSupervisor(
     try {
       logInfo("Stopping receiver with message: " + message + ": " + error.getOrElse(""))
       receiverState match {
-        case Initialized =>
+        case INITIALIZED =>
           logWarning("Skip stopping receiver because it has not yet stared")
-        case Started =>
-          receiverState = Stopped
+        case STARTED =>
+          receiverState = STOPPED
           receiver.onStop()
           logInfo("Called receiver onStop")
           onReceiverStop(message, error)
-        case Stopped =>
+        case STOPPED =>
           logWarning("Receiver has been stopped")
       }
     } catch {
@@ -203,13 +203,13 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Check if receiver has been marked for starting */
   def isReceiverStarted(): Boolean = {
     logDebug("state = " + receiverState)
-    receiverState == Started
+    receiverState == STARTED
   }
 
   /** Check if receiver has been marked for stopping */
   def isReceiverStopped(): Boolean = {
     logDebug("state = " + receiverState)
-    receiverState == Stopped
+    receiverState == STOPPED
   }
 
 
