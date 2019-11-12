@@ -118,12 +118,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** Enumeration to identify current state of the ReceiverTracker */
   object TrackerState extends Enumeration {
     type TrackerState = Value
-    val Initialized, Started, Stopping, Stopped = Value
+    val INITIALIZED, STARTED, STOPPING, STOPPED = Value
   }
   import TrackerState._
 
   /** State of the tracker. Protected by "trackerStateLock" */
-  @volatile private var trackerState = Initialized
+  @volatile private var trackerState = INITIALIZED
 
   // endpoint is created when generator starts.
   // This not being null means the tracker has been started and not stopped
@@ -158,14 +158,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         "ReceiverTracker", new ReceiverTrackerEndpoint(ssc.env.rpcEnv))
       if (!skipReceiverLaunch) launchReceivers()
       logInfo("ReceiverTracker started")
-      trackerState = Started
+      trackerState = STARTED
     }
   }
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean): Unit = synchronized {
     val isStarted: Boolean = isTrackerStarted
-    trackerState = Stopping
+    trackerState = STOPPING
     if (isStarted) {
       if (!skipReceiverLaunch) {
         // First, stop the receivers. Send the stop signal to all the receivers
@@ -199,7 +199,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     // close this even if this `ReceiverTracker` is not started.
     receivedBlockTracker.stop()
     logInfo("ReceiverTracker stopped")
-    trackerState = Stopped
+    trackerState = STOPPED
   }
 
   /** Allocate all unallocated blocks to the given batch. */
@@ -447,13 +447,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Check if tracker has been marked for starting */
-  private def isTrackerStarted: Boolean = trackerState == Started
+  private def isTrackerStarted: Boolean = trackerState == STARTED
 
   /** Check if tracker has been marked for stopping */
-  private def isTrackerStopping: Boolean = trackerState == Stopping
+  private def isTrackerStopping: Boolean = trackerState == STOPPING
 
   /** Check if tracker has been marked for stopped */
-  private def isTrackerStopped: Boolean = trackerState == Stopped
+  private def isTrackerStopped: Boolean = trackerState == STOPPED
 
   /** RpcEndpoint to receive messages from the receivers. */
   private class ReceiverTrackerEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
