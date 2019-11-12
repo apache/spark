@@ -190,10 +190,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case UpdateDelegationTokens(newDelegationTokens) =>
         updateDelegationTokens(newDelegationTokens)
 
-      case DecommissionExecutor(executorId) =>
-        logError(s"Decommissioning executor ${executorId}")
-        decommissionExecutor(executorId)
-
       case RemoveExecutor(executorId, reason) =>
         // We will remove the executor's state and cannot restore it. However, the connection
         // between the driver and the executor may be still alive so that the executor won't exit
@@ -268,6 +264,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorData.executorEndpoint.send(StopExecutor)
         }
         context.reply(true)
+
+      case DecommissionExecutor(executorId) =>
+        logInfo(s"Received decommission executor message ${executorId}.")
+        context.reply(decommissionExecutor(executorId))
 
       case RemoveWorker(workerId, host, message) =>
         removeWorker(workerId, host, message)
