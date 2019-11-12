@@ -79,7 +79,8 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
 
   @Override
   public String toString() {
-    return "CalendarInterval(months= " + months + ", days = " + days + ", microsecond = " + microseconds + ")";
+    return "CalendarInterval(months= " + months + ", days = " + days + ", microsecond = " +
+      microseconds + ")";
   }
 
   /**
