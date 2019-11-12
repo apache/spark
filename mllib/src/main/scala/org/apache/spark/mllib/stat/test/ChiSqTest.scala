@@ -196,7 +196,12 @@ private[spark] object ChiSqTest extends Logging {
     }
     val df = size - 1
     val pValue = 1.0 - new ChiSquaredDistribution(df).cumulativeProbability(statistic)
-    new ChiSqTestResult(pValue, df, statistic, PEARSON.name, NullHypothesis.GOODNESS_OF_FIT.toString)
+    new ChiSqTestResult(
+      pValue,
+      df,
+      statistic,
+      PEARSON.name,
+      NullHypothesis.GOODNESS_OF_FIT.toString)
   }
 
   /*
