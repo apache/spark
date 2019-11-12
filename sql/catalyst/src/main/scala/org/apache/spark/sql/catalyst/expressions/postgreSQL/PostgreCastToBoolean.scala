@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions.postgreSQL
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{CastBase, Expression, TimeZoneAwareExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.codegen.JavaCode
@@ -32,6 +33,11 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case StringType | IntegerType => super.checkInputDataTypes()
+    case dt => throw new UnsupportedOperationException(s"cannot cast type $dt to boolean")
+  }
+
   override def castToBoolean(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, str => {
@@ -44,10 +50,6 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
           throw new IllegalArgumentException(s"invalid input syntax for type boolean: $s")
         }
       })
-    case TimestampType | DateType | LongType | ShortType |
-         ByteType | DecimalType() | DoubleType | FloatType =>
-      _ => throw new UnsupportedOperationException(s"cannot cast type $from to boolean")
-
     case IntegerType =>
       super.castToBoolean(from)
   }
@@ -65,11 +67,6 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
             throw new IllegalArgumentException("invalid input syntax for type boolean: $c");
           }
         """
-    case TimestampType | DateType | LongType | ShortType |
-         ByteType | DecimalType() | DoubleType | FloatType =>
-      (c, evPrim, evNull) =>
-        val fromType = JavaCode.javaType(from)
-        code"""throw new UnsupportedOperationException("cannot cast type $fromType to boolean");"""
 
     case IntegerType =>
       super.castToBooleanCode(from)
