@@ -31,10 +31,9 @@ import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructTyp
 /**
  * A feature transformer that filters out stop words from input.
  *
- * Since 3.0.0,
- * `StopWordsRemover` can filter out multiple columns at once by setting the `inputCols`
- * parameter. Note that when both the `inputCol` and `inputCols` parameters are set, an Exception
- * will be thrown.
+ * Since 3.0.0, `StopWordsRemover` can filter out multiple columns at once by setting the
+ * `inputCols` parameter. Note that when both the `inputCol` and `inputCols` parameters are set,
+ * an Exception will be thrown.
  *
  * @note null values from input array are preserved unless adding null to stopWords
  * explicitly.
@@ -182,23 +181,21 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     if (isSet(inputCols)) {
       require(getInputCols.length == getOutputCols.length,
         s"StopWordsRemover $this has mismatched Params " +
-          s"for multi-column transform. Params (inputCols, outputCols) should have " +
-          s"equal lengths, but they have different lengths: " +
+          s"for multi-column transform. Params ($inputCols, $outputCols) should have " +
+          "equal lengths, but they have different lengths: " +
           s"(${getInputCols.length}, ${getOutputCols.length}).")
     }
 
     val (inputColNames, outputColNames) = getInOutCols()
-    var outputFields = schema.fields
-    inputColNames.zip(outputColNames).foreach { case (inputColName, outputColName) =>
-      require(!schema.fieldNames.contains(outputColName),
+    val newCols = inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
+       require(!schema.fieldNames.contains(outputColName),
         s"Output Column $outputColName already exists.")
       val inputType = schema(inputColName).dataType
       require(inputType.sameType(ArrayType(StringType)), "Input type must be " +
         s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
-      val outputField = StructField(outputColName, inputType, schema(inputColName).nullable)
-      outputFields :+= outputField
+      StructField(outputColName, inputType, schema(inputColName).nullable)
     }
-    StructType(outputFields)
+    StructType(schema.fields ++ newCols)
   }
 
   @Since("1.5.0")

@@ -242,11 +242,11 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
     remover.transform(df)
       .select("filtered1", "expected1", "filtered2", "expected2")
       .collect().foreach {
-      case Row(r1: Seq[String], e1: Seq[String], r2: Seq[String], e2: Seq[String]) =>
-        assert(r1 === e1,
-          s"The result value is not correct after bucketing. Expected $e1 but found $r1")
-        assert(r2 === e2,
-          s"The result value is not correct after bucketing. Expected $e2 but found $r2")
+        case Row(r1: Seq[String], e1: Seq[String], r2: Seq[String], e2: Seq[String]) =>
+          assert(r1 === e1,
+            s"The result value is not correct after bucketing. Expected $e1 but found $r1")
+          assert(r2 === e2,
+            s"The result value is not correct after bucketing. Expected $e2 but found $r2")
     }
   }
 
@@ -268,11 +268,11 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
     remover.transform(df)
       .select("filtered1", "expected1", "filtered2", "expected2")
       .collect().foreach {
-      case Row(r1: Seq[String], e1: Seq[String], r2: Seq[String], e2: Seq[String]) =>
-        assert(r1 === e1,
-          s"The result value is not correct after bucketing. Expected $e1 but found $r1")
-        assert(r2 === e2,
-          s"The result value is not correct after bucketing. Expected $e2 but found $r2")
+        case Row(r1: Seq[String], e1: Seq[String], r2: Seq[String], e2: Seq[String]) =>
+          assert(r1 === e1,
+            s"The result value is not correct after bucketing. Expected $e1 but found $r1")
+          assert(r2 === e2,
+            s"The result value is not correct after bucketing. Expected $e2 but found $r2")
     }
   }
 
