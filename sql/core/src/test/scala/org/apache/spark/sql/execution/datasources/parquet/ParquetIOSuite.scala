@@ -84,6 +84,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     withParquetDataFrame(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 
+  testStandardAndLegacyModes("array of struct") {
+    val data = (1 to 4).map(i => (i, Seq(Tuple1(i), Tuple1(i + 1))))
+    val expected = (1 to 4).map(i => Row(i, Seq(Row(i), Row(i + 1))))
+    withParquetDataFrame(data)(r => checkAnswer(r, expected))
+  }
+
+
   test("basic data types (without binary)") {
     val data = (1 to 4).map { i =>
       (i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
