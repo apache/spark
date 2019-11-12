@@ -28,7 +28,7 @@ import org.apache.spark.Partition
  */
 private[spark] object CheckpointState extends Enumeration {
   type CheckpointState = Value
-  val Initialized, CheckpointingInProgress, Checkpointed = Value
+  val INITIALIZED, CHECKPOINTING_IN_PROGRESS, CHECKPOINTED = Value
 }
 
 /**
@@ -43,7 +43,7 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient private 
   import CheckpointState._
 
   // The checkpoint state of the associated RDD.
-  protected var cpState = Initialized
+  protected var cpState = INITIALIZED
 
   // The RDD that contains our checkpointed data
   private var cpRDD: Option[CheckpointRDD[T]] = None
@@ -54,7 +54,7 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient private 
    * Return whether the checkpoint data for this RDD is already persisted.
    */
   def isCheckpointed: Boolean = RDDCheckpointData.synchronized {
-    cpState == Checkpointed
+    cpState == CHECKPOINTED
   }
 
   /**
@@ -65,8 +65,8 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient private 
     // Guard against multiple threads checkpointing the same RDD by
     // atomically flipping the state of this RDDCheckpointData
     RDDCheckpointData.synchronized {
-      if (cpState == Initialized) {
-        cpState = CheckpointingInProgress
+      if (cpState == INITIALIZED) {
+        cpState = CHECKPOINTING_IN_PROGRESS
       } else {
         return
       }
@@ -77,7 +77,7 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient private 
     // Update our state and truncate the RDD lineage
     RDDCheckpointData.synchronized {
       cpRDD = Some(newRDD)
-      cpState = Checkpointed
+      cpState = CHECKPOINTED
       rdd.markCheckpointed()
     }
   }
