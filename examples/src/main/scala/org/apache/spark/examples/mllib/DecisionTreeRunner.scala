@@ -45,7 +45,7 @@ object DecisionTreeRunner {
 
   object ImpurityType extends Enumeration {
     type ImpurityType = Value
-    val Gini, Entropy, Variance = Value
+    val GINI, ENTROPY, VARIANCE = Value
   }
 
   import ImpurityType._
@@ -56,7 +56,7 @@ object DecisionTreeRunner {
       dataFormat: String = "libsvm",
       algo: Algo = CLASSIFICATION,
       maxDepth: Int = 5,
-      impurity: ImpurityType = Gini,
+      impurity: ImpurityType = GINI,
       maxBins: Int = 32,
       minInstancesPerNode: Int = 1,
       minInfoGain: Double = 0.0,
@@ -136,9 +136,9 @@ object DecisionTreeRunner {
           failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1].")
         } else {
           if (params.algo == CLASSIFICATION &&
-            (params.impurity == Gini || params.impurity == Entropy)) {
+            (params.impurity == GINI || params.impurity == ENTROPY)) {
             success
-          } else if (params.algo == REGRESSION && params.impurity == Variance) {
+          } else if (params.algo == REGRESSION && params.impurity == VARIANCE) {
             success
           } else {
             failure(s"Algo ${params.algo} is not compatible with impurity ${params.impurity}.")
@@ -262,9 +262,9 @@ object DecisionTreeRunner {
       params.testInput, params.algo, params.fracTest)
 
     val impurityCalculator = params.impurity match {
-      case Gini => impurity.Gini
-      case Entropy => impurity.Entropy
-      case Variance => impurity.Variance
+      case GINI => impurity.Gini
+      case ENTROPY => impurity.Entropy
+      case VARIANCE => impurity.Variance
     }
 
     params.checkpointDir.foreach(sc.setCheckpointDir)
