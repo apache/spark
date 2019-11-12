@@ -20,14 +20,14 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{CastBase, Expression, TimeZoneAwareExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.postgreSQL.StringUtils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
   extends CastBase {
 
-  override protected def ansiEnabled = SQLConf.get.ansiEnabled
+  override protected def ansiEnabled =
+    throw new UnsupportedOperationException("PostgreSQL dialect doesn't support ansi mode")
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
