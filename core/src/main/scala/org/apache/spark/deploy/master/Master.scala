@@ -248,7 +248,7 @@ private[deploy] class Master(
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else {
-        // If a worker attempts to decommission that isn't registered ignore it.
+        // We use foreach since if it isn't registered we just skip it.
         idToWorker.get(id).foreach(decommissionWorker)
       }
 

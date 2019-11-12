@@ -39,7 +39,6 @@ import org.apache.spark.util.{RpcUtils, ThreadUtils}
  * Takes a master URL, an app description, and a listener for cluster events, and calls
  * back the listener when various events occur.
  *
- *
  * @param masterUrls Each url should look like spark://host:port.
  */
 private[spark] class StandaloneAppClient(
