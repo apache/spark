@@ -292,18 +292,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[DescribeDatabaseCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   DESCRIBE DATABASE [EXTENDED] database;
-   * }}}
-   */
-  override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DescribeDatabaseCommand(ctx.db.getText, ctx.EXTENDED != null)
-  }
-
-  /**
    * Create a plan for a DESCRIBE FUNCTION command.
    */
   override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {

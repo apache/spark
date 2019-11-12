@@ -108,25 +108,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(parsed1, expected1)
   }
 
-  test("describe database") {
-    // DESCRIBE DATABASE [EXTENDED] db_name;
-    val sql1 = "DESCRIBE DATABASE EXTENDED db_name"
-    val sql2 = "DESCRIBE DATABASE db_name"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-
-    val expected1 = DescribeDatabaseCommand(
-      "db_name",
-      extended = true)
-    val expected2 = DescribeDatabaseCommand(
-      "db_name",
-      extended = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
   test("create function") {
     val sql1 =
       """

@@ -199,7 +199,7 @@ statement
     | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? db=multipartIdentifier      #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         multipartIdentifier partitionSpec? describeColName?            #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
