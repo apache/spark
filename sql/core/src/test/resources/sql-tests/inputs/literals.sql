@@ -153,3 +153,10 @@ select interval '1' year to second;
 select '1' year to second;
 select interval 1 year '2-1' year to month;
 select 1 year '2-1' year to month;
+SET spark.sql.ansi.enabled=false;
+
+-- awareness for the negative sign before type
+select -integer '7';
+select -date '1999-01-01';
+select -timestamp '1999-01-01';
+select -x'2379ACFe';

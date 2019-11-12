@@ -1860,6 +1860,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
     val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
+    val negativeSign = Option(ctx.negativeSign).map(_.getText).getOrElse("")
+    val isNegative = if (negativeSign == "-") true else false
+
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
       f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
         throw new ParseException(s"Cannot parse the $valueType value: $value", ctx)
@@ -1867,9 +1870,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     try {
       valueType match {
-        case "DATE" =>
+        case "DATE" if !isNegative =>
           toLiteral(stringToDate(_, getZoneId(SQLConf.get.sessionLocalTimeZone)), DateType)
-        case "TIMESTAMP" =>
+        case "TIMESTAMP" if !isNegative =>
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
@@ -1881,8 +1884,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(applyNegativeSign(ctx.negativeSign, interval), CalendarIntervalType)
-        case "X" =>
+          val signedInterval = if (isNegative) IntervalUtils.negate(interval) else interval
+          Literal(signedInterval, CalendarIntervalType)
+        case "X" if !isNegative =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
         case "INTEGER" =>
@@ -1894,9 +1898,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(i, IntegerType)
+          Literal(if (isNegative) -i else i, IntegerType)
         case other =>
-          throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
+          throw new ParseException(s"Literals of type '$negativeSign$other' are currently not" +
+            " supported.", ctx)
       }
     } catch {
       case e: IllegalArgumentException =>
