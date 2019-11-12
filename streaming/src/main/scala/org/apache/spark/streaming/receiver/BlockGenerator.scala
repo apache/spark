@@ -86,17 +86,17 @@ private[streaming] class BlockGenerator(
   /**
    * The BlockGenerator can be in 5 possible states, in the order as follows.
    *
-   *  - Initialized: Nothing has been started.
-   *  - Active: start() has been called, and it is generating blocks on added data.
-   *  - StoppedAddingData: stop() has been called, the adding of data has been stopped,
-   *                       but blocks are still being generated and pushed.
-   *  - StoppedGeneratingBlocks: Generating of blocks has been stopped, but
-   *                             they are still being pushed.
-   *  - StoppedAll: Everything has been stopped, and the BlockGenerator object can be GCed.
+   *  - INITIALIZED: Nothing has been started.
+   *  - ACTIVE: start() has been called, and it is generating blocks on added data.
+   *  - STOPPED_ADDING_DATA: stop() has been called, the adding of data has been stopped,
+   *                         but blocks are still being generated and pushed.
+   *  - STOPPED_GENERATING_BLOCKS: Generating of blocks has been stopped, but
+   *                               they are still being pushed.
+   *  - STOPPED_ALL: Everything has been stopped, and the BlockGenerator object can be GCed.
    */
   private object GeneratorState extends Enumeration {
     type GeneratorState = Value
-    val Initialized, Active, StoppedAddingData, StoppedGeneratingBlocks, StoppedAll = Value
+    val INITIALIZED, ACTIVE, STOPPED_ADDING_DATA, STOPPED_GENERATING_BLOCKS, STOPPED_ALL = Value
   }
   import GeneratorState._
 
@@ -111,18 +111,18 @@ private[streaming] class BlockGenerator(
     new Thread() { override def run(): Unit = keepPushingBlocks() }
 
   @volatile private var currentBuffer = new ArrayBuffer[Any]
-  @volatile private var state = Initialized
+  @volatile private var state = INITIALIZED
 
   /** Start block generating and pushing threads. */
   def start(): Unit = synchronized {
-    if (state == Initialized) {
-      state = Active
+    if (state == INITIALIZED) {
+      state = ACTIVE
       blockIntervalTimer.start()
       blockPushingThread.start()
       logInfo("Started BlockGenerator")
     } else {
       throw new SparkException(
-        s"Cannot start BlockGenerator as its not in the Initialized state [state = $state]")
+        s"Cannot start BlockGenerator as its not in the INITIALIZED state [state = $state]")
     }
   }
 
@@ -136,10 +136,10 @@ private[streaming] class BlockGenerator(
   def stop(): Unit = {
     // Set the state to stop adding data
     synchronized {
-      if (state == Active) {
-        state = StoppedAddingData
+      if (state == ACTIVE) {
+        state = STOPPED_ADDING_DATA
       } else {
-        logWarning(s"Cannot stop BlockGenerator as its not in the Active state [state = $state]")
+        logWarning(s"Cannot stop BlockGenerator as its not in the ACTIVE state [state = $state]")
         return
       }
     }
@@ -147,12 +147,12 @@ private[streaming] class BlockGenerator(
     // Stop generating blocks and set the state for block pushing thread to start draining the queue
     logInfo("Stopping BlockGenerator")
     blockIntervalTimer.stop(interruptTimer = false)
-    synchronized { state = StoppedGeneratingBlocks }
+    synchronized { state = STOPPED_GENERATING_BLOCKS }
 
-    // Wait for the queue to drain and mark state as StoppedAll
+    // Wait for the queue to drain and mark state as STOPPED_ALL
     logInfo("Waiting for block pushing thread to terminate")
     blockPushingThread.join()
-    synchronized { state = StoppedAll }
+    synchronized { state = STOPPED_ALL }
     logInfo("Stopped BlockGenerator")
   }
 
@@ -160,10 +160,10 @@ private[streaming] class BlockGenerator(
    * Push a single data item into the buffer.
    */
   def addData(data: Any): Unit = {
-    if (state == Active) {
+    if (state == ACTIVE) {
       waitToPush()
       synchronized {
-        if (state == Active) {
+        if (state == ACTIVE) {
           currentBuffer += data
         } else {
           throw new SparkException(
@@ -181,10 +181,10 @@ private[streaming] class BlockGenerator(
    * `BlockGeneratorListener.onAddData` callback will be called.
    */
   def addDataWithCallback(data: Any, metadata: Any): Unit = {
-    if (state == Active) {
+    if (state == ACTIVE) {
       waitToPush()
       synchronized {
-        if (state == Active) {
+        if (state == ACTIVE) {
           currentBuffer += data
           listener.onAddData(data, metadata)
         } else {
@@ -204,7 +204,7 @@ private[streaming] class BlockGenerator(
    * are atomically added to the buffer, and are hence guaranteed to be present in a single block.
    */
   def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = {
-    if (state == Active) {
+    if (state == ACTIVE) {
       // Unroll iterator into a temp buffer, and wait for pushing in the process
       val tempBuffer = new ArrayBuffer[Any]
       dataIterator.foreach { data =>
@@ -212,7 +212,7 @@ private[streaming] class BlockGenerator(
         tempBuffer += data
       }
       synchronized {
-        if (state == Active) {
+        if (state == ACTIVE) {
           currentBuffer ++= tempBuffer
           listener.onAddData(tempBuffer, metadata)
         } else {
@@ -226,9 +226,9 @@ private[streaming] class BlockGenerator(
     }
   }
 
-  def isActive(): Boolean = state == Active
+  def isActive(): Boolean = state == ACTIVE
 
-  def isStopped(): Boolean = state == StoppedAll
+  def isStopped(): Boolean = state == STOPPED_ALL
 
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = {
@@ -260,7 +260,7 @@ private[streaming] class BlockGenerator(
     logInfo("Started block pushing thread")
 
     def areBlocksBeingGenerated: Boolean = synchronized {
-      state != StoppedGeneratingBlocks
+      state != STOPPED_GENERATING_BLOCKS
     }
 
     try {
