@@ -59,7 +59,7 @@ object TestData {
 }
 
 class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
-  override def mode: ServerMode.Value = ServerMode.binary
+  override def mode: ServerMode.Value = ServerMode.BINARY
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
     // Transport creation logic below mimics HiveConnection.createBinaryTransport
@@ -774,7 +774,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
-  override def mode: ServerMode.Value = ServerMode.binary
+  override def mode: ServerMode.Value = ServerMode.BINARY
 
   override protected def extraConf: Seq[String] =
     s"--conf ${HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
@@ -873,7 +873,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
 }
 
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
-  override def mode: ServerMode.Value = ServerMode.http
+  override def mode: ServerMode.Value = ServerMode.HTTP
 
   test("JDBC query execution") {
     withJdbcStatement("test") { statement =>
@@ -912,13 +912,13 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
 }
 
 object ServerMode extends Enumeration {
-  val binary, http = Value
+  val BINARY, HTTP = Value
 }
 
 abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
   Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
-  private def jdbcUri = if (mode == ServerMode.http) {
+  private def jdbcUri = if (mode == ServerMode.HTTP) {
     s"""jdbc:hive2://localhost:$serverPort/
        |default?
        |hive.server2.transport.mode=http;
@@ -1001,7 +1001,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   protected def extraConf: Seq[String] = Nil
 
   protected def serverStartCommand(port: Int) = {
-    val portConf = if (mode == ServerMode.binary) {
+    val portConf = if (mode == ServerMode.BINARY) {
       ConfVars.HIVE_SERVER2_THRIFT_PORT
     } else {
       ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
