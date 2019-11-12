@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.postgreSQL
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{CastBase, Expression, TimeZoneAwareExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.expressions.codegen.JavaCode
 import org.apache.spark.sql.catalyst.util.postgreSQL.StringUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
