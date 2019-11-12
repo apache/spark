@@ -318,10 +318,18 @@ private[parquet] class ParquetRowConverter(
         new ParquetMapConverter(parquetType.asGroupType(), t, updater)
 
       case t: StructType =>
+        val wrappedUpdater = {
+          if (updater.isInstanceOf[RowUpdater]) {
+            updater
+          } else {
+            new ParentContainerUpdater {
+              override def set(value: Any): Unit =
+                updater.set(value.asInstanceOf[InternalRow].copy())
+            }
+          }
+        }
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, convertTz, new ParentContainerUpdater {
-            override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
-          })
+          schemaConverter, parquetType.asGroupType(), t, convertTz, wrappedUpdater)
 
       case t =>
         throw new RuntimeException(
