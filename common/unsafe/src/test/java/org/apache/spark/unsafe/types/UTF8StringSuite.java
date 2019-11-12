@@ -367,9 +367,9 @@ public class UTF8StringSuite {
 
     assertEquals(EMPTY_UTF8, fromString("数据砖头").rpad(-10, fromString("孙行者")));
     assertEquals(EMPTY_UTF8, fromString("数据砖头").rpad(-10, EMPTY_UTF8));
-    assertEquals(fromString("数据砖头"), fromString("数据砖头").rpad(5, EMPTY_UTF8));
-    assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, EMPTY_UTF8));
-    assertEquals(EMPTY_UTF8, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
+    assertEquals(fromString(null), fromString("数据砖头").rpad(5, EMPTY_UTF8));
+    assertEquals(fromString(null), fromString("数据砖头").rpad(3, EMPTY_UTF8));
+    assertEquals(fromString(null), EMPTY_UTF8.rpad(3, EMPTY_UTF8));
   }
 
   @Test
