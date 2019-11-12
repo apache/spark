@@ -141,9 +141,17 @@ private[spark] class CoarseGrainedExecutorBackend(
     case LaunchTask(data) =>
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")
-      } else if (decommissioned) {
-        logWarning("Asked to launch a task while decommissioned. Not launching.")
       } else {
+        if (decommissioned) {
+          logError("Asked to launch a task while decommissioned.")
+          driver match {
+            case Some(endpoint) =>
+              logError("Sending DecommissionExecutor to driver")
+              endpoint.send(DecommissionExecutor(executorId))
+            case _ =>
+              logError("No registered driver to send Decommission to.")
+          }
+        }
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
         taskResources(taskDesc.taskId) = taskDesc.resources

@@ -424,7 +424,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
 
       if (shouldDisable) {
-        logInfo(s"Decommissioning executor $executorId.")
+        logError(s"Decommissioning executor $executorId.")
         scheduler.executorDecommission(executorId)
       }
       shouldDisable
