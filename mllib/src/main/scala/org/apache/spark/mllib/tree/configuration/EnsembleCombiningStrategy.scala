@@ -23,10 +23,4 @@ package org.apache.spark.mllib.tree.configuration
 private[tree] object EnsembleCombiningStrategy extends Enumeration {
   type EnsembleCombiningStrategy = Value
   val AVERAGE, SUM, VOTE = Value
-  @deprecated("Use AVERAGE instead.", "3.0.0")
-  val Average = AVERAGE
-  @deprecated("Use SUM instead.", "3.0.0")
-  val Sum = SUM
-  @deprecated("Use VOTE instead.", "3.0.0")
-  val Vote = VOTE
 }
