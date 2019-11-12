@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
@@ -255,11 +256,13 @@ private[sql] trait SQLTestUtilsBase
    * Drops temporary view `viewNames` after calling `f`.
    */
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      // If the test failed part way, we don't want to mask the failure by failing to remove
-      // temp views that never got created.
-      try viewNames.foreach(spark.catalog.dropTempView) catch {
-        case _: NoSuchTableException =>
+    Utils.tryWithSafeFinally(f) {
+      viewNames.foreach { viewName =>
+        try spark.catalog.dropTempView(viewName) catch {
+          // If the test failed part way, we don't want to mask the failure by failing to remove
+          // temp views that never got created.
+          case _: NoSuchTableException =>
+        }
       }
     }
   }
@@ -268,11 +271,13 @@ private[sql] trait SQLTestUtilsBase
    * Drops global temporary view `viewNames` after calling `f`.
    */
   protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      // If the test failed part way, we don't want to mask the failure by failing to remove
-      // global temp views that never got created.
-      try viewNames.foreach(spark.catalog.dropGlobalTempView) catch {
-        case _: NoSuchTableException =>
+    Utils.tryWithSafeFinally(f) {
+      viewNames.foreach { viewName =>
+        try spark.catalog.dropGlobalTempView(viewName) catch {
+          // If the test failed part way, we don't want to mask the failure by failing to remove
+          // global temp views that never got created.
+          case _: NoSuchTableException =>
+        }
       }
     }
   }
@@ -281,7 +286,7 @@ private[sql] trait SQLTestUtilsBase
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    Utils.tryWithSafeFinally(f) {
       tableNames.foreach { name =>
         spark.sql(s"DROP TABLE IF EXISTS $name")
       }
@@ -292,18 +297,18 @@ private[sql] trait SQLTestUtilsBase
    * Drops view `viewName` after calling `f`.
    */
   protected def withView(viewNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    Utils.tryWithSafeFinally(f)(
       viewNames.foreach { name =>
         spark.sql(s"DROP VIEW IF EXISTS $name")
       }
-    }
+    )
   }
 
   /**
    * Drops cache `cacheName` after calling `f`.
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    Utils.tryWithSafeFinally(f) {
       cacheNames.foreach { cacheName =>
         try uncacheTable(cacheName) catch {
           case _: AnalysisException =>
@@ -350,11 +355,24 @@ private[sql] trait SQLTestUtilsBase
    * Drops database `dbName` after calling `f`.
    */
   protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    Utils.tryWithSafeFinally(f) {
       dbNames.foreach { name =>
         spark.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
       }
       spark.sql(s"USE $DEFAULT_DATABASE")
+    }
+  }
+
+  /**
+   * Drops namespace `namespace` after calling `f`.
+   *
+   * Note that, if you switch current catalog/namespace in `f`, you should switch it back manually.
+   */
+  protected def withNamespace(namespaces: String*)(f: => Unit): Unit = {
+    Utils.tryWithSafeFinally(f) {
+      namespaces.foreach { name =>
+        spark.sql(s"DROP NAMESPACE IF EXISTS $name CASCADE")
+      }
     }
   }
 
@@ -379,7 +397,7 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
     spark.sessionState.catalog.setCurrentDatabase(db)
-    try f finally spark.sessionState.catalog.setCurrentDatabase("default")
+    Utils.tryWithSafeFinally(f)(spark.sessionState.catalog.setCurrentDatabase("default"))
   }
 
   /**
@@ -387,7 +405,7 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
-    val withoutFilters = df.queryExecution.sparkPlan.transform {
+    val withoutFilters = df.queryExecution.executedPlan.transform {
       case FilterExec(_, child) => child
     }
 
@@ -419,6 +437,14 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
+  }
+
+  /**
+   * Returns the size of the local directory except the metadata file and the temporary file.
+   */
+  def getLocalDirSize(file: File): Long = {
+    assert(file.isDirectory)
+    file.listFiles.filter(f => DataSourceUtils.isDataFile(f.getName)).map(_.length).sum
   }
 }
 

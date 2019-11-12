@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.ZoneId
+import java.time.{ZoneId, ZoneOffset}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
@@ -38,9 +38,8 @@ class UnsafeArraySuite extends SparkFunSuite {
   val doubleArray = Array(1.1, 2.2, 3.3)
   val stringArray = Array("1", "10", "100")
   val dateArray = Array(
-    DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1")).get,
-    DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26")).get)
-  private def defaultTz = DateTimeUtils.defaultTimeZone()
+    DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1"), ZoneOffset.UTC).get,
+    DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26"), ZoneOffset.UTC).get)
   private def defaultZoneId = ZoneId.systemDefault()
   val timestampArray = Array(
     DateTimeUtils.stringToTimestamp(
@@ -54,7 +53,8 @@ class UnsafeArraySuite extends SparkFunSuite {
     BigDecimal("1.2345678901234567890123456").setScale(21, BigDecimal.RoundingMode.FLOOR),
     BigDecimal("2.3456789012345678901234567").setScale(21, BigDecimal.RoundingMode.FLOOR))
 
-  val calenderintervalArray = Array(new CalendarInterval(3, 321), new CalendarInterval(1, 123))
+  val calenderintervalArray = Array(
+    new CalendarInterval(3, 2, 321), new CalendarInterval(1, 2, 123))
 
   val intMultiDimArray = Array(Array(1), Array(2, 20), Array(3, 30, 300))
   val doubleMultiDimArray = Array(

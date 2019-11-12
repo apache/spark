@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import java.util.UUID
 import java.util.concurrent._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
@@ -44,7 +44,7 @@ case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
 
-  private val runId: UUID = UUID.randomUUID
+  private[sql] val runId: UUID = UUID.randomUUID
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -59,10 +59,20 @@ case class BroadcastExchangeExec(
   }
 
   @transient
+  private lazy val promise = Promise[broadcast.Broadcast[Any]]()
+
+  /**
+   * For registering callbacks on `relationFuture`.
+   * Note that calling this field will not start the execution of broadcast job.
+   */
+  @transient
+  lazy val completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]] = promise.future
+
+  @transient
   private val timeout: Long = SQLConf.get.broadcastTimeout
 
   @transient
-  private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
+  private[sql] lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val task = new Callable[broadcast.Broadcast[Any]]() {
@@ -113,20 +123,28 @@ case class BroadcastExchangeExec(
               System.nanoTime() - beforeBroadcast)
 
             SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+            promise.success(broadcasted)
             broadcasted
           } catch {
             // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
             // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
             // will catch this exception and re-throw the wrapped fatal throwable.
             case oe: OutOfMemoryError =>
-              throw new SparkFatalException(
+              val ex = new SparkFatalException(
                 new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
                   "worker nodes. As a workaround, you can either disable broadcast by setting " +
                   s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
                   s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
                   .initCause(oe.getCause))
+              promise.failure(ex)
+              throw ex
             case e if !NonFatal(e) =>
-              throw new SparkFatalException(e)
+              val ex = new SparkFatalException(e)
+              promise.failure(ex)
+              throw ex
+            case e: Throwable =>
+              promise.failure(e)
+              throw e
           }
         }
       }

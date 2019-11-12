@@ -40,25 +40,6 @@ object YarnSparkHadoopUtil {
   val MEMORY_OVERHEAD_MIN = 384L
 
   val ANY_HOST = "*"
-  val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
-  val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
-
-  /**
-   * Convert Spark resources into YARN resources.
-   * The only resources we know how to map from spark configs to yarn configs are
-   * gpus and fpgas, everything else the user has to specify them in both the
-   * spark.yarn.*.resource and the spark.*.resource configs.
-   */
-  private[yarn] def getYarnResourcesFromSparkResources(
-      confPrefix: String,
-      sparkConf: SparkConf
-      ): Map[String, String] = {
-    Map("gpu" -> YARN_GPU_RESOURCE_CONFIG, "fpga" -> YARN_FPGA_RESOURCE_CONFIG).map {
-      case (rName, yarnName) =>
-        val resourceCountSparkConf = s"${confPrefix}${rName}${SPARK_RESOURCE_COUNT_SUFFIX}"
-        (yarnName -> sparkConf.get(resourceCountSparkConf, "0"))
-    }.filter { case (_, count) => count.toLong > 0 }
-  }
 
   // All RM requests are issued with same priority : we do not (yet) have any distinction between
   // request types (like map/reduce in hadoop for example)
@@ -202,4 +183,17 @@ object YarnSparkHadoopUtil {
     ConverterUtils.toContainerId(containerIdString)
   }
 
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
+      require(sizeInMB > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      sizeInMB
+    } else {
+      0
+    }
+  }
 }

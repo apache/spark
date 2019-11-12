@@ -75,10 +75,9 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
-  val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
-      "spark.kubernetes.authenticate.driver"
-  val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
-      "spark.kubernetes.authenticate.driver.mounted"
+  val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
+  val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
+  val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"
   val KUBERNETES_AUTH_CLIENT_MODE_PREFIX = "spark.kubernetes.authenticate"
   val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
   val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
@@ -140,6 +139,12 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
       .doc("Specify the hard cpu limit for each executor pod")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_SCHEDULER_NAME =
+    ConfigBuilder("spark.kubernetes.executor.scheduler.name")
+      .doc("Specify the scheduler name for each executor pod")
       .stringConf
       .createOptional
 
@@ -330,6 +335,12 @@ private[spark] object Config extends Logging {
         "of failure or normal termination.")
       .booleanConf
       .createWithDefault(true)
+
+  val KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.dynamicAllocation.deleteGracePeriod")
+      .doc("How long to wait for executors to shut down gracefully before a forceful kill.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5s")
 
   val KUBERNETES_SUBMIT_GRACE_PERIOD =
     ConfigBuilder("spark.kubernetes.appKillPodDeletionGracePeriod")

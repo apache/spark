@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -25,10 +26,10 @@ import collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
+class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("function get_json_object") {
@@ -217,22 +218,22 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   test("to_json - key types of map don't matter") {
     // interval type is invalid for converting to JSON. However, the keys of a map are treated
     // as strings, so its type doesn't matter.
-    val df = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
+    val df = Seq(Tuple1(Tuple1("-3 month 7 hours"))).toDF("a")
       .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
     checkAnswer(
       df.select(to_json($"c")),
-      Row("""{"col1":{"interval -3 months 7 hours":"a"}}""") :: Nil)
+      Row("""{"col1":{"-3 months 7 hours":"a"}}""") :: Nil)
   }
 
   test("to_json unsupported type") {
-    val baseDf = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
+    val baseDf = Seq(Tuple1(Tuple1("-3 month 7 hours"))).toDF("a")
     val df = baseDf.select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
     val e = intercept[AnalysisException]{
       // Unsupported type throws an exception
       df.select(to_json($"c")).collect()
     }
     assert(e.getMessage.contains(
-      "Unable to convert column a of type calendarinterval to JSON."))
+      "Unable to convert column a of type interval to JSON."))
 
     // interval type is invalid for converting to JSON. We can't use it as value type of a map.
     val df2 = baseDf
@@ -240,7 +241,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val e2 = intercept[AnalysisException] {
       df2.select(to_json($"c")).collect()
     }
-    assert(e2.getMessage.contains("Unable to convert column col1 of type calendarinterval to JSON"))
+    assert(e2.getMessage.contains("Unable to convert column col1 of type interval to JSON"))
   }
 
   test("roundtrip in to_json and from_json - struct") {
@@ -606,6 +607,24 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       val df = input.select(from_json($"value", "time timestamp", options))
 
       checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
+    }
+  }
+
+  test("special timestamp values") {
+    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
+      val input = Seq(s"""{"t": "$specialValue"}""").toDS()
+      val readback = input.select(from_json($"value", lit("t timestamp"),
+        Map.empty[String, String].asJava)).collect()
+      assert(readback(0).getAs[Row](0).getAs[Timestamp](0).getTime >= 0)
+    }
+  }
+
+  test("special date values") {
+    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
+      val input = Seq(s"""{"d": "$specialValue"}""").toDS()
+      val readback = input.select(from_json($"value", lit("d date"),
+        Map.empty[String, String].asJava)).collect()
+      assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
     }
   }
 }

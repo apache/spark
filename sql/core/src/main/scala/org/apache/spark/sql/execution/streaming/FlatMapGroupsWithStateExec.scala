@@ -28,14 +28,14 @@ import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.util.CompletionIterator
 
 /**
- * Physical operator for executing `FlatMapGroupsWithState.`
+ * Physical operator for executing `FlatMapGroupsWithState`
  *
  * @param func function called on each group
  * @param keyDeserializer used to extract the key object for each group.
  * @param valueDeserializer used to extract the items in the iterator from an input row.
  * @param groupingAttributes used to group the data
  * @param dataAttributes used to read the data
- * @param outputObjAttr used to define the output object
+ * @param outputObjAttr Defines the output object
  * @param stateEncoder used to serialize/deserialize state before calling `func`
  * @param outputMode the output mode of `func`
  * @param timeoutConf used to timeout groups that have not received data in a while
@@ -154,7 +154,7 @@ case class FlatMapGroupsWithStateExec(
       ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
     private val getValueObj =
       ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-    private val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
+    private val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
     // Metrics
     private val numUpdatedStateRows = longMetric("numUpdatedStateRows")

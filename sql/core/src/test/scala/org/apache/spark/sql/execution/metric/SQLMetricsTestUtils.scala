@@ -27,6 +27,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
+import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
 
 
@@ -114,29 +115,31 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       provider: String,
       dataFormat: String,
       tableName: String): Unit = {
-    withTempPath { dir =>
-      spark.sql(
-        s"""
-           |CREATE TABLE $tableName(a int, b int)
-           |USING $provider
-           |PARTITIONED BY(a)
-           |LOCATION '${dir.toURI}'
-         """.stripMargin)
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-      assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+    withTable(tableName) {
+      withTempPath { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE $tableName(a int, b int)
+             |USING $provider
+             |PARTITIONED BY(a)
+             |LOCATION '${dir.toURI}'
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-      val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
-        .selectExpr("id a", "id b")
+        val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
+          .selectExpr("id a", "id b")
 
-      // 40 files, 80 rows, 40 dynamic partitions.
-      verifyWriteDataMetrics(Seq(40, 40, 80)) {
-        df.union(df).repartition(2, $"a")
-          .write
-          .format(dataFormat)
-          .mode("overwrite")
-          .insertInto(tableName)
+        // 40 files, 80 rows, 40 dynamic partitions.
+        verifyWriteDataMetrics(Seq(40, 40, 80)) {
+          df.union(df).repartition(2, $"a")
+            .write
+            .format(dataFormat)
+            .mode("overwrite")
+            .insertInto(tableName)
+        }
+        assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
       }
-      assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
     }
   }
 
@@ -154,7 +157,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
        expectedNodeIds: Set[Long],
        enableWholeStage: Boolean = false): Option[Map[Long, (String, Map[String, Any])]] = {
     val previousExecutionIds = currentExecutionIds()
-    withSQLConf("spark.sql.codegen.wholeStage" -> enableWholeStage.toString) {
+    withSQLConf(WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
       df.collect()
     }
     sparkContext.listenerBus.waitUntilEmpty(10000)
@@ -229,7 +232,8 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
         val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
         assert(expectedNodeName === actualNodeName)
         for ((metricName, metricPredicate) <- expectedMetricsPredicatesMap) {
-          assert(metricPredicate(actualMetricsMap(metricName)))
+          assert(metricPredicate(actualMetricsMap(metricName)),
+            s"$nodeId / '$metricName' (= ${actualMetricsMap(metricName)}) did not match predicate.")
         }
       }
     }

@@ -40,15 +40,20 @@ def _wrap_function(sc, func, returnType):
 def _create_udf(f, returnType, evalType):
 
     if evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                    PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
+                    PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+                    PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                    PythonEvalType.SQL_MAP_PANDAS_ITER_UDF):
 
         from pyspark.sql.utils import require_minimum_pyarrow_version
         require_minimum_pyarrow_version()
 
         argspec = _get_argspec(f)
 
-        if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
+        if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
+                evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) and \
+                len(argspec.args) == 0 and \
                 argspec.varargs is None:
             raise ValueError(
                 "Invalid function: 0-arg pandas_udfs are not supported. "
@@ -60,6 +65,13 @@ def _create_udf(f, returnType, evalType):
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUPED_MAP "
                 "must take either one argument (data) or two arguments (key, data).")
+
+        if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF \
+                and len(argspec.args) not in (2, 3):
+            raise ValueError(
+                "Invalid function: pandas_udfs with function type COGROUPED_MAP "
+                "must take either two arguments (left, right) "
+                "or three arguments (key, left, right).")
 
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
@@ -113,7 +125,8 @@ class UserDefinedFunction(object):
             else:
                 self._returnType_placeholder = _parse_datatype_string(self._returnType)
 
-        if self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+        if self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF or \
+                self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
             try:
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
@@ -130,6 +143,28 @@ class UserDefinedFunction(object):
                         "%s is not supported" % str(self._returnType_placeholder))
             else:
                 raise TypeError("Invalid returnType for grouped map Pandas "
+                                "UDFs: returnType must be a StructType.")
+        elif self.evalType == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
+            if isinstance(self._returnType_placeholder, StructType):
+                try:
+                    to_arrow_type(self._returnType_placeholder)
+                except TypeError:
+                    raise NotImplementedError(
+                        "Invalid returnType with map iterator Pandas UDFs: "
+                        "%s is not supported" % str(self._returnType_placeholder))
+            else:
+                raise TypeError("Invalid returnType for map iterator Pandas "
+                                "UDFs: returnType must be a StructType.")
+        elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+            if isinstance(self._returnType_placeholder, StructType):
+                try:
+                    to_arrow_type(self._returnType_placeholder)
+                except TypeError:
+                    raise NotImplementedError(
+                        "Invalid returnType with cogrouped map Pandas UDFs: "
+                        "%s is not supported" % str(self._returnType_placeholder))
+            else:
+                raise TypeError("Invalid returnType for cogrouped map Pandas "
                                 "UDFs: returnType must be a StructType.")
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:
@@ -323,10 +358,13 @@ class UDFRegistration(object):
                     "a user-defined function, but got %s." % returnType)
             if f.evalType not in [PythonEvalType.SQL_BATCHED_UDF,
                                   PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-                                  PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
+                                  PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                                  PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                                  PythonEvalType.SQL_MAP_PANDAS_ITER_UDF]:
                 raise ValueError(
-                    "Invalid f: f must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF or "
-                    "SQL_GROUPED_AGG_PANDAS_UDF")
+                    "Invalid f: f must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
+                    "SQL_SCALAR_PANDAS_ITER_UDF, SQL_GROUPED_AGG_PANDAS_UDF or "
+                    "SQL_MAP_PANDAS_ITER_UDF.")
             register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
                                                evalType=f.evalType,
                                                deterministic=f.deterministic)
@@ -357,17 +395,17 @@ class UDFRegistration(object):
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
         >>> spark.sql("SELECT javaStringLength('test')").collect()
-        [Row(UDF:javaStringLength(test)=4)]
+        [Row(javaStringLength(test)=4)]
 
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength")
         >>> spark.sql("SELECT javaStringLength2('test')").collect()
-        [Row(UDF:javaStringLength2(test)=4)]
+        [Row(javaStringLength2(test)=4)]
 
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength3", "test.org.apache.spark.sql.JavaStringLength", "integer")
         >>> spark.sql("SELECT javaStringLength3('test')").collect()
-        [Row(UDF:javaStringLength3(test)=4)]
+        [Row(javaStringLength3(test)=4)]
         """
 
         jdt = None

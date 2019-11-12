@@ -36,8 +36,7 @@ object OrcNestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
   override val benchmarkName: String = "Nested Schema Pruning Benchmark For ORC v1"
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "orc",
-        SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "orc") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "orc") {
       super.runBenchmarkSuite(mainArgs)
     }
   }

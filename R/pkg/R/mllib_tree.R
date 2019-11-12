@@ -135,7 +135,7 @@ print.summary.decisionTree <- function(x) {
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', ':', '+', and '-'.
+#'                operators are supported, including '~', ':', '+', '-', '*', and '^'.
 #' @param type type of model, one of "regression" or "classification", to fit
 #' @param maxDepth Maximum depth of the tree (>= 0).
 #' @param maxBins Maximum number of bins used for discretizing continuous features and for choosing

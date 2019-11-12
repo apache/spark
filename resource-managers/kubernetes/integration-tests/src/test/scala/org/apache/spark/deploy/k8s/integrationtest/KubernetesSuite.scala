@@ -42,7 +42,7 @@ import org.apache.spark.internal.config._
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
   with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
-  with DepsTestsSuite with Logging with Eventually with Matchers {
+  with DepsTestsSuite with RTestsSuite with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
@@ -335,6 +335,10 @@ class KubernetesSuite extends SparkFunSuite
       === baseMemory)
   }
 
+  protected def doExecutorServiceAccountCheck(executorPod: Pod, account: String): Unit = {
+    doBasicExecutorPodCheck(executorPod)
+    assert(executorPod.getSpec.getServiceAccount == kubernetesTestComponents.serviceAccountName)
+  }
 
   protected def doBasicDriverPyPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)

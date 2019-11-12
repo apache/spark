@@ -96,7 +96,7 @@ private[spark] class BasicExecutorFeatureStep(
       .build()
 
     val executorResourceQuantities =
-      KubernetesUtils.buildResourcesQuantities(SPARK_EXECUTOR_RESOURCE_PREFIX,
+      KubernetesUtils.buildResourcesQuantities(SPARK_EXECUTOR_PREFIX,
         kubernetesConf.sparkConf)
 
     val executorEnv: Seq[EnvVar] = {
@@ -215,6 +215,9 @@ private[spark] class BasicExecutorFeatureStep(
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
         .endSpec()
       .build()
+
+    kubernetesConf.get(KUBERNETES_EXECUTOR_SCHEDULER_NAME)
+      .foreach(executorPod.getSpec.setSchedulerName)
 
     SparkPod(executorPod, containerWithLimitCores)
   }

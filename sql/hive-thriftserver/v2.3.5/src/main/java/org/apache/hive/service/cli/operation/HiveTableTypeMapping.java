@@ -31,8 +31,8 @@ import org.apache.hadoop.hive.metastore.TableType;
 public class HiveTableTypeMapping implements TableTypeMapping {
 
   @Override
-  public String mapToHiveType(String clientTypeName) {
-    return clientTypeName;
+  public String[] mapToHiveType(String clientTypeName) {
+    return new String[] {mapToClientType(clientTypeName)};
   }
 
   @Override
@@ -44,7 +44,7 @@ public class HiveTableTypeMapping implements TableTypeMapping {
   public Set<String> getTableTypeNames() {
     Set<String> typeNameSet = new HashSet<String>();
     for (TableType typeNames : TableType.values()) {
-      typeNameSet.add(typeNames.toString());
+      typeNameSet.add(typeNames.name());
     }
     return typeNameSet;
   }

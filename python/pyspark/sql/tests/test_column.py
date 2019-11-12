@@ -18,6 +18,8 @@
 
 import sys
 
+from py4j.protocol import Py4JJavaError
+
 from pyspark.sql import Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
@@ -85,13 +87,23 @@ class ColumnTests(ReusedSQLTestCase):
                                 "Cannot apply 'in' operator against a column",
                                 lambda: 1 in cs)
 
-    def test_column_getitem(self):
+    def test_column_apply(self):
         from pyspark.sql.functions import col
 
         self.assertIsInstance(col("foo")[1:3], Column)
         self.assertIsInstance(col("foo")[0], Column)
         self.assertIsInstance(col("foo")["bar"], Column)
         self.assertRaises(ValueError, lambda: col("foo")[0:10:2])
+
+    def test_column_getitem(self):
+        from pyspark.sql.functions import col, create_map, lit
+
+        map_col = create_map(lit(0), lit(100), lit(1), lit(200))
+        self.assertRaisesRegexp(
+            Py4JJavaError,
+            "Unsupported literal type class org.apache.spark.sql.Column id",
+            lambda: map_col.getItem(col('id'))
+        )
 
     def test_column_select(self):
         df = self.df
@@ -152,7 +164,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

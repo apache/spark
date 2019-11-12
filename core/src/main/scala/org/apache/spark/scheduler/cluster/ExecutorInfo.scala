@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.resource.ResourceInformation
 
 /**
  * :: DeveloperApi ::
@@ -27,10 +28,19 @@ class ExecutorInfo(
    val executorHost: String,
    val totalCores: Int,
    val logUrlMap: Map[String, String],
-   val attributes: Map[String, String]) {
+   val attributes: Map[String, String],
+   val resourcesInfo: Map[String, ResourceInformation]) {
 
   def this(executorHost: String, totalCores: Int, logUrlMap: Map[String, String]) = {
-    this(executorHost, totalCores, logUrlMap, Map.empty)
+    this(executorHost, totalCores, logUrlMap, Map.empty, Map.empty)
+  }
+
+  def this(
+      executorHost: String,
+      totalCores: Int,
+      logUrlMap: Map[String, String],
+      attributes: Map[String, String]) = {
+    this(executorHost, totalCores, logUrlMap, attributes, Map.empty)
   }
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[ExecutorInfo]
@@ -41,12 +51,13 @@ class ExecutorInfo(
         executorHost == that.executorHost &&
         totalCores == that.totalCores &&
         logUrlMap == that.logUrlMap &&
-        attributes == that.attributes
+        attributes == that.attributes &&
+        resourcesInfo == that.resourcesInfo
     case _ => false
   }
 
   override def hashCode(): Int = {
-    val state = Seq(executorHost, totalCores, logUrlMap, attributes)
+    val state = Seq(executorHost, totalCores, logUrlMap, attributes, resourcesInfo)
     state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
   }
 }

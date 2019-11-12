@@ -162,7 +162,7 @@ object Literal {
     case TimestampType => create(0L, TimestampType)
     case StringType => Literal("")
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
-    case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
+    case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
@@ -224,11 +224,41 @@ object NonNullLiteral {
 }
 
 /**
+ * Extractor for retrieving Float literals.
+ */
+object FloatLiteral {
+  def unapply(a: Any): Option[Float] = a match {
+    case Literal(a: Float, FloatType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Double literals.
+ */
+object DoubleLiteral {
+  def unapply(a: Any): Option[Double] = a match {
+    case Literal(a: Double, DoubleType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for retrieving Int literals.
  */
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving String literals.
+ */
+object StringLiteral {
+  def unapply(a: Any): Option[String] = a match {
+    case Literal(s: UTF8String, StringType) => Some(s.toString)
     case _ => None
   }
 }
@@ -360,7 +390,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ if v.isNaN => "'NaN'"
         case Float.PositiveInfinity => "'Infinity'"
         case Float.NegativeInfinity => "'-Infinity'"
-        case _ => v
+        case _ => s"'$v'"
       }
       s"CAST($castedValue AS ${FloatType.sql})"
     case (v: Double, DoubleType) =>
@@ -371,7 +401,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ => v + "D"
       }
     case (v: Decimal, t: DecimalType) => v + "BD"
-    case (v: Int, DateType) => s"DATE '${DateFormatter().format(v)}'"
+    case (v: Int, DateType) =>
+      val formatter = DateFormatter(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"DATE '${formatter.format(v)}'"
     case (v: Long, TimestampType) =>
       val formatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))

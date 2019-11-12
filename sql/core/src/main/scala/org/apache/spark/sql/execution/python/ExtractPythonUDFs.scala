@@ -81,6 +81,69 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Extracts PythonUDFs in logical aggregate, which are used in grouping keys, evaluate them
+ * before aggregate.
+ * This must be executed after `ExtractPythonUDFFromAggregate` rule and before `ExtractPythonUDFs`.
+ */
+object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
+  private def hasScalarPythonUDF(e: Expression): Boolean = {
+    e.find(PythonUDF.isScalarPythonUDF).isDefined
+  }
+
+  private def extract(agg: Aggregate): LogicalPlan = {
+    val projList = new ArrayBuffer[NamedExpression]()
+    val groupingExpr = new ArrayBuffer[Expression]()
+    val attributeMap = mutable.HashMap[PythonUDF, NamedExpression]()
+
+    agg.groupingExpressions.foreach { expr =>
+      if (hasScalarPythonUDF(expr)) {
+        val newE = expr transformDown {
+          case p: PythonUDF =>
+            // This is just a sanity check, the rule PullOutNondeterministic should
+            // already pull out those nondeterministic expressions.
+            assert(p.udfDeterministic, "Non-determinstic PythonUDFs should not appear " +
+              "in grouping expression")
+            val canonicalized = p.canonicalized.asInstanceOf[PythonUDF]
+            if (attributeMap.contains(canonicalized)) {
+              attributeMap(canonicalized)
+            } else {
+              val alias = Alias(p, "groupingPythonUDF")()
+              projList += alias
+              attributeMap += ((canonicalized, alias.toAttribute))
+              alias.toAttribute
+            }
+        }
+        groupingExpr += newE
+      } else {
+        groupingExpr += expr
+      }
+    }
+    val aggExpr = agg.aggregateExpressions.map { expr =>
+      expr.transformUp {
+        // PythonUDF over aggregate was pull out by ExtractPythonUDFFromAggregate.
+        // PythonUDF here should be either
+        // 1. Argument of an aggregate function.
+        //    CheckAnalysis guarantees the arguments are deterministic.
+        // 2. PythonUDF in grouping key. Grouping key must be deterministic.
+        // 3. PythonUDF not in grouping key. It is either no arguments or with grouping key
+        // in its arguments. Such PythonUDF was pull out by ExtractPythonUDFFromAggregate, too.
+        case p: PythonUDF if p.udfDeterministic =>
+          val canonicalized = p.canonicalized.asInstanceOf[PythonUDF]
+          attributeMap.getOrElse(canonicalized, p)
+      }.asInstanceOf[NamedExpression]
+    }
+    agg.copy(
+      groupingExpressions = groupingExpr,
+      aggregateExpressions = aggExpr,
+      child = Project(projList ++ agg.child.output, agg.child))
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case agg: Aggregate if agg.groupingExpressions.exists(hasScalarPythonUDF(_)) =>
+      extract(agg)
+  }
+}
 
 /**
  * Extracts PythonUDFs from operators, rewriting the query plan so that the UDF can be evaluated
@@ -111,19 +174,27 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def collectEvaluableUDFsFromExpressions(expressions: Seq[Expression]): Seq[PythonUDF] = {
-    // Eval type checker is set once when we find the first evaluable UDF and its value
-    // shouldn't change later.
-    // Used to check if subsequent UDFs are of the same type as the first UDF. (since we can only
+    // If fisrt UDF is SQL_SCALAR_PANDAS_ITER_UDF, then only return this UDF,
+    // otherwise check if subsequent UDFs are of the same type as the first UDF. (since we can only
     // extract UDFs of the same eval type)
-    var evalTypeChecker: Option[EvalTypeChecker] = None
+
+    var firstVisitedScalarUDFEvalType: Option[Int] = None
+
+    def canChainUDF(evalType: Int): Boolean = {
+      if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) {
+        false
+      } else {
+        evalType == firstVisitedScalarUDFEvalType.get
+      }
+    }
 
     def collectEvaluableUDFs(expr: Expression): Seq[PythonUDF] = expr match {
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
-        && evalTypeChecker.isEmpty =>
-        evalTypeChecker = Some((otherEvalType: EvalType) => otherEvalType == udf.evalType)
+        && firstVisitedScalarUDFEvalType.isEmpty =>
+        firstVisitedScalarUDFEvalType = Some(udf.evalType)
         Seq(udf)
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
-        && evalTypeChecker.get(udf.evalType) =>
+        && canChainUDF(udf.evalType) =>
         Seq(udf)
       case e => e.children.flatMap(collectEvaluableUDFs)
     }
@@ -171,20 +242,24 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
             validUdfs.forall(PythonUDF.isScalarPythonUDF),
             "Can only extract scalar vectorized udf or sql batch udf")
 
-          val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
+          val resultAttrs = validUdfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
 
-          val evaluation = validUdfs.partition(
-            _.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-          ) match {
-            case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
-              ArrowEvalPython(vectorizedUdfs, resultAttrs, child)
-            case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
-              BatchEvalPython(plainUdfs, resultAttrs, child)
+          val evalTypes = validUdfs.map(_.evalType).toSet
+          if (evalTypes.size != 1) {
+            throw new AnalysisException(
+              s"Expected udfs have the same evalType but got different evalTypes: " +
+              s"${evalTypes.mkString(",")}")
+          }
+          val evalType = evalTypes.head
+          val evaluation = evalType match {
+            case PythonEvalType.SQL_BATCHED_UDF =>
+              BatchEvalPython(validUdfs, resultAttrs, child)
+            case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
+              ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
-              throw new AnalysisException(
-                "Expected either Scalar Pandas UDFs or Batched UDFs but got both")
+              throw new AnalysisException("Unexcepted UDF evalType")
           }
 
           attributeMap ++= validUdfs.zip(resultAttrs)

@@ -23,7 +23,7 @@ There are several ways to monitor Spark applications: web UIs, metrics, and exte
 
 # Web Interfaces
 
-Every SparkContext launches a web UI, by default on port 4040, that
+Every SparkContext launches a [Web UI](web-ui.html), by default on port 4040, that
 displays useful information about the application. This includes:
 
 * A list of scheduler stages and tasks
@@ -190,7 +190,11 @@ Security options for the Spark History Server are covered more detail in the
     <td>1d</td>
     <td>
       How often the filesystem job history cleaner checks for files to delete.
-      Files are only deleted if they are older than <code>spark.history.fs.cleaner.maxAge</code>
+      Files are deleted if at least one of two conditions holds.
+      First, they're deleted if they're older than <code>spark.history.fs.cleaner.maxAge</code>.
+      They are also deleted if the number of files is more than
+      <code>spark.history.fs.cleaner.maxNum</code>, Spark tries to clean up the completed attempts
+      from the applications based on the order of their oldest attempt time.
     </td>
   </tr>
   <tr>
@@ -198,6 +202,16 @@ Security options for the Spark History Server are covered more detail in the
     <td>7d</td>
     <td>
       Job history files older than this will be deleted when the filesystem history cleaner runs.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.maxNum</td>
+    <td>Int.MaxValue</td>
+    <td>
+      The maximum number of files in the event log directory.
+      Spark tries to clean up the completed attempt logs to maintain the log directory under this limit.
+      This should be smaller than the underlying file system limit like
+      `dfs.namenode.fs-limits.max-directory-items` in HDFS.
     </td>
   </tr>
   <tr>
@@ -830,6 +844,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `CSVSink`: Exports metrics data to CSV files at regular intervals.
 * `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
+* `PrometheusServlet`: Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
 * `GraphiteSink`: Sends metrics to a Graphite node.
 * `Slf4jSink`: Sends metrics to slf4j as log entries.
 * `StatsdSink`: Sends metrics to a StatsD node.
@@ -862,6 +877,7 @@ This example shows a list of Spark configuration parameters for a Graphite sink:
 "spark.metrics.conf.*.sink.graphite.period"=10
 "spark.metrics.conf.*.sink.graphite.unit"=seconds
 "spark.metrics.conf.*.sink.graphite.prefix"="optional_prefix"
+"spark.metrics.conf.*.sink.graphite.regex"="optional_regex_to_send_matching_metrics"
 ```
 
 Default values of the Spark metrics configuration are as follows:
@@ -907,6 +923,8 @@ This is the component with the largest amount of instrumented metrics
   - memory.remainingOnHeapMem_MB
 
 - namespace=HiveExternalCatalog
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.static.sources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
   - hiveClientCalls.count
@@ -914,6 +932,8 @@ This is the component with the largest amount of instrumented metrics
   - partitionsFetched.count
 
 - namespace=CodeGenerator
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.static.sources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
@@ -975,6 +995,11 @@ This is the component with the largest amount of instrumented metrics
 - namespace=JVMCPU
   - jvmCpuTime
 
+- namespace=plugin.\<Plugin Class Name>
+  - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
+  configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
+  custom plugins into Spark.
+
 ### Component instance = Executor
 These metrics are exposed by Spark executors. Note, currently they are not available
 when running in local mode.
@@ -1014,10 +1039,12 @@ when running in local mode.
   - shuffleRemoteBytesReadToDisk.count
   - shuffleTotalBytesRead.count
   - shuffleWriteTime.count
+  - succeededTasks.count
   - threadpool.activeTasks
   - threadpool.completeTasks
   - threadpool.currentPool_size
   - threadpool.maxPool_size
+  - threadpool.startedTasks
 
 - namespace=JVMCPU
   - jvmCpuTime
@@ -1029,6 +1056,8 @@ when running in local mode.
   - shuffle-server.usedHeapMemory
 
 - namespace=HiveExternalCatalog
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.static.sources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
   - hiveClientCalls.count
@@ -1036,11 +1065,18 @@ when running in local mode.
   - partitionsFetched.count
 
 - namespace=CodeGenerator
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.static.sources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
   - hiveClientCalls.count
   - sourceCodeSize (histogram)
+
+- namespace=plugin.\<Plugin Class Name>
+  - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
+  configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
+  custom plugins into Spark.
 
 ### Source = JVM Source 
 Notes: 
@@ -1097,6 +1133,7 @@ Note: applies to the shuffle service
 - blockTransferRateBytes (meter)
 - numActiveConnections.count
 - numRegisteredConnections.count
+- numCaughtExceptions.count
 - openBlockRequestLatencyMillis (histogram)
 - registerExecutorRequestLatencyMillis (histogram)
 - registeredExecutorsSize
@@ -1117,3 +1154,21 @@ can provide fine-grained profiling on individual nodes.
 * JVM utilities such as `jstack` for providing stack traces, `jmap` for creating heap-dumps,
 `jstat` for reporting time-series statistics and `jconsole` for visually exploring various JVM
 properties are useful for those comfortable with JVM internals.
+
+Spark also provides a plugin API so that custom instrumentation code can be added to Spark
+applications. There are two configuration keys available for loading plugins into Spark:
+
+- <code>spark.plugins</code>
+- <code>spark.plugins.defaultList</code>
+
+Both take a comma-separated list of class names that implement the
+<code>org.apache.spark.api.plugin.SparkPlugin</code> interface. The two names exist so that it's
+possible for one list to be placed in the Spark default config file, allowing users to
+easily add other plugins from the command line without overwriting the config file's list. Duplicate
+plugins are ignored.
+
+Distribution of the jar files containing the plugin code is currently not done by Spark. The user
+or admin should make sure that the jar files are available to Spark applications, for example, by
+including the plugin jar with the Spark distribution. The exception to this rule is the YARN
+backend, where the <code>--jars</code> command line option (or equivalent config entry) can be
+used to make the plugin code available to both executors and cluster-mode drivers.

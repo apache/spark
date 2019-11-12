@@ -19,11 +19,11 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
-import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.mllib.feature.{ElementwiseProduct => OldElementwiseProduct}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -55,11 +55,38 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
 
   override protected def createTransformFunc: Vector => Vector = {
     require(params.contains(scalingVec), s"transformation requires a weight vector")
-    val elemScaler = new feature.ElementwiseProduct($(scalingVec))
-    v => elemScaler.transform(v)
+    val elemScaler = new OldElementwiseProduct(OldVectors.fromML($(scalingVec)))
+    val vectorSize = $(scalingVec).size
+
+    vector: Vector => {
+      require(vector.size == vectorSize,
+        s"vector sizes do not match: Expected $vectorSize but found ${vector.size}")
+      vector match {
+        case DenseVector(values) =>
+          val newValues = elemScaler.transformDense(values)
+          Vectors.dense(newValues)
+        case SparseVector(size, indices, values) =>
+          val (newIndices, newValues) = elemScaler.transformSparse(indices, values)
+          Vectors.sparse(size, newIndices, newValues)
+        case other =>
+          throw new UnsupportedOperationException(
+            s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+      }
+    }
+  }
+
+  override protected def validateInputType(inputType: DataType): Unit = {
+    require(inputType.isInstanceOf[VectorUDT],
+      s"Input type must be ${(new VectorUDT).catalogString} but got ${inputType.catalogString}.")
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ElementwiseProduct: uid=$uid" +
+      get(scalingVec).map(v => s", vectorSize=${v.size}").getOrElse("")
+  }
 }
 
 @Since("2.0.0")

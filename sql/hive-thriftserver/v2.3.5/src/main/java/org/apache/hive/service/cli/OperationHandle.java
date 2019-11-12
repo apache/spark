@@ -17,8 +17,8 @@
  */
 package org.apache.hive.service.cli;
 
-import org.apache.hive.service.cli.thrift.TOperationHandle;
-import org.apache.hive.service.cli.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TOperationHandle;
+import org.apache.hive.service.rpc.thrift.TProtocolVersion;
 
 public class OperationHandle extends Handle {
 

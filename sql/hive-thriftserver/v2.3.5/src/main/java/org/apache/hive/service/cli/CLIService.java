@@ -28,8 +28,6 @@ import java.util.concurrent.TimeoutException;
 
 import javax.security.auth.login.LoginException;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -45,9 +43,12 @@ import org.apache.hive.service.CompositeService;
 import org.apache.hive.service.ServiceException;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.operation.Operation;
+import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.cli.session.SessionManager;
-import org.apache.hive.service.cli.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TProtocolVersion;
 import org.apache.hive.service.server.HiveServer2;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * CLIService.
@@ -62,7 +63,7 @@ public class CLIService extends CompositeService implements ICLIService {
     SERVER_VERSION = protocols[protocols.length - 1];
   }
 
-  private final Log LOG = LogFactory.getLog(CLIService.class.getName());
+  private final Logger LOG = LoggerFactory.getLogger(CLIService.class.getName());
 
   private HiveConf hiveConf;
   private SessionManager sessionManager;
@@ -256,23 +257,57 @@ public class CLIService extends CompositeService implements ICLIService {
    */
   @Override
   public OperationHandle executeStatement(SessionHandle sessionHandle, String statement,
-      Map<String, String> confOverlay)
-          throws HiveSQLException {
-    OperationHandle opHandle = sessionManager.getSession(sessionHandle)
-        .executeStatement(statement, confOverlay);
+      Map<String, String> confOverlay) throws HiveSQLException {
+    HiveSession session = sessionManager.getSession(sessionHandle);
+    // need to reset the monitor, as operation handle is not available down stream, Ideally the
+    // monitor should be associated with the operation handle.
+    session.getSessionState().updateProgressMonitor(null);
+    OperationHandle opHandle = session.executeStatement(statement, confOverlay);
     LOG.debug(sessionHandle + ": executeStatement()");
     return opHandle;
   }
 
-  /* (non-Javadoc)
-   * @see org.apache.hive.service.cli.ICLIService#executeStatementAsync(org.apache.hive.service.cli.SessionHandle,
-   *  java.lang.String, java.util.Map)
+  /**
+   * Execute statement on the server with a timeout. This is a blocking call.
+   */
+  @Override
+  public OperationHandle executeStatement(SessionHandle sessionHandle, String statement,
+        Map<String, String> confOverlay, long queryTimeout) throws HiveSQLException {
+    HiveSession session = sessionManager.getSession(sessionHandle);
+    // need to reset the monitor, as operation handle is not available down stream, Ideally the
+    // monitor should be associated with the operation handle.
+    session.getSessionState().updateProgressMonitor(null);
+    OperationHandle opHandle = session.executeStatement(statement, confOverlay, queryTimeout);
+    LOG.debug(sessionHandle + ": executeStatement()");
+    return opHandle;
+  }
+
+  /**
+   * Execute statement asynchronously on the server. This is a non-blocking call
    */
   @Override
   public OperationHandle executeStatementAsync(SessionHandle sessionHandle, String statement,
       Map<String, String> confOverlay) throws HiveSQLException {
-    OperationHandle opHandle = sessionManager.getSession(sessionHandle)
-        .executeStatementAsync(statement, confOverlay);
+    HiveSession session = sessionManager.getSession(sessionHandle);
+    // need to reset the monitor, as operation handle is not available down stream, Ideally the
+    // monitor should be associated with the operation handle.
+    session.getSessionState().updateProgressMonitor(null);
+    OperationHandle opHandle = session.executeStatementAsync(statement, confOverlay);
+    LOG.debug(sessionHandle + ": executeStatementAsync()");
+    return opHandle;
+  }
+
+  /**
+   * Execute statement asynchronously on the server with a timeout. This is a non-blocking call
+   */
+  @Override
+  public OperationHandle executeStatementAsync(SessionHandle sessionHandle, String statement,
+      Map<String, String> confOverlay, long queryTimeout) throws HiveSQLException {
+    HiveSession session = sessionManager.getSession(sessionHandle);
+    // need to reset the monitor, as operation handle is not available down stream, Ideally the
+    // monitor should be associated with the operation handle.
+    session.getSessionState().updateProgressMonitor(null);
+    OperationHandle opHandle = session.executeStatementAsync(statement, confOverlay, queryTimeout);
     LOG.debug(sessionHandle + ": executeStatementAsync()");
     return opHandle;
   }
@@ -367,6 +402,33 @@ public class CLIService extends CompositeService implements ICLIService {
   }
 
   /* (non-Javadoc)
+   * @see org.apache.hive.service.cli.ICLIService#getPrimaryKeys(org.apache.hive.service.cli.SessionHandle)
+   */
+  @Override
+  public OperationHandle getPrimaryKeys(SessionHandle sessionHandle,
+      String catalog, String schema, String table) throws HiveSQLException {
+    OperationHandle opHandle = sessionManager.getSession(sessionHandle)
+        .getPrimaryKeys(catalog, schema, table);
+    LOG.debug(sessionHandle + ": getPrimaryKeys()");
+    return opHandle;
+  }
+
+  /* (non-Javadoc)
+   * @see org.apache.hive.service.cli.ICLIService#getCrossReference(org.apache.hive.service.cli.SessionHandle)
+   */
+  @Override
+  public OperationHandle getCrossReference(SessionHandle sessionHandle,
+      String primaryCatalog, String primarySchema, String primaryTable, String foreignCatalog,
+      String foreignSchema, String foreignTable) throws HiveSQLException {
+    OperationHandle opHandle = sessionManager.getSession(sessionHandle)
+        .getCrossReference(primaryCatalog, primarySchema, primaryTable,
+         foreignCatalog,
+         foreignSchema, foreignTable);
+    LOG.debug(sessionHandle + ": getCrossReference()");
+    return opHandle;
+  }
+
+  /* (non-Javadoc)
    * @see org.apache.hive.service.cli.ICLIService#getOperationStatus(org.apache.hive.service.cli.OperationHandle)
    */
   @Override
@@ -402,6 +464,10 @@ public class CLIService extends CompositeService implements ICLIService {
     OperationStatus opStatus = operation.getStatus();
     LOG.debug(opHandle + ": getOperationStatus()");
     return opStatus;
+  }
+
+  public HiveConf getSessionConf(SessionHandle sessionHandle) throws HiveSQLException {
+    return sessionManager.getSession(sessionHandle).getHiveConf();
   }
 
   /* (non-Javadoc)

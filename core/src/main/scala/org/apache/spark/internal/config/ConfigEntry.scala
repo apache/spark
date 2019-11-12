@@ -28,6 +28,8 @@ package org.apache.spark.internal.config
  * value declared as a string.
  *
  * @param key the key for the configuration
+ * @param prependedKey the key for the configuration which will be prepended
+ * @param prependSeparator the separator which is used for prepending
  * @param valueConverter how to convert a string to the value. It should throw an exception if the
  *                       string does not have the required format.
  * @param stringConverter how to convert a value to a string that the user can use it as a valid
@@ -41,6 +43,8 @@ package org.apache.spark.internal.config
  */
 private[spark] abstract class ConfigEntry[T] (
     val key: String,
+    val prependedKey: Option[String],
+    val prependSeparator: String,
     val alternatives: List[String],
     val valueConverter: String => T,
     val stringConverter: T => String,
@@ -54,7 +58,15 @@ private[spark] abstract class ConfigEntry[T] (
   def defaultValueString: String
 
   protected def readString(reader: ConfigReader): Option[String] = {
-    alternatives.foldLeft(reader.get(key))((res, nextKey) => res.orElse(reader.get(nextKey)))
+    val values = Seq(
+      prependedKey.flatMap(reader.get(_)),
+      alternatives.foldLeft(reader.get(key))((res, nextKey) => res.orElse(reader.get(nextKey)))
+    ).flatten
+    if (values.nonEmpty) {
+      Some(values.mkString(prependSeparator))
+    } else {
+      None
+    }
   }
 
   def readFrom(reader: ConfigReader): T
@@ -68,13 +80,24 @@ private[spark] abstract class ConfigEntry[T] (
 
 private class ConfigEntryWithDefault[T] (
     key: String,
+    prependedKey: Option[String],
+    prependSeparator: String,
     alternatives: List[String],
     _defaultValue: T,
     valueConverter: String => T,
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean)
-  extends ConfigEntry(key, alternatives, valueConverter, stringConverter, doc, isPublic) {
+  extends ConfigEntry(
+    key,
+    prependedKey,
+    prependSeparator,
+    alternatives,
+    valueConverter,
+    stringConverter,
+    doc,
+    isPublic
+  ) {
 
   override def defaultValue: Option[T] = Some(_defaultValue)
 
@@ -86,14 +109,25 @@ private class ConfigEntryWithDefault[T] (
 }
 
 private class ConfigEntryWithDefaultFunction[T] (
-     key: String,
-     alternatives: List[String],
-     _defaultFunction: () => T,
-     valueConverter: String => T,
-     stringConverter: T => String,
-     doc: String,
-     isPublic: Boolean)
-  extends ConfigEntry(key, alternatives, valueConverter, stringConverter, doc, isPublic) {
+    key: String,
+    prependedKey: Option[String],
+    prependSeparator: String,
+    alternatives: List[String],
+    _defaultFunction: () => T,
+    valueConverter: String => T,
+    stringConverter: T => String,
+    doc: String,
+    isPublic: Boolean)
+  extends ConfigEntry(
+    key,
+    prependedKey,
+    prependSeparator,
+    alternatives,
+    valueConverter,
+    stringConverter,
+    doc,
+    isPublic
+  ) {
 
   override def defaultValue: Option[T] = Some(_defaultFunction())
 
@@ -106,13 +140,24 @@ private class ConfigEntryWithDefaultFunction[T] (
 
 private class ConfigEntryWithDefaultString[T] (
     key: String,
+    prependedKey: Option[String],
+    prependSeparator: String,
     alternatives: List[String],
     _defaultValue: String,
     valueConverter: String => T,
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean)
-  extends ConfigEntry(key, alternatives, valueConverter, stringConverter, doc, isPublic) {
+  extends ConfigEntry(
+    key,
+    prependedKey,
+    prependSeparator,
+    alternatives,
+    valueConverter,
+    stringConverter,
+    doc,
+    isPublic
+  ) {
 
   override def defaultValue: Option[T] = Some(valueConverter(_defaultValue))
 
@@ -130,14 +175,23 @@ private class ConfigEntryWithDefaultString[T] (
  */
 private[spark] class OptionalConfigEntry[T](
     key: String,
+    prependedKey: Option[String],
+    prependSeparator: String,
     alternatives: List[String],
     val rawValueConverter: String => T,
     val rawStringConverter: T => String,
     doc: String,
     isPublic: Boolean)
-  extends ConfigEntry[Option[T]](key, alternatives,
+  extends ConfigEntry[Option[T]](
+    key,
+    prependedKey,
+    prependSeparator,
+    alternatives,
     s => Some(rawValueConverter(s)),
-    v => v.map(rawStringConverter).orNull, doc, isPublic) {
+    v => v.map(rawStringConverter).orNull,
+    doc,
+    isPublic
+  ) {
 
   override def defaultValueString: String = ConfigEntry.UNDEFINED
 
@@ -151,12 +205,22 @@ private[spark] class OptionalConfigEntry[T](
  */
 private[spark] class FallbackConfigEntry[T] (
     key: String,
+    prependedKey: Option[String],
+    prependSeparator: String,
     alternatives: List[String],
     doc: String,
     isPublic: Boolean,
     val fallback: ConfigEntry[T])
-  extends ConfigEntry[T](key, alternatives,
-    fallback.valueConverter, fallback.stringConverter, doc, isPublic) {
+  extends ConfigEntry[T](
+    key,
+    prependedKey,
+    prependSeparator,
+    alternatives,
+    fallback.valueConverter,
+    fallback.stringConverter,
+    doc,
+    isPublic
+  ) {
 
   override def defaultValueString: String = s"<value of ${fallback.key}>"
 

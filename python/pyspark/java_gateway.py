@@ -31,6 +31,7 @@ if sys.version >= '3':
     xrange = range
 
 from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
+from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
 from pyspark.util import _exception_message
@@ -125,10 +126,23 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
             atexit.register(killChild)
 
-    # Connect to the gateway
-    gateway = JavaGateway(
-        gateway_parameters=GatewayParameters(port=gateway_port, auth_token=gateway_secret,
-                                             auto_convert=True))
+    # Connect to the gateway (or client server to pin the thread between JVM and Python)
+    if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
+        gateway = ClientServer(
+            java_parameters=JavaParameters(
+                port=gateway_port,
+                auth_token=gateway_secret,
+                auto_convert=True),
+            python_parameters=PythonParameters(
+                port=0,
+                eager_load=False))
+    else:
+        gateway = JavaGateway(
+            gateway_parameters=GatewayParameters(
+                port=gateway_port,
+                auth_token=gateway_secret,
+                auto_convert=True))
+
     # Store a reference to the Popen object for use by the caller (e.g., in reading stdout/stderr)
     gateway.proc = proc
 
@@ -178,7 +192,7 @@ def local_connect_and_auth(port, auth_secret):
             sock = socket.socket(af, socktype, proto)
             sock.settimeout(15)
             sock.connect(sa)
-            sockfile = sock.makefile("rwb", 65536)
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:

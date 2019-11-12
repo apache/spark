@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil, SparkSubmit}
+import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util._
@@ -32,7 +32,7 @@ import org.apache.spark.util._
  * This is used in standalone cluster mode only.
  */
 object DriverWrapper extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     args.toList match {
       /*
        * IMPORTANT: Spark 1.3 provides a stable application submission gateway that is both

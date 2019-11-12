@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.util
 
-import java.time.{LocalDateTime, ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDateTime, LocalTime, ZoneOffset}
 import java.util.concurrent.TimeUnit
+
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 
-class TimestampFormatterSuite extends SparkFunSuite with SQLHelper {
+class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers {
 
   test("parsing timestamps using time zones") {
     val localDate = "2018-12-02T10:11:12.001234"
@@ -122,5 +125,33 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper {
     assert(formatter.format(1000) === "1970-01-01 00:00:00.001")
     assert(formatter.format(900000) === "1970-01-01 00:00:00.9")
     assert(formatter.format(1000000) === "1970-01-01 00:00:01")
+  }
+
+  test("formatting negative years with default pattern") {
+    val instant = LocalDateTime.of(-99, 1, 1, 0, 0, 0)
+      .atZone(ZoneOffset.UTC)
+      .toInstant
+    val micros = DateTimeUtils.instantToMicros(instant)
+    assert(TimestampFormatter(ZoneOffset.UTC).format(micros) === "-0099-01-01 00:00:00")
+  }
+
+  test("special timestamp values") {
+    testSpecialDatetimeValues { zoneId =>
+      val formatter = TimestampFormatter(zoneId)
+      val tolerance = TimeUnit.SECONDS.toMicros(30)
+
+      assert(formatter.parse("EPOCH") === 0)
+      val now = instantToMicros(Instant.now())
+      formatter.parse("now") should be(now +- tolerance)
+      val localToday = LocalDateTime.now(zoneId)
+        .`with`(LocalTime.MIDNIGHT)
+        .atZone(zoneId)
+      val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
+      formatter.parse("yesterday CET") should be(yesterday +- tolerance)
+      val today = instantToMicros(localToday.toInstant)
+      formatter.parse(" TODAY ") should be(today +- tolerance)
+      val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
+      formatter.parse("Tomorrow ") should be(tomorrow +- tolerance)
+    }
   }
 }

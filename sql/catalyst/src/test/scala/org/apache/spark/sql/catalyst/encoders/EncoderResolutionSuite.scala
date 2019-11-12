@@ -196,6 +196,21 @@ class EncoderResolutionSuite extends PlanTest {
     encoder.resolveAndBind(attrs)
   }
 
+  test("SPARK-28497: complex type is not compatible with string encoder schema") {
+    val encoder = ExpressionEncoder[String]
+
+    Seq('a.struct('x.long), 'a.array(StringType), 'a.map(StringType, StringType)).foreach { attr =>
+      val attrs = Seq(attr)
+      assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+        s"""
+           |Cannot up cast `a` from ${attr.dataType.catalogString} to string.
+           |The type path of the target object is:
+           |- root class: "java.lang.String"
+           |You can either add an explicit cast to the input data or choose a higher precision type
+        """.stripMargin.trim + " of the field in the target object")
+    }
+  }
+
   test("throw exception if real type is not compatible with encoder schema") {
     val msg1 = intercept[AnalysisException] {
       ExpressionEncoder[StringIntClass].resolveAndBind(Seq('a.string, 'b.long))

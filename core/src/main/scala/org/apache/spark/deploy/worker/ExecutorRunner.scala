@@ -27,8 +27,11 @@ import com.google.common.io.Files
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPARK_EXECUTOR_PREFIX
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
@@ -54,7 +57,8 @@ private[deploy] class ExecutorRunner(
     val workerUrl: String,
     conf: SparkConf,
     val appLocalDirs: Seq[String],
-    @volatile var state: ExecutorState.Value)
+    @volatile var state: ExecutorState.Value,
+    val resources: Map[String, ResourceInformation] = Map.empty)
   extends Logging {
 
   private val fullId = appId + "/" + execId
@@ -70,9 +74,9 @@ private[deploy] class ExecutorRunner(
   // make sense to remove this in the future.
   private var shutdownHook: AnyRef = null
 
-  private[worker] def start() {
+  private[worker] def start(): Unit = {
     workerThread = new Thread("ExecutorRunner for " + fullId) {
-      override def run() { fetchAndRunExecutor() }
+      override def run(): Unit = { fetchAndRunExecutor() }
     }
     workerThread.start()
     // Shutdown hook that kills actors on shutdown.
@@ -90,7 +94,7 @@ private[deploy] class ExecutorRunner(
    *
    * @param message the exception message which caused the executor's death
    */
-  private def killProcess(message: Option[String]) {
+  private def killProcess(message: Option[String]): Unit = {
     var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
@@ -114,7 +118,7 @@ private[deploy] class ExecutorRunner(
   }
 
   /** Stop this executor runner, including killing the process it launched */
-  private[worker] def kill() {
+  private[worker] def kill(): Unit = {
     if (workerThread != null) {
       // the workerThread will kill the child process when interrupted
       workerThread.interrupt()
@@ -141,13 +145,16 @@ private[deploy] class ExecutorRunner(
   /**
    * Download and run the executor described in our ApplicationDescription
    */
-  private def fetchAndRunExecutor() {
+  private def fetchAndRunExecutor(): Unit = {
     try {
+      val resourceFileOpt = prepareResourcesFile(SPARK_EXECUTOR_PREFIX, resources, executorDir)
       // Launch the process
+      val arguments = appDesc.command.arguments ++ resourceFileOpt.map(f =>
+        Seq("--resourcesFile", f.getAbsolutePath)).getOrElse(Seq.empty)
       val subsOpts = appDesc.command.javaOpts.map {
         Utils.substituteAppNExecIds(_, appId, execId.toString)
       }
-      val subsCommand = appDesc.command.copy(javaOpts = subsOpts)
+      val subsCommand = appDesc.command.copy(arguments = arguments, javaOpts = subsOpts)
       val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()

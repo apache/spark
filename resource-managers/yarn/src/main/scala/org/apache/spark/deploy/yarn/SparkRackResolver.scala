@@ -67,6 +67,9 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
   }
 
   private def coreResolve(hostNames: Seq[String]): Seq[Node] = {
+    if (hostNames.isEmpty) {
+      return Seq.empty
+    }
     val nodes = new ArrayBuffer[Node]
     // dnsToSwitchMapping is thread-safe
     val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala

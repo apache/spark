@@ -19,7 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
@@ -32,6 +32,7 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -90,6 +91,9 @@ class BisectingKMeansModel private[ml] (
   extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable
   with HasTrainingSummary[BisectingKMeansSummary] {
 
+  @Since("3.0.0")
+  lazy val numFeatures: Int = parentModel.clusterCenters.head.size
+
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
     val copied = copyValues(new BisectingKMeansModel(uid, parentModel), extra)
@@ -143,6 +147,12 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def write: MLWriter = new BisectingKMeansModel.BisectingKMeansModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"BisectingKMeansModel: uid=$uid, k=${parentModel.k}, distanceMeasure=${$(distanceMeasure)}, " +
+      s"numFeatures=$numFeatures"
+  }
 
   /**
    * Gets summary of model on training set. An exception is
@@ -248,7 +258,12 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val rdd = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
+    if (handlePersistence) {
+      rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    }
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
@@ -263,6 +278,10 @@ class BisectingKMeans @Since("2.0.0") (
       .setDistanceMeasure($(distanceMeasure))
     val parentModel = bkm.run(rdd, Some(instr))
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
+    if (handlePersistence) {
+      rdd.unpersist()
+    }
+
     val summary = new BisectingKMeansSummary(
       model.transform(dataset),
       $(predictionCol),
@@ -291,7 +310,6 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
 
 
 /**
- * :: Experimental ::
  * Summary of BisectingKMeans.
  *
  * @param predictions  `DataFrame` produced by `BisectingKMeansModel.transform()`.
@@ -303,7 +321,6 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  *                     dataset. This is equivalent to sklearn's inertia.
  */
 @Since("2.1.0")
-@Experimental
 class BisectingKMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,

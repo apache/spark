@@ -30,6 +30,9 @@ import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils, Utils}
 
@@ -108,34 +111,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.get("k4", "not found") === "not found")
     assert(conf.getOption("k1") === Some("v4"))
     assert(conf.getOption("k4") === None)
-  }
-
-  test("basic getAllWithPrefixAndPostfix") {
-    val conf = new SparkConf(false)
-    conf.set("spark.prefix.main.suffix", "v1")
-    val prefix = "spark.prefix."
-    val suffix = ".suffix"
-    assert(conf.getAllWithPrefixAndSuffix(prefix, suffix).toSet ===
-      Set(("main", "v1")))
-
-    conf.set("spark.prefix.main2.suffix", "v2")
-    conf.set("spark.prefix.main3.extra1.suffix", "v3")
-    conf.set("spark.prefix.main4.extra2.nonmatchingsuffix", "v4")
-    conf.set("spark.notmatchingprefix.main4.suffix", "v5")
-
-    assert(conf.getAllWithPrefixAndSuffix(prefix, suffix).toSet ===
-      Set(("main", "v1"), ("main2", "v2"), ("main3.extra1", "v3")))
-  }
-
-  test("test prefix config parsing utilities") {
-    val conf = new SparkConf(false)
-    conf.set("spark.prefix.main.suffix", "v1")
-    val prefix = "spark.prefix."
-    val suffix = ".suffix"
-    val configsWithPrefix = conf.getAllWithPrefix(prefix)
-    assert(configsWithPrefix.toSet === Set(("main.suffix", "v1")))
-    assert(SparkConf.getBaseOfConfigs(configsWithPrefix) === Set("main"))
-    assert(SparkConf.getConfigsWithSuffix(configsWithPrefix, suffix).toSet === Set(("main", "v1")))
   }
 
   test("basic getAllWithPrefix") {
@@ -267,7 +242,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("deprecated configs") {
-    val conf = new SparkConf()
+    val conf = new SparkConf(false)
     val newName = UPDATE_INTERVAL_S.key
 
     assert(!conf.contains(newName))
@@ -414,6 +389,19 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       """.stripMargin.trim)
   }
 
+  test("SPARK-28355: Use Spark conf for threshold at which UDFs are compressed by broadcast") {
+    val conf = new SparkConf()
+
+    // Check the default value
+    assert(conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD) === 1L * 1024 * 1024)
+
+    // Set the conf
+    conf.set(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD, 1L * 1024)
+
+    // Verify that it has been set properly
+    assert(conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD) === 1L * 1024)
+  }
+
   val defaultIllegalValue = "SomeIllegalValue"
   val illegalValueTests : Map[String, (SparkConf, String) => Any] = Map(
     "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
@@ -446,6 +434,79 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       assert(thrown.getMessage.contains(key))
     }
   }
+
+  test("get task resource requirement from config") {
+    val conf = new SparkConf()
+    conf.set(TASK_GPU_ID.amountConf, "2")
+    conf.set(TASK_FPGA_ID.amountConf, "1")
+    var taskResourceRequirement =
+      parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+        .map(req => (req.resourceName, req.amount)).toMap
+
+    assert(taskResourceRequirement.size == 2)
+    assert(taskResourceRequirement(GPU) == 2)
+    assert(taskResourceRequirement(FPGA) == 1)
+
+    conf.remove(TASK_FPGA_ID.amountConf)
+    // Ignore invalid prefix
+    conf.set(ResourceID("spark.invalid.prefix", FPGA).amountConf, "1")
+    taskResourceRequirement =
+      parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+        .map(req => (req.resourceName, req.amount)).toMap
+    assert(taskResourceRequirement.size == 1)
+    assert(taskResourceRequirement.get(FPGA).isEmpty)
+  }
+
+  test("Ensure that we can configure fractional resources for a task") {
+    val ratioSlots = Seq(
+      (0.10, 10), (0.11, 9), (0.125, 8), (0.14, 7), (0.16, 6),
+      (0.20, 5), (0.25, 4), (0.33, 3), (0.5, 2), (1.0, 1),
+      // if the amount is fractional greater than 0.5 and less than 1.0 we throw
+      (0.51, 1), (0.9, 1),
+      // if the amount is greater than one is not whole, we throw
+      (1.5, 0), (2.5, 0),
+      // it's ok if the amount is whole, and greater than 1
+      // parts are 1 because we get a whole part of a resource
+      (2.0, 1), (3.0, 1), (4.0, 1))
+    ratioSlots.foreach {
+      case (ratio, slots) =>
+        val conf = new SparkConf()
+        conf.set(TASK_GPU_ID.amountConf, ratio.toString)
+        if (ratio > 0.5 && ratio % 1 != 0) {
+          assertThrows[SparkException] {
+            parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+          }
+        } else {
+          val reqs = parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+          assert(reqs.size == 1)
+          assert(reqs.head.amount == Math.ceil(ratio).toInt)
+          assert(reqs.head.numParts == slots)
+        }
+    }
+  }
+
+  test("Non-task resources are never fractional") {
+    val ratioSlots = Seq(
+      // if the amount provided is not a whole number, we throw
+      (0.25, 0), (0.5, 0), (1.5, 0),
+      // otherwise we are successful at parsing resources
+      (1.0, 1), (2.0, 2), (3.0, 3))
+    ratioSlots.foreach {
+      case (ratio, slots) =>
+        val conf = new SparkConf()
+        conf.set(EXECUTOR_GPU_ID.amountConf, ratio.toString)
+        if (ratio % 1 != 0) {
+          assertThrows[SparkException] {
+            parseResourceRequirements(conf, SPARK_EXECUTOR_PREFIX)
+          }
+        } else {
+          val reqs = parseResourceRequirements(conf, SPARK_EXECUTOR_PREFIX)
+          assert(reqs.size == 1)
+          assert(reqs.head.amount == slots)
+          assert(reqs.head.numParts == 1)
+        }
+    }
+  }
 }
 
 class Class1 {}
@@ -453,7 +514,7 @@ class Class2 {}
 class Class3 {}
 
 class CustomRegistrator extends KryoRegistrator {
-  def registerClasses(kryo: Kryo) {
+  def registerClasses(kryo: Kryo): Unit = {
     kryo.register(classOf[Class2])
   }
 }

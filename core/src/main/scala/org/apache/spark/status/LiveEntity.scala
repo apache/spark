@@ -27,9 +27,10 @@ import com.google.common.collect.Interners
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
-import org.apache.spark.storage.RDDInfo
+import org.apache.spark.storage.{RDDInfo, StorageLevel}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
@@ -61,6 +62,7 @@ private[spark] abstract class LiveEntity {
 private class LiveJob(
     val jobId: Int,
     name: String,
+    description: Option[String],
     val submissionTime: Option[Date],
     val stageIds: Seq[Int],
     jobGroup: Option[String],
@@ -91,7 +93,7 @@ private class LiveJob(
     val info = new v1.JobData(
       jobId,
       name,
-      None, // description is always None?
+      description,
       submissionTime,
       completionTime,
       stageIds,
@@ -259,6 +261,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
 
   var executorLogs = Map[String, String]()
   var attributes = Map[String, String]()
+  var resources = Map[String, ResourceInformation]()
 
   // Memory metrics. They may not be recorded (e.g. old event logs) so if totalOnHeap is not
   // initialized, the store will not contain this information.
@@ -308,7 +311,8 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       memoryMetrics,
       blacklistedInStages,
       Some(peakExecutorMetrics).filter(_.isSet),
-      attributes)
+      attributes,
+      resources)
     new ExecutorSummaryWrapper(info)
   }
 }
@@ -455,7 +459,13 @@ private class LiveStage extends LiveEntity {
 
 }
 
-private class LiveRDDPartition(val blockName: String) {
+/**
+ * Data about a single partition of a cached RDD. The RDD storage level is used to compute the
+ * effective storage level of the partition, which takes into account the storage actually being
+ * used by the partition in the executors, and thus may differ from the storage level requested
+ * by the application.
+ */
+private class LiveRDDPartition(val blockName: String, rddLevel: StorageLevel) {
 
   import LiveEntityHelpers._
 
@@ -473,12 +483,13 @@ private class LiveRDDPartition(val blockName: String) {
 
   def update(
       executors: Seq[String],
-      storageLevel: String,
       memoryUsed: Long,
       diskUsed: Long): Unit = {
+    val level = StorageLevel(diskUsed > 0, memoryUsed > 0, rddLevel.useOffHeap,
+      if (memoryUsed > 0) rddLevel.deserialized else false, executors.size)
     value = new v1.RDDPartitionInfo(
       blockName,
-      weakIntern(storageLevel),
+      weakIntern(level.description),
       memoryUsed,
       diskUsed,
       executors)
@@ -517,27 +528,31 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
 
 }
 
-private class LiveRDD(val info: RDDInfo) extends LiveEntity {
+/**
+ * Tracker for data related to a persisted RDD.
+ *
+ * The RDD storage level is immutable, following the current behavior of `RDD.persist()`, even
+ * though it is mutable in the `RDDInfo` structure. Since the listener does not track unpersisted
+ * RDDs, this covers the case where an early stage is run on the unpersisted RDD, and a later stage
+ * it started after the RDD is marked for caching.
+ */
+private class LiveRDD(val info: RDDInfo, storageLevel: StorageLevel) extends LiveEntity {
 
   import LiveEntityHelpers._
 
-  var storageLevel: String = weakIntern(info.storageLevel.description)
   var memoryUsed = 0L
   var diskUsed = 0L
 
+  private val levelDescription = weakIntern(storageLevel.description)
   private val partitions = new HashMap[String, LiveRDDPartition]()
   private val partitionSeq = new RDDPartitionSeq()
 
   private val distributions = new HashMap[String, LiveRDDDistribution]()
 
-  def setStorageLevel(level: String): Unit = {
-    this.storageLevel = weakIntern(level)
-  }
-
   def partition(blockName: String): LiveRDDPartition = {
     partitions.getOrElseUpdate(blockName, {
-      val part = new LiveRDDPartition(blockName)
-      part.update(Nil, storageLevel, 0L, 0L)
+      val part = new LiveRDDPartition(blockName, storageLevel)
+      part.update(Nil, 0L, 0L)
       partitionSeq.addPartition(part)
       part
     })
@@ -575,7 +590,7 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
       info.name,
       info.numPartitions,
       partitions.size,
-      storageLevel,
+      levelDescription,
       memoryUsed,
       diskUsed,
       dists,

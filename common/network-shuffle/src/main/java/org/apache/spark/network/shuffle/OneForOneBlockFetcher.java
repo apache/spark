@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 import com.google.common.primitives.Ints;
+import com.google.common.primitives.Longs;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,40 +112,47 @@ public class OneForOneBlockFetcher {
    */
   private FetchShuffleBlocks createFetchShuffleBlocksMsg(
       String appId, String execId, String[] blockIds) {
-    int shuffleId = splitBlockId(blockIds[0])[0];
-    HashMap<Integer, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
+    String[] firstBlock = splitBlockId(blockIds[0]);
+    int shuffleId = Integer.parseInt(firstBlock[1]);
+    boolean batchFetchEnabled = firstBlock.length == 5;
+
+    HashMap<Long, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
     for (String blockId : blockIds) {
-      int[] blockIdParts = splitBlockId(blockId);
-      if (blockIdParts[0] != shuffleId) {
+      String[] blockIdParts = splitBlockId(blockId);
+      if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
         throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
           ", got:" + blockId);
       }
-      int mapId = blockIdParts[1];
+      long mapId = Long.parseLong(blockIdParts[2]);
       if (!mapIdToReduceIds.containsKey(mapId)) {
         mapIdToReduceIds.put(mapId, new ArrayList<>());
       }
-      mapIdToReduceIds.get(mapId).add(blockIdParts[2]);
+      mapIdToReduceIds.get(mapId).add(Integer.parseInt(blockIdParts[3]));
+      if (batchFetchEnabled) {
+        // When we read continuous shuffle blocks in batch, we will reuse reduceIds in
+        // FetchShuffleBlocks to store the start and end reduce id for range
+        // [startReduceId, endReduceId).
+        assert(blockIdParts.length == 5);
+        mapIdToReduceIds.get(mapId).add(Integer.parseInt(blockIdParts[4]));
+      }
     }
-    int[] mapIds = Ints.toArray(mapIdToReduceIds.keySet());
+    long[] mapIds = Longs.toArray(mapIdToReduceIds.keySet());
     int[][] reduceIdArr = new int[mapIds.length][];
     for (int i = 0; i < mapIds.length; i++) {
       reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapIds[i]));
     }
-    return new FetchShuffleBlocks(appId, execId, shuffleId, mapIds, reduceIdArr);
+    return new FetchShuffleBlocks(
+      appId, execId, shuffleId, mapIds, reduceIdArr, batchFetchEnabled);
   }
 
-  /** Split the shuffleBlockId and return shuffleId, mapId and reduceId. */
-  private int[] splitBlockId(String blockId) {
+  /** Split the shuffleBlockId and return shuffleId, mapId and reduceIds. */
+  private String[] splitBlockId(String blockId) {
     String[] blockIdParts = blockId.split("_");
-    if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
+    if (blockIdParts.length < 4 || blockIdParts.length > 5 || !blockIdParts[0].equals("shuffle")) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);
     }
-    return new int[] {
-      Integer.parseInt(blockIdParts[1]),
-      Integer.parseInt(blockIdParts[2]),
-      Integer.parseInt(blockIdParts[3])
-    };
+    return blockIdParts;
   }
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */

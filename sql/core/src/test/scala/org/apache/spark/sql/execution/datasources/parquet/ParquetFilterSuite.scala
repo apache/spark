@@ -26,17 +26,19 @@ import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 import org.apache.parquet.schema.MessageType
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
@@ -58,9 +60,9 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  * dependent on this configuration, don't forget you better explicitly set this configuration
  * within the test.
  */
-class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
+abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
 
-  private def createParquetFilters(
+  protected def createParquetFilters(
       schema: MessageType,
       caseSensitive: Option[Boolean] = None): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
@@ -82,57 +84,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  private def checkFilterPredicate(
+  def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,
       filterClass: Class[_ <: FilterPredicate],
       checker: (DataFrame, Seq[Row]) => Unit,
-      expected: Seq[Row]): Unit = {
-    val output = predicate.collect { case a: Attribute => a }.distinct
-
-    withSQLConf(
-      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
-      SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
-      SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> "true",
-      SQLConf.PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED.key -> "true",
-      SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
-      // Disable adding filters from constraints because it adds, for instance,
-      // is-not-null to pushed filters, which makes it hard to test if the pushed
-      // filter is expected or not (this had to be fixed with SPARK-13495).
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
-      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        val query = df
-          .select(output.map(e => Column(e)): _*)
-          .where(Column(predicate))
-
-        var maybeRelation: Option[HadoopFsRelation] = None
-        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters,
-                                 LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
-            maybeRelation = Some(relation)
-            filters
-        }.flatten.reduceLeftOption(_ && _)
-        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
-
-        val (_, selectedFilters, _) =
-          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-        assert(selectedFilters.nonEmpty, "No filter is pushed down")
-        val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
-        val parquetFilters = createParquetFilters(schema)
-        // In this test suite, all the simple predicates are convertible here.
-        assert(parquetFilters.convertibleFilters(selectedFilters) == selectedFilters)
-        val pushedParquetFilters = selectedFilters.map { pred =>
-          val maybeFilter = parquetFilters.createFilter(pred)
-          assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-          maybeFilter.get
-        }
-        // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-        assert(pushedParquetFilters.exists(_.getClass === filterClass),
-          s"${pushedParquetFilters.map(_.getClass).toList} did not contain ${filterClass}.")
-
-        checker(stripSparkFilter(query), expected)
-    }
-  }
+      expected: Seq[Row]): Unit
 
   private def checkFilterPredicate
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
@@ -1250,6 +1207,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       }
     }
 
+    // SPARK-28371: make sure filter is null-safe.
+    withParquetDataFrame(Seq(Tuple1[String](null))) { implicit df =>
+      checkFilterPredicate(
+        '_1.startsWith("blah").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]],
+        Seq.empty[Row])
+    }
+
     import testImplicits._
     // Test canDrop() has taken effect
     testStringStartsWith(spark.range(1024).map(_.toString).toDF(), "value like 'a%'")
@@ -1422,6 +1387,124 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
           checkAnswer(sql(s"select A from $tableName where B > 0"), (1 until count).map(Row(_)))
         }
+      }
+    }
+  }
+}
+
+class ParquetV1FilterSuite extends ParquetFilterSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+
+  override def checkFilterPredicate(
+      df: DataFrame,
+      predicate: Predicate,
+      filterClass: Class[_ <: FilterPredicate],
+      checker: (DataFrame, Seq[Row]) => Unit,
+      expected: Seq[Row]): Unit = {
+    val output = predicate.collect { case a: Attribute => a }.distinct
+
+    withSQLConf(
+      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
+      // Disable adding filters from constraints because it adds, for instance,
+      // is-not-null to pushed filters, which makes it hard to test if the pushed
+      // filter is expected or not (this had to be fixed with SPARK-13495).
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      val query = df
+        .select(output.map(e => Column(e)): _*)
+        .where(Column(predicate))
+
+      var maybeRelation: Option[HadoopFsRelation] = None
+      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+        case PhysicalOperation(_, filters,
+        LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
+          maybeRelation = Some(relation)
+          filters
+      }.flatten.reduceLeftOption(_ && _)
+      assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
+
+      val (_, selectedFilters, _) =
+        DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+      assert(selectedFilters.nonEmpty, "No filter is pushed down")
+      val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
+      val parquetFilters = createParquetFilters(schema)
+      // In this test suite, all the simple predicates are convertible here.
+      assert(parquetFilters.convertibleFilters(selectedFilters) === selectedFilters)
+      val pushedParquetFilters = selectedFilters.map { pred =>
+        val maybeFilter = parquetFilters.createFilter(pred)
+        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+        maybeFilter.get
+      }
+      // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+      assert(pushedParquetFilters.exists(_.getClass === filterClass),
+        s"${pushedParquetFilters.map(_.getClass).toList} did not contain ${filterClass}.")
+
+      checker(stripSparkFilter(query), expected)
+    }
+  }
+}
+
+class ParquetV2FilterSuite extends ParquetFilterSuite {
+  // TODO: enable Parquet V2 write path after file source V2 writers are workable.
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  override def checkFilterPredicate(
+      df: DataFrame,
+      predicate: Predicate,
+      filterClass: Class[_ <: FilterPredicate],
+      checker: (DataFrame, Seq[Row]) => Unit,
+      expected: Seq[Row]): Unit = {
+    val output = predicate.collect { case a: Attribute => a }.distinct
+
+    withSQLConf(
+      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
+      // Disable adding filters from constraints because it adds, for instance,
+      // is-not-null to pushed filters, which makes it hard to test if the pushed
+      // filter is expected or not (this had to be fixed with SPARK-13495).
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      val query = df
+        .select(output.map(e => Column(e)): _*)
+        .where(Column(predicate))
+
+      query.queryExecution.optimizedPlan.collectFirst {
+        case PhysicalOperation(_, filters,
+            DataSourceV2ScanRelation(_, scan: ParquetScan, _)) =>
+          assert(filters.nonEmpty, "No filter is analyzed from the given query")
+          val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter).toArray
+          val pushedFilters = scan.pushedFilters
+          assert(pushedFilters.nonEmpty, "No filter is pushed down")
+          val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
+          val parquetFilters = createParquetFilters(schema)
+          // In this test suite, all the simple predicates are convertible here.
+          assert(parquetFilters.convertibleFilters(sourceFilters) === pushedFilters)
+          val pushedParquetFilters = pushedFilters.map { pred =>
+            val maybeFilter = parquetFilters.createFilter(pred)
+            assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+            maybeFilter.get
+          }
+          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+          assert(pushedParquetFilters.exists(_.getClass === filterClass),
+            s"${pushedParquetFilters.map(_.getClass).toList} did not contain ${filterClass}.")
+
+          checker(stripSparkFilter(query), expected)
+
+        case _ =>
+          throw new AnalysisException("Can not match ParquetTable in the query.")
       }
     }
   }

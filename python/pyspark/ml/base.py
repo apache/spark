@@ -98,7 +98,6 @@ class Estimator(Params):
                  using `paramMaps[index]`. `index` values may not be sequential.
 
         .. note:: DeveloperApi
-        .. note:: Experimental
         """
         estimator = self.copy()
 
@@ -194,6 +193,18 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
 
     .. versionadded:: 2.3.0
     """
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @abstractmethod
     def createTransformFunc(self):

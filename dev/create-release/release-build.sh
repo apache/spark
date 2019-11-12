@@ -164,7 +164,6 @@ DEST_DIR_NAME="$SPARK_PACKAGE_VERSION"
 
 git clean -d -f -x
 rm .gitignore
-rm -rf .git
 cd ..
 
 if [[ "$1" == "package" ]]; then
@@ -179,7 +178,7 @@ if [[ "$1" == "package" ]]; then
     rm -r spark-$SPARK_VERSION/licenses-binary
   fi
 
-  tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
+  tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
@@ -220,7 +219,7 @@ if [[ "$1" == "package" ]]; then
 
     # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
     # to dev0 to be closer to PEP440.
-    PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -r "s/-/./" | sed -r "s/SNAPSHOT/dev0/"`
+    PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -e "s/-/./" -e "s/SNAPSHOT/dev0/" -e "s/preview/dev0/"`
     echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
 
     # Get maven home set by MVN
@@ -281,6 +280,8 @@ if [[ "$1" == "package" ]]; then
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
     if [[ $SPARK_VERSION < "3.0." ]]; then
       BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
+    else
+      BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
     fi
   fi
 
@@ -413,13 +414,13 @@ if [[ "$1" == "publish-release" ]]; then
 
   # TODO: revisit for Scala 2.13 support
 
-  if ! is_dry_run && [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
+  if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
     ./dev/change-scala-version.sh 2.11
     $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests \
       $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
   fi
 
-  if ! is_dry_run && [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
+  if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     ./dev/change-scala-version.sh 2.12
     $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -DskipTests \
       $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install

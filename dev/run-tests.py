@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -112,7 +112,6 @@ def determine_modules_to_test(changed_modules):
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ...   # doctest: +SKIP
     ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
      'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
@@ -123,14 +122,8 @@ def determine_modules_to_test(changed_modules):
     # If we need to run all of the tests, then we should short-circuit and return 'root'
     if modules.root in modules_to_test:
         return [modules.root]
-    changed_modules = toposort_flatten(
+    return toposort_flatten(
         {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True)
-
-    # TODO: Skip hive-thriftserver module for hadoop-3.2. remove this once hadoop-3.2 support it
-    if modules.hadoop_version == "hadoop3.2":
-        changed_modules = [m for m in changed_modules if m.name != "hive-thriftserver"]
-
-    return changed_modules
 
 
 def determine_tags_to_exclude(changed_modules):
@@ -247,7 +240,7 @@ def exec_maven(mvn_args=()):
     zinc_port = get_zinc_port()
     os.environ["ZINC_PORT"] = "%s" % zinc_port
     zinc_flag = "-DzincPort=%s" % zinc_port
-    flags = [os.path.join(SPARK_HOME, "build", "mvn"), "--force", zinc_flag]
+    flags = [os.path.join(SPARK_HOME, "build", "mvn"), zinc_flag]
     run_cmd(flags + mvn_args)
 
 
@@ -411,6 +404,13 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
     if excluded_tags:
         test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
 
+    # set up java11 env if this is a pull request build with 'test-java11' in the title
+    if "ghprbPullTitle" in os.environ:
+        if "test-java11" in os.environ["ghprbPullTitle"].lower():
+            os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
+            os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
+            test_profiles += ['-Djava.version=11']
+
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
     else:
@@ -476,6 +476,8 @@ def post_python_tests_results():
         run_cmd(["git", "push", "-f", "origin", "gh-pages"])
     finally:
         os.chdir("..")
+        # 10. Remove the cloned repository.
+        shutil.rmtree("pyspark-coverage-site")
 
 
 def run_python_packaging_tests():
@@ -570,6 +572,7 @@ def main():
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
         excluded_tags = determine_tags_to_exclude(changed_modules)
+
     if not changed_modules:
         changed_modules = [modules.root]
         excluded_tags = []

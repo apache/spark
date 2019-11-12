@@ -127,7 +127,8 @@ case class AggregateExpression(
   override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 
-  override def references: AttributeSet = {
+  @transient
+  override lazy val references: AttributeSet = {
     mode match {
       case Partial | Complete => aggregateFunction.references
       case PartialMerge | Final => AttributeSet(aggregateFunction.aggBufferAttributes)
@@ -545,7 +546,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
   private[this] val anyObjectType = ObjectType(classOf[AnyRef])
   private def getBufferObject(bufferRow: InternalRow): T = {
-    bufferRow.get(mutableAggBufferOffset, anyObjectType).asInstanceOf[T]
+    getBufferObject(bufferRow, mutableAggBufferOffset)
   }
 
   final override lazy val aggBufferAttributes: Seq[AttributeReference] = {
@@ -568,5 +569,22 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    */
   final def serializeAggregateBufferInPlace(buffer: InternalRow): Unit = {
     buffer(mutableAggBufferOffset) = serialize(getBufferObject(buffer))
+  }
+
+  /**
+   * Merge an input buffer into the aggregation buffer, where both buffers contain the deserialized
+   * java object. This function is used by aggregating accumulators.
+   *
+   * @param buffer the aggregation buffer that is updated.
+   * @param inputBuffer the buffer that is merged into the aggregation buffer.
+   */
+  final def mergeBuffersObjects(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
+    val bufferObject = getBufferObject(buffer)
+    val inputObject = getBufferObject(inputBuffer, inputAggBufferOffset)
+    buffer(mutableAggBufferOffset) = merge(bufferObject, inputObject)
+  }
+
+  private def getBufferObject(buffer: InternalRow, offset: Int): T = {
+    buffer.get(offset, anyObjectType).asInstanceOf[T]
   }
 }

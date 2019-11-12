@@ -186,9 +186,6 @@ private[spark] object SerDeUtil extends Logging {
       val unpickle = new Unpickler
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
-        // `Opcodes.MEMOIZE` of Protocol 4 (Python 3.4+) will store objects in internal map
-        // of `Unpickler`. This map is cleared when calling `Unpickler.close()`.
-        unpickle.close()
         if (batched) {
           obj match {
             case array: Array[Any] => array.toSeq

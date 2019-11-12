@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -424,12 +426,21 @@ class ExpressionParserSuite extends AnalysisTest {
   test("type constructors") {
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
-    intercept("DAtE 'mar 11 2016'")
+    intercept("DAtE 'mar 11 2016'", "Cannot parse the DATE value")
 
     // Timestamps.
     assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
-    intercept("timestamP '2016-33-11 20:54:00.000'")
+    intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
+
+    // Interval.
+    val intervalLiteral = Literal(IntervalUtils.fromString("interval 3 month 1 hour"))
+    assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
+    assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
+    intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
+    assertEqual(
+      "-interval '3 month 1 hour'",
+      Literal(IntervalUtils.fromString("interval -3 month -1 hour")))
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
@@ -580,27 +591,33 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   val intervalUnits = Seq(
-    "year",
-    "month",
-    "week",
-    "day",
-    "hour",
-    "minute",
-    "second",
-    "millisecond",
-    "microsecond")
+    YEAR,
+    MONTH,
+    WEEK,
+    DAY,
+    HOUR,
+    MINUTE,
+    SECOND,
+    MILLISECOND,
+    MICROSECOND)
 
-  def intervalLiteral(u: String, s: String): Literal = {
-    Literal(CalendarInterval.fromSingleUnitString(u, s))
+  def intervalLiteral(u: IntervalUnit, s: String): Literal = {
+    Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
   }
 
   test("intervals") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      assertEqual(s"interval $intervalValue", expected)
+      Seq(
+        "" -> expected,
+        "-" -> expected.copy(
+          value = IntervalUtils.negate(expected.value.asInstanceOf[CalendarInterval]))
+      ).foreach { case (sign, expectedLiteral) =>
+        assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
 
-      // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
-      withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
-        assertEqual(intervalValue, expected)
+        // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          assertEqual(intervalValue, expected)
+        }
       }
     }
 
@@ -621,17 +638,29 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Hive nanosecond notation.
-    checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
-    checkIntervals("-13.123456789 second", intervalLiteral("second", "-13.123456789"))
+    checkIntervals("13.123456789 seconds", intervalLiteral(SECOND, "13.123456789"))
+    checkIntervals(
+      "-13.123456789 second",
+      Literal(new CalendarInterval(
+        0,
+        0,
+        -13 * MICROS_PER_SECOND - 123 * MICROS_PER_MILLIS - 456)))
+    checkIntervals(
+      "13.123456 second",
+      Literal(new CalendarInterval(
+        0,
+        0,
+        13 * MICROS_PER_SECOND + 123 * MICROS_PER_MILLIS + 456)))
+    checkIntervals("1.001 second", Literal(IntervalUtils.fromString("1 second 1 millisecond")))
 
     // Non Existing unit
     intercept("interval 10 nanoseconds",
-      "no viable alternative at input 'interval 10 nanoseconds'")
+      "no viable alternative at input '10 nanoseconds'")
 
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
     yearMonthValues.foreach { value =>
-      val result = Literal(CalendarInterval.fromYearMonthString(value))
+      val result = Literal(IntervalUtils.fromYearMonthString(value))
       checkIntervals(s"'$value' year to month", result)
     }
 
@@ -644,35 +673,43 @@ class ExpressionParserSuite extends AnalysisTest {
       "-1 0:0:0",
       "1 0:0:1")
     datTimeValues.foreach { value =>
-      val result = Literal(CalendarInterval.fromDayTimeString(value))
+      val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' day to second", result)
     }
 
+    // Hour-Time intervals.
+    val hourTimeValues = Seq(
+      "11:22:33.123456789",
+      "9:8:7.123456789",
+      "-19:18:17.123456789",
+      "0:0:0",
+      "0:0:1")
+    hourTimeValues.foreach { value =>
+      val result = Literal(IntervalUtils.fromDayTimeString(value))
+      checkIntervals(s"'$value' hour to second", result)
+    }
+
     // Unknown FROM TO intervals
-    intercept("interval 10 month to second",
+    intercept("interval '10' month to second",
       "Intervals FROM month TO second are not supported.")
 
     // Composed intervals.
     checkIntervals(
-      "3 months 22 seconds 1 millisecond",
-      Literal(new CalendarInterval(3, 22001000L)))
-    checkIntervals(
-      "3 years '-1-10' year to month 3 weeks '1 0:0:2' day to second",
-      Literal(new CalendarInterval(14,
-        22 * CalendarInterval.MICROS_PER_DAY + 2 * CalendarInterval.MICROS_PER_SECOND)))
+      "3 months 4 days 22 seconds 1 millisecond",
+      Literal(new CalendarInterval(3, 4, 22001000L)))
   }
 
   test("SPARK-23264 Interval Compatibility tests") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         assertEqual(intervalValue, expected)
       }
 
       // Compatibility tests: If ANSI SQL disabled, `intervalValue` should be parsed as an alias
-      withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "false") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
         val aliases = defaultParser.parseExpression(intervalValue).collect {
           case a @ Alias(_: Literal, name)
-            if intervalUnits.exists { unit => name.startsWith(unit) } => a
+            if intervalUnits.exists { unit => name.startsWith(unit.toString) } => a
         }
         assert(aliases.size === 1)
       }
@@ -725,6 +762,15 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 
+  test("Support respect nulls keywords for first_value and last_value") {
+    assertEqual("first_value(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
+    assertEqual("first_value(a respect nulls)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("first_value(a)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("last_value(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
+    assertEqual("last_value(a respect nulls)", Last('a, Literal(false)).toAggregateExpression())
+    assertEqual("last_value(a)", Last('a, Literal(false)).toAggregateExpression())
+  }
+
   test("timestamp literals") {
     DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone.getID) {
@@ -758,12 +804,12 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("current date/timestamp braceless expressions") {
-    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
     }
 
-    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
     }

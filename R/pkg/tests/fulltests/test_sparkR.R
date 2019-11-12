@@ -36,8 +36,8 @@ test_that("sparkCheckInstall", {
 
   # "yarn-client, mesos-client" mode, SPARK_HOME was not set
   sparkHome <- ""
-  master <- "yarn-client"
-  deployMode <- ""
+  master <- "yarn"
+  deployMode <- "client"
   expect_error(sparkCheckInstall(sparkHome, master, deployMode))
   sparkHome <- ""
   master <- ""

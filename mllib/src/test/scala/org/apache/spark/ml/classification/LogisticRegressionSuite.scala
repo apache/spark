@@ -1344,7 +1344,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
          b_k' = b_k - \mean(b_k)
        }}}
      */
-    val rawInterceptsTheory = histogram.map(c => math.log(c + 1)) // add 1 for smoothing
+    val rawInterceptsTheory = histogram.map(math.log1p) // add 1 for smoothing
     val rawMean = rawInterceptsTheory.sum / rawInterceptsTheory.length
     val interceptsTheory = Vectors.dense(rawInterceptsTheory.map(_ - rawMean))
     val coefficientsTheory = new DenseMatrix(numClasses, numFeatures,
@@ -1425,8 +1425,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("multinomial logistic regression with zero variance (SPARK-21681)") {
-    val sqlContext = multinomialDatasetWithZeroVar.sqlContext
-    import sqlContext.implicits._
     val mlr = new LogisticRegression().setFamily("multinomial").setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(true).setWeightCol("weight")
 
@@ -2769,7 +2767,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
   test("toString") {
     val model = new LogisticRegressionModel("logReg", Vectors.dense(0.1, 0.2, 0.3), 0.0)
-    val expected = "LogisticRegressionModel: uid = logReg, numClasses = 2, numFeatures = 3"
+    val expected = "LogisticRegressionModel: uid=logReg, numClasses=2, numFeatures=3"
     assert(model.toString === expected)
   }
 }

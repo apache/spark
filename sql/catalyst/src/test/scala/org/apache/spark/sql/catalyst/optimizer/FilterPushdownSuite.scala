@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -24,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class FilterPushdownSuite extends PlanTest {
@@ -35,15 +36,20 @@ class FilterPushdownSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
         CombineFilters,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         BooleanSimplification,
         PushPredicateThroughJoin,
         CollapseProject) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val attrA = 'a.int
+  val attrB = 'b.int
+  val attrC = 'c.int
+  val attrD = 'd.int
 
-  val testRelation1 = LocalRelation('d.int)
+  val testRelation = LocalRelation(attrA, attrB, attrC)
+
+  val testRelation1 = LocalRelation(attrD)
 
   // This test already passes.
   test("eliminate subqueries") {
@@ -1148,7 +1154,7 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("watermark pushdown: no pushdown on watermark attribute #1") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1163,7 +1169,7 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("watermark pushdown: no pushdown for nondeterministic filter") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1178,7 +1184,7 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("watermark pushdown: full pushdown") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1192,7 +1198,7 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("watermark pushdown: no pushdown on watermark attribute #2") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
 
     val originalQuery = EventTimeWatermark('a, interval, testRelation)
       .where('a === 5 && 'b === 10)
@@ -1201,5 +1207,27 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
+  }
+
+  test("SPARK-28345: PythonUDF predicate should be able to pushdown to join") {
+    val pythonUDFJoinCond = {
+      val pythonUDF = PythonUDF("pythonUDF", null,
+        IntegerType,
+        Seq(attrA),
+        PythonEvalType.SQL_BATCHED_UDF,
+        udfDeterministic = true)
+      pythonUDF === attrD
+    }
+
+    val query = testRelation.join(
+      testRelation1,
+      joinType = Cross).where(pythonUDFJoinCond)
+
+    val expected = testRelation.join(
+      testRelation1,
+      joinType = Cross,
+      condition = Some(pythonUDFJoinCond)).analyze
+
+    comparePlans(Optimize.execute(query.analyze), expected)
   }
 }

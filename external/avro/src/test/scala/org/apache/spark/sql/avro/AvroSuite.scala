@@ -33,16 +33,16 @@ import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWri
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.{IntervalData, NullData, NullUDT}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+abstract class AvroSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   val episodesAvro = testFile("episodes.avro")
@@ -50,7 +50,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set("spark.sql.files.maxPartitionBytes", 1024)
+    spark.conf.set(SQLConf.FILES_MAX_PARTITION_BYTES.key, 1024)
   }
 
   def checkReloadMatchesSaved(originalFile: String, newFile: String): Unit = {
@@ -81,7 +81,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("resolve avro data source") {
     val databricksAvro = "com.databricks.spark.avro"
     // By default the backward compatibility for com.databricks.spark.avro is enabled.
-    Seq("avro", "org.apache.spark.sql.avro.AvroFileFormat", databricksAvro).foreach { provider =>
+    Seq("org.apache.spark.sql.avro.AvroFileFormat", databricksAvro).foreach { provider =>
       assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
         classOf[org.apache.spark.sql.avro.AvroFileFormat])
     }
@@ -1000,14 +1000,15 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       var msg = intercept[AnalysisException] {
         sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
-      assert(msg.contains("Cannot save interval data type into external storage."))
+      assert(msg.contains("Cannot save interval data type into external storage.") ||
+        msg.contains("AVRO data source does not support interval data type."))
 
       msg = intercept[AnalysisException] {
         spark.udf.register("testType", () => new IntervalData())
         sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
       assert(msg.toLowerCase(Locale.ROOT)
-        .contains(s"avro data source does not support calendarinterval data type."))
+        .contains(s"avro data source does not support interval data type."))
     }
   }
 
@@ -1035,7 +1036,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       (TimestampType, LONG),
       (DecimalType(4, 2), BYTES)
     )
-    def assertException(f: () => AvroSerializer) {
+    def assertException(f: () => AvroSerializer): Unit = {
       val message = intercept[org.apache.spark.sql.avro.IncompatibleSchemaException] {
         f()
       }.getMessage
@@ -1491,4 +1492,18 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       |}
     """.stripMargin)
   }
+}
+
+class AvroV1Suite extends AvroSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
+}
+
+class AvroV2Suite extends AvroSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

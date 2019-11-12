@@ -25,6 +25,7 @@ import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.deploy.k8s.SparkPod
+import org.apache.spark.resource.ResourceID
 
 object KubernetesFeaturesTestUtils {
 
@@ -67,5 +68,5 @@ object KubernetesFeaturesTestUtils {
     list.filter(_.getClass() == desired).map(_.asInstanceOf[T])
   }
 
-  case class TestResourceInformation(rName: String, count: String, vendor: String)
+  case class TestResourceInformation(rId: ResourceID, count: String, vendor: String)
 }

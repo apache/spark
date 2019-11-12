@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.{BufferedInputStream, FileInputStream}
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -27,11 +26,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import org.json4s.DefaultFormats
-import org.json4s.JsonAST.JArray
-import org.json4s.MappingException
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -39,6 +34,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -53,8 +50,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv,
-    resourcesFile: Option[String])
-  extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
+    resourcesFileOpt: Option[String])
+  extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
 
   private implicit val formats = DefaultFormats
 
@@ -66,9 +63,16 @@ private[spark] class CoarseGrainedExecutorBackend(
   // to be changed so that we don't share the serializer instance across threads
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
-  override def onStart() {
+  /**
+   * Map each taskId to the information about the resource allocated to it, Please refer to
+   * [[ResourceInformation]] for specifics.
+   * Exposed for testing only.
+   */
+  private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
+
+  override def onStart(): Unit = {
     logInfo("Connecting to driver: " + driverUrl)
-    val resources = parseOrFindResources(resourcesFile)
+    val resources = parseOrFindResources(resourcesFileOpt)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
@@ -84,36 +88,21 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   // visible for testing
-  def parseOrFindResources(resourcesFile: Option[String]): Map[String, ResourceInformation] = {
+  def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     // only parse the resources if a task requires them
-    val resourceInfo = if (env.conf.getAllWithPrefix(SPARK_TASK_RESOURCE_PREFIX).nonEmpty) {
-      val actualExecResources = resourcesFile.map { rFile => {
-        ResourceDiscoverer.parseAllocatedFromJsonFile(rFile)
-      }}.getOrElse {
-        ResourceDiscoverer.discoverResourcesInformation(env.conf, SPARK_EXECUTOR_RESOURCE_PREFIX)
-      }
-
-      if (actualExecResources.isEmpty) {
+    val resourceInfo = if (parseResourceRequirements(env.conf, SPARK_TASK_PREFIX).nonEmpty) {
+      val resources = getOrDiscoverAllResources(env.conf, SPARK_EXECUTOR_PREFIX, resourcesFileOpt)
+      if (resources.isEmpty) {
         throw new SparkException("User specified resources per task via: " +
-          s"$SPARK_TASK_RESOURCE_PREFIX, but can't find any resources available on the executor.")
+          s"$SPARK_TASK_PREFIX, but can't find any resources available on the executor.")
+      } else {
+        logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
       }
-      val execReqResourcesAndCounts =
-        env.conf.getAllWithPrefixAndSuffix(SPARK_EXECUTOR_RESOURCE_PREFIX,
-          SPARK_RESOURCE_COUNT_SUFFIX).toMap
-
-      ResourceDiscoverer.checkActualResourcesMeetRequirements(execReqResourcesAndCounts,
-        actualExecResources)
-
-      logInfo("===============================================================================")
-      logInfo(s"Executor $executorId Resources:")
-      actualExecResources.foreach { case (k, v) => logInfo(s"$k -> $v") }
-      logInfo("===============================================================================")
-
-      actualExecResources
+      resources
     } else {
-      if (resourcesFile.nonEmpty) {
-        logWarning(s"A resources file was specified but the application is not configured " +
-          s"to use any resources, see the configs with prefix: ${SPARK_TASK_RESOURCE_PREFIX}")
+      if (resourcesFileOpt.nonEmpty) {
+        logWarning("A resources file was specified but the application is not configured " +
+          s"to use any resources, see the configs with prefix: ${SPARK_TASK_PREFIX}")
       }
       Map.empty[String, ResourceInformation]
     }
@@ -151,6 +140,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
+        taskResources(taskDesc.taskId) = taskDesc.resources
         executor.launchTask(this, taskDesc)
       }
 
@@ -196,8 +186,12 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
   }
 
-  override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
-    val msg = StatusUpdate(executorId, taskId, state, data)
+  override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
+    val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
+    val msg = StatusUpdate(executorId, taskId, state, data, resources)
+    if (TaskState.isFinished(state)) {
+      taskResources.remove(taskId)
+    }
     driver match {
       case Some(driverRef) => driverRef.send(msg)
       case None => logWarning(s"Drop $msg because has not yet connected to driver")
@@ -238,13 +232,14 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       appId: String,
       workerUrl: Option[String],
       userClassPath: mutable.ListBuffer[URL],
-      resourcesFile: Option[String])
+      resourcesFileOpt: Option[String])
 
   def main(args: Array[String]): Unit = {
     val createFn: (RpcEnv, Arguments, SparkEnv) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.hostname, arguments.cores, arguments.userClassPath, env, arguments.resourcesFile)
+        arguments.hostname, arguments.cores, arguments.userClassPath, env,
+        arguments.resourcesFileOpt)
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
     System.exit(0)
@@ -269,7 +264,19 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         executorConf,
         new SecurityManager(executorConf),
         clientMode = true)
-      val driver = fetcher.setupEndpointRefByURI(arguments.driverUrl)
+
+      var driver: RpcEndpointRef = null
+      val nTries = 3
+      for (i <- 0 until nTries if driver == null) {
+        try {
+          driver = fetcher.setupEndpointRefByURI(arguments.driverUrl)
+        } catch {
+          case e: Throwable => if (i == nTries - 1) {
+            throw e
+          }
+        }
+      }
+
       val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
       val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
       fetcher.shutdown()
@@ -306,7 +313,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var executorId: String = null
     var hostname: String = null
     var cores: Int = 0
-    var resourcesFile: Option[String] = None
+    var resourcesFileOpt: Option[String] = None
     var appId: String = null
     var workerUrl: Option[String] = None
     val userClassPath = new mutable.ListBuffer[URL]()
@@ -327,7 +334,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           cores = value.toInt
           argv = tail
         case ("--resourcesFile") :: value :: tail =>
-          resourcesFile = Some(value)
+          resourcesFileOpt = Some(value)
           argv = tail
         case ("--app-id") :: value :: tail =>
           appId = value
@@ -348,13 +355,17 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
     }
 
-    if (driverUrl == null || executorId == null || hostname == null || cores <= 0 ||
-      appId == null) {
+    if (hostname == null) {
+      hostname = Utils.localHostName()
+      log.info(s"Executor hostname is not provided, will use '$hostname' to advertise itself")
+    }
+
+    if (driverUrl == null || executorId == null || cores <= 0 || appId == null) {
       printUsageAndExit(classNameForEntry)
     }
 
     Arguments(driverUrl, executorId, hostname, cores, appId, workerUrl,
-      userClassPath, resourcesFile)
+      userClassPath, resourcesFileOpt)
   }
 
   private def printUsageAndExit(classNameForEntry: String): Unit = {

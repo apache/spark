@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.util.{Properties, Timer, TimerTask}
 
+import scala.collection.JavaConverters._
+import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
 import org.apache.spark.annotation.{Experimental, Since}
@@ -26,6 +28,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
@@ -116,12 +119,34 @@ class BarrierTaskContext private[spark] (
     timer.schedule(timerTask, 60000, 60000)
 
     try {
-      barrierCoordinator.askSync[Unit](
+      val abortableRpcFuture = barrierCoordinator.askAbortable[Unit](
         message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
           barrierEpoch),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
         timeout = new RpcTimeout(365.days, "barrierTimeout"))
+
+      // Wait the RPC future to be completed, but every 1 second it will jump out waiting
+      // and check whether current spark task is killed. If killed, then throw
+      // a `TaskKilledException`, otherwise continue wait RPC until it completes.
+      try {
+        while (!abortableRpcFuture.toFuture.isCompleted) {
+          // wait RPC future for at most 1 second
+          try {
+            ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
+          } catch {
+            case _: TimeoutException | _: InterruptedException =>
+              // If `TimeoutException` thrown, waiting RPC future reach 1 second.
+              // If `InterruptedException` thrown, it is possible this task is killed.
+              // So in this two cases, we should check whether task is killed and then
+              // throw `TaskKilledException`
+              taskContext.killTaskIfInterrupted()
+          }
+        }
+      } finally {
+        abortableRpcFuture.abort(taskContext.getKillReason().getOrElse("Unknown reason."))
+      }
+
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
         "global sync successfully, waited for " +
@@ -183,6 +208,12 @@ class BarrierTaskContext private[spark] (
 
   override def getMetricsSources(sourceName: String): Seq[Source] = {
     taskContext.getMetricsSources(sourceName)
+  }
+
+  override def resources(): Map[String, ResourceInformation] = taskContext.resources()
+
+  override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
+    resources().asJava
   }
 
   override private[spark] def killTaskIfInterrupted(): Unit = taskContext.killTaskIfInterrupted()

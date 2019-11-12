@@ -133,20 +133,14 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    * (equals to micro-averaged document-based precision)
    */
   @Since("1.2.0")
-  lazy val microPrecision: Double = {
-    val sumFp = summary.fpPerClass.foldLeft(0L) { case(cum, (_, fp)) => cum + fp}
-    sumTp.toDouble / (sumTp + sumFp)
-  }
+  lazy val microPrecision: Double = sumTp.toDouble / (sumTp + sumFpClass)
 
   /**
    * Returns micro-averaged label-based recall
    * (equals to micro-averaged document-based recall)
    */
   @Since("1.2.0")
-  lazy val microRecall: Double = {
-    val sumFn = summary.fnPerClass.foldLeft(0.0) { case(cum, (_, fn)) => cum + fn}
-    sumTp.toDouble / (sumTp + sumFn)
-  }
+  lazy val microRecall: Double = sumTp.toDouble / (sumTp + sumFnClass)
 
   /**
    * Returns micro-averaged label-based f1-measure

@@ -53,6 +53,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTree
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -346,7 +347,6 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[Vector],
       k: Int,
       maxIterations: Int,
-      runs: Int,
       initializationMode: String,
       seed: java.lang.Long,
       initializationSteps: Int,
@@ -1142,12 +1142,21 @@ private[python] class PythonMLLibAPI extends Serializable {
     new RowMatrix(rows.rdd, numRows, numCols)
   }
 
+  def createRowMatrix(df: DataFrame, numRows: Long, numCols: Int): RowMatrix = {
+    require(df.schema.length == 1 && df.schema.head.dataType.getClass == classOf[VectorUDT],
+      "DataFrame must have a single vector type column")
+    new RowMatrix(df.rdd.map { case Row(vector: Vector) => vector }, numRows, numCols)
+  }
+
   /**
    * Wrapper around IndexedRowMatrix constructor.
    */
   def createIndexedRowMatrix(rows: DataFrame, numRows: Long, numCols: Int): IndexedRowMatrix = {
     // We use DataFrames for serialization of IndexedRows from Python,
     // so map each Row in the DataFrame back to an IndexedRow.
+    require(rows.schema.length == 2 && rows.schema.head.dataType == LongType &&
+      rows.schema(1).dataType.getClass == classOf[VectorUDT],
+      "DataFrame must consist of a long type index column and a vector type column")
     val indexedRows = rows.rdd.map {
       case Row(index: Long, vector: Vector) => IndexedRow(index, vector)
     }
@@ -1302,7 +1311,7 @@ private[spark] abstract class SerDeBase {
       }
     }
 
-    private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler)
+    private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit
   }
 
   def dumps(obj: AnyRef): Array[Byte] = {
@@ -1347,10 +1356,6 @@ private[spark] abstract class SerDeBase {
       val unpickle = new Unpickler
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
-        // `Opcodes.MEMOIZE` of Protocol 4 (Python 3.4+) will store objects in internal map
-        // of `Unpickler`. This map is cleared when calling `Unpickler.close()`. Pyrolite
-        // doesn't clear it up, so we manually clear it.
-        unpickle.close()
         if (batched) {
           obj match {
             case list: JArrayList[_] => list.asScala

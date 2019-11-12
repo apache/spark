@@ -23,9 +23,16 @@ package org.apache.spark
  */
 private[spark] trait ExecutorAllocationClient {
 
-
   /** Get the list of currently active executors */
   private[spark] def getExecutorIds(): Seq[String]
+
+  /**
+   * Whether an executor is active. An executor is active when it can be used to execute tasks
+   * for jobs submitted by the application.
+   *
+   * @return whether the executor with the given ID is currently active.
+   */
+  def isExecutorActive(id: String): Boolean
 
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included

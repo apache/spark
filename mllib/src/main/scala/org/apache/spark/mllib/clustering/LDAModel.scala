@@ -194,7 +194,7 @@ class LocalLDAModel private[spark] (
     override protected[spark] val gammaShape: Double = 100)
   extends LDAModel with Serializable {
 
-  private var seed: Long = Utils.random.nextLong()
+  private[spark] var seed: Long = Utils.random.nextLong()
 
   @Since("1.3.0")
   override def k: Int = topics.numCols
@@ -384,31 +384,6 @@ class LocalLDAModel private[spark] (
         (id, Vectors.dense(normalize(gamma, 1.0).toArray))
       }
     }
-  }
-
-  /**
-   * Get a method usable as a UDF for `topicDistributions()`
-   */
-  private[spark] def getTopicDistributionMethod: Vector => Vector = {
-    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
-    val docConcentrationBrz = this.docConcentration.asBreeze
-    val gammaShape = this.gammaShape
-    val k = this.k
-    val gammaSeed = this.seed
-
-    (termCounts: Vector) =>
-      if (termCounts.numNonzeros == 0) {
-        Vectors.zeros(k)
-      } else {
-        val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts,
-          expElogbeta,
-          docConcentrationBrz,
-          gammaShape,
-          k,
-          gammaSeed)
-        Vectors.dense(normalize(gamma, 1.0).toArray)
-      }
   }
 
   /**
