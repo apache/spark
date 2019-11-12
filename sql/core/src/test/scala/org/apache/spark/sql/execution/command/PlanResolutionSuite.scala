@@ -885,8 +885,6 @@ class PlanResolutionSuite extends AnalysisTest {
         case _ => fail("Expect DeleteFromTable, bug got:\n" + parsed1.treeString)
       }
     }
-
-    // TODO: v1 table is not supported.
   }
 
   test("UPDATE TABLE") {
@@ -944,8 +942,6 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(u.table.isInstanceOf[UnresolvedRelation])
       case _ => fail("Expect UpdateTable, but got:\n" + parsed.treeString)
     }
-
-    // TODO: v1 table is not supported.
   }
 
   test("alter table: alter column") {
@@ -1230,8 +1226,6 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(u.sourceTable.isInstanceOf[UnresolvedRelation])
       case _ => fail("Expect MergeIntoTable, but got:\n" + parsed.treeString)
     }
-
-    // TODO: v1 table is not supported.
   }
 
   // TODO: add tests for more commands.
