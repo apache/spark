@@ -174,8 +174,7 @@ case class InSubqueryExec(
 }
 
 /**
- * The physical node of exists-subquery. This is for support use exists in join's on condition,
- * since some join type we can't pushdown exists condition, we plan it here
+ * The physical node of non-correlated EXISTS subquery.
  */
 case class ExistsExec(
     plan: BaseSubqueryExec,
@@ -188,7 +187,7 @@ case class ExistsExec(
   override def dataType: DataType = BooleanType
   override def children: Seq[Expression] = Nil
   override def nullable: Boolean = false
-  override def toString: String = s"EXISTS ${plan.name}"
+  override def toString: String = s"EXISTS (${plan.simpleString(SQLConf.get.maxToStringFields)})"
   override def withNewPlan(plan: BaseSubqueryExec): ExistsExec = copy(plan = plan)
 
   override def semanticEquals(other: Expression): Boolean = other match {

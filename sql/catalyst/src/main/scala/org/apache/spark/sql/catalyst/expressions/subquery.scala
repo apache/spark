@@ -66,7 +66,8 @@ object SubqueryExpression {
    */
   def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
     e.find {
-      case _: ListQuery | _: Exists if e.children.nonEmpty => true
+      case _: ListQuery => true
+      case _: Exists if e.children.nonEmpty => true
       case _ => false
     }.isDefined
   }
