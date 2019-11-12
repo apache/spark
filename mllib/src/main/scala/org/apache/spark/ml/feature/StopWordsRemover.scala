@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructTyp
  * A feature transformer that filters out stop words from input.
  *
  * Since 3.0.0,
- * `StopWordsRemover` can filters out multiple columns at once by setting the `inputCols`
+ * `StopWordsRemover` can filter out multiple columns at once by setting the `inputCols`
  * parameter. Note that when both the `inputCol` and `inputCols` parameters are set, an Exception
  * will be thrown.
  *
@@ -188,7 +188,6 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     }
 
     val (inputColNames, outputColNames) = getInOutCols()
-
     var outputFields = schema.fields
     inputColNames.zip(outputColNames).foreach { case (inputColName, outputColName) =>
       require(!schema.fieldNames.contains(outputColName),
