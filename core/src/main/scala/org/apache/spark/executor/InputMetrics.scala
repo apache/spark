@@ -30,7 +30,16 @@ import org.apache.spark.util.LongAccumulator
 @DeveloperApi
 object DataReadMethod extends Enumeration with Serializable {
   type DataReadMethod = Value
-  val Memory, Disk, Hadoop, Network = Value
+  val MEMORY, DISK, HADOOP, NETWORK = Value
+
+  @deprecated("Use MEMORY instead.", "3.0.0")
+  val Memory = MEMORY
+  @deprecated("Use DISK instead.", "3.0.0")
+  val Disk = DISK
+  @deprecated("Use HADOOP instead.", "3.0.0")
+  val Hadoop = HADOOP
+  @deprecated("Use NETWORK instead.", "3.0.0")
+  val Network = NETWORK
 }
 
 

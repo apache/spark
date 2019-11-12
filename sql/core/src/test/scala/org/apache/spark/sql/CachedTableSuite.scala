@@ -308,15 +308,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
   }
 
   test("SQL interface support storageLevel(DISK_ONLY)") {
-    assertStorageLevel("('storageLevel' 'DISK_ONLY')", Disk)
+    assertStorageLevel("('storageLevel' 'DISK_ONLY')", DISK)
   }
 
   test("SQL interface support storageLevel(DISK_ONLY) with invalid options") {
-    assertStorageLevel("('storageLevel' 'DISK_ONLY', 'a' '1', 'b' '2')", Disk)
+    assertStorageLevel("('storageLevel' 'DISK_ONLY', 'a' '1', 'b' '2')", DISK)
   }
 
   test("SQL interface support storageLevel(MEMORY_ONLY)") {
-    assertStorageLevel("('storageLevel' 'MEMORY_ONLY')", Memory)
+    assertStorageLevel("('storageLevel' 'MEMORY_ONLY')", MEMORY)
   }
 
   test("SQL interface cache SELECT ... support storageLevel(DISK_ONLY)") {
@@ -324,7 +324,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
       sql("CACHE TABLE testCacheSelect OPTIONS('storageLevel' 'DISK_ONLY') SELECT * FROM testData")
       assertCached(spark.table("testCacheSelect"))
       val rddId = rddIdOf("testCacheSelect")
-      assert(isExpectStorageLevel(rddId, Disk))
+      assert(isExpectStorageLevel(rddId, DISK))
     }
   }
 
@@ -348,7 +348,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
     assert(
       isMaterialized(rddId),
       "Lazily cached in-memory table should have been materialized")
-    assert(isExpectStorageLevel(rddId, Disk))
+    assert(isExpectStorageLevel(rddId, DISK))
   }
 
   test("InMemoryRelation statistics") {

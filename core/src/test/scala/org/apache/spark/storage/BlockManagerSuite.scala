@@ -545,18 +545,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(list1Get.isDefined, "list1 expected to be in store")
     assert(list1Get.get.data.size === 2)
     assert(list1Get.get.bytes === list1SizeEstimate)
-    assert(list1Get.get.readMethod === DataReadMethod.Memory)
+    assert(list1Get.get.readMethod === DataReadMethod.MEMORY)
     val list2MemoryGet = store.get("list2memory")
     assert(list2MemoryGet.isDefined, "list2memory expected to be in store")
     assert(list2MemoryGet.get.data.size === 3)
     assert(list2MemoryGet.get.bytes === list2SizeEstimate)
-    assert(list2MemoryGet.get.readMethod === DataReadMethod.Memory)
+    assert(list2MemoryGet.get.readMethod === DataReadMethod.MEMORY)
     val list2DiskGet = store.get("list2disk")
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
     assert(list2DiskGet.get.bytes > 0)
-    assert(list2DiskGet.get.readMethod === DataReadMethod.Disk)
+    assert(list2DiskGet.get.readMethod === DataReadMethod.DISK)
   }
 
   test("optimize a location order of blocks without topology information") {

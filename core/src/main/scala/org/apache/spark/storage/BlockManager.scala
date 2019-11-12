@@ -750,7 +750,7 @@ private[spark] class BlockManager(
           val ci = CompletionIterator[Any, Iterator[Any]](iter, {
             releaseLock(blockId, taskContext)
           })
-          Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
+          Some(new BlockResult(ci, DataReadMethod.MEMORY, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
           val diskData = diskStore.getBytes(blockId)
           val iterToReturn: Iterator[Any] = {
@@ -769,7 +769,7 @@ private[spark] class BlockManager(
           val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
             releaseLockAndDispose(blockId, diskData, taskContext)
           })
-          Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
+          Some(new BlockResult(ci, DataReadMethod.DISK, info.size))
         } else {
           handleLocalReadFailure(blockId)
         }
@@ -835,7 +835,7 @@ private[spark] class BlockManager(
     getRemoteBlock(blockId, (data: ManagedBuffer) => {
       val values =
         serializerManager.dataDeserializeStream(blockId, data.createInputStream())(ct)
-      new BlockResult(values, DataReadMethod.Network, data.size)
+      new BlockResult(values, DataReadMethod.NETWORK, data.size)
     })
   }
 
