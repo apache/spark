@@ -1860,8 +1860,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
     val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
-    val negativeSign = Option(ctx.negativeSign).map(_.getText).getOrElse("")
-    val isNegative = if (negativeSign == "-") true else false
+    val isNegative = ctx.negativeSign != null
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
       f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
@@ -1900,6 +1899,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           }
           Literal(if (isNegative) -i else i, IntegerType)
         case other =>
+          val negativeSign: String = if (isNegative) "-" else ""
           throw new ParseException(s"Literals of type '$negativeSign$other' are currently not" +
             " supported.", ctx)
       }
@@ -2031,7 +2031,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   private def applyNegativeSign(sign: Token, interval: CalendarInterval): CalendarInterval = {
-    if (sign != null && sign.getText == "-") {
+    if (sign != null) {
       IntervalUtils.negate(interval)
     } else {
       interval
