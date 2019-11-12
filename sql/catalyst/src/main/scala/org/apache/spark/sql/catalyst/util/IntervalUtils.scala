@@ -303,35 +303,27 @@ object IntervalUtils {
     val pattern = regexp.get.pattern
     val m = pattern.matcher(input)
     require(m.matches, s"Interval string must match day-time format of '$pattern': $input")
-
-    try {
-      var micros: Long = 0L
-      var days: Int = 0
-
-      unitsRange(to, from).foreach {
-        case unit @ DAY =>
-          val parsed = toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue)
-          days = Math.toIntExact(parsed)
-        case unit @ HOUR =>
-          val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 23)
-          micros = Math.addExact(micros, Math.multiplyExact(parsed, MICROS_PER_HOUR))
-        case unit @ MINUTE =>
-          val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 59)
-          micros = Math.addExact(micros, Math.multiplyExact(parsed, MICROS_PER_MINUTE))
-        case unit @ SECOND =>
-          val parsed = parseSecondNano(m.group(unit.toString))
-          micros = Math.addExact(micros, parsed)
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Cannot support (interval '$input' $from to $to) expression")
-      }
-      val sign = if (m.group("sign") != null && m.group("sign") == "-") -1 else 1
-      new CalendarInterval(0, sign * days, sign * micros)
-    } catch {
-      case e: Exception =>
+    var micros: Long = 0L
+    var days: Int = 0
+    unitsRange(to, from).foreach {
+      case unit @ DAY =>
+        val parsed = toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue)
+        days = Math.toIntExact(parsed)
+      case unit @ HOUR =>
+        val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 23)
+        micros = Math.addExact(micros, Math.multiplyExact(parsed, MICROS_PER_HOUR))
+      case unit @ MINUTE =>
+        val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 59)
+        micros = Math.addExact(micros, Math.multiplyExact(parsed, MICROS_PER_MINUTE))
+      case unit @ SECOND =>
+        val parsed = parseSecondNano(m.group(unit.toString))
+        micros = Math.addExact(micros, parsed)
+      case _ =>
         throw new IllegalArgumentException(
-          s"Error parsing interval day-time string: ${e.getMessage}", e)
+          s"Cannot support (interval '$input' $from to $to) expression")
     }
+    val sign = if (m.group("sign") != null && m.group("sign") == "-") -1 else 1
+    new CalendarInterval(0, sign * days, sign * micros)
   }
 
   def fromUnitStrings(units: Array[IntervalUnit], values: Array[String]): CalendarInterval = {
