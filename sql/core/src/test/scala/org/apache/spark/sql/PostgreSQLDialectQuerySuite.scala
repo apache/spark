@@ -39,4 +39,16 @@ class PostgreSQLDialectQuerySuite extends QueryTest with SharedSparkSession {
       checkAnswer(sql(s"select cast('$input' as boolean)"), Row(null))
     }
   }
+
+  test("Cast to integer"){
+    assert(intercept[AnalysisException](
+      sql(s"SELECT cast(cast(\"1\" as byte) as int)")
+    ).getMessage contains "Cannot cast")
+    assert(intercept[AnalysisException](
+      sql(s"SELECT cast(cast(\"1-1-1\" as date) as int)")
+    ).getMessage contains "Cannot cast")
+    assert(intercept[AnalysisException](
+      sql(s"SELECT cast(cast(\"1-1-1\" as timestamp) as int)")
+    ).getMessage contains "Cannot cast")
+  }
 }

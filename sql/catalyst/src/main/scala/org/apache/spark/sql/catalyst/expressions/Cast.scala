@@ -488,7 +488,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // IntConverter
-  private[this] def castToInt(from: DataType): Any => Any = from match {
+  private[catalyst] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
@@ -792,7 +792,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
   // in parameter list, because the returned code will be put in null safe evaluation region.
-  private[this] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
+  private[catalyst] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
 
   private[this] def nullSafeCastFunction(
       from: DataType,
@@ -1394,7 +1394,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
   }
 
-  private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+  private[catalyst] def castToIntCode(
+      from: DataType,
+      ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
