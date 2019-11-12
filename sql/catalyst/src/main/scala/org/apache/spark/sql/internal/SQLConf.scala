@@ -1774,6 +1774,7 @@ object SQLConf {
     .createWithDefault(false)
 
   object IntervalStyle extends Enumeration {
+    type IntervalStyle = Value
     val SQL_STANDARD, ISO_8601, MULTI_UNITS = Value
   }
 

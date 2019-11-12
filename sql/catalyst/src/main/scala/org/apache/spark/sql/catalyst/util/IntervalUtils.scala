@@ -455,8 +455,11 @@ object IntervalUtils {
   }
 
   def toSqlStandardString(interval: CalendarInterval): String = {
-    val yearMonthPart = if (interval.months != 0) {
-      interval.months / 12 + "-" + math.abs(interval.months) % 12
+    val yearMonthPart = if (interval.months < 0) {
+      val ma = math.abs(interval.months)
+      "-" + ma / 12 + "-" + ma % 12
+    } else if (interval.months > 0) {
+      interval.months / 12 + "-" + interval.months % 12
     } else {
       ""
     }
