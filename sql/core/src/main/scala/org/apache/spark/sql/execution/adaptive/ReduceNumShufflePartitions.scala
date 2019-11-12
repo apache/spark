@@ -64,7 +64,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
       case _: LocalShuffleReaderExec => Nil
-      case _: SkewedShuffleReaderExec => Nil
+      case _: PostShufflePartitionReader => Nil
       case stage: ShuffleQueryStageExec => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
     }

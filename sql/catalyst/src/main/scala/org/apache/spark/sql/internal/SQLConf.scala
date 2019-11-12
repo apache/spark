@@ -472,13 +472,6 @@ object SQLConf {
       .longConf
       .createWithDefault(64 * 1024 * 1024L)
 
-  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_MAX_SPLITS =
-    buildConf("spark.sql.adaptive.skewedPartitionMaxSplits")
-      .doc("Configures the maximum number of task to handle a skewed partition in adaptive skewed" +
-        "join.")
-      .intConf
-      .createWithDefault(5)
-
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
       .doc("The relation with a non-empty partition ratio lower than this config will not be " +
@@ -2309,8 +2302,6 @@ class SQLConf extends Serializable with Logging {
 
   def adaptiveSkewedSizeThreshold: Long =
     getConf(ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD)
-
-  def adaptiveSkewedMaxSplits: Int = getConf(ADAPTIVE_EXECUTION_SKEWED_PARTITION_MAX_SPLITS)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 

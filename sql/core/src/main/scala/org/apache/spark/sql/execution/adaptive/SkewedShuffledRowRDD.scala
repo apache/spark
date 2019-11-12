@@ -73,11 +73,12 @@ class SkewedShuffledRowRDD(
     // as well as the `tempMetrics` for basic shuffle metrics.
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
 
-    val reader = SparkEnv.get.shuffleManager.getReaderForRangeMapper(
+    val reader = SparkEnv.get.shuffleManager.getReaderForRange(
       dependency.shuffleHandle,
-      skewedPartition.preShufflePartitionIndex,
       skewedPartition.startMapId,
       skewedPartition.endMapId,
+      skewedPartition.preShufflePartitionIndex,
+      skewedPartition.preShufflePartitionIndex + 1,
       context,
       sqlMetricsReporter)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)

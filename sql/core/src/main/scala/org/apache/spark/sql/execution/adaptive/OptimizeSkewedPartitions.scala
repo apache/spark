@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.MapOutputStatistics
+import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -57,17 +58,38 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
     if (bytes(bytesLen / 2) > 0) bytes(bytesLen / 2) else 1
   }
 
-  /**
-   * To equally divide n elements into m buckets, basically each bucket should have n/m elements,
-   * for the remaining n%m elements, add one more element to the first n%m buckets each. Returns
-   * a sequence with length numBuckets and each value represents the start index of each bucket.
-   */
-  def equallyDivide(numElements: Int, numBuckets: Int): Seq[Int] = {
-    val elementsPerBucket = numElements / numBuckets
-    val remaining = numElements % numBuckets
-    val splitPoint = (elementsPerBucket + 1) * remaining
-    (0 until remaining).map(_ * (elementsPerBucket + 1)) ++
-      (remaining until numBuckets).map(i => splitPoint + (i - remaining) * elementsPerBucket)
+  /*
+  * Get all the map data size for specific reduce partitionId.
+  */
+  def getMapSizeForSpecificPartition(partitionId: Int, shuffleId: Int): Array[Long] = {
+    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.shuffleStatuses.get(shuffleId).
+      get.mapStatuses.map{_.getSizeForBlock(partitionId)}
+  }
+
+  /*
+  * Split the mappers based on the map size of specific skewed reduce partitionId.
+  */
+  def splitMappersBasedDataSize(mapPartitionSize: Array[Long], numMappers: Int): Array[Int] = {
+    val advisoryTargetPostShuffleInputSize = conf.targetPostShuffleInputSize
+    val partitionStartIndices = ArrayBuffer[Int]()
+    var i = 0
+    var postMapPartitionSize: Long = mapPartitionSize(i)
+    partitionStartIndices += i
+    while (i < numMappers && i + 1 < numMappers) {
+      val nextIndex = if (i + 1 < numMappers) {
+        i + 1
+      } else numMappers -1
+
+      if (postMapPartitionSize + mapPartitionSize(nextIndex) > advisoryTargetPostShuffleInputSize) {
+        postMapPartitionSize = mapPartitionSize(nextIndex)
+        partitionStartIndices += nextIndex
+      } else {
+        postMapPartitionSize += mapPartitionSize(nextIndex)
+      }
+      i += 1
+    }
+    partitionStartIndices.toArray
   }
 
   /**
@@ -79,14 +101,11 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
     stage: QueryStageExec,
     partitionId: Int,
     medianSize: Long): Array[Int] = {
-    val metrics = getStatistics(stage)
-    val size = metrics.bytesByPartitionId(partitionId)
-    val factor = size / medianSize
-    val numMappers = getShuffleStage(stage).
-      plan.shuffleDependency.rdd.partitions.length
-     val numSplits = Math.min(conf.adaptiveSkewedMaxSplits,
-      Math.min(factor.toInt, numMappers))
-    equallyDivide(numMappers, numSplits).toArray
+    val dependency = getShuffleStage(stage).plan.shuffleDependency
+    val shuffleId = dependency.shuffleHandle.shuffleId
+    val mapSize = getMapSizeForSpecificPartition(partitionId, shuffleId)
+    val numMappers = dependency.rdd.partitions.length
+    splitMappersBasedDataSize(mapSize, numMappers)
   }
 
   private def getShuffleStage(queryStage: QueryStageExec): ShuffleQueryStageExec = {
@@ -185,11 +204,11 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
             // For the skewed partition, we set the id of shuffle query stage to -1.
             // And skip this shuffle query stage optimization in 'ReduceNumShufflePartitions' rule.
             val leftSkewedReader =
-              SkewedShuffleReaderExec(getShuffleStage(left).copy(id = -1),
+              PostShufflePartitionReader(getShuffleStage(left).copy(id = -1),
                 partitionId, leftMapIdStartIndices(i), leftEndMapId)
 
             val rightSkewedReader =
-              SkewedShuffleReaderExec(getShuffleStage(right).copy(id = -1),
+              PostShufflePartitionReader(getShuffleStage(right).copy(id = -1),
                 partitionId, rightMapIdStartIndices(j), rightEndMapId)
 
             subJoins +=
@@ -215,7 +234,7 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
       case _: LocalShuffleReaderExec => Nil
-      case _: SkewedShuffleReaderExec => Nil
+      case _: PostShufflePartitionReader => Nil
       case stage: ShuffleQueryStageExec => Seq(stage)
       case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
@@ -228,11 +247,12 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
       handleSkewJoin(plan)
     } else {
       plan
+
     }
   }
 }
 
-case class SkewedShuffleReaderExec(
+case class PostShufflePartitionReader(
     child: QueryStageExec,
     partitionIndex: Int,
     startMapId: Int,
