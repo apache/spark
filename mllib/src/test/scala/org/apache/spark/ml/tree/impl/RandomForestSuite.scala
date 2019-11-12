@@ -94,7 +94,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 200000, 200000.0, 0, 0,
         Map(), Set(),
-        Array(6), Gini, QuantileStrategy.Sort,
+        Array(6), Gini, QuantileStrategy.SORT,
         0, 0, 0.0, 0.0, 0, 0
       )
       val featureSamples = Array.fill(10000)((1.0, math.random)).filter(_._2 != 0.0)
@@ -110,7 +110,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 8, 8.0, 0, 0,
         Map(), Set(),
-        Array(3), Gini, QuantileStrategy.Sort,
+        Array(3), Gini, QuantileStrategy.SORT,
         0, 0, 0.0, 0.0, 0, 0
       )
 
@@ -138,7 +138,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 12, 12.0, 0, 0,
         Map(), Set(),
-        Array(5), Gini, QuantileStrategy.Sort,
+        Array(5), Gini, QuantileStrategy.SORT,
         0, 0, 0.0, 0.0, 0, 0
       )
       val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3).map(x => (1.0, x.toDouble))
@@ -153,7 +153,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 18, 18.0, 0, 0,
         Map(), Set(),
-        Array(3), Gini, QuantileStrategy.Sort,
+        Array(3), Gini, QuantileStrategy.SORT,
         0, 0, 0.0, 0.0, 0, 0
       )
       val featureSamples =
@@ -167,7 +167,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 17, 17.0, 0, 0,
         Map(), Set(),
-        Array(2), Gini, QuantileStrategy.Sort,
+        Array(2), Gini, QuantileStrategy.SORT,
         0, 0, 0.0, 0.0, 0, 0
       )
       val featureSamples =
@@ -181,7 +181,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0.0, 0, 0,
         Map(), Set(),
-        Array(6), Gini, QuantileStrategy.Sort,
+        Array(6), Gini, QuantileStrategy.SORT,
         0, 0, 0.0, 0.0, 0, 0
       )
       val featureSamplesUnitWeight = Array.fill(10)((1.0, math.random))
@@ -201,7 +201,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0.0, 0, 0,
         Map(), Set(),
-        Array(3), Gini, QuantileStrategy.Sort,
+        Array(3), Gini, QuantileStrategy.SORT,
         0, 0, 0.0, 0.0, 0, 0
       )
       val featureSamples = Array((10, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6)).map {

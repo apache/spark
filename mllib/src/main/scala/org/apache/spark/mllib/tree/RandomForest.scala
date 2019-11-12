@@ -168,7 +168,7 @@ object RandomForest extends Serializable with Logging {
       seed: Int = Utils.random.nextInt()): RandomForestModel = {
     val impurityType = Impurities.fromString(impurity)
     val strategy = new Strategy(CLASSIFICATION, impurityType, maxDepth,
-      numClasses, maxBins, Sort, categoricalFeaturesInfo)
+      numClasses, maxBins, SORT, categoricalFeaturesInfo)
     trainClassifier(input, strategy, numTrees, featureSubsetStrategy, seed)
   }
 
@@ -255,7 +255,7 @@ object RandomForest extends Serializable with Logging {
       seed: Int = Utils.random.nextInt()): RandomForestModel = {
     val impurityType = Impurities.fromString(impurity)
     val strategy = new Strategy(REGRESSION, impurityType, maxDepth,
-      0, maxBins, Sort, categoricalFeaturesInfo)
+      0, maxBins, SORT, categoricalFeaturesInfo)
     trainRegressor(input, strategy, numTrees, featureSubsetStrategy, seed)
   }
 

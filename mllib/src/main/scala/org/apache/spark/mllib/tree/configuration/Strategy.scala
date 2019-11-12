@@ -73,7 +73,7 @@ class Strategy @Since("1.3.0") (
     @Since("1.0.0") @BeanProperty var maxDepth: Int,
     @Since("1.2.0") @BeanProperty var numClasses: Int = 2,
     @Since("1.0.0") @BeanProperty var maxBins: Int = 32,
-    @Since("1.0.0") @BeanProperty var quantileCalculationStrategy: QuantileStrategy = Sort,
+    @Since("1.0.0") @BeanProperty var quantileCalculationStrategy: QuantileStrategy = SORT,
     @Since("1.0.0") @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
     @Since("1.2.0") @BeanProperty var minInstancesPerNode: Int = 1,
     @Since("1.2.0") @BeanProperty var minInfoGain: Double = 0.0,
@@ -133,7 +133,7 @@ class Strategy @Since("1.3.0") (
       numClasses: Int,
       maxBins: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
-    this(algo, impurity, maxDepth, numClasses, maxBins, Sort,
+    this(algo, impurity, maxDepth, numClasses, maxBins, SORT,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       minWeightFractionPerNode = 0.0)
   }

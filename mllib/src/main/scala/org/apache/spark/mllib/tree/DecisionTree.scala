@@ -213,7 +213,7 @@ object DecisionTree extends Serializable with Logging {
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
     val impurityType = Impurities.fromString(impurity)
-    train(input, CLASSIFICATION, impurityType, maxDepth, numClasses, maxBins, Sort,
+    train(input, CLASSIFICATION, impurityType, maxDepth, numClasses, maxBins, SORT,
       categoricalFeaturesInfo)
   }
 
@@ -258,7 +258,7 @@ object DecisionTree extends Serializable with Logging {
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
     val impurityType = Impurities.fromString(impurity)
-    train(input, REGRESSION, impurityType, maxDepth, 0, maxBins, Sort, categoricalFeaturesInfo)
+    train(input, REGRESSION, impurityType, maxDepth, 0, maxBins, SORT, categoricalFeaturesInfo)
   }
 
   /**

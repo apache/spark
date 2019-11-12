@@ -27,5 +27,11 @@ object QuantileStrategy extends Enumeration {
   @Since("1.0.0")
   type QuantileStrategy = Value
   @Since("1.0.0")
-  val Sort, MinMax, ApproxHist = Value
+  val SORT, MIN_MAX, APPROX_HIST = Value
+  @deprecated("Use SORT instead.", "3.0.0")
+  val Sort = SORT
+  @deprecated("Use MIN_MAX instead.", "3.0.0")
+  val MinMax = MIN_MAX
+  @deprecated("Use APPROX_HIST instead.", "3.0.0")
+  val ApproxHist = APPROX_HIST
 }
