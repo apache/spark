@@ -87,7 +87,7 @@ class Strategy @Since("1.3.0") (
    */
   @Since("1.2.0")
   def isMulticlassClassification: Boolean = {
-    algo == Classification && numClasses > 2
+    algo == CLASSIFICATION && numClasses > 2
   }
 
   /**
@@ -143,8 +143,8 @@ class Strategy @Since("1.3.0") (
    */
   @Since("1.2.0")
   def setAlgo(algo: String): Unit = algo match {
-    case "Classification" => setAlgo(Classification)
-    case "Regression" => setAlgo(Regression)
+    case "Classification" => setAlgo(CLASSIFICATION)
+    case "Regression" => setAlgo(REGRESSION)
   }
 
   /**
@@ -163,14 +163,14 @@ class Strategy @Since("1.3.0") (
    */
   private[spark] def assertValid(): Unit = {
     algo match {
-      case Classification =>
+      case CLASSIFICATION =>
         require(numClasses >= 2,
           s"DecisionTree Strategy for Classification must have numClasses >= 2," +
           s" but numClasses = $numClasses.")
         require(Set(Gini, Entropy).contains(impurity),
           s"DecisionTree Strategy given invalid impurity for Classification: $impurity." +
           s"  Valid settings: Gini, Entropy")
-      case Regression =>
+      case REGRESSION =>
         require(impurity == Variance,
           s"DecisionTree Strategy given invalid impurity for Regression: $impurity." +
           s"  Valid settings: Variance")
@@ -222,11 +222,11 @@ object Strategy {
    */
   @Since("1.3.0")
   def defaultStrategy(algo: Algo): Strategy = algo match {
-    case Algo.Classification =>
-      new Strategy(algo = Classification, impurity = Gini, maxDepth = 10,
+    case Algo.CLASSIFICATION =>
+      new Strategy(algo = CLASSIFICATION, impurity = Gini, maxDepth = 10,
         numClasses = 2)
-    case Algo.Regression =>
-      new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
+    case Algo.REGRESSION =>
+      new Strategy(algo = REGRESSION, impurity = Variance, maxDepth = 10,
         numClasses = 0)
   }
 

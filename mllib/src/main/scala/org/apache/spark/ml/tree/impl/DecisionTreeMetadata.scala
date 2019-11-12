@@ -128,8 +128,8 @@ private[spark] object DecisionTreeMetadata extends Logging {
     )
 
     val numClasses = strategy.algo match {
-      case Classification => strategy.numClasses
-      case Regression => 0
+      case CLASSIFICATION => strategy.numClasses
+      case REGRESSION => 0
     }
 
     val maxPossibleBins = math.min(strategy.maxBins, numExamples).toInt
@@ -190,7 +190,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
         if (numTrees == 1) {
           "all"
         } else {
-          if (strategy.algo == Classification) {
+          if (strategy.algo == CLASSIFICATION) {
             "sqrt"
           } else {
             "onethird"

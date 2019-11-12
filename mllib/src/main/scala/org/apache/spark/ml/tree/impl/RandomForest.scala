@@ -248,7 +248,7 @@ private[spark] object RandomForest extends Logging with Serializable {
 
     parentUID match {
       case Some(uid) =>
-        if (strategy.algo == OldAlgo.Classification) {
+        if (strategy.algo == OldAlgo.CLASSIFICATION) {
           topNodes.map { rootNode =>
             new DecisionTreeClassificationModel(uid, rootNode.toNode(prune), numFeatures,
               strategy.getNumClasses)
@@ -259,7 +259,7 @@ private[spark] object RandomForest extends Logging with Serializable {
           }
         }
       case None =>
-        if (strategy.algo == OldAlgo.Classification) {
+        if (strategy.algo == OldAlgo.CLASSIFICATION) {
           topNodes.map { rootNode =>
             new DecisionTreeClassificationModel(rootNode.toNode(prune), numFeatures,
               strategy.getNumClasses)

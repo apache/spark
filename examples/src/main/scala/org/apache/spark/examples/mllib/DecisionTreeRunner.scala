@@ -54,7 +54,7 @@ object DecisionTreeRunner {
       input: String = null,
       testInput: String = "",
       dataFormat: String = "libsvm",
-      algo: Algo = Classification,
+      algo: Algo = CLASSIFICATION,
       maxDepth: Int = 5,
       impurity: ImpurityType = Gini,
       maxBins: Int = 32,
@@ -135,10 +135,10 @@ object DecisionTreeRunner {
         if (params.fracTest < 0 || params.fracTest > 1) {
           failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1].")
         } else {
-          if (params.algo == Classification &&
+          if (params.algo == CLASSIFICATION &&
             (params.impurity == Gini || params.impurity == Entropy)) {
             success
-          } else if (params.algo == Regression && params.impurity == Variance) {
+          } else if (params.algo == REGRESSION && params.impurity == Variance) {
             success
           } else {
             failure(s"Algo ${params.algo} is not compatible with impurity ${params.impurity}.")
@@ -177,7 +177,7 @@ object DecisionTreeRunner {
     }
     // For classification, re-index classes if needed.
     val (examples, classIndexMap, numClasses) = algo match {
-      case Classification =>
+      case CLASSIFICATION =>
         // classCounts: class --> # examples in class
         val classCounts = origExamples.map(_.label).countByValue()
         val sortedClasses = classCounts.keys.toList.sorted
@@ -206,7 +206,7 @@ object DecisionTreeRunner {
           println(s"$c\t$frac\t${classCounts(c)}")
         }
         (examples, classIndexMap, numClasses)
-      case Regression =>
+      case REGRESSION =>
         (origExamples, null, 0)
       case _ =>
         throw new IllegalArgumentException(s"Algo $algo not supported.")
@@ -221,7 +221,7 @@ object DecisionTreeRunner {
         case "libsvm" => MLUtils.loadLibSVMFile(sc, testInput, numFeatures)
       }
       algo match {
-        case Classification =>
+        case CLASSIFICATION =>
           // classCounts: class --> # examples in class
           val testExamples = {
             if (classIndexMap.isEmpty) {
@@ -231,7 +231,7 @@ object DecisionTreeRunner {
             }
           }
           Array(examples, testExamples)
-        case Regression =>
+        case REGRESSION =>
           Array(examples, origTestExamples)
       }
     } else {
@@ -290,7 +290,7 @@ object DecisionTreeRunner {
       } else {
         println(model) // Print model summary.
       }
-      if (params.algo == Classification) {
+      if (params.algo == CLASSIFICATION) {
         val trainAccuracy =
           new MulticlassMetrics(training.map(lp => (model.predict(lp.features), lp.label))).accuracy
         println(s"Train accuracy = $trainAccuracy")
@@ -298,7 +298,7 @@ object DecisionTreeRunner {
           new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).accuracy
         println(s"Test accuracy = $testAccuracy")
       }
-      if (params.algo == Regression) {
+      if (params.algo == REGRESSION) {
         val trainMSE = meanSquaredError(model, training)
         println(s"Train mean squared error = $trainMSE")
         val testMSE = meanSquaredError(model, test)
@@ -306,7 +306,7 @@ object DecisionTreeRunner {
       }
     } else {
       val randomSeed = Utils.random.nextInt()
-      if (params.algo == Classification) {
+      if (params.algo == CLASSIFICATION) {
         val startTime = System.nanoTime()
         val model = RandomForest.trainClassifier(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
@@ -324,7 +324,7 @@ object DecisionTreeRunner {
           new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).accuracy
         println(s"Test accuracy = $testAccuracy")
       }
-      if (params.algo == Regression) {
+      if (params.algo == REGRESSION) {
         val startTime = System.nanoTime()
         val model = RandomForest.trainRegressor(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)

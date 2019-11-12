@@ -50,7 +50,7 @@ class RandomForestModel @Since("1.2.0") (
     @Since("1.2.0") override val algo: Algo,
     @Since("1.2.0") override val trees: Array[DecisionTreeModel])
   extends TreeEnsembleModel(algo, trees, Array.fill(trees.length)(1.0),
-    combiningStrategy = if (algo == Classification) Vote else Average)
+    combiningStrategy = if (algo == CLASSIFICATION) Vote else Average)
   with Saveable {
 
   require(trees.forall(_.algo == algo))
@@ -143,7 +143,7 @@ class GradientBoostedTreesModel @Since("1.2.0") (
 
     val sc = data.sparkContext
     val remappedData = algo match {
-      case Classification => data.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+      case CLASSIFICATION => data.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
       case _ => data
     }
 
@@ -307,15 +307,15 @@ private[tree] sealed class TreeEnsembleModel(
    */
   def predict(features: Vector): Double = {
     (algo, combiningStrategy) match {
-      case (Regression, Sum) =>
+      case (REGRESSION, Sum) =>
         predictBySumming(features)
-      case (Regression, Average) =>
+      case (REGRESSION, Average) =>
         predictBySumming(features) / sumWeights
-      case (Classification, Sum) => // binary classification
+      case (CLASSIFICATION, Sum) => // binary classification
         val prediction = predictBySumming(features)
         // TODO: predicted labels are +1 or -1 for GBT. Need a better way to store this info.
         if (prediction > 0.0) 1.0 else 0.0
-      case (Classification, Vote) =>
+      case (CLASSIFICATION, Vote) =>
         predictByVoting(features)
       case _ =>
         throw new IllegalArgumentException(
@@ -344,9 +344,9 @@ private[tree] sealed class TreeEnsembleModel(
    */
   override def toString: String = {
     algo match {
-      case Classification =>
+      case CLASSIFICATION =>
         s"TreeEnsembleModel classifier with $numTrees trees\n"
-      case Regression =>
+      case REGRESSION =>
         s"TreeEnsembleModel regressor with $numTrees trees\n"
       case _ => throw new IllegalArgumentException(
         s"TreeEnsembleModel given unknown algo parameter: $algo.")

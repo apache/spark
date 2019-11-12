@@ -200,7 +200,7 @@ class GBTClassifier @Since("1.4.0") (
     instr.logNumClasses(numClasses)
 
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.CLASSIFICATION)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
         $(seed), $(featureSubsetStrategy))
@@ -365,7 +365,7 @@ class GBTClassificationModel private[ml](
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
-    new OldGBTModel(OldAlgo.Classification, _trees.map(_.toOld), _treeWeights)
+    new OldGBTModel(OldAlgo.CLASSIFICATION, _trees.map(_.toOld), _treeWeights)
   }
 
   // hard coded loss, which is not meant to be changed in the model
@@ -380,7 +380,7 @@ class GBTClassificationModel private[ml](
   def evaluateEachIteration(dataset: Dataset[_]): Array[Double] = {
     val data = extractInstances(dataset)
     GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights, loss,
-      OldAlgo.Classification)
+      OldAlgo.CLASSIFICATION)
   }
 
   @Since("2.0.0")
@@ -448,7 +448,7 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
       categoricalFeatures: Map[Int, Int],
       numFeatures: Int = -1,
       numClasses: Int = 2): GBTClassificationModel = {
-    require(oldModel.algo == OldAlgo.Classification, "Cannot convert GradientBoostedTreesModel" +
+    require(oldModel.algo == OldAlgo.CLASSIFICATION, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
       // parent for each tree is null since there is no good way to set this.

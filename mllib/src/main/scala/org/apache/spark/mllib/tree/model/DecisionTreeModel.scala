@@ -100,9 +100,9 @@ class DecisionTreeModel @Since("1.0.0") (
    * Print a summary of the model.
    */
   override def toString: String = algo match {
-    case Classification =>
+    case CLASSIFICATION =>
       s"DecisionTreeModel classifier of depth $depth with $numNodes nodes"
-    case Regression =>
+    case REGRESSION =>
       s"DecisionTreeModel regressor of depth $depth with $numNodes nodes"
     case _ => throw new IllegalArgumentException(
       s"DecisionTreeModel given unknown algo parameter: $algo.")

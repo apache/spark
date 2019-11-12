@@ -39,7 +39,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
     val validateRdd = sc.parallelize(OldGBTSuite.validateData, 2).map(_.asML.toInstance)
     val seed = 42
 
-    val algos = Array(Regression, Regression, Classification)
+    val algos = Array(REGRESSION, REGRESSION, CLASSIFICATION)
     val losses = Array(SquaredError, AbsoluteError, LogLoss)
     algos.zip(losses).foreach { case (algo, loss) =>
       val treeStrategy = new Strategy(algo = algo, impurity = Variance, maxDepth = 2,
@@ -54,7 +54,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
       // Test that it performs better on the validation dataset.
       val (trees, treeWeights) = GradientBoostedTrees.run(trainRdd, boostingStrategy, seed, "all")
       val (errorWithoutValidation, errorWithValidation) = {
-        if (algo == Classification) {
+        if (algo == CLASSIFICATION) {
           val remappedRdd = validateRdd.map(x => Instance(2 * x.label - 1, x.weight, x.features))
           (GradientBoostedTrees.computeWeightedError(remappedRdd, trees, treeWeights, loss),
             GradientBoostedTrees.computeWeightedError(remappedRdd, validateTrees,

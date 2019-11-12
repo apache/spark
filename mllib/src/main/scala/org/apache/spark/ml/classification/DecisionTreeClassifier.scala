@@ -155,7 +155,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
   private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
-    super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity,
+    super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.CLASSIFICATION, getOldImpurity,
       subsamplingRate = 1.0)
   }
 
@@ -261,7 +261,7 @@ class DecisionTreeClassificationModel private[ml] (
 
   /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   override private[spark] def toOld: OldDecisionTreeModel = {
-    new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.Classification)
+    new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.CLASSIFICATION)
   }
 
   @Since("2.0.0")
@@ -318,7 +318,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       parent: DecisionTreeClassifier,
       categoricalFeatures: Map[Int, Int],
       numFeatures: Int = -1): DecisionTreeClassificationModel = {
-    require(oldModel.algo == OldAlgo.Classification,
+    require(oldModel.algo == OldAlgo.CLASSIFICATION,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)

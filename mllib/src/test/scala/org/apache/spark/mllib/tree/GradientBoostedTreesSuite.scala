@@ -38,7 +38,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
       case (numIterations, learningRate, subsamplingRate) =>
         val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
 
-        val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
+        val treeStrategy = new Strategy(algo = REGRESSION, impurity = Variance, maxDepth = 2,
           categoricalFeaturesInfo = Map.empty, subsamplingRate = subsamplingRate)
         val boostingStrategy =
           new BoostingStrategy(treeStrategy, SquaredError, numIterations, learningRate)
@@ -68,7 +68,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
       case (numIterations, learningRate, subsamplingRate) =>
         val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
 
-        val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
+        val treeStrategy = new Strategy(algo = REGRESSION, impurity = Variance, maxDepth = 2,
           categoricalFeaturesInfo = Map.empty, subsamplingRate = subsamplingRate)
         val boostingStrategy =
           new BoostingStrategy(treeStrategy, AbsoluteError, numIterations, learningRate)
@@ -98,7 +98,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
       case (numIterations, learningRate, subsamplingRate) =>
         val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
 
-        val treeStrategy = new Strategy(algo = Classification, impurity = Variance, maxDepth = 2,
+        val treeStrategy = new Strategy(algo = CLASSIFICATION, impurity = Variance, maxDepth = 2,
           numClasses = 2, categoricalFeaturesInfo = Map.empty,
           subsamplingRate = subsamplingRate)
         val boostingStrategy =
@@ -118,7 +118,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
         val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         val ensembleStrategy = treeStrategy.copy
-        ensembleStrategy.algo = Regression
+        ensembleStrategy.algo = REGRESSION
         ensembleStrategy.impurity = Variance
         val dt = DecisionTree.train(remappedInput, ensembleStrategy)
 
@@ -137,10 +137,10 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
-    val trees = Range(0, 3).map(_ => DecisionTreeSuite.createModel(Regression)).toArray
+    val trees = Range(0, 3).map(_ => DecisionTreeSuite.createModel(REGRESSION)).toArray
     val treeWeights = Array(0.1, 0.3, 1.1)
 
-    Array(Classification, Regression).foreach { algo =>
+    Array(CLASSIFICATION, REGRESSION).foreach { algo =>
       val model = new GradientBoostedTreesModel(algo, trees, treeWeights)
 
       // Save model, load it back, and compare.
@@ -165,7 +165,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
     val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
 
-    val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
+    val treeStrategy = new Strategy(algo = REGRESSION, impurity = Variance, maxDepth = 2,
       categoricalFeaturesInfo = Map.empty, checkpointInterval = 2)
     val boostingStrategy = new BoostingStrategy(treeStrategy, SquaredError, 5, 0.1)
 

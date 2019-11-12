@@ -27,11 +27,15 @@ object Algo extends Enumeration {
   @Since("1.0.0")
   type Algo = Value
   @Since("1.0.0")
-  val Classification, Regression = Value
+  val CLASSIFICATION, REGRESSION = Value
+  @deprecated("Use CLASSIFICATION instead.", "3.0.0")
+  val Classification = CLASSIFICATION
+  @deprecated("Use REGRESSION instead.", "3.0.0")
+  val Regression = REGRESSION
 
   private[mllib] def fromString(name: String): Algo = name match {
-    case "classification" | "Classification" => Classification
-    case "regression" | "Regression" => Regression
+    case "classification" | "Classification" => CLASSIFICATION
+    case "regression" | "Regression" => REGRESSION
     case _ => throw new IllegalArgumentException(s"Did not recognize Algo name: $name")
   }
 }

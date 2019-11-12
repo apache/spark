@@ -453,7 +453,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       val evaluationArray = GradientBoostedTrees
         .evaluateEachIteration(validationData.map(_.toInstance), modelWithoutValidation.trees,
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
-          OldAlgo.Classification)
+          OldAlgo.CLASSIFICATION)
       assert(evaluationArray.length === numIter)
       assert(evaluationArray(modelWithValidation.numTrees) >
         evaluationArray(modelWithValidation.numTrees - 1))
@@ -549,7 +549,7 @@ private object GBTClassifierSuite extends SparkFunSuite {
       categoricalFeatures: Map[Int, Int]): Unit = {
     val numFeatures = data.first().features.size
     val oldBoostingStrategy =
-      gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+      gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.CLASSIFICATION)
     val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)

@@ -133,7 +133,7 @@ class RandomForestClassifier @Since("1.4.0") (
 
     val instances: RDD[Instance] = extractLabeledPoints(dataset, numClasses).map(_.toInstance)
     val strategy =
-      super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
+      super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.CLASSIFICATION, getOldImpurity)
 
     instr.logParams(this, labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
       leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB,
@@ -278,7 +278,7 @@ class RandomForestClassificationModel private[ml] (
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldRandomForestModel = {
-    new OldRandomForestModel(OldAlgo.Classification, _trees.map(_.toOld))
+    new OldRandomForestModel(OldAlgo.CLASSIFICATION, _trees.map(_.toOld))
   }
 
   @Since("2.0.0")
@@ -348,7 +348,7 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
       categoricalFeatures: Map[Int, Int],
       numClasses: Int,
       numFeatures: Int = -1): RandomForestClassificationModel = {
-    require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
+    require(oldModel.algo == OldAlgo.CLASSIFICATION, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
       // parent for each tree is null since there is no good way to set this.

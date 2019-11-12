@@ -119,7 +119,7 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
     val instances = extractLabeledPoints(dataset).map(_.toInstance)
     val strategy =
-      super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
+      super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.REGRESSION, getOldImpurity)
 
     instr.logPipelineStage(this)
     instr.logDataset(instances)
@@ -253,7 +253,7 @@ class RandomForestRegressionModel private[ml] (
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldRandomForestModel = {
-    new OldRandomForestModel(OldAlgo.Regression, _trees.map(_.toOld))
+    new OldRandomForestModel(OldAlgo.REGRESSION, _trees.map(_.toOld))
   }
 
   @Since("2.0.0")
@@ -316,7 +316,7 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
       parent: RandomForestRegressor,
       categoricalFeatures: Map[Int, Int],
       numFeatures: Int = -1): RandomForestRegressionModel = {
-    require(oldModel.algo == OldAlgo.Regression, "Cannot convert RandomForestModel" +
+    require(oldModel.algo == OldAlgo.REGRESSION, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestRegressionModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
       // parent for each tree is null since there is no good way to set this.

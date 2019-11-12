@@ -147,7 +147,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
-    super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity,
+    super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.REGRESSION, getOldImpurity,
       subsamplingRate = 1.0)
   }
 
@@ -267,7 +267,7 @@ class DecisionTreeRegressionModel private[ml] (
 
   /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   override private[spark] def toOld: OldDecisionTreeModel = {
-    new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.Regression)
+    new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.REGRESSION)
   }
 
   @Since("2.0.0")
@@ -322,7 +322,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       parent: DecisionTreeRegressor,
       categoricalFeatures: Map[Int, Int],
       numFeatures: Int = -1): DecisionTreeRegressionModel = {
-    require(oldModel.algo == OldAlgo.Regression,
+    require(oldModel.algo == OldAlgo.REGRESSION,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)

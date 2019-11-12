@@ -776,7 +776,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     // Only done because methods below want an int, not an optional Long
     val intSeed = getSeedOrDefault(seed).toInt
     try {
-      if (algo == Algo.Classification) {
+      if (algo == Algo.CLASSIFICATION) {
         RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       } else {
         RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, intSeed)

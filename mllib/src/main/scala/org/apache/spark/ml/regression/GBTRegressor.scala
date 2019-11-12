@@ -182,7 +182,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       featureSubsetStrategy, validationIndicatorCol, validationTol)
 
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.REGRESSION)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
         $(seed), $(featureSubsetStrategy))
@@ -321,7 +321,7 @@ class GBTRegressionModel private[ml](
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
-    new OldGBTModel(OldAlgo.Regression, _trees.map(_.toOld), _treeWeights)
+    new OldGBTModel(OldAlgo.REGRESSION, _trees.map(_.toOld), _treeWeights)
   }
 
   /**
@@ -334,7 +334,7 @@ class GBTRegressionModel private[ml](
   def evaluateEachIteration(dataset: Dataset[_], loss: String): Array[Double] = {
     val data = extractInstances(dataset)
     GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights,
-      convertToOldLossType(loss), OldAlgo.Regression)
+      convertToOldLossType(loss), OldAlgo.REGRESSION)
   }
 
   @Since("2.0.0")
@@ -397,7 +397,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
       parent: GBTRegressor,
       categoricalFeatures: Map[Int, Int],
       numFeatures: Int = -1): GBTRegressionModel = {
-    require(oldModel.algo == OldAlgo.Regression, "Cannot convert GradientBoostedTreesModel" +
+    require(oldModel.algo == OldAlgo.REGRESSION, "Cannot convert GradientBoostedTreesModel" +
       s" with algo=${oldModel.algo} (old API) to GBTRegressionModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
       // parent for each tree is null since there is no good way to set this.

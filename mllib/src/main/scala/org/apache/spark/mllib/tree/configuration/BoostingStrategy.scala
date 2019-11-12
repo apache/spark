@@ -61,10 +61,10 @@ case class BoostingStrategy @Since("1.4.0") (
    */
   private[spark] def assertValid(): Unit = {
     treeStrategy.algo match {
-      case Classification =>
+      case CLASSIFICATION =>
         require(treeStrategy.numClasses == 2,
           "Only binary classification is supported for boosting.")
-      case Regression =>
+      case REGRESSION =>
         // nothing
       case _ =>
         throw new IllegalArgumentException(
@@ -101,10 +101,10 @@ object BoostingStrategy {
     val treeStrategy = Strategy.defaultStrategy(algo)
     treeStrategy.maxDepth = 3
     algo match {
-      case Algo.Classification =>
+      case Algo.CLASSIFICATION =>
         treeStrategy.numClasses = 2
         new BoostingStrategy(treeStrategy, LogLoss)
-      case Algo.Regression =>
+      case Algo.REGRESSION =>
         new BoostingStrategy(treeStrategy, SquaredError)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by boosting.")

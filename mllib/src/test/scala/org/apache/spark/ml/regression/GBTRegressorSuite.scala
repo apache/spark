@@ -292,7 +292,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       val evaluationArray = GradientBoostedTrees
         .evaluateEachIteration(validationData.map(_.toInstance), modelWithoutValidation.trees,
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
-          OldAlgo.Regression)
+          OldAlgo.REGRESSION)
       assert(evaluationArray.length === numIter)
       assert(evaluationArray(modelWithValidation.numTrees) >
         evaluationArray(modelWithValidation.numTrees - 1))
@@ -382,7 +382,7 @@ private object GBTRegressorSuite extends SparkFunSuite {
       gbt: GBTRegressor,
       categoricalFeatures: Map[Int, Int]): Unit = {
     val numFeatures = data.first().features.size
-    val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+    val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.REGRESSION)
     val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)

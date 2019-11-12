@@ -55,7 +55,7 @@ public class JavaDecisionTreeSuite extends SharedSparkSession {
     int maxDepth = 4;
     int numClasses = 2;
     int maxBins = 100;
-    Strategy strategy = new Strategy(Algo.Classification(), Gini.instance(), maxDepth, numClasses,
+    Strategy strategy = new Strategy(Algo.CLASSIFICATION(), Gini.instance(), maxDepth, numClasses,
       maxBins, categoricalFeaturesInfo);
 
     DecisionTree learner = new DecisionTree(strategy);
@@ -75,7 +75,7 @@ public class JavaDecisionTreeSuite extends SharedSparkSession {
     int maxDepth = 4;
     int numClasses = 2;
     int maxBins = 100;
-    Strategy strategy = new Strategy(Algo.Classification(), Gini.instance(), maxDepth, numClasses,
+    Strategy strategy = new Strategy(Algo.CLASSIFICATION(), Gini.instance(), maxDepth, numClasses,
       maxBins, categoricalFeaturesInfo);
 
     DecisionTreeModel model = DecisionTree$.MODULE$.train(rdd.rdd(), strategy);

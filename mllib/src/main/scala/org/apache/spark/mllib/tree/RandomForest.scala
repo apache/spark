@@ -124,7 +124,7 @@ object RandomForest extends Serializable with Logging {
       numTrees: Int,
       featureSubsetStrategy: String,
       seed: Int): RandomForestModel = {
-    require(strategy.algo == Classification,
+    require(strategy.algo == CLASSIFICATION,
       s"RandomForest.trainClassifier given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
     rf.run(input)
@@ -167,7 +167,7 @@ object RandomForest extends Serializable with Logging {
       maxBins: Int,
       seed: Int = Utils.random.nextInt()): RandomForestModel = {
     val impurityType = Impurities.fromString(impurity)
-    val strategy = new Strategy(Classification, impurityType, maxDepth,
+    val strategy = new Strategy(CLASSIFICATION, impurityType, maxDepth,
       numClasses, maxBins, Sort, categoricalFeaturesInfo)
     trainClassifier(input, strategy, numTrees, featureSubsetStrategy, seed)
   }
@@ -213,7 +213,7 @@ object RandomForest extends Serializable with Logging {
       numTrees: Int,
       featureSubsetStrategy: String,
       seed: Int): RandomForestModel = {
-    require(strategy.algo == Regression,
+    require(strategy.algo == REGRESSION,
       s"RandomForest.trainRegressor given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
     rf.run(input)
@@ -254,7 +254,7 @@ object RandomForest extends Serializable with Logging {
       maxBins: Int,
       seed: Int = Utils.random.nextInt()): RandomForestModel = {
     val impurityType = Impurities.fromString(impurity)
-    val strategy = new Strategy(Regression, impurityType, maxDepth,
+    val strategy = new Strategy(REGRESSION, impurityType, maxDepth,
       0, maxBins, Sort, categoricalFeaturesInfo)
     trainRegressor(input, strategy, numTrees, featureSubsetStrategy, seed)
   }

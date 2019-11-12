@@ -46,10 +46,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
-      case OldAlgo.Regression =>
+      case OldAlgo.REGRESSION =>
         GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false,
           seed, featureSubsetStrategy)
-      case OldAlgo.Classification =>
+      case OldAlgo.CLASSIFICATION =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => Instance((x.label * 2) - 1, x.weight, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false,
@@ -79,10 +79,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
-      case OldAlgo.Regression =>
+      case OldAlgo.REGRESSION =>
         GradientBoostedTrees.boost(input, validationInput, boostingStrategy,
           validate = true, seed, featureSubsetStrategy)
-      case OldAlgo.Classification =>
+      case OldAlgo.CLASSIFICATION =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(
           x => Instance((x.label * 2) - 1, x.weight, x.features))
@@ -221,7 +221,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       loss: OldLoss,
       algo: OldAlgo.Value): Array[Double] = {
     val remappedData = algo match {
-      case OldAlgo.Classification =>
+      case OldAlgo.CLASSIFICATION =>
         data.map(x => Instance((x.label * 2) - 1, x.weight, x.features))
       case _ => data
     }
@@ -278,7 +278,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     // Prepare strategy for individual trees, which use regression with variance impurity.
     val treeStrategy = boostingStrategy.treeStrategy.copy
     val validationTol = boostingStrategy.validationTol
-    treeStrategy.algo = OldAlgo.Regression
+    treeStrategy.algo = OldAlgo.REGRESSION
     treeStrategy.impurity = OldVariance
     treeStrategy.assertValid()
 
