@@ -865,12 +865,12 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed3 = parseAndResolve(sql3)
 
       parsed1 match {
-        case d @ DeleteFromTable(_: DataSourceV2Relation, None) =>
+        case DeleteFromTable(_: DataSourceV2Relation, None) =>
         case _ => fail("Expect DeleteFromTable, bug got:\n" + parsed1.treeString)
       }
 
       parsed2 match {
-        case d @ DeleteFromTable(
+        case DeleteFromTable(
           _: DataSourceV2Relation,
           Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
           assert(name.name == "name")
@@ -878,7 +878,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
 
       parsed3 match {
-        case d @ DeleteFromTable(
+        case DeleteFromTable(
           SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
           Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
           assert(name.name == "t.name")
@@ -900,7 +900,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed3 = parseAndResolve(sql3)
 
       parsed1 match {
-        case u @ UpdateTable(
+        case UpdateTable(
             _: DataSourceV2Relation,
             Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
               Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
