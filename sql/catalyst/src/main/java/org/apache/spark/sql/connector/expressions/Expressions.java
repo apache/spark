@@ -53,7 +53,7 @@ public class Expressions {
    * @return a named reference for the column
    */
   public static NamedReference column(String name) {
-    return LogicalExpressions.reference(name);
+    return LogicalExpressions.parseReference(name);
   }
 
   /**

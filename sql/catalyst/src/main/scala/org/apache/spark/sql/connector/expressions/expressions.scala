@@ -40,7 +40,7 @@ private[sql] object LogicalExpressions {
 
   def literal[T](value: T, dataType: DataType): LiteralValue[T] = LiteralValue(value, dataType)
 
-  def reference(name: String): NamedReference =
+  def parseReference(name: String): NamedReference =
     FieldReference(parser.parseMultipartIdentifier(name))
 
   def reference(nameParts: Seq[String]): NamedReference = FieldReference(nameParts)
@@ -263,6 +263,6 @@ private[sql] final case class FieldReference(parts: Seq[String]) extends NamedRe
 
 private[sql] object FieldReference {
   def apply(column: String): NamedReference = {
-    LogicalExpressions.reference(column)
+    LogicalExpressions.parseReference(column)
   }
 }
