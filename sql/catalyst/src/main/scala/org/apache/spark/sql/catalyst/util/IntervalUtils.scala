@@ -425,6 +425,35 @@ object IntervalUtils {
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
+  def toMultiUnitsString(interval: CalendarInterval): String = {
+    if (interval.months == 0 && interval.days == 0 && interval.microseconds == 0) {
+      return "0 seconds"
+    }
+    val sb = new StringBuilder
+    if (interval.months != 0) {
+      appendUnit(sb, interval.months / 12, "years")
+      appendUnit(sb, interval.months % 12, "months")
+    }
+    appendUnit(sb, interval.days, "days")
+    if (interval.microseconds != 0) {
+      var rest = interval.microseconds
+      appendUnit(sb, rest / MICROS_PER_HOUR, "hours")
+      rest %= MICROS_PER_HOUR
+      appendUnit(sb, rest / MICROS_PER_MINUTE, "minutes")
+      rest %= MICROS_PER_MINUTE
+      if (rest != 0) {
+        val s = BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString
+        sb.append(s).append(" seconds ")
+      }
+    }
+    sb.setLength(sb.length - 1)
+    sb.toString
+  }
+
+  private def appendUnit(sb: StringBuilder, value: Long, unit: String): Unit = {
+    if (value != 0) sb.append(value).append(' ').append(unit).append(' ')
+  }
+
   def toSqlStandardString(interval: CalendarInterval): String = {
     val yearMonthPart = if (interval.months != 0) {
       interval.months / 12 + "-" + math.abs(interval.months) % 12

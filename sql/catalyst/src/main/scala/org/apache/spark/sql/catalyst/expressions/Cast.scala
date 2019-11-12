@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.IntervalStyle._
 import org.apache.spark.sql.types._
@@ -283,12 +284,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case CalendarIntervalType => SQLConf.get.intervalOutputStyle match {
-      case SQL_STANDARD => buildCast[CalendarInterval](_, i =>
-        UTF8String.fromString(IntervalUtils.toSqlStandardString(i)))
-      case ISO_8601 => buildCast[CalendarInterval](_, i =>
-        UTF8String.fromString(IntervalUtils.toIso8601String(i)))
-      case _ => buildCast[CalendarInterval](_, i =>
-        UTF8String.fromString(i.toString))
+      case SQL_STANDARD =>
+        buildCast[CalendarInterval](_, i => UTF8String.fromString(toSqlStandardString(i)))
+      case ISO_8601 =>
+        buildCast[CalendarInterval](_, i => UTF8String.fromString(toIso8601String(i)))
+      case _ =>
+        buildCast[CalendarInterval](_, i => UTF8String.fromString(toMultiUnitsString(i)))
     }
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
     case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
@@ -994,6 +995,16 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           timestampFormatter.getClass)
         (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($tf, $c));"""
+      case CalendarIntervalType =>
+        val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+        SQLConf.get.intervalOutputStyle match {
+        case SQL_STANDARD =>
+          (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toSqlStandardString($c));"""
+        case ISO_8601 =>
+          (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toIso8601String($c));"""
+        case _ =>
+          (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toMultiUnitsString($c));"""
+        }
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])

@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Period;
 import java.time.temporal.ChronoUnit;
@@ -80,39 +79,7 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
 
   @Override
   public String toString() {
-    if (months == 0 && days == 0 && microseconds == 0) {
-      return "0 seconds";
-    }
-
-    StringBuilder sb = new StringBuilder();
-
-    if (months != 0) {
-      appendUnit(sb, months / 12, "years");
-      appendUnit(sb, months % 12, "months");
-    }
-
-    appendUnit(sb, days, "days");
-
-    if (microseconds != 0) {
-      long rest = microseconds;
-      appendUnit(sb, rest / MICROS_PER_HOUR, "hours");
-      rest %= MICROS_PER_HOUR;
-      appendUnit(sb, rest / MICROS_PER_MINUTE, "minutes");
-      rest %= MICROS_PER_MINUTE;
-      if (rest != 0) {
-        String s = BigDecimal.valueOf(rest, 6).stripTrailingZeros().toPlainString();
-        sb.append(s).append(" seconds ");
-      }
-    }
-
-    sb.setLength(sb.length() - 1);
-    return sb.toString();
-  }
-
-  private void appendUnit(StringBuilder sb, long value, String unit) {
-    if (value != 0) {
-      sb.append(value).append(' ').append(unit).append(' ');
-    }
+    return "CalendarInterval(months= " + months + ", days = " + days + ", microsecond = " + microseconds + ")";
   }
 
   /**

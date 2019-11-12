@@ -21,7 +21,8 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.IntervalStyle._
@@ -101,9 +102,9 @@ object HiveResult {
     case (decimal, DecimalType()) => decimal.toString
     case (interval: CalendarInterval, CalendarIntervalType) =>
       SQLConf.get.intervalOutputStyle match {
-        case SQL_STANDARD => IntervalUtils.toSqlStandardString(interval)
-        case ISO_8601 => IntervalUtils.toIso8601String(interval)
-        case _ => interval.toString
+        case SQL_STANDARD => toSqlStandardString(interval)
+        case ISO_8601 => toIso8601String(interval)
+        case _ => toMultiUnitsString(interval)
       }
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
@@ -129,9 +130,9 @@ object HiveResult {
     case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
     case (interval: CalendarInterval, CalendarIntervalType) =>
       SQLConf.get.intervalOutputStyle match {
-        case SQL_STANDARD => IntervalUtils.toSqlStandardString(interval)
-        case ISO_8601 => IntervalUtils.toIso8601String(interval)
-        case _ => interval.toString
+        case SQL_STANDARD => toSqlStandardString(interval)
+        case ISO_8601 => toIso8601String(interval)
+        case _ => toMultiUnitsString(interval)
       }
     case (interval, CalendarIntervalType) => interval.toString
     case (other, _ : UserDefinedType[_]) => other.toString
