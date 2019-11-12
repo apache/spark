@@ -77,7 +77,7 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
 
   override def dataType: DataType = BooleanType
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
   override def toString: String = s"PostgreCastToBoolean($child as ${dataType.simpleString})"
 
