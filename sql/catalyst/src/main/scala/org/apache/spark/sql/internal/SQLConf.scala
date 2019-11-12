@@ -349,14 +349,6 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
 
-  val SHUFFLE_WITHOUT_SHUFFLE_SIDE_RATIO =
-    buildConf("spark.sql.shuffle.withoutShuffleSideRatio")
-      .doc("The maximum number of without shuffle partition ratio lower than this config " +
-        "will not add shuffle exchange for it.")
-      .doubleConf
-      .checkValue(ratio => ratio > 0 && ratio <= 1, "The ratio value must be in [0, 1].")
-      .createWithDefault(1.0)
-
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution.")
     .booleanConf
@@ -2169,8 +2161,6 @@ class SQLConf extends Serializable with Logging {
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
-
-  def withoutShuffleSideRatio: Double = getConf(SHUFFLE_WITHOUT_SHUFFLE_SIDE_RATIO)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 

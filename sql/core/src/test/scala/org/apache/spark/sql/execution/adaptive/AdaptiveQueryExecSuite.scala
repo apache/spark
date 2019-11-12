@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -471,34 +471,6 @@ class AdaptiveQueryExecSuite
         val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
         assert(bhj.size == 1)
         assert(bhj.head.buildSide == BuildRight)
-      }
-    }
-  }
-
-  test("Enable adaptive execution should not add ShuffleExchange") {
-    def findTopLevelShuffleExchangeExec(df: DataFrame): Seq[ShuffleExchangeExec] = {
-      collect(df.queryExecution.executedPlan) {
-        case s: ShuffleExchangeExec => s
-      }
-    }
-
-    val bucketedTableName = "bucketed_table"
-    withTable(bucketedTableName) {
-      withSQLConf(
-        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
-        SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key -> "5",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        spark.range(10).write.bucketBy(4, "id").sortBy("id").saveAsTable(bucketedTableName)
-        val bucketedTable = spark.table(bucketedTableName)
-
-        Seq(false, true).foreach { isAdaptive =>
-          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$isAdaptive") {
-            assert(
-              findTopLevelShuffleExchangeExec(bucketedTable.join(spark.range(8), "id")).size === 1)
-            assert(
-              findTopLevelShuffleExchangeExec(bucketedTable.join(bucketedTable, "id")).size === 0)
-          }
-        }
       }
     }
   }

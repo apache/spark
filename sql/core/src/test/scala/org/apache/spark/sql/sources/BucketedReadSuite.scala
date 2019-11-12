@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -382,8 +383,16 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           joined.sort("bucketed_table1.k", "bucketed_table2.k"),
           df1.join(df2, joinCondition(df1, df2), joinType).sort("df1.k", "df2.k"))
 
-        assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoinExec])
-        val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoinExec]
+        val joinOperator = if (joined.sqlContext.conf.adaptiveExecutionEnabled) {
+          val executedPlan =
+            joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+          assert(executedPlan.isInstanceOf[SortMergeJoinExec])
+          executedPlan.asInstanceOf[SortMergeJoinExec]
+        } else {
+          val executedPlan = joined.queryExecution.executedPlan
+          assert(executedPlan.isInstanceOf[SortMergeJoinExec])
+          executedPlan.asInstanceOf[SortMergeJoinExec]
+        }
 
         // check existence of shuffle
         assert(
@@ -795,43 +804,22 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Support spark.sql.shuffle.withoutShuffleSideRatio") {
-    // numBuckets >= spark.sql.shuffle.partitions
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5")  {
-      val bucketSpec = Some(BucketSpec(6, Seq("i", "j"), Nil))
-      val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
-      val bucketedTableTestSpecRight = BucketedTableTestSpec(None, expectedShuffle = true)
-      testBucketing(
-        bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
-        bucketedTableTestSpecRight = bucketedTableTestSpecRight,
-        joinCondition = joinCondition(Seq("i", "j"))
-      )
-    }
-
-    // numBuckets < spark.sql.shuffle.partitions
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5")  {
-      val bucketSpec = Some(BucketSpec(4, Seq("i", "j"), Nil))
-      val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = true)
-      val bucketedTableTestSpecRight = BucketedTableTestSpec(None, expectedShuffle = true)
-      testBucketing(
-        bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
-        bucketedTableTestSpecRight = bucketedTableTestSpecRight,
-        joinCondition = joinCondition(Seq("i", "j"))
-      )
-    }
-
-    // numBuckets < spark.sql.shuffle.partitions and withoutShuffleSideRatio = 0.1
+  test("Read bucketed tables obeys numShufflePartitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      SQLConf.SHUFFLE_WITHOUT_SHUFFLE_SIDE_RATIO.key -> "0.1")  {
-      val bucketSpec = Some(BucketSpec(4, Seq("i", "j"), Nil))
-      val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
-      val bucketedTableTestSpecRight = BucketedTableTestSpec(None, expectedShuffle = true)
-      testBucketing(
-        bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
-        bucketedTableTestSpecRight = bucketedTableTestSpecRight,
-        joinCondition = joinCondition(Seq("i", "j"))
-      )
+      SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key -> "7")  {
+      val bucketSpec = Some(BucketSpec(6, Seq("i", "j"), Nil))
+      Seq(false, true).foreach { enableAdaptive =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enableAdaptive") {
+          val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
+          val bucketedTableTestSpecRight = BucketedTableTestSpec(None, expectedShuffle = true)
+          testBucketing(
+            bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+            bucketedTableTestSpecRight = bucketedTableTestSpecRight,
+            joinCondition = joinCondition(Seq("i", "j"))
+          )
+        }
+      }
     }
   }
 }
