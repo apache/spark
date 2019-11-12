@@ -54,7 +54,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val split = rootNode.split.get
     assert(split.categories === List(1.0))
-    assert(split.featureType === Categorical)
+    assert(split.featureType === CATEGORICAL)
 
     val stats = rootNode.stats.get
     assert(stats.gain > 0)
@@ -82,7 +82,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val split = rootNode.split.get
     assert(split.categories.length === 1)
     assert(split.categories.contains(1.0))
-    assert(split.featureType === Categorical)
+    assert(split.featureType === CATEGORICAL)
 
     val stats = rootNode.stats.get
     assert(stats.gain > 0)
@@ -194,7 +194,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(split.feature === 0)
     assert(split.categories.length === 1)
     assert(split.categories.contains(1))
-    assert(split.featureType === Categorical)
+    assert(split.featureType === CATEGORICAL)
   }
 
   test("Binary classification stump with 1 continuous feature, to check off-by-1 error") {
@@ -255,7 +255,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(split.feature === 0)
     assert(split.categories.length === 1)
     assert(split.categories.contains(1))
-    assert(split.featureType === Categorical)
+    assert(split.featureType === CATEGORICAL)
 
     val gain = rootNode.stats.get
     assert(gain.leftImpurity === 0)
@@ -276,7 +276,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val split = rootNode.split.get
     assert(split.feature === 1)
-    assert(split.featureType === Continuous)
+    assert(split.featureType === CONTINUOUS)
     assert(split.threshold > 1980)
     assert(split.threshold < 2020)
 
@@ -298,7 +298,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val split = rootNode.split.get
     assert(split.feature === 1)
-    assert(split.featureType === Continuous)
+    assert(split.featureType === CONTINUOUS)
     assert(split.threshold > 1980)
     assert(split.threshold < 2020)
   }
@@ -320,7 +320,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(split.feature === 0)
     assert(split.categories.length === 1)
     assert(split.categories.contains(1.0))
-    assert(split.featureType === Categorical)
+    assert(split.featureType === CATEGORICAL)
   }
 
   test("Multiclass classification tree with 10-ary (ordered) categorical features," +
@@ -565,8 +565,8 @@ object DecisionTreeSuite extends SparkFunSuite {
       id: Int, featureType: FeatureType, left: Node, right: Node): Node = {
     val node = Node(nodeIndex = id, new Predict(0.0, 1.0), impurity = 0.5, isLeaf = false)
     node.split = Some(featureType match {
-      case Continuous => Split(feature = 0, threshold = 0.5, featureType, List.empty[Double])
-      case Categorical => Split(feature = 1, threshold = 0.0, featureType, List(0.0, 1.0))
+      case CONTINUOUS => Split(feature = 0, threshold = 0.5, featureType, List.empty[Double])
+      case CATEGORICAL => Split(feature = 1, threshold = 0.0, featureType, List(0.0, 1.0))
     })
     node.stats = Some(new InformationGainStats(gain = 0.1, impurity = node.impurity,
       leftImpurity = left.impurity, rightImpurity = right.impurity,
@@ -581,9 +581,9 @@ object DecisionTreeSuite extends SparkFunSuite {
    */
   private[spark] def createModel(algo: Algo): DecisionTreeModel = {
     val (node6, node7) = (createLeafNode(6), createLeafNode(7))
-    val node3 = createInternalNode(3, Categorical, node6, node7)
+    val node3 = createInternalNode(3, CATEGORICAL, node6, node7)
     val node2 = createLeafNode(2)
-    val topNode = createInternalNode(1, Continuous, node2, node3)
+    val topNode = createInternalNode(1, CONTINUOUS, node2, node3)
     new DecisionTreeModel(topNode, algo)
   }
 

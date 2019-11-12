@@ -55,10 +55,10 @@ private[tree] object Split {
 
   def fromOld(oldSplit: OldSplit, categoricalFeatures: Map[Int, Int]): Split = {
     oldSplit.featureType match {
-      case OldFeatureType.Categorical =>
+      case OldFeatureType.CATEGORICAL =>
         new CategoricalSplit(featureIndex = oldSplit.feature,
           _leftCategories = oldSplit.categories.toArray, categoricalFeatures(oldSplit.feature))
-      case OldFeatureType.Continuous =>
+      case OldFeatureType.CONTINUOUS =>
         new ContinuousSplit(featureIndex = oldSplit.feature, threshold = oldSplit.threshold)
     }
   }
@@ -127,7 +127,7 @@ class CategoricalSplit private[ml] (
     } else {
       setComplement(categories)
     }
-    OldSplit(featureIndex, threshold = 0.0, OldFeatureType.Categorical, oldCats.toList)
+    OldSplit(featureIndex, threshold = 0.0, OldFeatureType.CATEGORICAL, oldCats.toList)
   }
 
   /** Get sorted categories which split to the left */
@@ -186,6 +186,6 @@ class ContinuousSplit private[ml] (override val featureIndex: Int, val threshold
   }
 
   override private[tree] def toOld: OldSplit = {
-    OldSplit(featureIndex, threshold, OldFeatureType.Continuous, List.empty[Double])
+    OldSplit(featureIndex, threshold, OldFeatureType.CONTINUOUS, List.empty[Double])
   }
 }

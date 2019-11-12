@@ -27,5 +27,9 @@ object FeatureType extends Enumeration {
   @Since("1.0.0")
   type FeatureType = Value
   @Since("1.0.0")
-  val Continuous, Categorical = Value
+  val CONTINUOUS, CATEGORICAL = Value
+  @deprecated("Use CONTINUOUS instead.", "3.0.0")
+  val Continuous = CONTINUOUS
+  @deprecated("Use CATEGORICAL instead.", "3.0.0")
+  val Categorical = CATEGORICAL
 }

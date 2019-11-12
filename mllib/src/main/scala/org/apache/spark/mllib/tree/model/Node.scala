@@ -66,7 +66,7 @@ class Node @Since("1.2.0") (
     if (isLeaf) {
       predict.predict
     } else {
-      if (split.get.featureType == Continuous) {
+      if (split.get.featureType == CONTINUOUS) {
         if (features(split.get.feature) <= split.get.threshold) {
           leftNode.get.predict(features)
         } else {
@@ -127,12 +127,12 @@ class Node @Since("1.2.0") (
 
     def splitToString(split: Split, left: Boolean): String = {
       split.featureType match {
-        case Continuous => if (left) {
+        case CONTINUOUS => if (left) {
           s"(feature ${split.feature} <= ${split.threshold})"
         } else {
           s"(feature ${split.feature} > ${split.threshold})"
         }
-        case Categorical => if (left) {
+        case CATEGORICAL => if (left) {
           s"(feature ${split.feature} in ${split.categories.mkString("{", ",", "}")})"
         } else {
           s"(feature ${split.feature} not in ${split.categories.mkString("{", ",", "}")})"
