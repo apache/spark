@@ -148,6 +148,13 @@ Security options for the Spark History Server are covered more detail in the
     </td>
   </tr>
   <tr>
+    <td>spark.history.ui.summaryDeferRender</td>
+    <td>true</td>
+    <td>
+      Whether to defer render the history summary page.
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.ui.port</td>
     <td>18080</td>
     <td>

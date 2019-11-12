@@ -650,6 +650,9 @@ package object config {
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
 
+  private[spark] val HISTORY_UI_SUMMARY_DEFER_RENDER =
+    ConfigBuilder("spark.history.ui.summaryDeferRender").booleanConf.createWithDefault(true)
+
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .booleanConf
     .createWithDefault(false)
