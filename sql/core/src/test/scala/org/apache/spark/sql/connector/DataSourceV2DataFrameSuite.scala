@@ -129,19 +129,18 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  testQuietly("SPARK-29778") {
-    val t1 = "testcat.ns1.ns2.tbl"
+  testQuietly("SPARK-29778: saveAsTable: append mode takes write options") {
 
     var plan: LogicalPlan = null
     val listener = new QueryExecutionListener {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
-
       }
       override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
     }
-
     spark.listenerManager.register(listener)
+
+    val t1 = "testcat.ns1.ns2.tbl"
 
     sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
 
