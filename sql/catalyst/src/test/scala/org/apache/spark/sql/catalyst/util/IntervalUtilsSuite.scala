@@ -20,12 +20,14 @@ package org.apache.spark.sql.catalyst.util
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class IntervalUtilsSuite extends SparkFunSuite {
+class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
   private def checkFromString(input: String, expected: CalendarInterval): Unit = {
     assert(fromString(input) === expected)
@@ -131,6 +133,48 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
   }
 
+  test("from day-time string - legacy") {
+    withSQLConf(SQLConf.LEGACY_FROM_DAYTIME_STRING.key -> "true") {
+      assert(fromDayTimeString("5 12:40:30.999999999") ===
+        new CalendarInterval(
+          0,
+          5,
+          12 * MICROS_PER_HOUR +
+            40 * MICROS_PER_MINUTE +
+            30 * MICROS_PER_SECOND + 999999L))
+      assert(fromDayTimeString("10 0:12:0.888") ===
+        new CalendarInterval(
+          0,
+          10,
+          12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLIS))
+      assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
+
+      try {
+        fromDayTimeString("5 30:12:20")
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("hour 30 outside range"))
+      }
+
+      try {
+        fromDayTimeString("5 30-12")
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("must match day-time format"))
+      }
+
+      try {
+        fromDayTimeString("5 1:12:20", HOUR, MICROSECOND)
+        fail("Expected to throw an exception for the invalid convention type")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("Cannot support (interval"))
+      }
+    }
+  }
+
   test("interval duration") {
     def duration(s: String, unit: TimeUnit, daysPerMonth: Int): Long = {
       IntervalUtils.getDuration(fromString(s), unit, daysPerMonth)
@@ -227,7 +271,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
   }
 
-  test("from day-time string to interval") {
+  test("from day-time string") {
     def check(input: String, from: IntervalUnit, to: IntervalUnit, expected: String): Unit = {
       withClue(s"from = $from, to = $to") {
         assert(fromDayTimeString(input, from, to) === fromString(expected))
