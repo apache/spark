@@ -50,7 +50,7 @@ class RandomForestModel @Since("1.2.0") (
     @Since("1.2.0") override val algo: Algo,
     @Since("1.2.0") override val trees: Array[DecisionTreeModel])
   extends TreeEnsembleModel(algo, trees, Array.fill(trees.length)(1.0),
-    combiningStrategy = if (algo == CLASSIFICATION) Vote else Average)
+    combiningStrategy = if (algo == CLASSIFICATION) VOTE else AVERAGE)
   with Saveable {
 
   require(trees.forall(_.algo == algo))
@@ -113,7 +113,7 @@ class GradientBoostedTreesModel @Since("1.2.0") (
     @Since("1.2.0") override val algo: Algo,
     @Since("1.2.0") override val trees: Array[DecisionTreeModel],
     @Since("1.2.0") override val treeWeights: Array[Double])
-  extends TreeEnsembleModel(algo, trees, treeWeights, combiningStrategy = Sum)
+  extends TreeEnsembleModel(algo, trees, treeWeights, combiningStrategy = SUM)
   with Saveable {
 
   require(trees.length == treeWeights.length)
@@ -241,7 +241,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
         val metadata = TreeEnsembleModel.SaveLoadV1_0.readMetadata(jsonMetadata)
-        assert(metadata.combiningStrategy == Sum.toString)
+        assert(metadata.combiningStrategy == SUM.toString)
         val trees =
           TreeEnsembleModel.SaveLoadV1_0.loadTrees(sc, path, metadata.treeAlgo)
         new GradientBoostedTreesModel(Algo.fromString(metadata.algo), trees, metadata.treeWeights)
@@ -307,15 +307,15 @@ private[tree] sealed class TreeEnsembleModel(
    */
   def predict(features: Vector): Double = {
     (algo, combiningStrategy) match {
-      case (REGRESSION, Sum) =>
+      case (REGRESSION, SUM) =>
         predictBySumming(features)
-      case (REGRESSION, Average) =>
+      case (REGRESSION, AVERAGE) =>
         predictBySumming(features) / sumWeights
-      case (CLASSIFICATION, Sum) => // binary classification
+      case (CLASSIFICATION, SUM) => // binary classification
         val prediction = predictBySumming(features)
         // TODO: predicted labels are +1 or -1 for GBT. Need a better way to store this info.
         if (prediction > 0.0) 1.0 else 0.0
-      case (CLASSIFICATION, Vote) =>
+      case (CLASSIFICATION, VOTE) =>
         predictByVoting(features)
       case _ =>
         throw new IllegalArgumentException(
