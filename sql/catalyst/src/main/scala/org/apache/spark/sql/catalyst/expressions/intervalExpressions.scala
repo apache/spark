@@ -261,7 +261,7 @@ case class MakeInterval(
 abstract class IntervalJustifyLike(
     child: Expression,
     justify: CalendarInterval => CalendarInterval,
-    justifyType: String) extends UnaryExpression with ExpectsInputTypes {
+    justifyFuncName: String) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
 
   override def dataType: DataType = CalendarIntervalType
@@ -279,7 +279,7 @@ abstract class IntervalJustifyLike(
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       s"""
          |try {
-         |  ${ev.value} = $iu.justify$justifyType($child);
+         |  ${ev.value} = $iu.$justifyFuncName($child);
          |} catch (java.lang.ArithmeticException e) {
          |  ${ev.isNull} = true;
          |}
@@ -287,7 +287,7 @@ abstract class IntervalJustifyLike(
     })
   }
 
-  override def prettyName: String = s"justify_${justifyType.toLowerCase(Locale.ROOT)}"
+  override def prettyName: String = justifyFuncName
 }
 
 @ExpressionDescription(
@@ -299,7 +299,7 @@ abstract class IntervalJustifyLike(
   """,
   since = "3.0.0")
 case class JustifyDays(child: Expression)
-  extends IntervalJustifyLike(child, justifyDays, "Days")
+  extends IntervalJustifyLike(child, justifyDays, "justifyDays")
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Adjust interval so 24-hour time periods are represented as days",
@@ -310,7 +310,7 @@ case class JustifyDays(child: Expression)
   """,
   since = "3.0.0")
 case class JustifyHours(child: Expression)
-  extends IntervalJustifyLike(child, justifyHours, "Hours")
+  extends IntervalJustifyLike(child, justifyHours, "justifyHours")
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Adjust interval using justifyHours and justifyDays, with additional" +
@@ -322,4 +322,4 @@ case class JustifyHours(child: Expression)
   """,
   since = "3.0.0")
 case class JustifyInterval(child: Expression)
-  extends IntervalJustifyLike(child, justifyInterval, "Interval")
+  extends IntervalJustifyLike(child, justifyInterval, "justifyInterval")

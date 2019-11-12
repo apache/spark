@@ -367,7 +367,7 @@ NULL
 -- !query 45
 select justify_days(cast(null as interval))
 -- !query 45 schema
-struct<justify_days(CAST(NULL AS INTERVAL)):interval>
+struct<justifyDays(CAST(NULL AS INTERVAL)):interval>
 -- !query 45 output
 NULL
 
@@ -375,7 +375,7 @@ NULL
 -- !query 46
 select justify_hours(cast(null as interval))
 -- !query 46 schema
-struct<justify_hours(CAST(NULL AS INTERVAL)):interval>
+struct<justifyHours(CAST(NULL AS INTERVAL)):interval>
 -- !query 46 output
 NULL
 
@@ -383,7 +383,7 @@ NULL
 -- !query 47
 select justify_interval(cast(null as interval))
 -- !query 47 schema
-struct<justify_interval(CAST(NULL AS INTERVAL)):interval>
+struct<justifyInterval(CAST(NULL AS INTERVAL)):interval>
 -- !query 47 output
 NULL
 
@@ -391,7 +391,7 @@ NULL
 -- !query 48
 select justify_days(interval '1 month 59 day 25 hour')
 -- !query 48 schema
-struct<justify_days(1 months 59 days 25 hours):interval>
+struct<justifyDays(1 months 59 days 25 hours):interval>
 -- !query 48 output
 2 months 29 days 25 hours
 
@@ -399,7 +399,7 @@ struct<justify_days(1 months 59 days 25 hours):interval>
 -- !query 49
 select justify_hours(interval '1 month 59 day 25 hour')
 -- !query 49 schema
-struct<justify_hours(1 months 59 days 25 hours):interval>
+struct<justifyHours(1 months 59 days 25 hours):interval>
 -- !query 49 output
 1 months 60 days 1 hours
 
@@ -407,7 +407,7 @@ struct<justify_hours(1 months 59 days 25 hours):interval>
 -- !query 50
 select justify_interval(interval '1 month 59 day 25 hour')
 -- !query 50 schema
-struct<justify_interval(1 months 59 days 25 hours):interval>
+struct<justifyInterval(1 months 59 days 25 hours):interval>
 -- !query 50 output
 3 months 1 hours
 
@@ -415,7 +415,7 @@ struct<justify_interval(1 months 59 days 25 hours):interval>
 -- !query 51
 select justify_days(interval '1 month -59 day 25 hour')
 -- !query 51 schema
-struct<justify_days(1 months -59 days 25 hours):interval>
+struct<justifyDays(1 months -59 days 25 hours):interval>
 -- !query 51 output
 -29 days 25 hours
 
@@ -423,7 +423,7 @@ struct<justify_days(1 months -59 days 25 hours):interval>
 -- !query 52
 select justify_hours(interval '1 month -59 day 25 hour')
 -- !query 52 schema
-struct<justify_hours(1 months -59 days 25 hours):interval>
+struct<justifyHours(1 months -59 days 25 hours):interval>
 -- !query 52 output
 1 months -57 days -23 hours
 
@@ -431,7 +431,7 @@ struct<justify_hours(1 months -59 days 25 hours):interval>
 -- !query 53
 select justify_interval(interval '1 month -59 day 25 hour')
 -- !query 53 schema
-struct<justify_interval(1 months -59 days 25 hours):interval>
+struct<justifyInterval(1 months -59 days 25 hours):interval>
 -- !query 53 output
 -27 days -23 hours
 
@@ -439,7 +439,7 @@ struct<justify_interval(1 months -59 days 25 hours):interval>
 -- !query 54
 select justify_days(interval '1 month 59 day -25 hour')
 -- !query 54 schema
-struct<justify_days(1 months 59 days -25 hours):interval>
+struct<justifyDays(1 months 59 days -25 hours):interval>
 -- !query 54 output
 2 months 29 days -25 hours
 
@@ -447,7 +447,7 @@ struct<justify_days(1 months 59 days -25 hours):interval>
 -- !query 55
 select justify_hours(interval '1 month 59 day -25 hour')
 -- !query 55 schema
-struct<justify_hours(1 months 59 days -25 hours):interval>
+struct<justifyHours(1 months 59 days -25 hours):interval>
 -- !query 55 output
 1 months 57 days 23 hours
 
@@ -455,6 +455,6 @@ struct<justify_hours(1 months 59 days -25 hours):interval>
 -- !query 56
 select justify_interval(interval '1 month 59 day -25 hour')
 -- !query 56 schema
-struct<justify_interval(1 months 59 days -25 hours):interval>
+struct<justifyInterval(1 months 59 days -25 hours):interval>
 -- !query 56 output
 2 months 27 days 23 hours

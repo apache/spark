@@ -272,6 +272,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     assert(justifyDays(fromString("-1 month 35 day")) === new CalendarInterval(0, 5, 0))
     assert(justifyDays(fromString("1 month -35 day")) === new CalendarInterval(0, -5, 0))
     assert(justifyDays(fromString("-1 month -35 day")) === new CalendarInterval(-2, -5, 0))
+    assert(justifyDays(fromString("-1 month 2 day")) === new CalendarInterval(0, -28, 0))
   }
 
   test("justify hours") {

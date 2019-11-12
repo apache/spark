@@ -642,8 +642,10 @@ object IntervalUtils {
    * Adjust interval so 30-day time periods are represented as months
    */
   def justifyDays(interval: CalendarInterval): CalendarInterval = {
-    val months = Math.addExact(interval.months, interval.days / DAYS_PER_MONTH.toInt)
-    val days = interval.days % DAYS_PER_MONTH.toInt
+    val monthToDays = interval.months * DAYS_PER_MONTH
+    val totalDays = Math.addExact(monthToDays, interval.days)
+    val months = Math.toIntExact(totalDays / DAYS_PER_MONTH)
+    val days = Math.toIntExact(totalDays % DAYS_PER_MONTH)
     new CalendarInterval(months, days, interval.microseconds)
   }
 
@@ -671,5 +673,4 @@ object IntervalUtils {
     val months = Math.toIntExact(totalDays / DAYS_PER_MONTH)
     new CalendarInterval(months, days.toInt, microseconds)
   }
-
 }
