@@ -92,7 +92,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     cd "$FWDIR"/python
     # Delete the egg info file if it exists, this can cache the setup file.
     rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
-    python setup.py sdist
+    python3 setup.py sdist
 
 
     echo "Installing dist into virtual env"
@@ -112,9 +112,9 @@ for python in "${PYTHON_EXECS[@]}"; do
     echo "Run basic sanity check on pip installed version with spark-submit"
     spark-submit "$FWDIR"/dev/pip-sanity-check.py
     echo "Run basic sanity check with import based"
-    python "$FWDIR"/dev/pip-sanity-check.py
+    python3 "$FWDIR"/dev/pip-sanity-check.py
     echo "Run the tests for context.py"
-    python "$FWDIR"/python/pyspark/context.py
+    python3 "$FWDIR"/python/pyspark/context.py
 
     cd "$FWDIR"
 
