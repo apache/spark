@@ -51,9 +51,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
   private val listenerBus = new StreamingQueryListenerBus(sparkSession.sparkContext.listenerBus)
 
-  @GuardedBy("activeQueriesLock")
+  @GuardedBy("activeQueriesSharedLock")
   private val activeQueries = new mutable.HashMap[UUID, StreamingQuery]
-  private val activeQueriesLock = sparkSession.sharedState.activeQueriesLock
+  // A global lock to keep track of active streaming queries across Spark sessions
+  private val activeQueriesSharedLock = sparkSession.sharedState.activeQueriesLock
   private val awaitTerminationLock = new Object
 
   @GuardedBy("awaitTerminationLock")
@@ -77,7 +78,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    *
    * @since 2.0.0
    */
-  def active: Array[StreamingQuery] = activeQueriesLock.synchronized {
+  def active: Array[StreamingQuery] = activeQueriesSharedLock.synchronized {
     activeQueries.values.toArray
   }
 
@@ -86,7 +87,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    *
    * @since 2.1.0
    */
-  def get(id: UUID): StreamingQuery = activeQueriesLock.synchronized {
+  def get(id: UUID): StreamingQuery = activeQueriesSharedLock.synchronized {
     activeQueries.get(id).orNull
   }
 
@@ -346,42 +347,45 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     // The following code block checks if a stream with the same name or id is running. Then it
     // returns an Option of an already active stream to stop outside of the lock
     // to avoid a deadlock.
-    val activeDuplicateQuery = activeQueriesLock.synchronized {
+    val activeRunOpt = activeQueriesSharedLock.synchronized {
       // Make sure no other query with same name is active
       userSpecifiedName.foreach { name =>
         if (activeQueries.values.exists(_.name == name)) {
-          throw new IllegalArgumentException(
-            s"Cannot start query with name $name as a query with that name is already active")
+          throw new IllegalArgumentException(s"Cannot start query with name $name as a query " +
+            s"with that name is already active in this SparkSession")
         }
       }
 
       // Make sure no other query with same id is active across all sessions
       val activeOption = Option(sparkSession.sharedState.activeStreamingQueries.get(query.id))
-        .orElse(activeQueries.get(query.id))
+        .orElse(activeQueries.get(query.id)) // shouldn't be needed but paranoia ...
 
-      val turnOffOldStream =
-        sparkSession.sessionState.conf.getConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM)
-      if (activeOption.isDefined && turnOffOldStream) {
-        val oldQuery = activeOption.get
-        logWarning(s"Stopping existing streaming query [id=${query.id}, runId=${oldQuery.runId}]," +
-          " as a new run is being started.")
-        Some(oldQuery)
-      } else if (activeOption.isDefined) {
-        throw new IllegalStateException(
-          s"Cannot start query with id ${query.id} as another query with same id is " +
-            s"already active. Perhaps you are attempting to restart a query from checkpoint " +
-            s"that is already active. You may stop the old query by setting the SQL " +
-            s"""configuration: spark.conf.set("${SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key}", """ +
-            "true) and retry.")
+      val shouldStopActiveRun =
+        sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART)
+      if (activeOption.isDefined) {
+        if (shouldStopActiveRun) {
+          val oldQuery = activeOption.get
+          logWarning(s"Stopping existing streaming query [id=${query.id}, " +
+            s"runId=${oldQuery.runId}], as a new run is being started.")
+          Some(oldQuery)
+        } else {
+          throw new IllegalStateException(
+            s"Cannot start query with id ${query.id} as another query with same id is " +
+              s"already active. Perhaps you are attempting to restart a query from checkpoint " +
+              s"that is already active. You may stop the old query by setting the SQL " +
+              "configuration: " +
+              s"""spark.conf.set("${SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key}", true) """ +
+              "and retry.")
+        }
       } else {
         // nothing to stop so, no-op
         None
       }
     }
 
-    activeDuplicateQuery.foreach(_.stop())
+    activeRunOpt.foreach(_.stop())
 
-    activeQueriesLock.synchronized {
+    activeQueriesSharedLock.synchronized {
       // We still can have a race condition when two concurrent instances try to start the same
       // stream, while a third one was already active. In this case, we throw a
       // ConcurrentModificationException.
@@ -421,7 +425,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   }
 
   private def unregisterTerminatedStream(terminatedQuery: StreamingQuery): Unit = {
-    activeQueriesLock.synchronized {
+    activeQueriesSharedLock.synchronized {
       // remove from shared state only if the streaming execution also matches
       sparkSession.sharedState.activeStreamingQueries.remove(
         terminatedQuery.id, terminatedQuery)

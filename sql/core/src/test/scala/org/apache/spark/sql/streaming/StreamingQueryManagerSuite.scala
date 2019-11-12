@@ -275,7 +275,7 @@ class StreamingQueryManagerSuite extends StreamTest {
   }
 
   testQuietly("can't start multiple instances of the same streaming query in the same session") {
-    withSQLConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key -> "false") {
+    withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "false") {
       withTempDir { dir =>
         val (ms1, ds1) = makeDataset
         val (ms2, ds2) = makeDataset
@@ -292,7 +292,7 @@ class StreamingQueryManagerSuite extends StreamTest {
           }
           assert(e.getMessage.contains("same id"))
         } finally {
-          query1.stop()
+          spark.streams.active.foreach(_.stop())
         }
       }
     }
@@ -300,7 +300,7 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   testQuietly("new instance of the same streaming query stops old query in the same session") {
     failAfter(90 seconds) {
-      withSQLConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key -> "true") {
+      withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "true") {
         withTempDir { dir =>
           val (ms1, ds1) = makeDataset
           val (ms2, ds2) = makeDataset
@@ -322,7 +322,7 @@ class StreamingQueryManagerSuite extends StreamTest {
             assert(!query1.isActive,
               "First query should have stopped before starting the second query")
           } finally {
-            query2.stop()
+            spark.streams.active.foreach(_.stop())
           }
         }
       }
@@ -331,7 +331,7 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   testQuietly(
     "can't start multiple instances of the same streaming query in the different sessions") {
-    withSQLConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key -> "false") {
+    withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "false") {
       withTempDir { dir =>
         val session2 = spark.cloneSession()
 
@@ -350,7 +350,8 @@ class StreamingQueryManagerSuite extends StreamTest {
           }
           assert(e.getMessage.contains("same id"))
         } finally {
-          query1.stop()
+          spark.streams.active.foreach(_.stop())
+          session2.streams.active.foreach(_.stop())
         }
       }
     }
@@ -359,7 +360,7 @@ class StreamingQueryManagerSuite extends StreamTest {
   testQuietly(
     "new instance of the same streaming query stops old query in a different session") {
     failAfter(90 seconds) {
-      withSQLConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key -> "true") {
+      withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "true") {
         withTempDir { dir =>
           val session2 = spark.cloneSession()
 
@@ -383,7 +384,8 @@ class StreamingQueryManagerSuite extends StreamTest {
             assert(!query1.isActive,
               "First query should have stopped before starting the second query")
           } finally {
-            query2.stop()
+            spark.streams.active.foreach(_.stop())
+            session2.streams.active.foreach(_.stop())
           }
         }
       }
