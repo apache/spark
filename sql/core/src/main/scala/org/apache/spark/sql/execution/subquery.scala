@@ -178,8 +178,7 @@ case class InSubqueryExec(
  */
 case class ExistsExec(
     plan: BaseSubqueryExec,
-    exprId: ExprId,
-    private var resultBroadcast: Broadcast[Boolean] = null)
+    exprId: ExprId)
   extends ExecSubqueryExpression {
 
   @transient private var result: Boolean = _
@@ -197,30 +196,21 @@ case class ExistsExec(
 
   def updateResult(): Unit = {
     result = plan.executeTake(1).length == 1
-    resultBroadcast = plan.sqlContext.sparkContext.broadcast[Boolean](result)
   }
 
-  def values(): Option[Boolean] = Option(resultBroadcast).map(_.value)
-
-  private def prepareResult(): Unit = {
-    require(resultBroadcast != null, s"$this has not finished")
-    result = resultBroadcast.value
-  }
+  def values(): Option[Boolean] = Option(result)
 
   override def eval(input: InternalRow): Any = {
-    prepareResult()
     result
   }
 
   override lazy val canonicalized: ExistsExec = {
     copy(
       plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
-      exprId = ExprId(0),
-      resultBroadcast = null)
+      exprId = ExprId(0))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    prepareResult()
     val setTerm = ctx.addReferenceObj("result", result)
     val resultCode =
       s"""
