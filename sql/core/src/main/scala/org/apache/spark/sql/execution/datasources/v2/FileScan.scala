@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, Statist
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.v2.FilterV2
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -137,7 +138,7 @@ abstract class FileScan(
     StructType(readDataSchema.fields ++ readPartitionSchema.fields)
 
   // Returns whether the two given arrays of [[Filter]]s are equivalent.
-  protected def equivalentFilters(a: Array[Filter], b: Array[Filter]): Boolean = {
+  protected def equivalentFilters(a: Array[FilterV2], b: Array[FilterV2]): Boolean = {
     a.sortBy(_.hashCode()).sameElements(b.sortBy(_.hashCode()))
   }
 

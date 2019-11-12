@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.Filter;
+import org.apache.spark.sql.sources.v2.FilterV2;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
@@ -33,10 +33,10 @@ public interface SupportsPushDownFilters extends ScanBuilder {
    * Rows should be returned from the data source if and only if all of the filters match. That is,
    * filters must be interpreted as ANDed together.
    */
-  Filter[] pushFilters(Filter[] filters);
+  FilterV2[] pushFilters(FilterV2[] filters);
 
   /**
-   * Returns the filters that are pushed to the data source via {@link #pushFilters(Filter[])}.
+   * Returns the filters that are pushed to the data source via {@link #pushFilters(FilterV2[])}.
    *
    * There are 3 kinds of filters:
    *  1. pushable filters which don't need to be evaluated again after scanning.
@@ -45,8 +45,8 @@ public interface SupportsPushDownFilters extends ScanBuilder {
    *  3. non-pushable filters.
    * Both case 1 and 2 should be considered as pushed filters and should be returned by this method.
    *
-   * It's possible that there is no filters in the query and {@link #pushFilters(Filter[])}
+   * It's possible that there is no filters in the query and {@link #pushFilters(FilterV2[])}
    * is never called, empty array should be returned for this case.
    */
-  Filter[] pushedFilters();
+  FilterV2[] pushedFilters();
 }

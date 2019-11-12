@@ -18,6 +18,9 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.annotation.{Evolving, Stable}
+import org.apache.spark.sql.catalog.v2.expressions.FieldReference
+import org.apache.spark.sql.catalog.v2.expressions.NamedReference
+import org.apache.spark.sql.sources.v2.FilterV2
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the filters that we can push down to the data sources.
@@ -40,6 +43,17 @@ abstract class Filter {
     case f: Filter => f.references
     case _ => Array.empty
   }
+
+  private[sql] def toV2: FilterV2
+
+  private[sql] def attToNamedRef(attribute: String): NamedReference = {
+    FieldReference(Seq(attribute))
+  }
+
+  private[sql] def valueConverter(value: Any): Any = value match {
+    case f: Filter => f.toV2
+    case _ => value
+  }
 }
 
 /**
@@ -51,6 +65,8 @@ abstract class Filter {
 @Stable
 case class EqualTo(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+
+  override private[sql] def toV2 = v2.EqualTo(attToNamedRef(attribute), valueConverter(value))
 }
 
 /**
@@ -63,6 +79,8 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
 @Stable
 case class EqualNullSafe(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+
+  override private[sql] def toV2 = v2.EqualNullSafe(attToNamedRef(attribute), valueConverter(value))
 }
 
 /**
@@ -74,6 +92,8 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+
+  override private[sql] def toV2 = v2.GreaterThan(attToNamedRef(attribute), valueConverter(value))
 }
 
 /**
@@ -85,6 +105,9 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+
+  override private[sql] def toV2 =
+    v2.GreaterThanOrEqual(attToNamedRef(attribute), valueConverter(value))
 }
 
 /**
@@ -96,6 +119,8 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+
+  override private[sql] def toV2 = v2.LessThan(attToNamedRef(attribute), valueConverter(value))
 }
 
 /**
@@ -107,6 +132,9 @@ case class LessThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+
+  override private[sql] def toV2 =
+    v2.LessThanOrEqual(attToNamedRef(attribute), valueConverter(value))
 }
 
 /**
@@ -134,6 +162,8 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
   }
 
   override def references: Array[String] = Array(attribute) ++ values.flatMap(findReferences)
+
+  override private[sql] def toV2 = v2.In(attToNamedRef(attribute), values.map(valueConverter))
 }
 
 /**
@@ -144,6 +174,8 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
 @Stable
 case class IsNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+
+  override private[sql] def toV2 = v2.IsNull(attToNamedRef(attribute))
 }
 
 /**
@@ -154,6 +186,8 @@ case class IsNull(attribute: String) extends Filter {
 @Stable
 case class IsNotNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+
+  override private[sql] def toV2 = v2.IsNotNull(attToNamedRef(attribute))
 }
 
 /**
@@ -164,6 +198,8 @@ case class IsNotNull(attribute: String) extends Filter {
 @Stable
 case class And(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
+
+  override private[sql] def toV2 = v2.And(left.toV2, right.toV2)
 }
 
 /**
@@ -174,6 +210,8 @@ case class And(left: Filter, right: Filter) extends Filter {
 @Stable
 case class Or(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
+
+  override private[sql] def toV2 = v2.Or(left.toV2, right.toV2)
 }
 
 /**
@@ -184,6 +222,8 @@ case class Or(left: Filter, right: Filter) extends Filter {
 @Stable
 case class Not(child: Filter) extends Filter {
   override def references: Array[String] = child.references
+
+  override private[sql] def toV2 = v2.Not(child.toV2)
 }
 
 /**
@@ -195,6 +235,8 @@ case class Not(child: Filter) extends Filter {
 @Stable
 case class StringStartsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+
+  override private[sql] def toV2 = v2.StringStartsWith(attToNamedRef(attribute), value)
 }
 
 /**
@@ -206,6 +248,8 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
 @Stable
 case class StringEndsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+
+  override private[sql] def toV2 = v2.StringEndsWith(attToNamedRef(attribute), value)
 }
 
 /**
@@ -217,6 +261,8 @@ case class StringEndsWith(attribute: String, value: String) extends Filter {
 @Stable
 case class StringContains(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+
+  override private[sql] def toV2 = v2.StringContains(attToNamedRef(attribute), value)
 }
 
 /**
@@ -225,6 +271,8 @@ case class StringContains(attribute: String, value: String) extends Filter {
 @Evolving
 case class AlwaysTrue() extends Filter {
   override def references: Array[String] = Array.empty
+
+  override private[sql] def toV2 = v2.AlwaysTrue
 }
 
 @Evolving
@@ -237,6 +285,8 @@ object AlwaysTrue extends AlwaysTrue {
 @Evolving
 case class AlwaysFalse() extends Filter {
   override def references: Array[String] = Array.empty
+
+  override private[sql] def toV2 = v2.AlwaysFalse
 }
 
 @Evolving

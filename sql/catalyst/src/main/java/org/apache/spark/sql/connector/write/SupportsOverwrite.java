@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.sql.sources.AlwaysTrue$;
-import org.apache.spark.sql.sources.Filter;
+import org.apache.spark.sql.sources.v2.AlwaysTrue$;
+import org.apache.spark.sql.sources.v2.FilterV2;
 
 /**
  * Write builder trait for tables that support overwrite by filter.
@@ -36,10 +36,10 @@ public interface SupportsOverwrite extends WriteBuilder, SupportsTruncate {
    * @param filters filters used to match data to overwrite
    * @return this write builder for method chaining
    */
-  WriteBuilder overwrite(Filter[] filters);
+  WriteBuilder overwrite(FilterV2[] filters);
 
   @Override
   default WriteBuilder truncate() {
-    return overwrite(new Filter[] { AlwaysTrue$.MODULE$ });
+    return overwrite(new FilterV2[] { AlwaysTrue$.MODULE$ });
   }
 }

@@ -1493,7 +1493,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
           // In this test suite, all the simple predicates are convertible here.
           assert(parquetFilters.convertibleFilters(sourceFilters) === pushedFilters)
           val pushedParquetFilters = pushedFilters.map { pred =>
-            val maybeFilter = parquetFilters.createFilter(pred)
+            val maybeFilter: Option[FilterPredicate] = None // parquetFilters.createFilter(pred)
             assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
             maybeFilter.get
           }

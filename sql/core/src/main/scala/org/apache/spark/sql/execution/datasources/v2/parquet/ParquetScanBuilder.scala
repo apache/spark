@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.v2.FilterV2
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -53,12 +53,13 @@ case class ParquetScanBuilder(
       new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(schema)
     val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
       pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
-    parquetFilters.convertibleFilters(this.filters).toArray
+    // parquetFilters.convertibleFilters(this.filters).toArray
+    this.filters
   }
 
-  private var filters: Array[Filter] = Array.empty
+  private var filters: Array[FilterV2] = Array.empty
 
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+  override def pushFilters(filters: Array[FilterV2]): Array[FilterV2] = {
     this.filters = filters
     this.filters
   }
@@ -66,7 +67,7 @@ case class ParquetScanBuilder(
   // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
   // It requires the Parquet physical schema to determine whether a filter is convertible.
   // All filters that can be converted to Parquet are pushed down.
-  override def pushedFilters(): Array[Filter] = pushedParquetFilters
+  override def pushedFilters(): Array[FilterV2] = pushedParquetFilters
 
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),

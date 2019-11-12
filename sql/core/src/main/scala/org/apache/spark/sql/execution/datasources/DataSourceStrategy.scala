@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
@@ -40,6 +41,7 @@ import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.v2.FilterV2
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -427,6 +429,7 @@ object DataSourceStrategy {
    * case insensitive, we should change them to match the one in schema, so we do not need to
    * worry about case sensitivity anymore.
    */
+  // TODO (DB Tsai): Handel the case sensitivity of nested columns
   protected[sql] def normalizeFilters(
       filters: Seq[Expression],
       attributes: Seq[AttributeReference]): Seq[Expression] = {
@@ -438,93 +441,117 @@ object DataSourceStrategy {
     }
   }
 
-  private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = predicate match {
-    case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
-      Some(sources.EqualTo(a.name, convertToScala(v, t)))
-    case expressions.EqualTo(Literal(v, t), a: Attribute) =>
-      Some(sources.EqualTo(a.name, convertToScala(v, t)))
+  /**
+   * Tries to convert an [[Expression]] that can be pushed down to a [[NamedReference]]
+   */
+  private def toNamedRef(e: Expression): Option[NamedReference] = {
+    def helper(e: Expression): Option[Seq[String]] = e match {
+      case a: Attribute =>
+        Some(Seq(a.name))
+      case s: GetStructField =>
+        helper(s.child).map(_ ++ Seq(s.childSchema(s.ordinal).name))
+      case _ =>
+        None
+    }
+    helper(e).map(fieldNames => FieldReference(fieldNames))
+  }
 
-    case expressions.EqualNullSafe(a: Attribute, Literal(v, t)) =>
-      Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
-    case expressions.EqualNullSafe(Literal(v, t), a: Attribute) =>
-      Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
+  private def translateLeafNodeFilterV2(predicate: Expression): Option[FilterV2] = predicate match {
+    case expressions.EqualTo(e: Expression, Literal(v, t)) =>
+      toNamedRef(e).map(field => sources.v2.EqualTo(field, convertToScala(v, t)))
+    case expressions.EqualTo(Literal(v, t), e: Expression) =>
+      toNamedRef(e).map(field => sources.v2.EqualTo(field, convertToScala(v, t)))
 
-    case expressions.GreaterThan(a: Attribute, Literal(v, t)) =>
-      Some(sources.GreaterThan(a.name, convertToScala(v, t)))
-    case expressions.GreaterThan(Literal(v, t), a: Attribute) =>
-      Some(sources.LessThan(a.name, convertToScala(v, t)))
+    case expressions.EqualNullSafe(e: Expression, Literal(v, t)) =>
+      toNamedRef(e).map(field => sources.v2.EqualNullSafe(field, convertToScala(v, t)))
+    case expressions.EqualNullSafe(Literal(v, t), e: Expression) =>
+      toNamedRef(e).map(field => sources.v2.EqualNullSafe(field, convertToScala(v, t)))
 
-    case expressions.LessThan(a: Attribute, Literal(v, t)) =>
-      Some(sources.LessThan(a.name, convertToScala(v, t)))
-    case expressions.LessThan(Literal(v, t), a: Attribute) =>
-      Some(sources.GreaterThan(a.name, convertToScala(v, t)))
+    case expressions.GreaterThan(e: Expression, Literal(v, t)) =>
+      toNamedRef(e).map(field => sources.v2.GreaterThan(field, convertToScala(v, t)))
+    case expressions.GreaterThan(Literal(v, t), e: Expression) =>
+      toNamedRef(e).map(field => sources.v2.LessThan(field, convertToScala(v, t)))
 
-    case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, t)) =>
-      Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
-    case expressions.GreaterThanOrEqual(Literal(v, t), a: Attribute) =>
-      Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
+    case expressions.LessThan(e: Expression, Literal(v, t)) =>
+      toNamedRef(e).map(field => sources.v2.LessThan(field, convertToScala(v, t)))
+    case expressions.LessThan(Literal(v, t), e: Expression) =>
+      toNamedRef(e).map(field => sources.v2.GreaterThan(field, convertToScala(v, t)))
 
-    case expressions.LessThanOrEqual(a: Attribute, Literal(v, t)) =>
-      Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
-    case expressions.LessThanOrEqual(Literal(v, t), a: Attribute) =>
-      Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(e: Expression, Literal(v, t)) =>
+      toNamedRef(e).map(field => sources.v2.GreaterThanOrEqual(field, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(Literal(v, t), e: Expression) =>
+      toNamedRef(e).map(field => sources.v2.LessThanOrEqual(field, convertToScala(v, t)))
 
-    case expressions.InSet(a: Attribute, set) =>
-      val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-      Some(sources.In(a.name, set.toArray.map(toScala)))
+    case expressions.LessThanOrEqual(e: Expression, Literal(v, t)) =>
+      toNamedRef(e).map(field => sources.v2.LessThanOrEqual(field, convertToScala(v, t)))
+    case expressions.LessThanOrEqual(Literal(v, t), e: Expression) =>
+      toNamedRef(e).map(field => sources.v2.GreaterThanOrEqual(field, convertToScala(v, t)))
+
+    case expressions.InSet(e: Expression, set) =>
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      toNamedRef(e).map(field => sources.v2.In(field, set.toArray.map(toScala)))
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
     // down.
-    case expressions.In(a: Attribute, list) if list.forall(_.isInstanceOf[Literal]) =>
+    case expressions.In(e: Expression, list) if list.forall(_.isInstanceOf[Literal]) =>
       val hSet = list.map(_.eval(EmptyRow))
-      val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-      Some(sources.In(a.name, hSet.toArray.map(toScala)))
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      toNamedRef(e).map(field => sources.v2.In(field, hSet.toArray.map(toScala)))
 
-    case expressions.IsNull(a: Attribute) =>
-      Some(sources.IsNull(a.name))
-    case expressions.IsNotNull(a: Attribute) =>
-      Some(sources.IsNotNull(a.name))
-    case expressions.StartsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringStartsWith(a.name, v.toString))
+    case expressions.IsNull(e: Expression) =>
+      toNamedRef(e).map(field => sources.v2.IsNull(field))
+    case expressions.IsNotNull(e: Expression) =>
+      toNamedRef(e).map(field => sources.v2.IsNotNull(field))
+    case expressions.StartsWith(e: Expression, Literal(v: UTF8String, StringType)) =>
+      toNamedRef(e).map(field => sources.v2.StringStartsWith(field, v.toString))
 
-    case expressions.EndsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringEndsWith(a.name, v.toString))
+    case expressions.EndsWith(e: Expression, Literal(v: UTF8String, StringType)) =>
+      toNamedRef(e).map(field => sources.v2.StringEndsWith(field, v.toString))
 
-    case expressions.Contains(a: Attribute, Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringContains(a.name, v.toString))
+    case expressions.Contains(e: Expression, Literal(v: UTF8String, StringType)) =>
+      toNamedRef(e).map(field => sources.v2.StringContains(field, v.toString))
 
     case expressions.Literal(true, BooleanType) =>
-      Some(sources.AlwaysTrue)
+      Some(sources.v2.AlwaysTrue)
 
     case expressions.Literal(false, BooleanType) =>
-      Some(sources.AlwaysFalse)
+      Some(sources.v2.AlwaysFalse)
 
     case _ => None
   }
 
   /**
+   * Tries to translate a Catalyst [[Expression]] into data source [[FilterV2]].
+   *
+   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
+   */
+  protected[sql] def translateFilterV2(predicate: Expression): Option[FilterV2] = {
+    translateFilterWithMapping(predicate, None)
+  }
+
+    /**
    * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
    *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilter(predicate: Expression): Option[Filter] = {
-    translateFilterWithMapping(predicate, None)
+    ???
   }
 
   /**
-   * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
+   * Tries to translate a Catalyst [[Expression]] into data source [[FilterV2]].
    *
-   * @param predicate The input [[Expression]] to be translated as [[Filter]]
+   * @param predicate The input [[Expression]] to be translated as [[FilterV2]]
    * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
-   *                               translated [[Filter]]. The map is used for rebuilding
-   *                               [[Expression]] from [[Filter]].
+   *                               translated [[FilterV2]]. The map is used for rebuilding
+   *                               [[Expression]] from [[FilterV2]].
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
       predicate: Expression,
-      translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]])
-    : Option[Filter] = {
+      translatedFilterToExpr: Option[mutable.HashMap[sources.v2.FilterV2, Expression]])
+    : Option[sources.v2.FilterV2] = {
     predicate match {
       case expressions.And(left, right) =>
         // See SPARK-12218 for detailed discussion
@@ -539,19 +566,19 @@ object DataSourceStrategy {
         for {
           leftFilter <- translateFilterWithMapping(left, translatedFilterToExpr)
           rightFilter <- translateFilterWithMapping(right, translatedFilterToExpr)
-        } yield sources.And(leftFilter, rightFilter)
+        } yield sources.v2.And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {
           leftFilter <- translateFilterWithMapping(left, translatedFilterToExpr)
           rightFilter <- translateFilterWithMapping(right, translatedFilterToExpr)
-        } yield sources.Or(leftFilter, rightFilter)
+        } yield sources.v2.Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
-        translateFilterWithMapping(child, translatedFilterToExpr).map(sources.Not)
+        translateFilterWithMapping(child, translatedFilterToExpr).map(sources.v2.Not)
 
       case other =>
-        val filter = translateLeafNodeFilter(other)
+        val filter = translateLeafNodeFilterV2(other)
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
           translatedFilterToExpr.get(filter.get) = predicate
         }
@@ -560,16 +587,16 @@ object DataSourceStrategy {
   }
 
   protected[sql] def rebuildExpressionFromFilter(
-      filter: Filter,
-      translatedFilterToExpr: mutable.HashMap[sources.Filter, Expression]): Expression = {
+      filter: FilterV2,
+      translatedFilterToExpr: mutable.HashMap[sources.v2.FilterV2, Expression]): Expression = {
     filter match {
-      case sources.And(left, right) =>
+      case sources.v2.And(left, right) =>
         expressions.And(rebuildExpressionFromFilter(left, translatedFilterToExpr),
           rebuildExpressionFromFilter(right, translatedFilterToExpr))
-      case sources.Or(left, right) =>
+      case sources.v2.Or(left, right) =>
         expressions.Or(rebuildExpressionFromFilter(left, translatedFilterToExpr),
           rebuildExpressionFromFilter(right, translatedFilterToExpr))
-      case sources.Not(pred) =>
+      case sources.v2.Not(pred) =>
         expressions.Not(rebuildExpressionFromFilter(pred, translatedFilterToExpr))
       case other =>
         translatedFilterToExpr.getOrElse(other,
@@ -590,7 +617,8 @@ object DataSourceStrategy {
    */
   protected[sql] def selectFilters(
       relation: BaseRelation,
-      predicates: Seq[Expression]): (Seq[Expression], Seq[Filter], Set[Filter]) = {
+      predicates: Seq[Expression])
+  : (Seq[Expression], Seq[Filter], Set[Filter]) = {
 
     // For conciseness, all Catalyst filter expressions of type `expressions.Expression` below are
     // called `predicate`s, while all data source filters of type `sources.Filter` are simply called

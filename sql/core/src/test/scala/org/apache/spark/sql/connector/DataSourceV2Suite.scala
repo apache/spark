@@ -38,6 +38,11 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.sources.v2.{FilterV2, GreaterThan}
+import org.apache.spark.sql.sources.v2.TableCapability._
+import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.partitioning.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -481,7 +486,7 @@ class AdvancedScanBuilder extends ScanBuilder
   with Scan with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
 
   var requiredSchema = new StructType().add("i", "int").add("j", "int")
-  var filters = Array.empty[Filter]
+  var filters = Array.empty[FilterV2]
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     this.requiredSchema = requiredSchema
@@ -489,27 +494,27 @@ class AdvancedScanBuilder extends ScanBuilder
 
   override def readSchema(): StructType = requiredSchema
 
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+  override def pushFilters(filters: Array[FilterV2]): Array[FilterV2] = {
     val (supported, unsupported) = filters.partition {
-      case GreaterThan("i", _: Int) => true
+      case GreaterThan(ref, _: Int) if ref.fieldNames == Array("i") => true
       case _ => false
     }
     this.filters = supported
     unsupported
   }
 
-  override def pushedFilters(): Array[Filter] = filters
+  override def pushedFilters(): Array[FilterV2] = filters
 
   override def build(): Scan = this
 
   override def toBatch: Batch = new AdvancedBatch(filters, requiredSchema)
 }
 
-class AdvancedBatch(val filters: Array[Filter], val requiredSchema: StructType) extends Batch {
+class AdvancedBatch(val filters: Array[FilterV2], val requiredSchema: StructType) extends Batch {
 
   override def planInputPartitions(): Array[InputPartition] = {
     val lowerBound = filters.collectFirst {
-      case GreaterThan("i", v: Int) => v
+      case GreaterThan(ref, v: Int) if ref.fieldNames == Array("i") => v
     }
 
     val res = scala.collection.mutable.ArrayBuffer.empty[InputPartition]

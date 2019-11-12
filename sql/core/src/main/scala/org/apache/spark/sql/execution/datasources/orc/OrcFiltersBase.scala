@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import org.apache.spark.sql.sources.{And, Filter}
+import org.apache.spark.sql.sources.v2.{And, FilterV2}
 import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType}
 
 /**
@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType}
  */
 trait OrcFiltersBase {
 
-  private[sql] def buildTree(filters: Seq[Filter]): Option[Filter] = {
+  private[sql] def buildTree(filters: Seq[FilterV2]): Option[FilterV2] = {
     filters match {
       case Seq() => None
       case Seq(filter) => Some(filter)
@@ -33,16 +33,6 @@ trait OrcFiltersBase {
       case _ => // length > 2
         val (left, right) = filters.splitAt(filters.length / 2)
         Some(And(buildTree(left).get, buildTree(right).get))
-    }
-  }
-
-  // Since ORC 1.5.0 (ORC-323), we need to quote for column names with `.` characters
-  // in order to distinguish predicate pushdown for nested columns.
-  protected[sql] def quoteAttributeNameIfNeeded(name: String) : String = {
-    if (!name.contains("`") && name.contains(".")) {
-      s"`$name`"
-    } else {
-      name
     }
   }
 

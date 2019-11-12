@@ -57,7 +57,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           DataSourceV2ScanRelation(_, OrcScan(_, _, _, _, _, _, _, pushedFilters), _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         assert(pushedFilters.nonEmpty, "No filter is pushed down")
-        val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
+        val maybeFilter: Option[SearchArgument] = None // OrcFilters.createFilter(query.schema, pushedFilters)
         assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pushedFilters")
         checker(maybeFilter.get)
 

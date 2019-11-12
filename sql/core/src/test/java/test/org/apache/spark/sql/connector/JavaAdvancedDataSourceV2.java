@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableProvider;
 import org.apache.spark.sql.connector.read.*;
-import org.apache.spark.sql.sources.Filter;
-import org.apache.spark.sql.sources.GreaterThan;
+import org.apache.spark.sql.sources.v2.FilterV2;
+import org.apache.spark.sql.sources.v2.GreaterThan;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -46,7 +46,7 @@ public class JavaAdvancedDataSourceV2 implements TableProvider {
     SupportsPushDownFilters, SupportsPushDownRequiredColumns {
 
     private StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
-    private Filter[] filters = new Filter[0];
+    private FilterV2[] filters = new FilterV2[0];
 
     @Override
     public void pruneColumns(StructType requiredSchema) {
@@ -59,31 +59,31 @@ public class JavaAdvancedDataSourceV2 implements TableProvider {
     }
 
     @Override
-    public Filter[] pushFilters(Filter[] filters) {
-      Filter[] supported = Arrays.stream(filters).filter(f -> {
+    public FilterV2[] pushFilters(FilterV2[] filters) {
+      FilterV2[] supported = Arrays.stream(filters).filter(f -> {
         if (f instanceof GreaterThan) {
           GreaterThan gt = (GreaterThan) f;
-          return gt.attribute().equals("i") && gt.value() instanceof Integer;
+          return gt.field().name().equals("i") && gt.value() instanceof Integer;
         } else {
           return false;
         }
-      }).toArray(Filter[]::new);
+      }).toArray(FilterV2[]::new);
 
-      Filter[] unsupported = Arrays.stream(filters).filter(f -> {
+      FilterV2[] unsupported = Arrays.stream(filters).filter(f -> {
         if (f instanceof GreaterThan) {
           GreaterThan gt = (GreaterThan) f;
-          return !gt.attribute().equals("i") || !(gt.value() instanceof Integer);
+          return !gt.field().name().equals("i") || !(gt.value() instanceof Integer);
         } else {
           return true;
         }
-      }).toArray(Filter[]::new);
+      }).toArray(FilterV2[]::new);
 
       this.filters = supported;
       return unsupported;
     }
 
     @Override
-    public Filter[] pushedFilters() {
+    public FilterV2[] pushedFilters() {
       return filters;
     }
 
@@ -101,9 +101,9 @@ public class JavaAdvancedDataSourceV2 implements TableProvider {
   public static class AdvancedBatch implements Batch {
     // Exposed for testing.
     public StructType requiredSchema;
-    public Filter[] filters;
+    public FilterV2[] filters;
 
-    AdvancedBatch(StructType requiredSchema, Filter[] filters) {
+    AdvancedBatch(StructType requiredSchema, FilterV2[] filters) {
       this.requiredSchema = requiredSchema;
       this.filters = filters;
     }
@@ -113,10 +113,10 @@ public class JavaAdvancedDataSourceV2 implements TableProvider {
       List<InputPartition> res = new ArrayList<>();
 
       Integer lowerBound = null;
-      for (Filter filter : filters) {
+      for (FilterV2 filter : filters) {
         if (filter instanceof GreaterThan) {
           GreaterThan f = (GreaterThan) filter;
-          if ("i".equals(f.attribute()) && f.value() instanceof Integer) {
+          if ("i".equals(f.field().name()) && f.value() instanceof Integer) {
             lowerBound = (Integer) f.value();
             break;
           }

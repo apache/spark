@@ -15,34 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Experimental;
-import java.util.Arrays;
+import org.apache.spark.sql.catalog.v2.expressions.NamedReference;
 
-/**
- * Represents a field or column reference in the public logical expression API.
- */
 @Experimental
-public interface NamedReference extends Expression {
+public abstract class FilterV2 {
   /**
-   * Returns the referenced field name as an array of String parts.
-   * <p>
-   * Each string in the returned array represents a field name.
+   * Returns list of columns that are referenced by this filter.
    */
-  String[] fieldNames();
+  abstract NamedReference[] references();
 
-  /**
-   * Returns the full name of the field. For nested column, `.` character will be used as delimiter.
-   * If the name contains `.` character, it will be quoted to distinguish from the delimiter.
-   */
-  default String name() {
-    return Arrays.stream(fieldNames()).reduce((acc, name) -> {
-      if (!name.contains("`") && name.contains(".")) {
-        return acc + "." + "`" + name + "`";
-      } else {
-        return acc + "." + name;
-      }
-    }).get();
+  protected NamedReference[] findReferences(Object valve) {
+    if (valve instanceof FilterV2) {
+      return ((FilterV2) valve).references();
+    } else {
+      return new NamedReference[0];
+    }
   }
 }
