@@ -226,7 +226,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(to_json($"c", Map("intervalOutputStyle" -> "SQL_STANDARD"))),
-      Row("""{"col1":{"-0-3 7:00:00":"a"}}""") :: Nil)
+      Row("""{"col1":{"-0-3 +7:00:00":"a"}}""") :: Nil)
 
     checkAnswer(
       df.select(to_json($"c", Map("intervalOutputStyle" -> "ISO_8601"))),

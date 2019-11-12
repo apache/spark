@@ -459,19 +459,26 @@ object IntervalUtils {
       val ma = math.abs(interval.months)
       "-" + ma / 12 + "-" + ma % 12
     } else if (interval.months > 0) {
-      interval.months / 12 + "-" + interval.months % 12
+      "+" + interval.months / 12 + "-" + interval.months % 12
     } else {
       ""
     }
 
-    val dayPart = if (interval.days != 0) interval.days.toString else ""
+    val dayPart = if (interval.days < 0) {
+      interval.days.toString
+    } else if (interval.days > 0) {
+      "+" + interval.days
+    } else {
+      ""
+    }
 
     val timePart = if (interval.microseconds != 0) {
-      val sb = new StringBuilder()
-      var rest = interval.microseconds
+      val sign = if (interval.microseconds > 0) "+" else "-"
+      val sb = new StringBuilder(sign)
+      var rest = math.abs(interval.microseconds)
       sb.append(rest / MICROS_PER_HOUR)
       sb.append(':')
-      rest = math.abs(rest % MICROS_PER_HOUR)
+      rest = rest % MICROS_PER_HOUR
       val minutes = rest / MICROS_PER_MINUTE;
       if (minutes < 10) {
         sb.append(0)

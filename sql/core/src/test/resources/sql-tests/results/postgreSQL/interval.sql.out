@@ -210,7 +210,7 @@ SELECT  interval '1 day -1 hours',
 -- !query 25 schema
 struct<1 days -1 hours:interval,-1 days 1 hours:interval,1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds:interval,-1 years -2 months 3 days -4 hours -5 minutes -6.789 seconds:interval>
 -- !query 25 output
-1 -1:00:00	-1 1:00:00	1-2 -3 4:05:06.789	-1-2 3 -4:05:06.789
++1 -1:00:00	-1 +1:00:00	+1-2 -3 +4:05:06.789	-1-2 +3 -4:05:06.789
 
 
 -- !query 26
