@@ -37,9 +37,9 @@ private[spark] class ExecutorPodsAllocator(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     clock: Clock) extends Logging {
 
-  private val EXIT_MAX_EXECUTOR_FAILURES = 11
+  private[k8s] val EXIT_MAX_EXECUTOR_FAILURES = 11
 
-  private val EXECUTOR_ID_COUNTER = new AtomicLong(0L)
+  private[k8s] val EXECUTOR_ID_COUNTER = new AtomicLong(0L)
 
   private val totalExpectedExecutors = new AtomicInteger(0)
 
@@ -48,16 +48,6 @@ private[spark] class ExecutorPodsAllocator(
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
   private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000)
-
-  // maxNumExecutorFailures must be less than Int.MaxValue
-  private lazy val maxNumExecutorFailures = conf.get(KUBERNETES_MAX_EXECUTOR_FAILURES)
-    .getOrElse {
-      math.max(3, if (totalExpectedExecutors.get() > Int.MaxValue / 2) {
-        Int.MaxValue
-      } else {
-        2 * totalExpectedExecutors.get()
-      })
-    }
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
@@ -96,6 +86,16 @@ private[spark] class ExecutorPodsAllocator(
       snapshotsStore.notifySubscribers()
     }
   }
+
+  // maxNumExecutorFailures must be less than Int.MaxValue
+  private[k8s] def maxNumExecutorFailures: Int = conf.get(KUBERNETES_MAX_EXECUTOR_FAILURES)
+    .getOrElse {
+      math.max(3, if (totalExpectedExecutors.get() > Int.MaxValue / 2) {
+        Int.MaxValue
+      } else {
+        2 * totalExpectedExecutors.get()
+      })
+    }
 
   private def onNewSnapshots(
       applicationId: String,

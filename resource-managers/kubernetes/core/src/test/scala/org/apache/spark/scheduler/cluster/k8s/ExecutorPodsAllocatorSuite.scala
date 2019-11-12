@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.security.Permission
+
 import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
@@ -124,6 +126,35 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
+  }
+
+  test("SPARK-29771: shutdown application while too many executors failed.") {
+    // define a NoExitSecurityManager to capture System.exit
+    case class ExitException(status: Int) extends SecurityException("There is no escape!")
+    class NoExitSecurityManager extends java.lang.SecurityManager {
+      override def checkPermission(perm: Permission): Unit = {}
+      override def checkExit(status: Int): Unit = throw ExitException(status)
+    }
+    val preSecurityManager = System.getSecurityManager
+    System.setSecurityManager(new NoExitSecurityManager)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize)
+    val maxFailedExecutorCount = podsAllocatorUnderTest.maxNumExecutorFailures
+    podsAllocatorUnderTest.EXECUTOR_ID_COUNTER.set(maxFailedExecutorCount)
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(maxFailedExecutorCount))
+    try {
+      snapshotsStore.notifySubscribers()
+      throw new IllegalArgumentException(
+        s"Application did not exit " +
+          s"when executor failed ${maxFailedExecutorCount} times")
+    } catch {
+      case e: ExitException =>
+        assert(podsAllocatorUnderTest.EXIT_MAX_EXECUTOR_FAILURES == e.status,
+          s"exit num show be ${podsAllocatorUnderTest.EXIT_MAX_EXECUTOR_FAILURES}")
+    } finally {
+      // reset SecurityManager
+      System.setSecurityManager(preSecurityManager)
+    }
   }
 
   test("When an executor is requested but the API does not report it in a reasonable time, retry" +
