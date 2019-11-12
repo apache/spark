@@ -42,7 +42,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(pearson.degreesOfFreedom === 2)
     assert(pearson.pValue ~== 0.8187 relTol 1e-4)
     assert(pearson.method === ChiSqTest.PEARSON.name)
-    assert(pearson.nullHypothesis === ChiSqTest.NullHypothesis.goodnessOfFit.toString)
+    assert(pearson.nullHypothesis === ChiSqTest.NullHypothesis.GOODNESS_OF_FIT.toString)
 
     // different expected and observed sum
     val observed1 = new DenseVector(Array[Double](21, 38, 43, 80))
@@ -55,7 +55,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(pearson1.degreesOfFreedom === 3)
     assert(pearson1.pValue ~== 0.002717 relTol 1e-4)
     assert(pearson1.method === ChiSqTest.PEARSON.name)
-    assert(pearson1.nullHypothesis === ChiSqTest.NullHypothesis.goodnessOfFit.toString)
+    assert(pearson1.nullHypothesis === ChiSqTest.NullHypothesis.GOODNESS_OF_FIT.toString)
 
     // Vectors with different sizes
     val observed3 = new DenseVector(Array(1.0, 2.0, 3.0))
@@ -73,7 +73,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(inf.degreesOfFreedom === 2)
     assert(inf.pValue === 0.0)
     assert(inf.method === ChiSqTest.PEARSON.name)
-    assert(inf.nullHypothesis === ChiSqTest.NullHypothesis.goodnessOfFit.toString)
+    assert(inf.nullHypothesis === ChiSqTest.NullHypothesis.GOODNESS_OF_FIT.toString)
 
     // 0.0 in expected and observed simultaneously
     val zeroObserved = new DenseVector(Array(2.0, 0.0, 1.0))
@@ -92,7 +92,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(chi.degreesOfFreedom === 6)
     assert(chi.pValue ~== 0.001213 relTol 1e-4)
     assert(chi.method === ChiSqTest.PEARSON.name)
-    assert(chi.nullHypothesis === ChiSqTest.NullHypothesis.independence.toString)
+    assert(chi.nullHypothesis === ChiSqTest.NullHypothesis.INDEPENDENCE.toString)
 
     // Negative counts
     val negCounts = Array(4.0, 5.0, 3.0, -3.0)
@@ -126,13 +126,13 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(feature1.degreesOfFreedom === 2)
       assert(feature1.pValue ~== 0.6873 relTol 1e-4)
       assert(feature1.method === ChiSqTest.PEARSON.name)
-      assert(feature1.nullHypothesis === ChiSqTest.NullHypothesis.independence.toString)
+      assert(feature1.nullHypothesis === ChiSqTest.NullHypothesis.INDEPENDENCE.toString)
       val feature2 = chi(1)
       assert(feature2.statistic === 1.5)
       assert(feature2.degreesOfFreedom === 3)
       assert(feature2.pValue ~== 0.6823 relTol 1e-4)
       assert(feature2.method === ChiSqTest.PEARSON.name)
-      assert(feature2.nullHypothesis === ChiSqTest.NullHypothesis.independence.toString)
+      assert(feature2.nullHypothesis === ChiSqTest.NullHypothesis.INDEPENDENCE.toString)
     }
 
     // Test that the right number of results is returned
