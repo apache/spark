@@ -48,14 +48,12 @@ public class JavaResourceProfileSuite {
     assertEquals(gpuReq.amount(), 2);
     assertEquals(gpuReq.discoveryScript(), "myscript");
     assertEquals(gpuReq.vendor(), "");
-    assertEquals(gpuReq.units(), "");
 
     assert(eresources.containsKey(FPGAResource));
     ExecutorResourceRequest fpgaReq = eresources.get(FPGAResource);
     assertEquals(fpgaReq.amount(), 3);
     assertEquals(fpgaReq.discoveryScript(), "myfpgascript");
     assertEquals(fpgaReq.vendor(), "nvidia");
-    assertEquals(fpgaReq.units(), "");
 
     assertEquals(rprof.taskResources().size(), 1);
     Map<String, TaskResourceRequest> tresources = rprof.taskResourcesJMap();

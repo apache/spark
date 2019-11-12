@@ -38,10 +38,9 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  *
  * For instance, a user wants to allocate an Executor with GPU resources on YARN. The user has
  * to specify the resource name (resource.gpu), the amount or number of GPUs per Executor,
- * units would not be used as its not a memory config, the discovery script would be specified
- * so that when the Executor starts up it can discovery what GPU addresses are available for it to
- * use because YARN doesn't tell Spark that, then vendor would not be used because
- * its specific for Kubernetes.
+ * the discovery script would be specified so that when the Executor starts up it can
+ * discovery what GPU addresses are available for it to use because YARN doesn't tell
+ * Spark that, then vendor would not be used because its specific for Kubernetes.
  *
  * See the configuration and cluster specific docs for more details.
  *
@@ -49,8 +48,6 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  *
  * @param resourceName Name of the resource
  * @param amount Amount requesting
- * @param units Optional units of the amount. For things like Memory, default is
- *              no units, only byte types (b, mb, gb, etc) are currently supported.
  * @param discoveryScript Optional script used to discover the resources. This is required on some
  *                        cluster managers that don't tell Spark the addresses of the resources
  *                        allocated. The script runs on Executors startup to discover the addresses
@@ -63,7 +60,6 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
 private[spark] class ExecutorResourceRequest(
     val resourceName: String,
     val amount: Long,
-    val units: String = "",
     val discoveryScript: String = "",
     val vendor: String = "") extends Serializable {
 

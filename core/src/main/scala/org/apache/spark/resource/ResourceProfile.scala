@@ -132,7 +132,7 @@ private[spark] object ResourceProfile extends Logging {
   private def addDefaultExecutorResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
     val ereqs = new ExecutorResourceRequests()
     ereqs.cores(conf.get(EXECUTOR_CORES))
-    ereqs.memory(conf.get(EXECUTOR_MEMORY), "m")
+    ereqs.memory(conf.get(EXECUTOR_MEMORY).toString)
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
     execReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.id.resourceName}"

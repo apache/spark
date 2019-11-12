@@ -37,19 +37,6 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
   def requests: Map[String, ExecutorResourceRequest] = _executorResources.toMap
 
   /**
-   * Specify heap memory.
-   *
-   * @param amount Amount of memory.
-   * @param units Units of the amount. For things like Memory, default is no units,
-   *              only byte types (b, mb, gb, etc) are currently supported.
-   */
-  def memory(amount: Long, units: String): this.type = {
-    val rr = new ExecutorResourceRequest(MEMORY, amount, units)
-    _executorResources(MEMORY) = rr
-    this
-  }
-
-  /**
    * Specify heap memory. The value specified will be converted to MiB.
    *
    * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
@@ -57,21 +44,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def memory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(MEMORY, amountMiB, "m")
+    val rr = new ExecutorResourceRequest(MEMORY, amountMiB)
     _executorResources(MEMORY) = rr
-    this
-  }
-
-  /**
-   * Specify overhead memory.
-   *
-   * @param amount Amount of memory.
-   * @param units Units of the amount. For things like Memory, default is no units,
-   *              only byte types (b, mb, gb, etc) are currently supported.
-   */
-  def memoryOverhead(amount: Long, units: String): this.type = {
-    val rr = new ExecutorResourceRequest(OVERHEAD_MEM, amount, units)
-    _executorResources(OVERHEAD_MEM) = rr
     this
   }
 
@@ -83,21 +57,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def memoryOverhead(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(OVERHEAD_MEM, amountMiB, "m")
+    val rr = new ExecutorResourceRequest(OVERHEAD_MEM, amountMiB)
     _executorResources(OVERHEAD_MEM) = rr
-    this
-  }
-
-  /**
-   * Specify pyspark memory.
-   *
-   * @param amount Amount of memory.
-   * @param units Units of the amount. For things like Memory, default is no units,
-   *              only byte types (b, mb, gb, etc) are currently supported.
-   */
-  def pysparkMemory(amount: Long, units: String): this.type = {
-    val rr = new ExecutorResourceRequest(PYSPARK_MEM, amount, units)
-    _executorResources(PYSPARK_MEM) = rr
     this
   }
 
@@ -109,7 +70,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def pysparkMemory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(PYSPARK_MEM, amountMiB, "m")
+    val rr = new ExecutorResourceRequest(PYSPARK_MEM, amountMiB)
     _executorResources(PYSPARK_MEM) = rr
     this
   }
@@ -145,7 +106,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
       vendor: String = ""): this.type = {
     // a bit weird but for Java api use empty string as meaning None because empty
     // string is otherwise invalid for those paramters anyway
-    val eReq = new ExecutorResourceRequest(resourceName, amount, "", discoveryScript, vendor)
+    val eReq = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
     _executorResources(resourceName) = eReq
     this
   }

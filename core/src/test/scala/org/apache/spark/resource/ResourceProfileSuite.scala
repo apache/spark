@@ -39,8 +39,6 @@ class ResourceProfileSuite extends SparkFunSuite {
       s"Executor resources should have 1 core")
     assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 1024,
       s"Executor resources should have 1024 memory")
-    assert(rprof.executorResources(ResourceProfile.MEMORY).units === "m",
-      s"Executor resources should have 1024 memory")
     assert(rprof.taskResources.size === 1,
       "Task resources should just contain cpus by default")
     assert(rprof.taskResources(ResourceProfile.CPUS).amount === 1,
@@ -82,8 +80,6 @@ class ResourceProfileSuite extends SparkFunSuite {
       "discoveryScript should be myscript")
     assert(rprof.executorResources.get("resource.gpu").get.amount === 2,
     "gpu amount should be 2")
-    assert(rprof.executorResources.get("resource.gpu").get.units === "",
-    "units should be empty")
 
     assert(rprof.taskResources.size === 1, "Should have 1 task resource")
     assert(rprof.taskResources.contains("resource.gpu"), "Task resources should have gpu")
@@ -91,8 +87,8 @@ class ResourceProfileSuite extends SparkFunSuite {
       "Task resources should have 1 gpu")
 
     val ereqs = new ExecutorResourceRequests()
-    ereqs.cores(2).memory(4096, "m")
-    ereqs.memoryOverhead(2048, "m").pysparkMemory(1024, "m")
+    ereqs.cores(2).memory("4096")
+    ereqs.memoryOverhead("2048").pysparkMemory("1024")
     val treqs = new TaskResourceRequests()
     treqs.cpus(1)
 
@@ -104,8 +100,6 @@ class ResourceProfileSuite extends SparkFunSuite {
       s"Executor resources should have 2 cores")
     assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
       s"Executor resources should have 4096 memory")
-    assert(rprof.executorResources(ResourceProfile.MEMORY).units === "m",
-      s"Executor resources should have memory units mb")
     assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount === 2048,
       s"Executor resources should have 2048 overhead memory")
     assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount === 1024,
@@ -129,21 +123,15 @@ class ResourceProfileSuite extends SparkFunSuite {
     val rprof = new ResourceProfile()
     val ereqs = new ExecutorResourceRequests()
     ereqs.memory("4g")
-    ereqs.memoryOverhead("2000m").pysparkMemory("512")
+    ereqs.memoryOverhead("2000m").pysparkMemory("512000k")
     rprof.require(ereqs)
 
     assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
       s"Executor resources should have 4096 memory")
-    assert(rprof.executorResources(ResourceProfile.MEMORY).units === "m",
-      s"Executor resources should have memory units mb")
     assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount === 2000,
       s"Executor resources should have 2000 overhead memory")
-    assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).units === "m",
-      s"Executor resources should have memory units mb")
-    assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount === 512,
+    assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount === 500,
       s"Executor resources should have 512 pyspark memory")
-    assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).units === "m",
-      s"Executor resources should have memory units mb")
   }
 
   test("Test TaskResourceRequest fractional") {
