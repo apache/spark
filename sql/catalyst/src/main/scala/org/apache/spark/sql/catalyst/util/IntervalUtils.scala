@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -183,6 +184,84 @@ object IntervalUtils {
     fromDayTimeString(s, DAY, SECOND)
   }
 
+  /**
+   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
+   *
+   * adapted from HiveIntervalDayTime.valueOf.
+   * Below interval conversion patterns are supported:
+   * - DAY TO (HOUR|MINUTE|SECOND)
+   * - HOUR TO (MINUTE|SECOND)
+   * - MINUTE TO SECOND
+   */
+  def fromDayTimeString(input: String, from: IntervalUnit, to: IntervalUnit): CalendarInterval = {
+    if (SQLConf.get.getConf(SQLConf.LEGACY_FROM_DAYTIME_STRING)) {
+      fromDayTimeLegacy(input, from, to)
+    } else {
+      fromDayTime(input, from, to)
+    }
+  }
+
+  private val dayTimePatternLegacy =
+    "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$".r
+
+  private def fromDayTimeLegacy(
+      input: String,
+      from: IntervalUnit,
+      to: IntervalUnit): CalendarInterval = {
+    require(input != null, "Interval day-time string must be not null")
+    assert(input.length == input.trim.length)
+    val m = dayTimePatternLegacy.pattern.matcher(input)
+    require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input")
+
+    try {
+      val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
+      val days = if (m.group(2) == null) {
+        0
+      } else {
+        toLongWithRange(DAY, m.group(3), 0, Integer.MAX_VALUE).toInt
+      }
+      var hours: Long = 0L
+      var minutes: Long = 0L
+      var seconds: Long = 0L
+      if (m.group(5) != null || from == MINUTE) { // 'HH:mm:ss' or 'mm:ss minute'
+        hours = toLongWithRange(HOUR, m.group(5), 0, 23)
+        minutes = toLongWithRange(MINUTE, m.group(6), 0, 59)
+        seconds = toLongWithRange(SECOND, m.group(7), 0, 59)
+      } else if (m.group(8) != null) { // 'mm:ss.nn'
+        minutes = toLongWithRange(MINUTE, m.group(6), 0, 59)
+        seconds = toLongWithRange(SECOND, m.group(7), 0, 59)
+      } else { // 'HH:mm'
+        hours = toLongWithRange(HOUR, m.group(6), 0, 23)
+        minutes = toLongWithRange(SECOND, m.group(7), 0, 59)
+      }
+      // Hive allow nanosecond precision interval
+      var secondsFraction = parseNanos(m.group(9), seconds < 0)
+      to match {
+        case HOUR =>
+          minutes = 0
+          seconds = 0
+          secondsFraction = 0
+        case MINUTE =>
+          seconds = 0
+          secondsFraction = 0
+        case SECOND =>
+        // No-op
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot support (interval '$input' $from to $to) expression")
+      }
+      var micros = secondsFraction
+      micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
+      micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
+      micros = Math.addExact(micros, Math.multiplyExact(seconds, MICROS_PER_SECOND))
+      new CalendarInterval(0, sign * days, sign * micros)
+    } catch {
+      case e: Exception =>
+        throw new IllegalArgumentException(
+          s"Error parsing interval day-time string: ${e.getMessage}", e)
+    }
+  }
+
   private val signRe = "(?<sign>[+|-])"
   private val dayRe = "(?<day>\\d+)"
   private val hourRe = "(?<hour>\\d{1,2})"
@@ -202,16 +281,10 @@ object IntervalUtils {
     (start.id to end.id).map(IntervalUnit(_))
   }
 
-  /**
-   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
-   *
-   * adapted from HiveIntervalDayTime.valueOf.
-   * Below interval conversion patterns are supported:
-   * - DAY TO (HOUR|MINUTE|SECOND)
-   * - HOUR TO (MINUTE|SECOND)
-   * - MINUTE TO SECOND
-   */
-  def fromDayTimeString(input: String, from: IntervalUnit, to: IntervalUnit): CalendarInterval = {
+  private def fromDayTime(
+      input: String,
+      from: IntervalUnit,
+      to: IntervalUnit): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
     val regexp = dayTimePattern.get(from -> to)
     require(regexp.isDefined, s"Cannot support (interval '$input' $from to $to) expression")
