@@ -293,6 +293,28 @@ object IntervalUtils {
     (start.id to end.id).map(IntervalUnit(_))
   }
 
+  /**
+   * Parses an input string in the day-time format defined by the `from` and `to` bounds.
+   * It supports the following formats:
+   * - [+|-]D+ H[H]:m[m]:s[s][.SSSSSSSSS] for DAY TO SECOND
+   * - [+|-]D+ H[H]:m[m] for DAY TO MINUTE
+   * - [+|-]D+ H[H] for DAY TO HOUR
+   * - [+|-]H[H]:m[m]s[s][.SSSSSSSSS] for HOUR TO SECOND
+   * - [+|-]H[H]:m[m] for HOUR TO MINUTE
+   * - [+|-]m[m]:s[s][.SSSSSSSSS] for MINUTE TO SECOND
+   *
+   * Note: the seconds fraction is truncation to microseconds.
+   *
+   * @param input The input string to parse.
+   * @param from The interval unit from which the input string begins.
+   * @param to The interval unit at where the input string ends.
+   * @return an instance of `CalendarInterval` if the input string was parsed successfully
+   *         otherwise throws an exception.
+   * @throws IllegalArgumentException The input string has incorrect format and cannot be parsed.
+   * @throws ArithmeticException An interval unit value is out of valid range or the resulted
+   *                             interval fields `days` or `microseconds` are out of the valid
+   *                             ranges.
+   */
   private def parseDayTime(
       input: String,
       from: IntervalUnit,
