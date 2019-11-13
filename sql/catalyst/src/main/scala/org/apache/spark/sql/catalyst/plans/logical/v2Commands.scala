@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, Star, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, StringType, StructType}
@@ -250,7 +250,7 @@ case class CreateNamespace(
  * The logical plan of the DROP NAMESPACE command that works for v2 catalogs.
  */
 case class DropNamespace(
-    catalog: SupportsNamespaces,
+    catalog: CatalogPlugin,
     namespace: Seq[String],
     ifExists: Boolean,
     cascade: Boolean) extends Command
