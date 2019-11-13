@@ -121,7 +121,7 @@ case class CreateViewCommand(
     }
 
     // Temporary view names should NOT contain database prefix like "database.table"
-    name.database.foreach{
+    name.database.foreach {
       database => throw new AnalysisException(
         s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
     }
@@ -207,8 +207,7 @@ case class CreateViewCommand(
                 + s" $name will be created as temporary view")
               verifyTempView()
               isTempReferred = true
-            }
-            else {
+            } else {
               throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
                 s"referencing a temporary view $ident")
             }
