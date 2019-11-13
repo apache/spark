@@ -639,29 +639,29 @@ object IntervalUtils {
   }
 
   /**
-   * Adjust interval so 30-day time periods are represented as months
+   * Adjust interval so 30-day time periods are represented as months.
    */
   def justifyDays(interval: CalendarInterval): CalendarInterval = {
     val monthToDays = interval.months * DAYS_PER_MONTH
-    val totalDays = Math.addExact(monthToDays, interval.days)
+    val totalDays = monthToDays + interval.days
     val months = Math.toIntExact(totalDays / DAYS_PER_MONTH)
-    val days = Math.toIntExact(totalDays % DAYS_PER_MONTH)
-    new CalendarInterval(months, days, interval.microseconds)
+    val days = totalDays % DAYS_PER_MONTH
+    new CalendarInterval(months, days.toInt, interval.microseconds)
   }
 
   /**
-   * Adjust interval so 24-hour time periods are represented as days
+   * Adjust interval so 24-hour time periods are represented as days.
    */
   def justifyHours(interval: CalendarInterval): CalendarInterval = {
     val dayToUs = MICROS_PER_DAY * interval.days
     val totalUs = Math.addExact(interval.microseconds, dayToUs)
-    val days = Math.toIntExact(totalUs / MICROS_PER_DAY)
+    val days = totalUs / MICROS_PER_DAY
     val microseconds = totalUs % MICROS_PER_DAY
-    new CalendarInterval(interval.months, days, microseconds)
+    new CalendarInterval(interval.months, days.toInt, microseconds)
   }
 
   /**
-   * Adjust interval using justifyHours and justifyDays, with additional sign adjustments
+   * Adjust interval using justifyHours and justifyDays, with additional sign adjustments.
    */
   def justifyInterval(interval: CalendarInterval): CalendarInterval = {
     val monthToDays = DAYS_PER_MONTH * interval.months
@@ -670,7 +670,7 @@ object IntervalUtils {
     val microseconds = totalUs % MICROS_PER_DAY
     val totalDays = totalUs / MICROS_PER_DAY
     val days = totalDays % DAYS_PER_MONTH
-    val months = Math.toIntExact(totalDays / DAYS_PER_MONTH)
-    new CalendarInterval(months, days.toInt, microseconds)
+    val months = totalDays / DAYS_PER_MONTH
+    new CalendarInterval(months.toInt, days.toInt, microseconds)
   }
 }

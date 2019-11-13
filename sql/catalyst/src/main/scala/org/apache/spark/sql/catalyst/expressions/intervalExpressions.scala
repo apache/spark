@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
@@ -270,7 +272,7 @@ abstract class IntervalJustifyLike(
     try {
       justify(input.asInstanceOf[CalendarInterval])
     } catch {
-      case _: ArithmeticException => null
+      case NonFatal(_) => null
     }
   }
 
