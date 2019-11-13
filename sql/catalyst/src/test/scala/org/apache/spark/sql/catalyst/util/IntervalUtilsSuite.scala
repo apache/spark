@@ -95,6 +95,14 @@ class IntervalUtilsSuite extends SparkFunSuite {
     // Only the seconds units can have the fractional part
     checkFromInvalidString("1.5 days", "'days' with fractional part is unsupported")
     checkFromInvalidString("1. hour", "'hour' with fractional part is unsupported")
+    checkFromInvalidString("1 hourX", "invalid unit suffix")
+    checkFromInvalidString("~1 hour", "unrecognized sign")
+    checkFromInvalidString("1 Mour", "invalid unit 'mour'")
+    checkFromInvalidString("1 aour", "invalid unit 'aour'")
+    checkFromInvalidString("1a1 hour", "invalid value 'a1'")
+    checkFromInvalidString("1.1a1 seconds", "invalid value fractional part 'a1'")
+    checkFromInvalidString("2234567890 days", "integer overflow")
+
   }
 
   test("string to interval: seconds with fractional part") {
@@ -106,7 +114,8 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromString("-1.5 seconds", new CalendarInterval(0, 0, -1500000))
     // truncate nanoseconds to microseconds
     checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 999999))
-    checkFromInvalidString("0.123456789123 seconds", "invalid value fractional part '123456789123'")
+    checkFromString(".999999999 seconds", new CalendarInterval(0, 0, 999999))
+    checkFromInvalidString("0.123456789123 seconds", "'123456789123' out of range")
   }
 
   test("from year-month string") {

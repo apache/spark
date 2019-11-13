@@ -447,7 +447,7 @@ object IntervalUtils {
               i += 1
               fractionScale = (NANOS_PER_SECOND / 10).toInt
               state = VALUE_FRACTIONAL_PART
-            case _ => exceptionWithState( s"Unrecognized sign '$nextWord'")
+            case _ => exceptionWithState( s"unrecognized sign '$nextWord'")
           }
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
@@ -456,8 +456,7 @@ object IntervalUtils {
               try {
                 currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
               } catch {
-                case _: ArithmeticException =>
-                  exceptionWithState(s"'$currentValue$nextWord' out of range")
+                case e: ArithmeticException => exceptionWithState(e.getMessage, e)
               }
             case ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
@@ -474,7 +473,9 @@ object IntervalUtils {
             case ' ' =>
               fraction /= NANOS_PER_MICROS.toInt
               state = TRIM_BEFORE_UNIT
-            case _ => exceptionWithState(s"invalid value fractional part '$fraction$nextWord'")
+            case _ if '0' <= b && b <= '9' =>
+              exceptionWithState(s"invalid value fractional part '$fraction$nextWord' out of range")
+            case _ => exceptionWithState(s"invalid value fractional part '$nextWord'")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
