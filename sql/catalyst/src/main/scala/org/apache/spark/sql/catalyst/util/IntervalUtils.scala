@@ -427,6 +427,12 @@ object IntervalUtils {
           state = TRIM_BEFORE_SIGN
         case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
         case SIGN =>
+          currentValue = 0
+          fraction = 0
+          // Sets the scale to an invalid value to track fraction presence
+          // in the BEGIN_UNIT_NAME state
+          fractionScale = -1
+          state = TRIM_BEFORE_VALUE
           b match {
             case '-' =>
               isNegative = true
@@ -436,14 +442,13 @@ object IntervalUtils {
               i += 1
             case _ if '0' <= b && b <= '9' =>
               isNegative = false
+            case '.' =>
+              isNegative = false
+              i += 1
+              fractionScale = (NANOS_PER_SECOND / 10).toInt
+              state = VALUE_FRACTIONAL_PART
             case _ => exceptionWithState( s"Unrecognized sign '$nextWord'")
           }
-          currentValue = 0
-          fraction = 0
-          // Sets the scale to an invalid value to track fraction presence
-          // in the BEGIN_UNIT_NAME state
-          fractionScale = -1
-          state = TRIM_BEFORE_VALUE
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
           b match {

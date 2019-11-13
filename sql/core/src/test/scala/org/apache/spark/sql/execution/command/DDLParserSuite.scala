@@ -789,7 +789,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assertError("select interval '23:61:15' hour to second",
       "minute 61 outside range [0, 59]")
     assertError("select interval '.1111111111' second",
-      "Invalid interval string")
+      "invalid value fractional part '1111111111'")
   }
 
   test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {
