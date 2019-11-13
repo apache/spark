@@ -22,6 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Evaluator for binary classification.
@@ -172,7 +173,9 @@ class BinaryClassificationMetrics @Since("3.0.0") (
         c += (labelAndWeight._1, labelAndWeight._2),
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
     )
-    binnedWeights.persist()
+    if (scoreLabelsWeight.getStorageLevel != StorageLevel.NONE) {
+      binnedWeights.persist()
+    }
     val counts = binnedWeights.sortByKey(ascending = false)
 
     val binnedCounts =
