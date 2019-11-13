@@ -78,5 +78,5 @@ CREATE GLOBAL TEMPORARY VIEW IF NOT EXISTS subscribed_movies
 {% endhighlight %}
 
 ### Related Statements
-- [ALTER VIEW](sql-ref-syntax-ddl-alter-view.md)
-- [DROP VIEW](sql-ref-syntax-ddl-drop-view.md)
+- [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
+- [DROP VIEW](sql-ref-syntax-ddl-drop-view.html)
