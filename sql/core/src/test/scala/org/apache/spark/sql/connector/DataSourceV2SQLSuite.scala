@@ -1270,6 +1270,21 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("DeleteFrom: DELETE is only supported with v2 tables") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    val v1Table = "tbl"
+    withTable(v1Table) {
+      sql(s"CREATE TABLE $v1Table" +
+          s" USING ${classOf[SimpleScanSource].getName} OPTIONS (from=0,to=1)")
+      val exc = intercept[AnalysisException] {
+        sql(s"DELETE FROM $v1Table WHERE i = 2")
+      }
+
+      assert(exc.getMessage.contains("DELETE is only supported with v2 tables"))
+    }
+  }
+
   test("UPDATE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
