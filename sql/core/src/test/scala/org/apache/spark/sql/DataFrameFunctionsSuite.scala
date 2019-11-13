@@ -314,13 +314,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("array_sort with lambda functions") {
 
-    spark.udf.register("fDesc", (x: Int, y: Int) => {
+    spark.udf.register("fAsc", (x: Int, y: Int) => {
       if (x < y) -1
       else if (x == y) 0
       else 1
     })
 
-    spark.udf.register("fAsc", (x: Int, y: Int) => {
+    spark.udf.register("fDesc", (x: Int, y: Int) => {
       if (x < y) 1
       else if (x == y) 0
       else -1
@@ -342,20 +342,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       else if (x.length < y.length) -1
       else if (x.length == y.length) 0
       else 1
-
     })
 
     val df1 = Seq(Array[Int](3, 2, 5, 1, 2)).toDF("a")
     checkAnswer(
       df1.selectExpr("array_sort(a, (x, y) -> fAsc(x, y))"),
       Seq(
-        Row(Seq(5, 3, 2, 2, 1)))
+        Row(Seq(1, 2, 2, 3, 5)))
     )
 
     checkAnswer(
       df1.selectExpr("array_sort(a, (x, y) -> fDesc(x, y))"),
       Seq(
-        Row(Seq(1, 2, 2, 3, 5)))
+        Row(Seq(5, 3, 2, 2, 1)))
     )
 
     val df2 = Seq(Array[String]("bc", "ab", "dc")).toDF("a")
@@ -375,7 +374,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val df4 = Seq((Array[Array[Int]](Array(2, 3, 1), Array(4, 2, 1, 4),
       Array(1, 2)), "x")).toDF("a", "b")
     checkAnswer(
-      df4.selectExpr("array_sort(a, (x, y) -> fDesc(cardinality(x), cardinality(y)))"),
+      df4.selectExpr("array_sort(a, (x, y) -> fAsc(cardinality(x), cardinality(y)))"),
       Seq(
         Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4))))
     )

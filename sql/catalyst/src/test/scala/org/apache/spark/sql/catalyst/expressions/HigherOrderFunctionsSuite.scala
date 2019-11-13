@@ -210,8 +210,6 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq(null, "b", "a"))
     checkEvaluation(arraySort(a4, (left, right) => UnaryMinus(ArraySort.comparator(left, right))),
       Seq(d2, d1))
-
-
   }
 
   test("MapFilter") {
