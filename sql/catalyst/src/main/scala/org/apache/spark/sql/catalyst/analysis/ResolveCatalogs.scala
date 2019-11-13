@@ -93,19 +93,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${tableName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case DeleteFromStatement(
-         nameParts @ NonSessionCatalog(catalog, tableName), tableAlias, condition) =>
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
-      val aliased = tableAlias.map(SubqueryAlias(_, r)).getOrElse(r)
-      DeleteFromTable(aliased, condition)
-
-    case u @ UpdateTableStatement(
-         nameParts @ CatalogAndIdentifierParts(catalog, tableName), _, _, _, _) =>
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
-      val aliased = u.tableAlias.map(SubqueryAlias(_, r)).getOrElse(r)
-      val columns = u.columns.map(UnresolvedAttribute(_))
-      UpdateTable(aliased, columns, u.values, u.condition)
-
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
