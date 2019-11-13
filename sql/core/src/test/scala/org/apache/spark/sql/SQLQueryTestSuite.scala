@@ -65,6 +65,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *  1. A list of SQL queries separated by semicolon.
  *  2. Lines starting with -- are treated as comments and ignored.
  *  3. Lines starting with --SET are used to run the file with the following set of configs.
+ *  4. Lines starting with --import are used to load queries from another test file.
  *
  * For example:
  * {{{
@@ -158,7 +159,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   )
 
   // Create all the test cases.
-  listTestCases().foreach(createScalaTestCase)
+  listTestCases.foreach(createScalaTestCase)
 
   /** A single SQL query's output. */
   protected case class QueryOutput(sql: String, schema: String, output: String) {
@@ -186,6 +187,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
    */
   protected trait PgSQLTest
 
+  /**
+   * traits that indicate ANSI-related tests with the ANSI mode enabled.
+   */
+  protected trait AnsiTest
+
   protected trait UDFTest {
     val udf: TestUDF
   }
@@ -211,6 +217,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       inputFile: String,
       resultFile: String,
       udf: TestUDF) extends TestCase with UDFTest with PgSQLTest
+
+  /** An ANSI-related test case. */
+  protected case class AnsiTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (blackList.exists(t =>
@@ -255,9 +265,21 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
     val (comments, code) = input.split("\n").partition(_.trim.startsWith("--"))
 
+    // If `--import` found, load code from another test case file, then insert them
+    // into the head in this test.
+    val importedTestCaseName = comments.filter(_.startsWith("--import ")).map(_.substring(9))
+    val importedCode = importedTestCaseName.flatMap { testCaseName =>
+      listTestCases.find(_.name == testCaseName).map { testCase =>
+        val input = fileToString(new File(testCase.inputFile))
+        val (_, code) = input.split("\n").partition(_.trim.startsWith("--"))
+        code
+      }
+    }.flatten
+
     // List of SQL queries to run
     // note: this is not a robust way to split queries using semicolon, but works for now.
-    val queries = code.mkString("\n").split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
+    val queries = (importedCode ++ code).mkString("\n").split("(?<=[^\\\\]);")
+      .map(_.trim).filter(_ != "").toSeq
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
 
@@ -325,6 +347,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
+      case _: AnsiTest =>
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
       case _ =>
     }
 
@@ -457,7 +481,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     line.replaceAll("#\\d+", "#x")
       .replaceAll(
         s"Location.*$clsName/",
-        s"Location ${notIncludedMsg}/{warehouse_dir}/")
+        s"Location $notIncludedMsg/{warehouse_dir}/")
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
@@ -465,7 +489,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
   }
 
-  protected def listTestCases(): Seq[TestCase] = {
+  protected lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
@@ -484,6 +508,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
+        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }

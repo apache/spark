@@ -143,17 +143,6 @@ select interval 1 year '2-1' year to month;
 select interval 1 year '12:11:10' hour to second;
 select interval '10-9' year to month '1' year;
 select interval '12:11:10' hour to second '1' year;
--- malformed interval literal with ansi mode
-SET spark.sql.ansi.enabled=true;
-select interval;
-select interval 1 fake_unit;
-select interval 1 year to month;
-select 1 year to month;
-select interval '1' year to second;
-select '1' year to second;
-select interval 1 year '2-1' year to month;
-select 1 year '2-1' year to month;
-SET spark.sql.ansi.enabled=false;
 
 -- awareness of the negative sign before type
 select -integer '7';

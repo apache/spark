@@ -231,7 +231,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  override def listTestCases(): Seq[TestCase] = {
+  override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
