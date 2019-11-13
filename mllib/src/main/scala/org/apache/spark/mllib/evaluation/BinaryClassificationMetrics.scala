@@ -220,6 +220,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
     val partitionwiseCumulativeCounts =
       agg.scanLeft(new BinaryLabelCounter())((agg, c) => agg.clone() += c)
     val totalCount = partitionwiseCumulativeCounts.last
+    binnedWeights.unpersist()
     logInfo(s"Total counts: $totalCount")
     val cumulativeCounts = binnedCounts.mapPartitionsWithIndex(
       (index: Int, iter: Iterator[(Double, BinaryLabelCounter)]) => {
