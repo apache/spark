@@ -198,6 +198,7 @@ object SparkSQLExample {
       .textFile("examples/src/main/resources/people.txt")
       .map(_.split(","))
       .map(attributes => Person(attributes(0), attributes(1).trim.toInt))
+      .cache()
       .toDF()
     // Register the DataFrame as a temporary view
     peopleDF.createOrReplaceTempView("people")

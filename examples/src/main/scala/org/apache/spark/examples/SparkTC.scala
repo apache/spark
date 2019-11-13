@@ -55,20 +55,24 @@ object SparkTC {
     // the graph to obtain the path (x, z).
 
     // Because join() joins on keys, the edges are stored in reversed order.
-    val edges = tc.map(x => (x._2, x._1))
+    val edges = tc.map(x => (x._2, x._1)).cache()
 
     // This join is iterated until a fixed point is reached.
     var oldCount = 0L
     var nextCount = tc.count()
+    var nextTc = tc
     do {
       oldCount = nextCount
+      tc = nextTc
       // Perform the join, obtaining an RDD of (y, (z, x)) pairs,
       // then project the result to obtain the new (x, z) paths.
-      tc = tc.union(tc.join(edges).map(x => (x._2._2, x._2._1))).distinct().cache()
-      nextCount = tc.count()
+      nextTc = tc.union(tc.join(edges).map(x => (x._2._2, x._2._1))).distinct().cache()
+      nextCount = nextTc.count()
+      tc.unpersist()
     } while (nextCount != oldCount)
+    edges.unpersist()
 
-    println(s"TC has ${tc.count()} edges.")
+    println(s"TC has ${nextTc.count()} edges.")
     spark.stop()
   }
 }

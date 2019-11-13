@@ -60,7 +60,7 @@ object LogisticRegressionSummaryExample {
     println(s"areaUnderROC: ${trainingSummary.areaUnderROC}")
 
     // Set the model threshold to maximize F-Measure
-    val fMeasure = trainingSummary.fMeasureByThreshold
+    val fMeasure = trainingSummary.fMeasureByThreshold.cache()
     val maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0)
     val bestThreshold = fMeasure.where($"F-Measure" === maxFMeasure)
       .select("threshold").head().getDouble(0)
