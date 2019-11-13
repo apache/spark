@@ -1781,9 +1781,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
-    val clock = new ManualClock
-    clock.advance(1)
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    assert(sched.taskSetsFailed.isEmpty)
 
     val offerResult = manager.resourceOffer("exec1", "host1", ANY)
     assert(offerResult.isDefined,

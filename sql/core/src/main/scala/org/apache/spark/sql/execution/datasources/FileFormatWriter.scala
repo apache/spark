@@ -283,7 +283,7 @@ object FileFormatWriter extends Logging {
         throw e
       case f: FileAlreadyExistsException =>
         // If any output file to write already exists, it does not make sense to re-run this task.
-        // We throw the exception and let Executor throw ExceptionFailure to about the job.
+        // We throw the exception and let Executor throw ExceptionFailure to abort the job.
         throw new TaskOutputFileAlreadyExistException(f)
       case t: Throwable =>
         throw new SparkException("Task failed while writing rows.", t)
