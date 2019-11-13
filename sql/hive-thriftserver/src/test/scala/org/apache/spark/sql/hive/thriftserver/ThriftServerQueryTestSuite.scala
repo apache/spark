@@ -107,7 +107,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
       testCase match {
         case _: PgSQLTest =>
-          // PostgreSQL enabled cartesian product by default.
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
         case _: AnsiTest =>
@@ -241,6 +240,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
         Seq.empty
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
+        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }

@@ -129,6 +129,5 @@ select interval 1 year '12:11:10' hour to second;
 select interval '10-9' year to month '1' year;
 select interval '12:11:10' hour to second '1' year;
 
--- awareness of the negative sign before type
-select +integer '7';
+-- awareness of the positive sign before interval type
 select +interval '1 second';
