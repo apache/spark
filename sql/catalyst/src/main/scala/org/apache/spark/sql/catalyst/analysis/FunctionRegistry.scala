@@ -420,6 +420,9 @@ object FunctionRegistry {
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeInterval]("make_interval"),
+    expression[JustifyDays]("justify_days"),
+    expression[JustifyHours]("justify_hours"),
+    expression[JustifyInterval]("justify_interval"),
     expression[DatePart]("date_part"),
 
     // collection functions
