@@ -30,7 +30,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A very simple source that reads files from the given directory as they appear.
@@ -274,7 +276,7 @@ class FileStreamSource(
     }
   }
 
-  override def stop(): Unit = {}
+  override def stop(): Unit = sourceCleaner.foreach(_.stop())
 }
 
 
@@ -342,7 +344,14 @@ object FileStreamSource {
     def size: Int = map.size()
   }
 
-  private[sql] trait FileStreamSourceCleaner {
+  private[sql] abstract class FileStreamSourceCleaner {
+    protected val cleanThreadPool = ThreadUtils.newDaemonCachedThreadPool(
+      "file-source-cleaner-threadpool",
+      SQLConf.get.getConf(SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS)
+    )
+
+    def stop(): Unit = cleanThreadPool.shutdown()
+
     def clean(entry: FileEntry): Unit
   }
 
@@ -395,23 +404,27 @@ object FileStreamSource {
     }
 
     override def clean(entry: FileEntry): Unit = {
-      val curPath = new Path(new URI(entry.path))
-      val newPath = new Path(baseArchivePath.toString.stripSuffix("/") + curPath.toUri.getPath)
+      cleanThreadPool.submit(new Runnable {
+        override def run(): Unit = {
+          val curPath = new Path(new URI(entry.path))
+          val newPath = new Path(baseArchivePath.toString.stripSuffix("/") + curPath.toUri.getPath)
 
-      try {
-        logDebug(s"Creating directory if it doesn't exist ${newPath.getParent}")
-        if (!fileSystem.exists(newPath.getParent)) {
-          fileSystem.mkdirs(newPath.getParent)
-        }
+          try {
+            logDebug(s"Creating directory if it doesn't exist ${newPath.getParent}")
+            if (!fileSystem.exists(newPath.getParent)) {
+              fileSystem.mkdirs(newPath.getParent)
+            }
 
-        logDebug(s"Archiving completed file $curPath to $newPath")
-        if (!fileSystem.rename(curPath, newPath)) {
-          logWarning(s"Fail to move $curPath to $newPath / skip moving file.")
+            logDebug(s"Archiving completed file $curPath to $newPath")
+            if (!fileSystem.rename(curPath, newPath)) {
+              logWarning(s"Fail to move $curPath to $newPath / skip moving file.")
+            }
+          } catch {
+            case NonFatal(e) =>
+              logWarning(s"Fail to move $curPath to $newPath / skip moving file.", e)
+          }
         }
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Fail to move $curPath to $newPath / skip moving file.", e)
-      }
+      })
     }
   }
 
@@ -419,18 +432,22 @@ object FileStreamSource {
     extends FileStreamSourceCleaner with Logging {
 
     override def clean(entry: FileEntry): Unit = {
-      val curPath = new Path(new URI(entry.path))
-      try {
-        logDebug(s"Removing completed file $curPath")
+      cleanThreadPool.submit(new Runnable {
+        override def run(): Unit = {
+          val curPath = new Path(new URI(entry.path))
+          try {
+            logDebug(s"Removing completed file $curPath")
 
-        if (!fileSystem.delete(curPath, false)) {
-          logWarning(s"Failed to remove $curPath / skip removing file.")
+            if (!fileSystem.delete(curPath, false)) {
+              logWarning(s"Failed to remove $curPath / skip removing file.")
+            }
+          } catch {
+            case NonFatal(e) =>
+              // Log to error but swallow exception to avoid process being stopped
+              logWarning(s"Fail to remove $curPath / skip removing file.", e)
+          }
         }
-      } catch {
-        case NonFatal(e) =>
-          // Log to error but swallow exception to avoid process being stopped
-          logWarning(s"Fail to remove $curPath / skip removing file.", e)
-      }
+      })
     }
   }
 }
