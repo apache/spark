@@ -602,7 +602,7 @@ class ExpressionParserSuite extends AnalysisTest {
     MICROSECOND)
 
   def intervalLiteral(u: IntervalUnit, s: String): Literal = {
-    Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
+    Literal(IntervalUtils.fromString(s + " " + u.toString))
   }
 
   test("intervals") {

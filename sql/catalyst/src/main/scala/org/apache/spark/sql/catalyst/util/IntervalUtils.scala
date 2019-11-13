@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -108,25 +107,11 @@ object IntervalUtils {
    */
   def fromString(str: String): CalendarInterval = {
     if (str == null) throw new IllegalArgumentException("Interval string cannot be null")
-    try {
-      CatalystSqlParser.parseInterval(str)
-    } catch {
-      case e: ParseException =>
-        val ex = new IllegalArgumentException(s"Invalid interval string: $str\n" + e.message)
-        ex.setStackTrace(e.getStackTrace)
-        throw ex
+    val interval = stringToInterval(UTF8String.fromString(str))
+    if (interval == null) {
+      throw new IllegalArgumentException(s"Invalid interval string: $str")
     }
-  }
-
-  /**
-   * A safe version of `fromString`. It returns null for invalid input string.
-   */
-  def safeFromString(str: String): CalendarInterval = {
-    try {
-      fromString(str)
-    } catch {
-      case _: IllegalArgumentException => null
-    }
+    interval
   }
 
   private def toLongWithRange(
@@ -248,46 +233,6 @@ object IntervalUtils {
         throw new IllegalArgumentException(
           s"Error parsing interval day-time string: ${e.getMessage}", e)
     }
-  }
-
-  def fromUnitStrings(units: Array[IntervalUnit], values: Array[String]): CalendarInterval = {
-    assert(units.length == values.length)
-    var months: Int = 0
-    var days: Int = 0
-    var microseconds: Long = 0
-    var i = 0
-    while (i < units.length) {
-      try {
-        units(i) match {
-          case YEAR =>
-            months = Math.addExact(months, Math.multiplyExact(values(i).toInt, 12))
-          case MONTH =>
-            months = Math.addExact(months, values(i).toInt)
-          case WEEK =>
-            days = Math.addExact(days, Math.multiplyExact(values(i).toInt, 7))
-          case DAY =>
-            days = Math.addExact(days, values(i).toInt)
-          case HOUR =>
-            val hoursUs = Math.multiplyExact(values(i).toLong, MICROS_PER_HOUR)
-            microseconds = Math.addExact(microseconds, hoursUs)
-          case MINUTE =>
-            val minutesUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MINUTE)
-            microseconds = Math.addExact(microseconds, minutesUs)
-          case SECOND =>
-            microseconds = Math.addExact(microseconds, parseSecondNano(values(i)))
-          case MILLISECOND =>
-            val millisUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MILLIS)
-            microseconds = Math.addExact(microseconds, millisUs)
-          case MICROSECOND =>
-            microseconds = Math.addExact(microseconds, values(i).toLong)
-        }
-      } catch {
-        case e: Exception =>
-          throw new IllegalArgumentException(s"Error parsing interval string: ${e.getMessage}", e)
-      }
-      i += 1
-    }
-    new CalendarInterval(months, days, microseconds)
   }
 
   // Parses a string with nanoseconds, truncates the result and returns microseconds
