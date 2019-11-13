@@ -420,8 +420,9 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @see [[org.apache.spark.graphx.lib.PageRank$#run]]
    */
-  def staticPageRank(numIter: Int, resetProb: Double = 0.15): Graph[Double, Double] = {
-    PageRank.run(graph, numIter, resetProb)
+  def staticPageRank(numIter: Int, resetProb: Double = 0.15,
+                     prePageRank: Option[Graph[Double, Double]] = None): Graph[Double, Double] = {
+    PageRank.run(graph, numIter, resetProb, prePageRank)
   }
 
   /**

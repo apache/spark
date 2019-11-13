@@ -100,6 +100,29 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
     }
   } // end of test Star PageRank
 
+  test("Star PageRank with checkpoint") {
+    withSpark { sc =>
+      val nVertices = 100
+      val starGraph = GraphGenerators.starGraph(sc, nVertices).cache()
+      val resetProb = 0.15
+      val tol = 0.0001
+      val numIter = 2
+      val checkPointIter = 1
+      val errorTol = 1.0e-5
+
+      val staticGraphRankPartial = starGraph.staticPageRank(checkPointIter, resetProb)
+      val staticGraphRankTotal = starGraph.staticPageRank(numIter + 1, resetProb)
+      val staticGraphRankWithCheckPoint = starGraph.staticPageRank(numIter - checkPointIter,
+        resetProb, Some(staticGraphRankPartial))
+
+      val noCheckPointRanks = staticGraphRankTotal.vertices.cache()
+      val checkPointRanks = staticGraphRankWithCheckPoint.vertices.cache()
+
+      assert(compareRanks(noCheckPointRanks, checkPointRanks) < errorTol)
+
+    }
+  } // end of test Star PageRank
+
   test("Star PersonalPageRank") {
     withSpark { sc =>
       val nVertices = 100
@@ -184,6 +207,32 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
     }
   } // end of Grid PageRank
 
+  test("Grid PageRank with checkpoint") {
+    withSpark { sc =>
+      val rows = 10
+      val cols = 10
+      val resetProb = 0.15
+      val numIter = 50
+      val checkPointIter = 25
+      val errorTol = 1.0e-5
+      val tol = 0.0001
+      val gridGraph = GraphGenerators.gridGraph(sc, rows, cols).cache()
+
+      val staticGraphRankPartial = gridGraph.staticPageRank(checkPointIter, resetProb)
+      val staticGraphRankTotal = gridGraph.staticPageRank(numIter, resetProb)
+      val staticGraphRankWithCheckPoint = gridGraph.staticPageRank(numIter - checkPointIter,
+        resetProb, Some(staticGraphRankPartial))
+
+      val noCheckPointRanks = staticGraphRankTotal.vertices.cache()
+      val checkPointRanks = staticGraphRankWithCheckPoint.vertices.cache()
+      val dynamicRanks = gridGraph.pageRank(tol, resetProb).vertices.cache()
+
+      assert(compareRanks(checkPointRanks, dynamicRanks) < errorTol)
+      assert(compareRanks(noCheckPointRanks, checkPointRanks) < errorTol)
+
+    }
+  } // end of Grid PageRank
+
   test("Chain PageRank") {
     withSpark { sc =>
       val chain1 = (0 until 9).map(x => (x, x + 1))
@@ -200,6 +249,32 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
     }
   }
+
+  test("Chain PageRank with checkpoint") {
+    withSpark { sc =>
+      val chain1 = (0 until 9).map(x => (x, x + 1))
+      val rawEdges = sc.parallelize(chain1, 1).map { case (s, d) => (s.toLong, d.toLong) }
+      val chain = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
+      val resetProb = 0.15
+      val numIter = 10
+      val checkPointIter = 5
+      val errorTol = 1.0e-5
+      val tol = 0.0001
+
+      val staticGraphRankPartial = chain.staticPageRank(checkPointIter, resetProb)
+      val staticGraphRankTotal = chain.staticPageRank(numIter, resetProb)
+      val staticGraphRankWithCheckPoint = chain.staticPageRank(numIter - checkPointIter,
+        resetProb, Some(staticGraphRankPartial))
+
+      val noCheckPointRanks = staticGraphRankTotal.vertices.cache()
+      val checkPointRanks = staticGraphRankWithCheckPoint.vertices.cache()
+      val dynamicRanks = chain.pageRank(tol, resetProb).vertices
+
+      assert(compareRanks(checkPointRanks, dynamicRanks) < errorTol)
+      assert(compareRanks(noCheckPointRanks, checkPointRanks) < errorTol)
+
+    }
+  } // end of Grid PageRank
 
   test("Chain PersonalizedPageRank") {
     withSpark { sc =>

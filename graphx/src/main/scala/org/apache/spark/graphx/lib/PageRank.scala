@@ -79,10 +79,11 @@ object PageRank extends Logging {
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    */
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int,
-    resetProb: Double = 0.15): Graph[Double, Double] =
+  def run[VD: ClassTag, ED: ClassTag](
+      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15,
+      prePageRank: Option[Graph[Double, Double]] = None): Graph[Double, Double] =
   {
-    runWithOptions(graph, numIter, resetProb)
+    runWithOptions(graph, numIter, resetProb, None, prePageRank)
   }
 
   /**
@@ -103,9 +104,8 @@ object PageRank extends Logging {
    *
    */
   def runWithOptions[VD: ClassTag, ED: ClassTag](
-      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15,
-      srcId: Option[VertexId] = None): Graph[Double, Double] =
-  {
+      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15, srcId: Option[VertexId] = None,
+      preRankGraph: Option[Graph[Double, Double]] = None): Graph[Double, Double] = {
     require(numIter > 0, s"Number of iterations must be greater than 0," +
       s" but got ${numIter}")
     require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
@@ -118,15 +118,20 @@ object PageRank extends Logging {
     // weight 1/outDegree and each vertex with attribute 1.0.
     // When running personalized pagerank, only the source vertex
     // has an attribute 1.0. All others are set to 0.
-    var rankGraph: Graph[Double, Double] = graph
-      // Associate the degree with each vertex
-      .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
-      // Set the weight on the edges based on the degree
-      .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
-      // Set the vertex attributes to the initial pagerank values
-      .mapVertices { (id, attr) =>
-        if (!(id != src && personalized)) 1.0 else 0.0
+    var rankGraph: Graph[Double, Double] = {
+      preRankGraph match {
+        case Some(pageRank) => pageRank
+        case None => graph
+            // Associate the degree with each vertex
+            .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
+            // Set the weight on the edges based on the degree
+            .mapTriplets(e => 1.0 / e.srcAttr, TripletFields.Src)
+            // Set the vertex attributes to the initial pagerank values
+            .mapVertices { (id, attr) =>
+            if (!(id != src && personalized)) 1.0 else 0.0
+          }
       }
+    }
 
     def delta(u: VertexId, v: VertexId): Double = { if (u == v) 1.0 else 0.0 }
 
