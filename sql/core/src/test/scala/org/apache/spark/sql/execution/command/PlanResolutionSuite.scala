@@ -26,17 +26,17 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, IntegerLiteral, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan, SubqueryAlias, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DescribeTable, DropTable, InsertAction, LogicalPlan, MergeIntoTable, Project, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.connector.InMemoryTableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -49,12 +49,20 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
+  private val table1: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(new StructType().add("i", "int"))
+    t
+  }
+
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[Identifier](0).name match {
         case "tab" =>
           table
+        case "tab1" =>
+          table1
         case name =>
           throw new NoSuchTableException(name)
       }
@@ -71,8 +79,14 @@ class PlanResolutionSuite extends AnalysisTest {
           val v1Table = mock(classOf[V1Table])
           when(v1Table.schema).thenReturn(new StructType().add("i", "int"))
           v1Table
+        case "v1Table1" =>
+          val v1Table1 = mock(classOf[V1Table])
+          when(v1Table1.schema).thenReturn(new StructType().add("i", "int"))
+          v1Table1
         case "v2Table" =>
           table
+        case "v2Table1" =>
+          table1
         case name =>
           throw new NoSuchTableException(name)
       }
@@ -895,6 +909,292 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(u.table.isInstanceOf[UnresolvedV2Relation])
       case _ => fail("Expect UpdateTable, but got:\n" + parsed.treeString)
     }
+  }
+
+  test("alter table: alter column") {
+    Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
+      case (tblName, useV1Command) =>
+        val sql1 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint"
+        val sql2 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint COMMENT 'new comment'"
+        val sql3 = s"ALTER TABLE $tblName ALTER COLUMN i COMMENT 'new comment'"
+
+        val parsed1 = parseAndResolve(sql1)
+        val parsed2 = parseAndResolve(sql2)
+
+        val tableIdent = TableIdentifier(tblName, None)
+        if (useV1Command) {
+          val newColumn = StructField("i", LongType)
+          val expected1 = AlterTableChangeColumnCommand(
+            tableIdent, "i", newColumn)
+          val expected2 = AlterTableChangeColumnCommand(
+            tableIdent, "i", newColumn.withComment("new comment"))
+
+          comparePlans(parsed1, expected1)
+          comparePlans(parsed2, expected2)
+
+          val e1 = intercept[AnalysisException] {
+            parseAndResolve(sql3)
+          }
+          assert(e1.getMessage.contains("ALTER COLUMN with v1 tables must specify new data type"))
+
+          val sql4 = s"ALTER TABLE $tblName ALTER COLUMN a.b.c TYPE bigint"
+          val e2 = intercept[AnalysisException] {
+            parseAndResolve(sql4)
+          }
+          assert(e2.getMessage.contains(
+            "ALTER COLUMN with qualified column is only supported with v2 tables"))
+
+          val sql5 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE char(1)"
+          val builder = new MetadataBuilder
+          builder.putString(HIVE_TYPE_STRING, CharType(1).catalogString)
+          val newColumnWithCleanedType = StructField("i", StringType, true, builder.build())
+          val expected5 = AlterTableChangeColumnCommand(
+            tableIdent, "i", newColumnWithCleanedType)
+          val parsed5 = parseAndResolve(sql5)
+          comparePlans(parsed5, expected5)
+        } else {
+          val parsed3 = parseAndResolve(sql3)
+
+          parsed1 match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.updateColumnType(Array("i"), LongType)))
+            case _ => fail("expect AlterTable")
+          }
+
+          parsed2 match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.updateColumnType(Array("i"), LongType),
+                TableChange.updateColumnComment(Array("i"), "new comment")))
+            case _ => fail("expect AlterTable")
+          }
+
+          parsed3 match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.updateColumnComment(Array("i"), "new comment")))
+            case _ => fail("expect AlterTable")
+          }
+        }
+    }
+  }
+
+  test("MERGE INTO TABLE") {
+    Seq(("v2Table", "v2Table1"), ("testcat.tab", "testcat.tab1")).foreach {
+        case(target, source) =>
+
+        // basic
+        val sql1 =
+          s"""
+             |MERGE INTO $target AS target
+             |USING $source AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
+             |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
+             |WHEN NOT MATCHED AND (target.s='insert')
+             |  THEN INSERT (target.i, target.s) values (source.i, source.s)
+           """.stripMargin
+        // star
+        val sql2 =
+          s"""
+             |MERGE INTO $target AS target
+             |USING $source AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
+             |WHEN MATCHED AND (target.s='update') THEN UPDATE SET *
+             |WHEN NOT MATCHED AND (target.s='insert') THEN INSERT *
+           """.stripMargin
+        // no additional conditions
+        val sql3 =
+          s"""
+             |MERGE INTO $target AS target
+             |USING $source AS source
+             |ON target.i = source.i
+             |WHEN MATCHED THEN DELETE
+             |WHEN MATCHED THEN UPDATE SET target.s = source.s
+             |WHEN NOT MATCHED THEN INSERT (target.i, target.s) values (source.i, source.s)
+           """.stripMargin
+        // using subquery
+        val sql4 =
+          s"""
+             |MERGE INTO $target AS target
+             |USING (SELECT * FROM $source) AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
+             |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
+             |WHEN NOT MATCHED AND (target.s='insert')
+             |  THEN INSERT (target.i, target.s) values (source.i, source.s)
+           """.stripMargin
+
+        val parsed1 = parseAndResolve(sql1)
+        val parsed2 = parseAndResolve(sql2)
+        val parsed3 = parseAndResolve(sql3)
+        val parsed4 = parseAndResolve(sql4)
+
+        parsed1 match {
+          case MergeIntoTable(
+              SubqueryAlias(AliasIdentifier("target", None), _: DataSourceV2Relation),
+              SubqueryAlias(AliasIdentifier("source", None), _: DataSourceV2Relation),
+              EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute),
+              Seq(DeleteAction(Some(EqualTo(dl: UnresolvedAttribute, StringLiteral("delete")))),
+                UpdateAction(Some(EqualTo(ul: UnresolvedAttribute, StringLiteral("update"))),
+                  updateAssigns)),
+              Seq(InsertAction(Some(EqualTo(il: UnresolvedAttribute, StringLiteral("insert"))),
+                insertAssigns))) =>
+            assert(l.name == "target.i" && r.name == "source.i")
+            assert(dl.name == "target.s")
+            assert(ul.name == "target.s")
+            assert(il.name == "target.s")
+            assert(updateAssigns.size == 1)
+            assert(updateAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+                updateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.s")
+            assert(updateAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+                updateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.s")
+            assert(insertAssigns.size == 2)
+            assert(insertAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+                insertAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.i")
+            assert(insertAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+                insertAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.i")
+
+          case _ => fail("Expect MergeIntoTable, but got:\n" + parsed2.treeString)
+        }
+
+        parsed2 match {
+          case MergeIntoTable(
+              SubqueryAlias(AliasIdentifier("target", None), _: DataSourceV2Relation),
+              SubqueryAlias(AliasIdentifier("source", None), _: DataSourceV2Relation),
+              EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute),
+              Seq(DeleteAction(Some(EqualTo(dl: UnresolvedAttribute, StringLiteral("delete")))),
+                UpdateAction(Some(EqualTo(ul: UnresolvedAttribute,
+                  StringLiteral("update"))), Seq())),
+              Seq(InsertAction(Some(EqualTo(il: UnresolvedAttribute, StringLiteral("insert"))),
+                Seq()))) =>
+            assert(l.name == "target.i" && r.name == "source.i")
+            assert(dl.name == "target.s")
+            assert(ul.name == "target.s")
+            assert(il.name == "target.s")
+
+          case _ => fail("Expect MergeIntoTable, but got:\n" + parsed2.treeString)
+        }
+
+        parsed3 match {
+          case MergeIntoTable(
+              SubqueryAlias(AliasIdentifier("target", None), _: DataSourceV2Relation),
+              SubqueryAlias(AliasIdentifier("source", None), _: DataSourceV2Relation),
+              EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute),
+              Seq(DeleteAction(None), UpdateAction(None, updateAssigns)),
+              Seq(InsertAction(None, insertAssigns))) =>
+            assert(l.name == "target.i" && r.name == "source.i")
+            assert(updateAssigns.size == 1)
+            assert(updateAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+                updateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.s")
+            assert(updateAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+                updateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.s")
+            assert(insertAssigns.size == 2)
+            assert(insertAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+                insertAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.i")
+            assert(insertAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+                insertAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.i")
+
+          case _ => fail("Expect MergeIntoTable, but got:\n" + parsed2.treeString)
+        }
+
+        parsed4 match {
+          case MergeIntoTable(
+              SubqueryAlias(AliasIdentifier("target", None), _: DataSourceV2Relation),
+              SubqueryAlias(AliasIdentifier("source", None), _: Project),
+              EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute),
+              Seq(DeleteAction(Some(EqualTo(dl: UnresolvedAttribute, StringLiteral("delete")))),
+                UpdateAction(Some(EqualTo(ul: UnresolvedAttribute, StringLiteral("update"))),
+                  updateAssigns)),
+              Seq(InsertAction(Some(EqualTo(il: UnresolvedAttribute, StringLiteral("insert"))),
+                insertAssigns))) =>
+            assert(l.name == "target.i" && r.name == "source.i")
+            assert(dl.name == "target.s")
+            assert(ul.name == "target.s")
+            assert(il.name == "target.s")
+            assert(updateAssigns.size == 1)
+            assert(updateAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+                updateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.s")
+            assert(updateAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+                updateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.s")
+            assert(insertAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+                insertAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.i")
+            assert(insertAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+                insertAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.i")
+
+          case _ => fail("Expect MergeIntoTable, but got:\n" + parsed2.treeString)
+      }
+    }
+
+    // no aliases
+    Seq(("v2Table", "v2Table1"),
+      ("testcat.tab", "testcat.tab1")).foreach { pair =>
+
+      val target = pair._1
+      val source = pair._2
+
+      val sql =
+        s"""
+           |MERGE INTO $target
+           |USING $source
+           |ON $target.i = $source.i
+           |WHEN MATCHED AND ($target.s='delete') THEN DELETE
+           |WHEN MATCHED AND ($target.s='update') THEN UPDATE SET $target.s = $source.s
+           |WHEN NOT MATCHED AND ($target.s='insert')
+           |THEN INSERT ($target.i, $target.s) values ($source.i, $source.s)
+         """.stripMargin
+
+      val parsed = parseAndResolve(sql)
+
+      parsed match {
+        case MergeIntoTable(
+        _: DataSourceV2Relation,
+        _: DataSourceV2Relation,
+        EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute),
+        Seq(DeleteAction(Some(EqualTo(dl: UnresolvedAttribute, StringLiteral("delete")))),
+        UpdateAction(Some(EqualTo(ul: UnresolvedAttribute, StringLiteral("update"))),
+          updateAssigns)),
+        Seq(InsertAction(Some(EqualTo(il: UnresolvedAttribute, StringLiteral("insert"))),
+          insertAssigns))) =>
+          assert(l.name == s"$target.i" && r.name == s"$source.i")
+          assert(dl.name == s"$target.s")
+          assert(ul.name == s"$target.s")
+          assert(il.name == s"$target.s")
+          assert(updateAssigns.size == 1)
+          assert(updateAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+              updateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == s"$target.s")
+          assert(updateAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+              updateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == s"$source.s")
+          assert(insertAssigns.size == 2)
+          assert(insertAssigns.head.key.isInstanceOf[UnresolvedAttribute] &&
+              insertAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == s"$target.i")
+          assert(insertAssigns.head.value.isInstanceOf[UnresolvedAttribute] &&
+              insertAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == s"$source.i")
+
+        case _ => fail("Expect MergeIntoTable, but got:\n" + parsed.treeString)
+      }
+    }
+
+    val sql =
+      s"""
+         |MERGE INTO non_exist_target
+         |USING non_exist_source
+         |ON target.i = source.i
+         |WHEN MATCHED THEN DELETE
+         |WHEN MATCHED THEN UPDATE SET *
+         |WHEN NOT MATCHED THEN INSERT *
+       """.stripMargin
+    val parsed = parseAndResolve(sql)
+    parsed match {
+      case u: MergeIntoTable =>
+        assert(u.targetTable.isInstanceOf[UnresolvedRelation])
+        assert(u.sourceTable.isInstanceOf[UnresolvedRelation])
+      case _ => fail("Expect MergeIntoTable, but got:\n" + parsed.treeString)
+    }
+
+    // TODO: v1 table is not supported.
   }
 
   // TODO: add tests for more commands.

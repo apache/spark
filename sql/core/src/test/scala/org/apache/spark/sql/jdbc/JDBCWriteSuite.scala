@@ -21,10 +21,12 @@ import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
+import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -542,5 +544,58 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         .jdbc(url1, "TEST.TIMEOUTTEST", properties)
     }.getMessage
     assert(errMsg.contains("Statement was canceled or the session timed out"))
+  }
+
+  test("metrics") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+
+    runAndVerifyRecordsWritten(2) {
+      df.write.mode(SaveMode.Append).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+
+    runAndVerifyRecordsWritten(1) {
+      df2.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+
+    runAndVerifyRecordsWritten(1) {
+      df2.write.mode(SaveMode.Overwrite).option("truncate", true)
+        .jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+
+    runAndVerifyRecordsWritten(0) {
+      intercept[AnalysisException] {
+        df2.write.mode(SaveMode.ErrorIfExists).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+      }
+    }
+
+    runAndVerifyRecordsWritten(0) {
+      df.write.mode(SaveMode.Ignore).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+  }
+
+  private def runAndVerifyRecordsWritten(expected: Long)(job: => Unit): Unit = {
+    assert(expected === runAndReturnMetrics(job, _.taskMetrics.outputMetrics.recordsWritten))
+  }
+
+  private def runAndReturnMetrics(job: => Unit, collector: (SparkListenerTaskEnd) => Long): Long = {
+    val taskMetrics = new ArrayBuffer[Long]()
+
+    // Avoid receiving earlier taskEnd events
+    sparkContext.listenerBus.waitUntilEmpty()
+
+    val listener = new SparkListener() {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        taskMetrics += collector(taskEnd)
+      }
+    }
+    sparkContext.addSparkListener(listener)
+
+    job
+
+    sparkContext.listenerBus.waitUntilEmpty()
+
+    sparkContext.removeSparkListener(listener)
+    taskMetrics.sum
   }
 }

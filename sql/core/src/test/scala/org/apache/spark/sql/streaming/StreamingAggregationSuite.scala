@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
@@ -28,7 +28,7 @@ import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
@@ -348,25 +348,25 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
-        .select(($"value" * DateTimeUtils.SECONDS_PER_DAY).cast("timestamp").as("value"))
+        .select(($"value" * SECONDS_PER_DAY).cast("timestamp").as("value"))
         .groupBy($"value")
         .agg(count("*"))
         .where($"value".cast("date") >= date_sub(current_timestamp().cast("date"), 10))
         .select(
-          ($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
+          ($"value".cast("long") / SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
       StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
       // advance clock to 10 days, should retain all keys
       AddData(inputData, 0L, 5L, 5L, 10L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      AdvanceManualClock(MILLIS_PER_DAY * 10),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
       // advance clock to 20 days, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      AdvanceManualClock(MILLIS_PER_DAY * 10),
       CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
       // advance clock to 30 days, should retain keys >= 20
       AddData(inputData, 85L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      AdvanceManualClock(MILLIS_PER_DAY * 10),
       CheckLastBatch((20L, 1), (85L, 1)),
 
       // bounce stream and ensure correct batch timestamp is used
@@ -376,7 +376,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         q.sink.asInstanceOf[MemorySink].clear()
         q.commitLog.purge(3)
         // advance by 60 days i.e., 90 days total
-        clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
+        clock.advance(MILLIS_PER_DAY * 60)
         true
       },
       StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
@@ -385,7 +385,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
       // advance clock to 100 days, should retain keys >= 90
       AddData(inputData, 85L, 90L, 100L, 105L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      AdvanceManualClock(MILLIS_PER_DAY * 10),
       CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
     )
   }

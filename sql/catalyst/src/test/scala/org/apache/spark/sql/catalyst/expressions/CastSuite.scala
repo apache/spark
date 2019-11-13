@@ -28,6 +28,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -664,16 +665,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     import org.apache.spark.unsafe.types.CalendarInterval
 
     checkEvaluation(Cast(Literal(""), CalendarIntervalType), null)
-    checkEvaluation(Cast(Literal("interval -3 month 7 hours"), CalendarIntervalType),
-      new CalendarInterval(-3, 7 * CalendarInterval.MICROS_PER_HOUR))
+    checkEvaluation(Cast(Literal("interval -3 month 1 day 7 hours"), CalendarIntervalType),
+      new CalendarInterval(-3, 1, 7 * MICROS_PER_HOUR))
     checkEvaluation(Cast(Literal.create(
-      new CalendarInterval(15, -3 * CalendarInterval.MICROS_PER_DAY), CalendarIntervalType),
+      new CalendarInterval(15, 9, -3 * MICROS_PER_HOUR), CalendarIntervalType),
       StringType),
-      "interval 1 years 3 months -3 days")
+      "1 years 3 months 9 days -3 hours")
     checkEvaluation(Cast(Literal("INTERVAL 1 Second 1 microsecond"), CalendarIntervalType),
-      new CalendarInterval(0, 1000001))
+      new CalendarInterval(0, 0, 1000001))
     checkEvaluation(Cast(Literal("1 MONTH 1 Microsecond"), CalendarIntervalType),
-      new CalendarInterval(1, 1))
+      new CalendarInterval(1, 0, 1))
   }
 
   test("cast string to boolean") {

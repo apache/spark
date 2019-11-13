@@ -84,7 +84,20 @@ select timestamp '2016-33-11 20:54:00.000';
 
 -- interval
 select interval 13.123456789 seconds, interval -13.123456789 second;
-select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond, 9 microsecond;
+select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond;
+select interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second;
+select interval '0 0:0:0.1' day to second;
+select interval '10-9' year to month;
+select interval '20 15:40:32.99899999' day to hour;
+select interval '20 15:40:32.99899999' day to minute;
+select interval '20 15:40:32.99899999' day to second;
+select interval '15:40:32.99899999' hour to minute;
+select interval '15:40.99899999' hour to second;
+select interval '15:40' hour to second;
+select interval '15:40:32.99899999' hour to second;
+select interval '20 40:32.99899999' minute to second;
+select interval '40:32.99899999' minute to second;
+select interval '40:32' minute to second;
 -- ns is not supported
 select interval 10 nanoseconds;
 
@@ -112,3 +125,40 @@ select map(1, interval 1 day, 2, interval 3 week);
 -- typed interval expression
 select interval 'interval 3 year 1 hour';
 select interval '3 year 1 hour';
+
+-- typed integer expression
+select integer '7';
+select integer'7';
+select integer '2147483648';
+
+-- malformed interval literal
+select interval;
+select interval 1 fake_unit;
+select interval 1 year to month;
+select interval '1' year to second;
+select interval '10-9' year to month '2-1' year to month;
+select interval '10-9' year to month '12:11:10' hour to second;
+select interval '1 15:11' day to minute '12:11:10' hour to second;
+select interval 1 year '2-1' year to month;
+select interval 1 year '12:11:10' hour to second;
+select interval '10-9' year to month '1' year;
+select interval '12:11:10' hour to second '1' year;
+-- malformed interval literal with ansi mode
+SET spark.sql.ansi.enabled=true;
+select interval;
+select interval 1 fake_unit;
+select interval 1 year to month;
+select 1 year to month;
+select interval '1' year to second;
+select '1' year to second;
+select interval 1 year '2-1' year to month;
+select 1 year '2-1' year to month;
+SET spark.sql.ansi.enabled=false;
+
+-- awareness of the negative sign before type
+select -integer '7';
+select -date '1999-01-01';
+select -timestamp '1999-01-01';
+select -x'2379ACFe';
+select +integer '7';
+select +interval '1 second';

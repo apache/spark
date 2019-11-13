@@ -419,6 +419,7 @@ object FunctionRegistry {
     expression[TimeWindow]("window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
 
     // collection functions
@@ -486,6 +487,7 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method"),
+    expression[Version]("version"),
 
     // grouping sets
     expression[Cube]("cube"),
@@ -527,6 +529,7 @@ object FunctionRegistry {
     expression[BitwiseCount]("bit_count"),
     expression[BitAndAgg]("bit_and"),
     expression[BitOrAgg]("bit_or"),
+    expression[BitXorAgg]("bit_xor"),
 
     // json
     expression[StructsToJson]("to_json"),

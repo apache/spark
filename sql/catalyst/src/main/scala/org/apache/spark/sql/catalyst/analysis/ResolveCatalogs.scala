@@ -73,7 +73,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       createAlterTable(nameParts, catalog, tableName, changes)
 
     case AlterTableSetLocationStatement(
-         nameParts @ NonSessionCatalog(catalog, tableName), newLoc) =>
+         nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, newLoc) =>
+      if (partitionSpec.nonEmpty) {
+        throw new AnalysisException(
+          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
+      }
       val changes = Seq(TableChange.setProperty("location", newLoc))
       createAlterTable(nameParts, catalog, tableName, changes)
 
@@ -137,6 +141,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.options.filterKeys(_ != "path"),
         ignoreIfExists = c.ifNotExists)
 
+    case RefreshTableStatement(NonSessionCatalog(catalog, tableName)) =>
+      RefreshTable(catalog.asTableCatalog, tableName.asIdentifier)
+
     case c @ ReplaceTableStatement(
          NonSessionCatalog(catalog, tableName), _, _, _, _, _, _, _, _, _) =>
       ReplaceTable(
@@ -175,6 +182,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.ifNotExists,
         c.properties)
 
+    case DropNamespaceStatement(NonSessionCatalog(catalog, nameParts), ifExists, cascade) =>
+      DropNamespace(catalog.asNamespaceCatalog, nameParts, ifExists, cascade)
+
     case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, namespace)), pattern) =>
       ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)
 
@@ -194,6 +204,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val CatalogAndNamespace(catalog, namespace) = nameParts
         SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
       }
+
+    case ShowCurrentNamespaceStatement() =>
+      ShowCurrentNamespace(catalogManager)
+
+    case ShowTablePropertiesStatement(
+      nameParts @ NonSessionCatalog(catalog, tableName), propertyKey) =>
+      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
+      ShowTableProperties(r, propertyKey)
   }
 
   object NonSessionCatalog {
