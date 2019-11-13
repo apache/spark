@@ -98,6 +98,41 @@ private[spark] class StageDataWrapper(
 }
 
 /**
+ * This object map the indices names of successful tasks' metrices. Mapped to short strings
+ * to save space when using a disk store.
+ */
+private[spark] object SuccessTaskIndexNames {
+  final val DESER_CPU_TIME = "sdct"
+  final val DESER_TIME = "sdes"
+  final val DISK_SPILL = "sdbs"
+  final val EXEC_CPU_TIME = "sect"
+  final val EXEC_RUN_TIME = "sert"
+  final val GC_TIME = "sgc"
+  final val GETTING_RESULT_TIME = "sgrt"
+  final val INPUT_RECORDS = "sir"
+  final val INPUT_SIZE = "sis"
+  final val MEM_SPILL = "smbs"
+  final val OUTPUT_RECORDS = "sor"
+  final val OUTPUT_SIZE = "sos"
+  final val PEAK_MEM = "spem"
+  final val RESULT_SIZE = "srs"
+  final val SCHEDULER_DELAY = "sdly"
+  final val SER_TIME = "srst"
+  final val SHUFFLE_LOCAL_BLOCKS = "sslbl"
+  final val SHUFFLE_READ_RECORDS = "ssrr"
+  final val SHUFFLE_READ_TIME = "ssrt"
+  final val SHUFFLE_REMOTE_BLOCKS = "ssrbl"
+  final val SHUFFLE_REMOTE_READS = "ssrby"
+  final val SHUFFLE_REMOTE_READS_TO_DISK = "ssrbd"
+  final val SHUFFLE_TOTAL_READS = "sstby"
+  final val SHUFFLE_TOTAL_BLOCKS = "sstbl"
+  final val SHUFFLE_WRITE_RECORDS = "sswr"
+  final val SHUFFLE_WRITE_SIZE = "ssws"
+  final val SHUFFLE_WRITE_TIME = "sswt"
+  final val STAGE = "stage"
+}
+
+/**
  * Tasks have a lot of indices that are used in a few different places. This object keeps logical
  * names for these indices, mapped to short strings to save space when using a disk store.
  */
@@ -235,6 +270,8 @@ private[spark] class TaskDataWrapper(
 
   def hasMetrics: Boolean = executorDeserializeTime >= 0
 
+  private val isSuccess = status == "SUCCESS"
+
   def toApi: TaskData = {
     val metrics = if (hasMetrics) {
       Some(new TaskMetrics(
@@ -289,6 +326,119 @@ private[spark] class TaskDataWrapper(
       schedulerDelay = 0L,
       gettingResultTime = 0L)
   }
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.DESER_TIME, parent = TaskIndexNames.STAGE)
+  def executorDeserializeTimeIndex: Long = if (isSuccess) {
+    executorDeserializeTime
+  } else {
+    -1L
+  }
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.DESER_CPU_TIME, parent = TaskIndexNames.STAGE)
+  def executorDeserializeCpuTimeIndex: Long = if (isSuccess) {
+    executorDeserializeCpuTime
+  } else {
+    -1L
+  }
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.EXEC_RUN_TIME, parent = TaskIndexNames.STAGE)
+  def executorRunTimeIndex: Long = if (isSuccess) executorRunTime else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.EXEC_CPU_TIME, parent = TaskIndexNames.STAGE)
+  def executorCpuTimeIndex: Long = if (isSuccess) executorCpuTime else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.RESULT_SIZE, parent = TaskIndexNames.STAGE)
+  def resultSizeIndex: Long = if (isSuccess) resultSize else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.GC_TIME, parent = TaskIndexNames.STAGE)
+  def jvmGcTimeIndex: Long = if (isSuccess) jvmGcTime else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SER_TIME, parent = TaskIndexNames.STAGE)
+  def resultSerializationTimeIndex: Long = if (isSuccess) resultSerializationTime else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.MEM_SPILL, parent = TaskIndexNames.STAGE)
+  def memoryBytesSpilledIndex: Long = if (isSuccess) memoryBytesSpilled else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.DISK_SPILL, parent = TaskIndexNames.STAGE)
+  def diskBytesSpilledIndex: Long = if (isSuccess) diskBytesSpilled else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.PEAK_MEM, parent = TaskIndexNames.STAGE)
+  def peakExecutionMemoryIndex: Long = if (isSuccess) peakExecutionMemory else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.INPUT_SIZE, parent = TaskIndexNames.STAGE)
+  def inputBytesReadIndex: Long = if (isSuccess) inputBytesRead else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.INPUT_RECORDS, parent = TaskIndexNames.STAGE)
+  def inputRecordsReadIndex: Long = if (isSuccess) inputRecordsRead else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.OUTPUT_SIZE, parent = TaskIndexNames.STAGE)
+  def outputBytesWrittenIndex: Long = if (isSuccess) outputBytesWritten else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.OUTPUT_RECORDS, parent = TaskIndexNames.STAGE)
+  def outputRecordsWrittenIndex: Long = if (isSuccess) outputRecordsWritten else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_REMOTE_BLOCKS,
+    parent = TaskIndexNames.STAGE)
+  def shuffleRemoteBlocksFetchedIndex: Long = if (isSuccess) {
+    shuffleRemoteBlocksFetched
+  } else {
+    -1L
+  }
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_LOCAL_BLOCKS,
+    parent = TaskIndexNames.STAGE)
+  def shuffleLocalBlocksFetchedIndex: Long = if (isSuccess) {
+    shuffleLocalBlocksFetched
+  } else {
+    -1L
+  }
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_READ_TIME,
+    parent = TaskIndexNames.STAGE)
+  def shuffleFetchWaitTimeIndex: Long = if (isSuccess) shuffleFetchWaitTime else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_REMOTE_READS,
+    parent = TaskIndexNames.STAGE)
+  def shuffleRemoteBytesReadIndex: Long = if (isSuccess) shuffleRemoteBytesRead else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_REMOTE_READS_TO_DISK,
+    parent = TaskIndexNames.STAGE)
+  def shuffleRemoteBytesReadToDiskIndex: Long = if (isSuccess) {
+    shuffleRemoteBytesReadToDisk
+  } else {
+    -1L
+  }
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_READ_RECORDS,
+    parent = TaskIndexNames.STAGE)
+  def shuffleRecordsReadIndex: Long = if (isSuccess) shuffleRecordsRead else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_WRITE_SIZE,
+    parent = TaskIndexNames.STAGE)
+  def shuffleBytesWrittenIndex: Long = if (isSuccess) shuffleBytesWritten else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_WRITE_TIME,
+    parent = TaskIndexNames.STAGE)
+  def shuffleWriteTimeIndex: Long = if (isSuccess) shuffleWriteTime else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_WRITE_RECORDS,
+    parent = TaskIndexNames.STAGE)
+  def shuffleRecordsWrittenIndex: Long = if (isSuccess) shuffleRecordsWritten else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SCHEDULER_DELAY, parent = TaskIndexNames.STAGE)
+  def schedulerDelayIndex: Long = if (isSuccess) schedulerDelay else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.GETTING_RESULT_TIME,
+    parent = TaskIndexNames.STAGE)
+  def gettingResultTimeIndex: Long = if (isSuccess) gettingResultTime else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_TOTAL_READS,
+    parent = TaskIndexNames.STAGE)
+  def shuffleTotalReadsIndex: Long = if (isSuccess) shuffleTotalReads else -1L
+
+  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_TOTAL_BLOCKS,
+    parent = TaskIndexNames.STAGE)
+  private def shuffleTotalBlocksIndex: Long = if (isSuccess) shuffleTotalBlocks else -1L
 
   @JsonIgnore @KVIndex(TaskIndexNames.STAGE)
   private def stage: Array[Int] = Array(stageId, stageAttemptId)

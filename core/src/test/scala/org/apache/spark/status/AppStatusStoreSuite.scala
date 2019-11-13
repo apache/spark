@@ -18,7 +18,7 @@
 package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.util.Distribution
+import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore._
 
 class AppStatusStoreSuite extends SparkFunSuite {
@@ -92,6 +92,17 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-28638: only successful tasks have taskSummary when with disk kvstore (LevelDB)") {
+    val testDir = Utils.createTempDir()
+    val store = KVUtils.open(testDir, getClass().getName())
+
+    (0 until 5).foreach { i => store.write(newTaskData(i, status = "FAILED")) }
+    Seq(new AppStatusStore(store)).foreach { appStore =>
+      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
+      assert(summary.size === 0)
+    }
+  }
+
   test("SPARK-28638: summary should contain successful tasks only when with in memory kvstore") {
     val store = new InMemoryStore()
 
@@ -113,6 +124,34 @@ class AppStatusStoreSuite extends SparkFunSuite {
         assert(expected === actual)
       }
     }
+  }
+
+  test("summary should contain successful tasks only when with disk kvstore (LevelDB)") {
+
+    val testDir = Utils.createTempDir()
+
+    val store = KVUtils.open(testDir, getClass().getName())
+
+    for (i <- 0 to 5) {
+      if (i % 2 == 1) {
+        store.write(newTaskData(i, status = "FAILED"))
+      } else {
+        store.write(newTaskData(i))
+      }
+    }
+
+    Seq(new AppStatusStore(store)).foreach { appStore =>
+      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
+
+      val values = Array(0.0, 2.0, 4.0)
+
+      val dist = new Distribution(values, 0, values.length).getQuantiles(uiQuantiles.sorted)
+      dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
+        assert(expected === actual)
+      }
+    }
+    store.close()
+    Utils.deleteRecursively(testDir)
   }
 
   private def compareQuantiles(count: Int, quantiles: Array[Double]): Unit = {
