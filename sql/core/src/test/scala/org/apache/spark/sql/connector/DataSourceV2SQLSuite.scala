@@ -822,20 +822,44 @@ class DataSourceV2SQLSuite
     testShowNamespaces("SHOW NAMESPACES IN testcat", Seq())
   }
 
-  test("DropNamespace: drop non-empty namespace") {
+  test("DropNamespace: drop non-empty namespace with a non-cascading mode") {
     sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
     testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
 
-    val e1 = intercept[IllegalStateException] {
-      sql("DROP NAMESPACE testcat.ns1")
+    def assertDropFails(): Unit = {
+      val e = intercept[SparkException] {
+        sql("DROP NAMESPACE testcat.ns1")
+      }
+      assert(e.getMessage.contains("Cannot drop a non-empty namespace: ns1"))
     }
-    assert(e1.getMessage.contains("Cannot delete non-empty namespace: ns1"))
 
-    val e2 = intercept[SparkException] {
-      sql("DROP NAMESPACE testcat.ns1 CASCADE")
-    }
-    assert(e2.getMessage.contains(
-      "Cascade option for droping namespace is not supported in V2 catalog"))
+    // testcat.ns1.table is present, thus testcat.ns1 cannot be dropped.
+    assertDropFails()
+    sql("DROP TABLE testcat.ns1.table")
+
+    // testcat.ns1.ns2.table is present, thus testcat.ns1 cannot be dropped.
+    assertDropFails()
+    sql("DROP TABLE testcat.ns1.ns2.table")
+
+    // testcat.ns1.ns2 namespace is present, thus testcat.ns1 cannot be dropped.
+    assertDropFails()
+    sql("DROP NAMESPACE testcat.ns1.ns2")
+
+    // Now that testcat.ns1 is empty, it can be dropped.
+    sql("DROP NAMESPACE testcat.ns1")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq())
+  }
+
+  test("DropNamespace: drop non-empty namespace with a cascade mode") {
+    sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
+
+    sql("DROP NAMESPACE testcat.ns1 CASCADE")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq())
   }
 
   test("DropNamespace: test handling of 'IF EXISTS'") {

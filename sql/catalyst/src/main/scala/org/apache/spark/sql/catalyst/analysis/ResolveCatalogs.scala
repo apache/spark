@@ -183,7 +183,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.properties)
 
     case DropNamespaceStatement(NonSessionCatalog(catalog, nameParts), ifExists, cascade) =>
-      DropNamespace(catalog.asNamespaceCatalog, nameParts, ifExists, cascade)
+      DropNamespace(catalog, nameParts, ifExists, cascade)
 
     case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, namespace)), pattern) =>
       ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)
