@@ -124,7 +124,7 @@ class BarrierTaskContext private[spark] (
           barrierEpoch),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
-        timeout = new RpcTimeout(365.days, "barrierTimeout"))
+        timeout = new RpcTimeout(Duration.Inf, "barrierTimeout"))
 
       // Wait the RPC future to be completed, but every 1 second it will jump out waiting
       // and check whether current spark task is killed. If killed, then throw

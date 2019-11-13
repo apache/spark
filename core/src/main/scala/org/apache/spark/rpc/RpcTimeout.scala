@@ -33,13 +33,13 @@ private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
 
 
 /**
- * Associates a timeout with a description so that a when a TimeoutException occurs, additional
+ * Associates a timeout with a description so that when a TimeoutException occurs, additional
  * context about the timeout can be amended to the exception message.
  *
- * @param duration timeout duration in seconds
+ * @param duration timeout duration in seconds, or [[Duration.Inf]] for unbounded waiting
  * @param timeoutProp the configuration property that controls this timeout
  */
-private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: String)
+private[spark] class RpcTimeout(val duration: Duration, val timeoutProp: String)
   extends Serializable {
 
   /** Amends the standard message of TimeoutException to include the description */
