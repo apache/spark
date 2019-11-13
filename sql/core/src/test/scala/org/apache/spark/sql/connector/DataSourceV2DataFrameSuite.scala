@@ -138,24 +138,29 @@ class DataSourceV2DataFrameSuite
       }
       override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
     }
-    spark.listenerManager.register(listener)
 
-    val t1 = "testcat.ns1.ns2.tbl"
+    try {
+      spark.listenerManager.register(listener)
 
-    sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      val t1 = "testcat.ns1.ns2.tbl"
 
-    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-    df.write.option("other", "20").mode("append").saveAsTable(t1)
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
 
-    sparkContext.listenerBus.waitUntilEmpty()
-    plan match {
-      case p: AppendData =>
-        assert(p.writeOptions == Map("other" -> "20"))
-      case other =>
-        fail(s"Expected to parse ${classOf[AppendData].getName} from query," +
-          s"got ${other.getClass.getName}: $plan")
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df.write.option("other", "20").mode("append").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case p: AppendData =>
+          assert(p.writeOptions == Map("other" -> "20"))
+        case other =>
+          fail(s"Expected to parse ${classOf[AppendData].getName} from query," +
+            s"got ${other.getClass.getName}: $plan")
+      }
+
+      checkAnswer(spark.table(t1), df)
+    } finally {
+      spark.listenerManager.unregister(listener)
     }
-
-    checkAnswer(spark.table(t1), df)
   }
 }
