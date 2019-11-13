@@ -181,7 +181,7 @@ case class ExistsExec(
     exprId: ExprId)
   extends ExecSubqueryExpression {
 
-  @transient private var result: Boolean = _
+  @volatile private var result: Option[Boolean] = None
 
   override def dataType: DataType = BooleanType
   override def children: Seq[Expression] = Nil
@@ -195,32 +195,19 @@ case class ExistsExec(
   }
 
   def updateResult(): Unit = {
-    result = plan.executeTake(1).length == 1
+    result = Some(plan.executeTake(1).length == 1)
   }
 
-  def values(): Option[Boolean] = Option(result)
+  def values(): Option[Boolean] = result
 
   override def eval(input: InternalRow): Any = {
+    require(result.isDefined, s"$this has not finished")
     result
   }
 
-  override lazy val canonicalized: ExistsExec = {
-    copy(
-      plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
-      exprId = ExprId(0))
-  }
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val setTerm = ctx.addReferenceObj("result", result)
-    val resultCode =
-      s"""
-         |${ev.value} = $setTerm;
-       """.stripMargin
-
-    ev.copy(code =
-      code"""
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
+    require(result.isDefined, s"$this has not finished")
+    Literal.create(result.get, dataType).doGenCode(ctx, ev)
   }
 }
 
