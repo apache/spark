@@ -40,6 +40,25 @@ class KubernetesConfSuite extends SparkFunSuite {
   private val SECRET_NAMES_TO_MOUNT_PATHS = Map(
     "secret1" -> "/mnt/secrets/secret1",
     "secret2" -> "/mnt/secrets/secret2")
+  private val CUSTOM_TOLERATIONS = Seq(
+    Map(
+      "key"      -> "key1",
+      "operator" -> "Equal",
+      "effect"   -> "NoSchedule",
+      "value"    -> "value1"
+    ),
+    Map(
+      "key"               -> "key2",
+      "operator"          -> "Exist",
+      "effect"            -> "PreferNoSchedule",
+      "tolerationSeconds" -> "15"
+    ),
+    Map(
+      "operator"          -> "Exist",
+      "effect"            -> "NoExecute",
+      "tolerationSeconds" -> "20"
+    )
+  )
   private val SECRET_ENV_VARS = Map(
     "envName1" -> "name1:key1",
     "envName2" -> "name2:key2")
@@ -162,7 +181,8 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
   }
 
-  test("Resolve driver labels, annotations, secret mount paths, envs, and memory overhead") {
+  test("""Resolve driver labels, annotations, secret mount paths, envs,
+ tolerations and memory overhead""") {
     val sparkConf = new SparkConf(false)
       .set(MEMORY_OVERHEAD_FACTOR, 0.3)
     CUSTOM_LABELS.foreach { case (key, value) =>
@@ -179,6 +199,11 @@ class KubernetesConfSuite extends SparkFunSuite {
     }
     CUSTOM_ENVS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_ENV_PREFIX$key", value)
+    }
+    for ((toleration, idx) <- CUSTOM_TOLERATIONS.view.zipWithIndex) {
+      toleration.foreach { case (key, value) =>
+        sparkConf.set(s"$KUBERNETES_DRIVER_TOLERATIONS_PREFIX$idx.$key", value)
+      }
     }
 
     val conf = KubernetesConf.createDriverConf(

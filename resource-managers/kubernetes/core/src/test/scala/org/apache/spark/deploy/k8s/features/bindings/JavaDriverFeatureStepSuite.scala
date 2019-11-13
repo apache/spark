@@ -43,6 +43,7 @@ class JavaDriverFeatureStepSuite extends SparkFunSuite {
       roleSecretEnvNamesToKeyRefs = Map.empty,
       roleEnvs = Map.empty,
       roleVolumes = Nil,
+      roleTolerations = Nil,
       sparkFiles = Seq.empty[String])
 
     val step = new JavaDriverFeatureStep(kubernetesConf)

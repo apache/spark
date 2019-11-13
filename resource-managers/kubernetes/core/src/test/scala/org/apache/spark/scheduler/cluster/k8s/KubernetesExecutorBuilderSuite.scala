@@ -28,6 +28,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
   private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
   private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
+  private val TOLERATIONS_STEP_TYPE = "tolerations"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
@@ -39,13 +40,16 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
   private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
+  private val tolerationsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    TOLERATIONS_STEP_TYPE, classOf[TolerationsFeatureStep])
 
   private val builderUnderTest = new KubernetesExecutorBuilder(
     _ => basicFeatureStep,
     _ => mountSecretsStep,
     _ => envSecretsStep,
     _ => localDirsStep,
-    _ => mountVolumesStep)
+    _ => mountVolumesStep,
+    _ => tolerationsStep)
 
   test("Basic steps are consistently applied.") {
     val conf = KubernetesConf(
@@ -59,6 +63,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Nil,
       Seq.empty[String])
     validateStepTypesApplied(
@@ -77,6 +82,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map("secret" -> "secretMountPath"),
       Map("secret-name" -> "secret-key"),
       Map.empty,
+      Nil,
       Nil,
       Seq.empty[String])
     validateStepTypesApplied(
@@ -105,12 +111,41 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       volumeSpec :: Nil,
+      Nil,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
       MOUNT_VOLUMES_STEP_TYPE)
+  }
+
+  test("Apply tolerations step if tolerations are present.") {
+    val tolerationSpec = KubernetesTolerationSpec(
+      Some("key1"),
+      "Equal",
+      Some("NoSchedule"),
+      Some("value1"),
+      None)
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesExecutorSpecificConf(
+        "executor-id", Some(new PodBuilder().build())),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      tolerationSpec :: Nil,
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      TOLERATIONS_STEP_TYPE)
   }
 
   private def validateStepTypesApplied(resolvedPod: SparkPod, stepTypes: String*): Unit = {

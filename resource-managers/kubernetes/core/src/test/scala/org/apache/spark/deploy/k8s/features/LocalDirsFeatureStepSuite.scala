@@ -46,6 +46,7 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       Map.empty,
       Map.empty,
       Nil,
+      Nil,
       Seq.empty[String])
   }
 

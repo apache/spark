@@ -61,6 +61,7 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleSecretEnvNamesToKeyRefs: Map[String, String],
     roleEnvs: Map[String, String],
     roleVolumes: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]],
+    roleTolerations: Iterable[KubernetesTolerationSpec],
     sparkFiles: Seq[String]) {
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
@@ -169,6 +170,8 @@ private[spark] object KubernetesConf {
     // before the driver pod is created
     KubernetesVolumeUtils.parseVolumesWithPrefix(
       sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX).map(_.get)
+    val driverTolerations = KubernetesTolerationUtils.parseTolerationsWithPrefix(
+      sparkConf, KUBERNETES_DRIVER_TOLERATIONS_PREFIX)
 
     val sparkFiles = sparkConf
       .getOption("spark.files")
@@ -186,6 +189,7 @@ private[spark] object KubernetesConf {
       driverSecretEnvNamesToKeyRefs,
       driverEnvs,
       driverVolumes,
+      driverTolerations,
       sparkFiles)
   }
 
@@ -220,7 +224,8 @@ private[spark] object KubernetesConf {
     val executorEnv = sparkConf.getExecutorEnv.toMap
     val executorVolumes = KubernetesVolumeUtils.parseVolumesWithPrefix(
       sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX).map(_.get)
-
+    val executorTolerations = KubernetesTolerationUtils.parseTolerationsWithPrefix(
+      sparkConf, KUBERNETES_EXECUTOR_TOLERATIONS_PREFIX)
     // If no prefix is defined then we are in pure client mode
     // (not the one used by cluster mode inside the container)
     val appResourceNamePrefix = {
@@ -242,6 +247,7 @@ private[spark] object KubernetesConf {
       executorEnvSecrets,
       executorEnv,
       executorVolumes,
+      executorTolerations,
       Seq.empty[String])
   }
 }

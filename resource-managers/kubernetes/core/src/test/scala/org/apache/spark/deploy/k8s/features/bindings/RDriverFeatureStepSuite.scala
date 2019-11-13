@@ -47,6 +47,7 @@ class RDriverFeatureStepSuite extends SparkFunSuite {
       roleSecretEnvNamesToKeyRefs = Map.empty,
       roleEnvs = Map.empty,
       roleVolumes = Seq.empty,
+      roleTolerations = Seq.empty,
       sparkFiles = Seq.empty[String])
 
     val step = new RDriverFeatureStep(kubernetesConf)
