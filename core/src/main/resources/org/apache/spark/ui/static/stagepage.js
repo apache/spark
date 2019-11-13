@@ -880,7 +880,8 @@ $(document).ready(function () {
                         { "visible": false, "targets": 16 },
                         { "visible": false, "targets": 17 },
                         { "visible": false, "targets": 18 }
-                    ]
+                    ],
+                    "deferRender": true
                 };
                 taskTableSelector = $(taskTable).DataTable(taskConf);
                 $('#active-tasks-table_filter input').unbind();

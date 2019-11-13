@@ -61,9 +61,6 @@ class HistoryServer(
   // How many applications the summary ui displays
   private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS);
 
-  // Whether to defer render the history summary page
-  private[history] val deferRender = conf.get(HISTORY_UI_SUMMARY_DEFER_RENDER)
-
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
 

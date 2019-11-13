@@ -17,14 +17,8 @@
 
 var appLimit = -1;
 
-var deferRender = true;
-
 function setAppLimit(val) {
     appLimit = val;
-}
-
-function setDeferRender(val) {
-    deferRender = val;
 }
 
 function makeIdNumeric(id) {
@@ -183,7 +177,7 @@ $(document).ready(function() {
             {name: 'eventLog'},
           ],
           "autoWidth": false,
-          "deferRender": deferRender
+          "deferRender": true
         };
 
         if (hasMultipleAttempts) {
