@@ -64,10 +64,10 @@ class TypesTests(ReusedSQLTestCase):
             df2 = self.spark.createDataFrame(rdd, schema, verifySchema=verify)
             self.assertEqual(df.schema, df2.schema)
 
-            rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x, b=None))
+            rdd = self.sc.parallelize(range(10)).map(lambda x: Row(b=None, a=x))
             df3 = self.spark.createDataFrame(rdd, schema, verifySchema=verify)
             self.assertEqual(10, df3.count())
-            input = [Row(a=x, b=str(x)) for x in range(10)]
+            input = [Row(b=str(x), a=x) for x in range(10)]
             df4 = self.spark.createDataFrame(input, schema, verifySchema=verify)
             self.assertEqual(10, df4.count())
 
@@ -883,7 +883,8 @@ class DataTypeVerificationTests(unittest.TestCase):
             ({"s": "a", "f": 1.0}, schema),
             (Row(s="a", i=1), schema),
             (Row(s="a", i=None), schema),
-            (Row(s="a", i=1, f=1.0), schema),
+            (Row(s="a", i=1, f=1.0).asDict(), schema),
+            (Row(i=1, f=1.0, s="a").asDict(), schema),
             (["a", 1], schema),
             (["a", None], schema),
             (("a", 1), schema),
@@ -947,7 +948,8 @@ class DataTypeVerificationTests(unittest.TestCase):
 
             # Struct
             ({"s": "a", "i": "1"}, schema, TypeError),
-            (Row(s="a"), schema, ValueError),     # Row can't have missing field
+            (Row(s="a"), schema, ValueError),  # Row can't have missing field
+            (Row(s="a", i=1, f=1.0), schema, ValueError),  # Row can't have additional fields
             (Row(s="a", i="1"), schema, TypeError),
             (["a"], schema, ValueError),
             (["a", "1"], schema, TypeError),

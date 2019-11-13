@@ -518,7 +518,7 @@ class Column(object):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
     >>> df.filter(df.height.isNull()).collect()
-    [Row(height=None, name=u'Alice')]
+    [Row(name=u'Alice', height=None)]
     """
     _isNotNull_doc = """
     True if the current expression is NOT null.
@@ -526,7 +526,7 @@ class Column(object):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
     >>> df.filter(df.height.isNotNull()).collect()
-    [Row(height=80, name=u'Tom')]
+    [Row(name=u'Tom', height=80)]
     """
 
     isNull = ignore_unicode_prefix(_unary_op("isNull", _isNull_doc))
