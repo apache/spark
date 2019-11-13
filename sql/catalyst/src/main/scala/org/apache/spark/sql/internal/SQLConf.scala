@@ -1094,6 +1094,16 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
+  val STREAMING_JOIN_STATE_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.join.stateFormatVersion")
+      .internal()
+      .doc("State format version used by streaming join operations in a streaming query. " +
+        "State between versions are tend to be incompatible, so state format version shouldn't " +
+        "be modified after running.")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(2)
+
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
       .internal()

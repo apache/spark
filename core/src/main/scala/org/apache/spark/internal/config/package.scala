@@ -606,6 +606,23 @@ package object config {
       .intConf
       .createWithDefault(128)
 
+  private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_ENABLED =
+    ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent.enabled")
+      .internal()
+      .doc("When enabled, log the event that takes too much time to process. This helps us " +
+        "discover the event types that cause performance bottlenecks. The time threshold is " +
+        "controlled by spark.scheduler.listenerbus.logSlowEvent.threshold.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD =
+    ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent.threshold")
+      .internal()
+      .doc("The time threshold of whether a event is considered to be taking too much time to " +
+        "process. Log the event if spark.scheduler.listenerbus.logSlowEvent.enabled is true.")
+      .timeConf(TimeUnit.NANOSECONDS)
+      .createWithDefaultString("1s")
+
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .stringConf
@@ -1172,16 +1189,6 @@ package object config {
       .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
       .doc("Comma-separated list of class names implementing " +
         "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
-      .stringConf
-      .toSequence
-      .createWithDefault(Nil)
-
-  private[spark] val EXECUTOR_PLUGINS =
-    ConfigBuilder("spark.executor.plugins")
-      .doc("Comma-separated list of class names for \"plugins\" implementing " +
-        "org.apache.spark.ExecutorPlugin.  Plugins have the same privileges as any task " +
-        "in a Spark executor.  They can also interfere with task execution and fail in " +
-        "unexpected ways.  So be sure to only use this for trusted plugins.")
       .stringConf
       .toSequence
       .createWithDefault(Nil)

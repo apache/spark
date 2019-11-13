@@ -246,7 +246,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    */
   val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
   // stub out BlockManagerMaster.getLocations to use our cacheLocations
-  val blockManagerMaster = new BlockManagerMaster(null, conf, true) {
+  val blockManagerMaster = new BlockManagerMaster(null, null, conf, true) {
       override def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
         blockIds.map {
           _.asRDDId.map(id => (id.rddId -> id.splitIndex)).flatMap(key => cacheLocations.get(key)).
