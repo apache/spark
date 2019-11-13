@@ -33,7 +33,7 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
     copy(timeZoneId = Option(timeZoneId))
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case StringType | IntegerType | NullType =>
+    case BooleanType | StringType | IntegerType | NullType =>
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(s"cannot cast type ${child.dataType} to boolean")
