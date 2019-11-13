@@ -704,13 +704,17 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       val actual = fastParseToMicros(parser, input, timeZone)
       assert(actual === expected)
     }
+    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
+      "2019-10-14T09:39:07.3220000Z", "2019-10-14T09:39:07.322Z")
     check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
       "2019-10-14T09:39:07.322000Z", "2019-10-14T09:39:07.322Z")
-    check("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+    check("yyyy-MM-dd'T'HH:mm:ss.SSSX",
       "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
-    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
+    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
       "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
-    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
+    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
       "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.000010Z")
+    check("yyyy-MM-dd'T'HH:mm:ss.SX",
+      "2019-10-14T09:39:07.1Z", "2019-10-14T09:39:07.1Z")
   }
 }

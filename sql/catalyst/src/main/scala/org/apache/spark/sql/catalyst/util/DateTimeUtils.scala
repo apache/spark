@@ -29,6 +29,7 @@ import scala.annotation.tailrec
 
 import org.apache.commons.lang3.time.FastDateFormat
 
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -1169,14 +1170,8 @@ object DateTimeUtils {
 
   class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
     def getMicros(digitsInFraction: Int): SQLTimestamp = {
-      digitsInFraction match {
-        case 0 => 0
-        case 3 => fields(Calendar.MILLISECOND) * MICROS_PER_MILLIS
-        case 6 => fields(Calendar.MILLISECOND)
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Supported only 0, 3 or 6 digits in the second fraction but got ${digitsInFraction}")
-      }
+      val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
+      d / Decimal.POW_10(digitsInFraction)
     }
   }
 
