@@ -83,6 +83,9 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         numPartitionsSet.headOption
       }
 
+      // Read bucketed tables always obeys numShufflePartitions because maxNumPostShufflePartitions
+      // is usually much larger than numShufflePartitions,
+      // which causes some bucket map join lose efficacy after enabling adaptive execution.
       val nonShuffleChildrenNumPartitions =
         childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
           .map(_.outputPartitioning.numPartitions)
