@@ -94,7 +94,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
         .build()
     val key = toCacheKey(updatedKafkaParams)
     if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
-      logDebug(s"Task re-attempt detected, invalidating producers with key $key")
+      logDebug(s"Invalidating key $key")
       producerPool.invalidateKey(key)
     }
     producerPool.borrowObject(key, updatedKafkaParams)
