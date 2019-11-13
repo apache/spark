@@ -138,7 +138,6 @@ final class EMLDAOptimizer extends LDAOptimizer {
     this.docConcentration = if (docConcentration == -1) (50.0 / k) + 1.0 else docConcentration
     this.topicConcentration = if (topicConcentration == -1) 1.1 else topicConcentration
     val randomSeed = lda.getSeed
-    docs.persist()
 
     // For each document, create an edge (Document -> Term) for each unique term in the document.
     val edges: RDD[Edge[TokenCount]] = docs.flatMap { case (docID: Long, termCounts: Vector) =>

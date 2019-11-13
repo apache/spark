@@ -41,7 +41,6 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
    */
   @Since("1.4.0")
   def fit(sources: RDD[Vector]): PCAModel = {
-    sources.persist()
     val numFeatures = sources.first().size
     require(k <= numFeatures,
       s"source vector size $numFeatures must be no less than k=$k")

@@ -142,7 +142,6 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     } else None
 
     val inputRDD = dataset.toDF.rdd
-    inputRDD.persist()
     // Compute metrics for each model over each split
     val splits = MLUtils.kFold(inputRDD, $(numFolds), $(seed))
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>

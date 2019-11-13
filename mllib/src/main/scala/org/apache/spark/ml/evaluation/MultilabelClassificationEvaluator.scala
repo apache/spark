@@ -96,7 +96,6 @@ class MultilabelClassificationEvaluator (override val uid: String)
         .rdd.map { row =>
         (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
       }
-    predictionAndLabels.persist()
     val metrics = new MultilabelMetrics(predictionAndLabels)
     $(metricName) match {
       case "subsetAccuracy" => metrics.subsetAccuracy

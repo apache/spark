@@ -250,7 +250,6 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
    */
   @Since("1.3.0")
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
-    data.persist()
     val chiSqTestResult = Statistics.chiSqTest(data).zipWithIndex
     val features = selectorType match {
       case ChiSqSelector.NumTopFeatures =>
@@ -286,7 +285,6 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
     val indices = features.map { case (_, index) => index }
-    data.unpersist()
     new ChiSqSelectorModel(indices)
   }
 }
