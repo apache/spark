@@ -19,11 +19,11 @@ package org.apache.spark.deploy.history
 
 import org.apache.spark.scheduler._
 
-trait EventFilterBuilder extends SparkListenerInterface {
+private[spark] trait EventFilterBuilder extends SparkListenerInterface {
   def createFilter(): EventFilter
 }
 
-trait EventFilter {
+private[spark] trait EventFilter {
   def filterStageCompleted(event: SparkListenerStageCompleted): Option[Boolean] = None
 
   def filterStageSubmitted(event: SparkListenerStageSubmitted): Option[Boolean] = None

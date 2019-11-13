@@ -402,8 +402,12 @@ object RollingEventLogFilesWriter {
     status.isDirectory && status.getPath.getName.startsWith(EVENT_LOG_DIR_NAME_PREFIX)
   }
 
+  def isEventLogFile(fileName: String): Boolean = {
+    fileName.startsWith(EVENT_LOG_FILE_NAME_PREFIX)
+  }
+
   def isEventLogFile(status: FileStatus): Boolean = {
-    status.isFile && status.getPath.getName.startsWith(EVENT_LOG_FILE_NAME_PREFIX)
+    status.isFile && isEventLogFile(status.getPath.getName)
   }
 
   def isAppStatusFile(status: FileStatus): Boolean = {
@@ -411,7 +415,7 @@ object RollingEventLogFilesWriter {
   }
 
   def getIndex(eventLogFileName: String): Long = {
-    require(eventLogFileName.startsWith(EVENT_LOG_FILE_NAME_PREFIX), "Not an event log file!")
+    require(isEventLogFile(eventLogFileName), "Not an event log file!")
     val index = eventLogFileName.stripPrefix(EVENT_LOG_FILE_NAME_PREFIX).split("_")(0)
     index.toLong
   }

@@ -220,7 +220,7 @@ class RollingEventLogFilesFileReader(
   private lazy val eventLogFiles: Seq[FileStatus] = {
     val eventLogFiles = files.filter(isEventLogFile).sortBy { status =>
       val filePath = status.getPath
-      var idx = getIndex(status.getPath.getName) + 0.0d
+      var idx = getIndex(filePath.getName) + 0.0d
       // trick to place compacted file later than normal file if index is same.
       if (EventLogFileWriter.isCompacted(filePath)) {
         idx += 0.1

@@ -46,8 +46,8 @@ class EventLogFileCompactor(
   //  sequentially if the last event log file is already a compacted file, everything
   //  will be skipped
   def compact(eventLogFiles: Seq[FileStatus]): Seq[FileStatus] = {
-    if (eventLogFiles.isEmpty) {
-      return Seq.empty[FileStatus]
+    if (eventLogFiles.length <= maxFilesToRetain) {
+      return eventLogFiles
     }
 
     // skip everything if the last file is already a compacted file
@@ -84,10 +84,14 @@ class EventLogFileCompactor(
 
   private def cleanupCompactedFiles(files: Seq[FileStatus]): Unit = {
     files.foreach { file =>
+      var deleted = false
       try {
-        fs.delete(file.getPath, true)
+        deleted = fs.delete(file.getPath, true)
       } catch {
-        case _: IOException => logWarning(s"Failed to remove ${file.getPath} / skip removing.")
+        case _: IOException =>
+      }
+      if (!deleted) {
+        logWarning(s"Failed to remove ${file.getPath} / skip removing.")
       }
     }
   }
