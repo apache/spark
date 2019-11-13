@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
+import org.apache.commons.lang3.time.FastDateFormat
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
@@ -679,5 +681,25 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         }
       }
     }
+  }
+
+  test("fast parse to micros") {
+    val locale = Locale.US
+    val timeZone = TimeZoneUTC
+    def check(pattern: String, input: String, reference: String): Unit = {
+      val parser = FastDateFormat.getInstance(pattern, timeZone, locale)
+      val expected = DateTimeUtils.stringToTimestamp(
+        UTF8String.fromString(reference), timeZone).get
+      val actual = fastParseToMicros(parser, input, timeZone, locale)
+      assert(actual === expected)
+    }
+    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
+      "2019-10-14T09:39:07.3220000Z", "2019-10-14T09:39:07.322Z")
+    check("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+      "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
+    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
+      "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
+    check("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+      "2019-10-14T09:39:07.123Z", "2019-10-14T09:39:07.123Z")
   }
 }

@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-import java.util.{Calendar, Locale, TimeZone}
+import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.{Function => JFunction}
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
+
+import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1146,5 +1148,36 @@ object DateTimeUtils {
     threadLocalGmtCalendar.remove()
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
+  }
+
+  class MicrosCalendar(timeZone: TimeZone, locale: Locale)
+    extends GregorianCalendar(timeZone, locale) {
+    def getMicros(): SQLTimestamp = {
+      var fraction = fields(Calendar.MILLISECOND)
+      if (fraction < MICROS_PER_MILLIS) {
+        fraction *= MICROS_PER_MILLIS.toInt
+      } else if (fraction >= MICROS_PER_SECOND) {
+        do {
+          fraction /= 10
+        } while (fraction >= MICROS_PER_SECOND)
+      }
+      fraction
+    }
+  }
+
+  def fastParseToMicros(
+      parser: FastDateFormat,
+      s: String,
+      timeZone: TimeZone,
+      locale: Locale): SQLTimestamp = {
+    val pos = new java.text.ParsePosition(0)
+    val cal = new MicrosCalendar(timeZone, locale)
+    cal.clear()
+    if (!parser.parse(s, pos, cal)) {
+      throw new IllegalArgumentException(s)
+    }
+    val micros = cal.getMicros()
+    cal.set(Calendar.MILLISECOND, 0)
+    cal.getTimeInMillis * MICROS_PER_MILLIS + micros
   }
 }
