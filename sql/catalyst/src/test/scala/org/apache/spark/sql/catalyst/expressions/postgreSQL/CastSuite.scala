@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.postgreSQL
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
 
 class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -54,19 +55,19 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkPostgreCastToBoolean("off", false)
     checkPostgreCastToBoolean("of", false)
 
-    intercept[Exception](checkPostgreCastToBoolean("o", null))
-    intercept[Exception](checkPostgreCastToBoolean("abc", null))
-    intercept[Exception](checkPostgreCastToBoolean("", null))
+    intercept[IllegalArgumentException](PostgreCastToBoolean(Literal("o"), None).eval())
+    intercept[IllegalArgumentException](PostgreCastToBoolean(Literal("abc"), None).eval())
+    intercept[IllegalArgumentException](PostgreCastToBoolean(Literal(""), None).eval())
   }
 
   test("unsupported data types to cast to boolean") {
-    intercept[Exception](checkPostgreCastToBoolean(new Timestamp(1), null))
-    intercept[Exception](checkPostgreCastToBoolean(new Date(1), null))
-    intercept[Exception](checkPostgreCastToBoolean(1.toLong, null))
-    intercept[Exception](checkPostgreCastToBoolean(1.toShort, null))
-    intercept[Exception](checkPostgreCastToBoolean(1.toByte, null))
-    intercept[Exception](checkPostgreCastToBoolean(BigDecimal(1.0), null))
-    intercept[Exception](checkPostgreCastToBoolean(1.toDouble, null))
-    intercept[Exception](checkPostgreCastToBoolean(1.toFloat, null))
+    assert(PostgreCastToBoolean(Literal(new Timestamp(1)), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToBoolean(Literal(new Date(1)), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToBoolean(Literal(1.toLong), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToBoolean(Literal(1.toShort), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToBoolean(Literal(1.toByte), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToBoolean(Literal(BigDecimal(1.0)), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToBoolean(Literal(1.toDouble), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToBoolean(Literal(1.toFloat), None).checkInputDataTypes().isFailure)
   }
 }
