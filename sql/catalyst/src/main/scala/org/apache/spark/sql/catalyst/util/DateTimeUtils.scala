@@ -1168,16 +1168,15 @@ object DateTimeUtils {
   }
 
   class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
-    def getMicros(): SQLTimestamp = {
-      var fraction = fields(Calendar.MILLISECOND)
-      if (fraction < MICROS_PER_MILLIS) {
-        fraction *= MICROS_PER_MILLIS.toInt
-      } else if (fraction >= MICROS_PER_SECOND) {
-        do {
-          fraction /= 10
-        } while (fraction >= MICROS_PER_SECOND)
+    def getMicros(digitsInFraction: Int): SQLTimestamp = {
+      digitsInFraction match {
+        case 0 => 0
+        case 3 => fields(Calendar.MILLISECOND) * MICROS_PER_MILLIS
+        case 6 => fields(Calendar.MILLISECOND)
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Supported only 0, 3 or 6 digits in the second fraction but got ${digitsInFraction}")
       }
-      fraction
     }
   }
 
@@ -1188,7 +1187,7 @@ object DateTimeUtils {
     if (!parser.parse(s, pos, cal)) {
       throw new IllegalArgumentException(s)
     }
-    val micros = cal.getMicros()
+    val micros = cal.getMicros(parser.getPattern.count(_ == 'S'))
     cal.set(Calendar.MILLISECOND, 0)
     cal.getTimeInMillis * MICROS_PER_MILLIS + micros
   }
