@@ -82,7 +82,7 @@ private[spark] class TaskSchedulerImpl(
   // Duplicate copies of a task will only be launched if the original copy has been running for
   // at least this amount of time. This is to avoid the overhead of launching speculative copies
   // of tasks that are very short.
-  val MIN_TIME_TO_SPECULATION = 100
+  val MIN_RUNTIME_TO_SPECULATION_MS = conf.get(SPECULATION_MIN_RUNTIME)
 
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
@@ -725,7 +725,7 @@ private[spark] class TaskSchedulerImpl(
   def checkSpeculatableTasks(): Unit = {
     var shouldRevive = false
     synchronized {
-      shouldRevive = rootPool.checkSpeculatableTasks(MIN_TIME_TO_SPECULATION)
+      shouldRevive = rootPool.checkSpeculatableTasks(MIN_RUNTIME_TO_SPECULATION_MS)
     }
     if (shouldRevive) {
       backend.reviveOffers()

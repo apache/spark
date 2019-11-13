@@ -1438,6 +1438,11 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
+  private[spark] val SPECULATION_MIN_RUNTIME =
+    ConfigBuilder("spark.speculation.minRuntime")
+      .intConf
+      .createWithDefault(100)
+
   private[spark] val SPECULATION_MULTIPLIER =
     ConfigBuilder("spark.speculation.multiplier")
       .doubleConf

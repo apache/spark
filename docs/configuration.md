@@ -1973,6 +1973,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.speculation.minRuntime</code></td>
+  <td>100</td>
+  <td>
+    The minumn runtime for a task to speculate.
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation.multiplier</code></td>
   <td>1.5</td>
   <td>
