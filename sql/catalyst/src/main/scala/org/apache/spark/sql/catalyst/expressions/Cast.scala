@@ -288,7 +288,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         buildCast[CalendarInterval](_, i => UTF8String.fromString(toSqlStandardString(i)))
       case ISO_8601 =>
         buildCast[CalendarInterval](_, i => UTF8String.fromString(toIso8601String(i)))
-      case _ =>
+      case MULTI_UNITS =>
         buildCast[CalendarInterval](_, i => UTF8String.fromString(toMultiUnitsString(i)))
     }
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
@@ -1002,7 +1002,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toSqlStandardString($c));"""
         case ISO_8601 =>
           (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toIso8601String($c));"""
-        case _ =>
+        case MULTI_UNITS =>
           (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toMultiUnitsString($c));"""
         }
       case ArrayType(et, _) =>

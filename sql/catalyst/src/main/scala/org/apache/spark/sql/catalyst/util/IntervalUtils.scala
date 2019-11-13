@@ -478,7 +478,7 @@ object IntervalUtils {
       var rest = math.abs(interval.microseconds)
       sb.append(rest / MICROS_PER_HOUR)
       sb.append(':')
-      rest = rest % MICROS_PER_HOUR
+      rest %= MICROS_PER_HOUR
       val minutes = rest / MICROS_PER_MINUTE;
       if (minutes < 10) {
         sb.append(0)

@@ -24,8 +24,8 @@ import com.fasterxml.jackson.core._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf.IntervalStyle._
 import org.apache.spark.sql.types._
+
 /**
  * `JackGenerator` can only be initialized with a `StructType`, a `MapType` or an `ArrayType`.
  * Once it is initialized with `StructType`, it can be used to write out a struct or an array of
@@ -120,14 +120,8 @@ private[sql] class JacksonGenerator(
         gen.writeNumber(row.getDouble(ordinal))
 
     case CalendarIntervalType =>
-      (row: SpecializedGetters, ordinal: Int) => options.intervalOutputStyle match {
-        case SQL_STANDARD =>
-          gen.writeString(IntervalUtils.toSqlStandardString(row.getInterval(ordinal)))
-        case ISO_8601 =>
-          gen.writeString(IntervalUtils.toIso8601String(row.getInterval(ordinal)))
-        case _ =>
-          gen.writeString(IntervalUtils.toMultiUnitsString(row.getInterval(ordinal)))
-      }
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeString(IntervalUtils.toMultiUnitsString(row.getInterval(ordinal)))
 
     case StringType =>
       (row: SpecializedGetters, ordinal: Int) =>
@@ -225,14 +219,8 @@ private[sql] class JacksonGenerator(
       map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
     val keyString = mapType.keyType match {
-      case CalendarIntervalType => options.intervalOutputStyle match {
-        case SQL_STANDARD =>
-          (i: Int) => IntervalUtils.toSqlStandardString(keyArray.getInterval(i))
-        case ISO_8601 =>
-          (i: Int) => IntervalUtils.toIso8601String(keyArray.getInterval(i))
-        case _ =>
-          (i: Int) => IntervalUtils.toMultiUnitsString(keyArray.getInterval(i))
-      }
+      case CalendarIntervalType =>
+        (i: Int) => IntervalUtils.toMultiUnitsString(keyArray.getInterval(i))
       case _ => (i: Int) => keyArray.get(i, mapType.keyType).toString
     }
     val valueArray = map.valueArray()

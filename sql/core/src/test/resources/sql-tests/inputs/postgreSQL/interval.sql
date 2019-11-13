@@ -272,12 +272,12 @@ SELECT interval '1 2:03:04' minute to second;
 -- test output of couple non-standard interval values in the sql style
 -- [SPARK-29406] Interval output styles
 -- SET IntervalStyle TO sql_standard;
-set spark.sql.intervalOutputStyle=SQL_STANDARD;
+set spark.sql.dialect.intervalOutputStyle=SQL_STANDARD;
 SELECT  interval '1 day -1 hours',
         interval '-1 days +1 hours',
         interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds',
         - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds';
-set spark.sql.intervalOutputStyle=MULTI_UNITS;
+set spark.sql.dialect.intervalOutputStyle=MULTI_UNITS;
 
 -- test outputting iso8601 intervals
 -- [SPARK-29406] Interval output styles

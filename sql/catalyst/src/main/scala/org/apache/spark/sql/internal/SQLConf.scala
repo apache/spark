@@ -1778,11 +1778,13 @@ object SQLConf {
     val SQL_STANDARD, ISO_8601, MULTI_UNITS = Value
   }
 
-  val INTERVAL_STYLE = buildConf("spark.sql.intervalOutputStyle")
-    .doc("Display format for interval values. The value SQL_STANDARD will produce output" +
-      " matching SQL standard interval literals. The value ISO_8601 will produce output matching" +
-      " the ISO 8601 standard. The value MULTI_UNITS (which is the default) will produce output" +
-      " in form of value unit pairs, i.e. '3 year 2 months 10 days'")
+  val INTERVAL_STYLE = buildConf("spark.sql.dialect.intervalOutputStyle")
+    .doc("When converting interval values to strings (i.e. for display), this config decides the" +
+      " interval string format. The value SQL_STANDARD will produce output matching SQL standard" +
+      " interval literals (i.e. '+3-2 +10 -00:00:01'). The value ISO_8601 will produce output" +
+      " matching the ISO 8601 standard (i.e. 'P3Y2M10DT-1S'). The value MULTI_UNITS (which is the" +
+      " default) will produce output in form of value unit pairs, (i.e. '3 year 2 months 10 days" +
+      " -1 seconds'")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(IntervalStyle.values.map(_.toString))

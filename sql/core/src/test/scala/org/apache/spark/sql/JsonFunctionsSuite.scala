@@ -223,14 +223,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(to_json($"c")),
       Row("""{"col1":{"-3 months 7 hours":"a"}}""") :: Nil)
-
-    checkAnswer(
-      df.select(to_json($"c", Map("intervalOutputStyle" -> "SQL_STANDARD"))),
-      Row("""{"col1":{"-0-3 +7:00:00":"a"}}""") :: Nil)
-
-    checkAnswer(
-      df.select(to_json($"c", Map("intervalOutputStyle" -> "ISO_8601"))),
-      Row("""{"col1":{"P-3MT7H":"a"}}""") :: Nil)
   }
 
   test("to_json unsupported type") {

@@ -104,7 +104,7 @@ object HiveResult {
       SQLConf.get.intervalOutputStyle match {
         case SQL_STANDARD => toSqlStandardString(interval)
         case ISO_8601 => toIso8601String(interval)
-        case _ => toMultiUnitsString(interval)
+        case MULTI_UNITS => toMultiUnitsString(interval)
       }
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
@@ -132,7 +132,7 @@ object HiveResult {
       SQLConf.get.intervalOutputStyle match {
         case SQL_STANDARD => toSqlStandardString(interval)
         case ISO_8601 => toIso8601String(interval)
-        case _ => toMultiUnitsString(interval)
+        case MULTI_UNITS => toMultiUnitsString(interval)
       }
     case (interval, CalendarIntervalType) => interval.toString
     case (other, _ : UserDefinedType[_]) => other.toString
