@@ -35,7 +35,6 @@ import org.apache.spark.internal.config.EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, Utils}
 
-// FIXME: UTs
 class EventLogFileCompactor(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
@@ -60,11 +59,10 @@ class EventLogFileCompactor(
     if (filesToCompact.isEmpty) {
       filesToRetain
     } else {
-      // first pass
       val bus = new ReplayListenerBus()
 
       val builders = ServiceLoader.load(classOf[EventFilterBuilder],
-        Utils.getContextOrSparkClassLoader).asScala
+        Utils.getContextOrSparkClassLoader).asScala.toSeq
       builders.foreach(bus.addListener)
 
       filesToCompact.foreach { log =>
@@ -73,17 +71,14 @@ class EventLogFileCompactor(
         }
       }
 
-      // second pass
-      val rewriter = new FilteredEventLogFileRewriter(sparkConf, hadoopConf,
-        filesToCompact, fs, builders.map(_.createFilter()).toSeq)
-      rewriter.start()
-      rewriter.rewrite()
-      rewriter.stop()
+      val rewriter = new FilteredEventLogFileRewriter(sparkConf, hadoopConf, fs,
+        builders.map(_.createFilter()))
+      val compactedPath = rewriter.rewrite(filesToCompact)
 
       // cleanup files which are replaced with new compacted file.
       cleanupCompactedFiles(filesToCompact)
 
-      fs.getFileStatus(new Path(rewriter.logPath)) :: filesToRetain.toList
+      fs.getFileStatus(new Path(compactedPath)) :: filesToRetain.toList
     }
   }
 
@@ -112,36 +107,28 @@ class EventLogFileCompactor(
   }
 }
 
-// FIXME: UTs
 class FilteredEventLogFileRewriter(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    eventLogFiles: Seq[FileStatus],
     fs: FileSystem,
     filters: Seq[EventFilter]) extends Logging {
 
-  require(eventLogFiles.nonEmpty)
+  def rewrite(eventLogFiles: Seq[FileStatus]): String = {
+    require(eventLogFiles.nonEmpty)
 
-  private val targetEventLogFilePath = eventLogFiles.last.getPath
-  private val logWriter: CompactedEventLogFileWriter = new CompactedEventLogFileWriter(
-    targetEventLogFilePath, "dummy", None, targetEventLogFilePath.getParent.toUri,
-    sparkConf, hadoopConf)
+    val targetEventLogFilePath = eventLogFiles.last.getPath
+    val logWriter: CompactedEventLogFileWriter = new CompactedEventLogFileWriter(
+      targetEventLogFilePath, "dummy", None, targetEventLogFilePath.getParent.toUri,
+      sparkConf, hadoopConf)
 
-  def logPath: String = logWriter.logPath
-
-  def start(): Unit = {
     logWriter.start()
-  }
-
-  def stop(): Unit = {
+    eventLogFiles.foreach { file => rewriteFile(logWriter, file) }
     logWriter.stop()
+
+    logWriter.logPath
   }
 
-  def rewrite(): Unit = {
-    eventLogFiles.foreach(rewriteFile)
-  }
-
-  private def rewriteFile(fileStatus: FileStatus): Unit = {
+  private def rewriteFile(logWriter: CompactedEventLogFileWriter, fileStatus: FileStatus): Unit = {
     Utils.tryWithResource(EventLogFileReader.openEventLog(fileStatus.getPath, fs)) { in =>
       val lines = Source.fromInputStream(in)(Codec.UTF8).getLines()
 

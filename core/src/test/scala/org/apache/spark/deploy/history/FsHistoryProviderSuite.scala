@@ -1333,6 +1333,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
   }
 
+  // FIXME: add end-to-end test for compaction, or mock to verify whether compact is being called
+
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
    * app list. Example:
