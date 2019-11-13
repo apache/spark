@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import sys
 import decimal
 import time
@@ -611,7 +612,7 @@ class StructType(DataType):
         else:
             if isinstance(obj, dict):
                 return tuple(obj.get(n) for n in self.names)
-            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
+            elif isinstance(obj, LegacyRow) and getattr(obj, "__from_dict__", False):
                 return tuple(obj[n] for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
@@ -1376,7 +1377,7 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             if isinstance(obj, dict):
                 for f, verifier in verifiers:
                     verifier(obj.get(f))
-            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
+            elif isinstance(obj, LegacyRow) and getattr(obj, "__from_dict__", False):
                 # the order in obj could be different than dataType.fields
                 for f, verifier in verifiers:
                     verifier(obj[f])
@@ -1421,6 +1422,9 @@ def _create_row(fields, values):
     return row
 
 
+_legacy_row_enabled = os.environ.get('PYSPARK_LEGACY_ROW_ENABLED', 'false').lower() == 'true'
+
+
 class Row(tuple):
 
     """
@@ -1432,10 +1436,12 @@ class Row(tuple):
 
     ``key in row`` will search through row keys.
 
-    Row can be used to create a row object by using named arguments,
-    the fields will be sorted by names. It is not allowed to omit
-    a named argument to represent the value is None or missing. This should be
-    explicitly set to None in this case.
+    Row can be used to create a row object by using named arguments.
+    It is not allowed to omit a named argument to represent the value is
+    None or missing. This should be explicitly set to None in this case.
+
+    NOTE: For Python version < 3.6, named arguments can not be used due
+    to
 
     >>> row = Row(name="Alice", age=11)
     >>> row
@@ -1474,21 +1480,31 @@ class Row(tuple):
     True
     """
 
-    def __new__(self, *args, **kwargs):
+    def __new__(cls, *args, **kwargs):
+        if _legacy_row_enabled:
+            return LegacyRow(args, kwargs)
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
+        if sys.version_info[:2] < (3, 6):
+            # Remove after Python < 3.6 dropped
+            from collections import OrderedDict
+            if kwargs:
+                raise ValueError("Named arguments are not allowed for Python version < 3.6, "
+                                 "use a collections.OrderedDict instead. To enable Spark 2.x "
+                                 "compatible Rows, set the environment variable "
+                                 "'PYSPARK_LEGACY_ROW_ENABLED' to 'true'.")
+            elif len(args) == 1 and isinstance(args[0], OrderedDict):
+                kwargs = args[0]
+
         if kwargs:
             # create row objects
-            names = sorted(kwargs.keys())
-            row = tuple.__new__(self, [kwargs[n] for n in names])
-            row.__fields__ = names
-            row.__from_dict__ = True
+            row = tuple.__new__(cls, list(kwargs.values()))
+            row.__fields__ = list(kwargs.keys())
             return row
-
         else:
             # create row class or objects
-            return tuple.__new__(self, args)
+            return tuple.__new__(cls, args)
 
     def asDict(self, recursive=False):
         """
@@ -1562,7 +1578,7 @@ class Row(tuple):
             raise AttributeError(item)
 
     def __setattr__(self, key, value):
-        if key != '__fields__' and key != "__from_dict__":
+        if key != '__fields__':
             raise Exception("Row is read-only")
         self.__dict__[key] = value
 
@@ -1580,6 +1596,33 @@ class Row(tuple):
                                          for k, v in zip(self.__fields__, tuple(self)))
         else:
             return "<Row(%s)>" % ", ".join("%r" % field for field in self)
+
+
+class LegacyRow(Row):
+    """
+
+    .. note:: Deprecated in 3.0. See SPARK-29748
+    """
+
+    def __new__(cls, *args, **kwargs):
+        if args and kwargs:
+            raise ValueError("Can not use both args "
+                             "and kwargs to create Row")
+        if kwargs:
+            # create row objects
+            names = sorted(kwargs.keys())
+            row = tuple.__new__(cls, [kwargs[n] for n in names])
+            row.__fields__ = names
+            row.__from_dict__ = True
+            return row
+        else:
+            # create row class or objects
+            return tuple.__new__(cls, args)
+
+    def __setattr__(self, key, value):
+        if key != '__fields__' and key != "__from_dict__":
+            raise Exception("Row is read-only")
+        self.__dict__[key] = value
 
 
 class DateConverter(object):
