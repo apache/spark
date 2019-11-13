@@ -219,11 +219,11 @@ struct<1 days 2 hours 3 minutes 4 seconds:interval>
 
 
 -- !query 27
-set spark.sql.dialect.intervalOutputStyle=SQL_STANDARD
+set spark.sql.intervalOutputStyle=SQL_STANDARD
 -- !query 27 schema
 struct<key:string,value:string>
 -- !query 27 output
-spark.sql.dialect.intervalOutputStyle	SQL_STANDARD
+spark.sql.intervalOutputStyle	SQL_STANDARD
 
 
 -- !query 28
@@ -238,8 +238,8 @@ struct<1 days -1 hours:interval,-1 days 1 hours:interval,1 years 2 months -3 day
 
 
 -- !query 29
-set spark.sql.dialect.intervalOutputStyle=MULTI_UNITS
+set spark.sql.intervalOutputStyle=MULTI_UNITS
 -- !query 29 schema
 struct<key:string,value:string>
 -- !query 29 output
-spark.sql.dialect.intervalOutputStyle	MULTI_UNITS
+spark.sql.intervalOutputStyle	MULTI_UNITS

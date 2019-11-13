@@ -997,14 +997,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($tf, $c));"""
       case CalendarIntervalType =>
         val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-        SQLConf.get.intervalOutputStyle match {
-        case SQL_STANDARD =>
-          (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toSqlStandardString($c));"""
-        case ISO_8601 =>
-          (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toIso8601String($c));"""
-        case MULTI_UNITS =>
-          (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toMultiUnitsString($c));"""
+        val funcName = SQLConf.get.intervalOutputStyle match {
+          case SQL_STANDARD => "toSqlStandardString"
+          case ISO_8601 => "toIso8601String"
+          case MULTI_UNITS => "toMultiUnitsString"
         }
+        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.$funcName($c));"""
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])

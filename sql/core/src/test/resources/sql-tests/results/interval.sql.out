@@ -461,11 +461,11 @@ struct<justifyInterval(1 months 59 days -25 hours):interval>
 
 
 -- !query 57
-set spark.sql.dialect.intervalOutputStyle=SQL_STANDARD
+set spark.sql.intervalOutputStyle=SQL_STANDARD
 -- !query 57 schema
 struct<key:string,value:string>
 -- !query 57 output
-spark.sql.dialect.intervalOutputStyle	SQL_STANDARD
+spark.sql.intervalOutputStyle	SQL_STANDARD
 
 
 -- !query 58
@@ -488,11 +488,11 @@ NULL	0	+1-0	+0-1	+1-2	+1 -1:00:00	-1 -1:00:00	-1 +1:00:00	-1 +1:00:00	+1-2 -3 +4
 
 
 -- !query 59
-set spark.sql.dialect.intervalOutputStyle=ISO_8601
+set spark.sql.intervalOutputStyle=ISO_8601
 -- !query 59 schema
 struct<key:string,value:string>
 -- !query 59 output
-spark.sql.dialect.intervalOutputStyle	ISO_8601
+spark.sql.intervalOutputStyle	ISO_8601
 
 
 -- !query 60
@@ -515,11 +515,11 @@ NULL	PT0S	P1Y	P1M	P1Y2M	P-1DT-1H	P-1DT1H	P1DT-1H	P-1DT1H	P1Y2M-3DT4H5M6.789S	P-1
 
 
 -- !query 61
-set spark.sql.dialect.intervalOutputStyle=MULTI_UNITS
+set spark.sql.intervalOutputStyle=MULTI_UNITS
 -- !query 61 schema
 struct<key:string,value:string>
 -- !query 61 output
-spark.sql.dialect.intervalOutputStyle	MULTI_UNITS
+spark.sql.intervalOutputStyle	MULTI_UNITS
 
 
 -- !query 62

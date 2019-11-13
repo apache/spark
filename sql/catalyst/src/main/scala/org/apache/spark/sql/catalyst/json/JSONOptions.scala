@@ -94,9 +94,6 @@ private[sql] class JSONOptions(
   val timestampFormat: String =
     parameters.getOrElse("timestampFormat", "uuuu-MM-dd'T'HH:mm:ss.SSSXXX")
 
-  val intervalOutputStyle: IntervalStyle = parameters.get("intervalOutputStyle")
-    .map(IntervalStyle.withName).getOrElse(SQLConf.get.intervalOutputStyle)
-
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
   /**

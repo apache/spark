@@ -90,7 +90,7 @@ select justify_hours(interval '1 month 59 day -25 hour');
 select justify_interval(interval '1 month 59 day -25 hour');
 
 -- interval output style
-set spark.sql.dialect.intervalOutputStyle=SQL_STANDARD;
+set spark.sql.intervalOutputStyle=SQL_STANDARD;
 SELECT
   cast(null as interval), -- null
   interval '0 day', -- 0
@@ -104,7 +104,7 @@ SELECT
   interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds',
   - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds';
 
-set spark.sql.dialect.intervalOutputStyle=ISO_8601;
+set spark.sql.intervalOutputStyle=ISO_8601;
 SELECT
   cast(null as interval), -- null
   interval '0 day', -- 0
@@ -118,7 +118,7 @@ SELECT
   interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds',
   - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds';
 
-set spark.sql.dialect.intervalOutputStyle=MULTI_UNITS;
+set spark.sql.intervalOutputStyle=MULTI_UNITS;
 SELECT
   cast(null as interval), -- null
   interval '0 day', -- 0

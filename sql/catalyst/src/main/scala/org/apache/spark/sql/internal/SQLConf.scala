@@ -1788,7 +1788,7 @@ object SQLConf {
     val SQL_STANDARD, ISO_8601, MULTI_UNITS = Value
   }
 
-  val INTERVAL_STYLE = buildConf("spark.sql.dialect.intervalOutputStyle")
+  val INTERVAL_STYLE = buildConf("spark.sql.intervalOutputStyle")
     .doc("When converting interval values to strings (i.e. for display), this config decides the" +
       " interval string format. The value SQL_STANDARD will produce output matching SQL standard" +
       " interval literals (i.e. '+3-2 +10 -00:00:01'). The value ISO_8601 will produce output" +
