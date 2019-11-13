@@ -2221,4 +2221,44 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     val idTuples = sampled.collect().map(row => row.getLong(0) -> row.getLong(1))
     assert(idTuples.length == idTuples.toSet.size)
   }
+
+  test("groupBy.keyAs") {
+    val df1 = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
+      .repartition($"a", $"b").sortWithinPartitions("a", "b")
+    val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a", "b", "c")
+      .repartition($"a", $"b").sortWithinPartitions("a", "b")
+
+    val df3 = df1.groupBy("a", "b").keyAs[GroupByKey]
+      .cogroup(df2.groupBy("a", "b").keyAs[GroupByKey]) { case (_, data1, data2) =>
+        data1.zip(data2).map { p =>
+          p._1.getInt(2) + p._2.getInt(2)
+        }
+      }.toDF
+
+    checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
+
+    // Assert that no extra shuffle introduced by cogroup.
+    val exchanges = df3.queryExecution.executedPlan.collect {
+      case h: ShuffleExchangeExec => h
+    }
+    assert(exchanges.size == 2)
+  }
+
+  test("groupBy.keyAs: custom grouping expressions") {
+    val df1 = Seq((1, 2, 3), (2, 3, 4)).toDF("a1", "b", "c")
+      .repartition($"a1", $"b").sortWithinPartitions("a1", "b")
+    val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a1", "b", "c")
+      .repartition($"a1", $"b").sortWithinPartitions("a1", "b")
+
+    val df3 = df1.groupBy(($"a1" + 1).as("a"), $"b").keyAs[GroupByKey]
+      .cogroup(df2.groupBy(($"a1" + 1).as("a"), $"b").keyAs[GroupByKey]) { case (_, data1, data2) =>
+        data1.zip(data2).map { p =>
+          p._1.getInt(2) + p._2.getInt(2)
+        }
+      }.toDF
+
+    checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
+  }
 }
+
+case class GroupByKey(a: Int, b: Int)

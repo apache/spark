@@ -1606,8 +1606,8 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def groupBy(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
+  def groupBy(cols: Column*): RelationalGroupedDataset[T] = {
+    RelationalGroupedDataset(this, cols.map(_.expr), RelationalGroupedDataset.GroupByType)
   }
 
   /**
@@ -1630,8 +1630,8 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def rollup(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.RollupType)
+  def rollup(cols: Column*): RelationalGroupedDataset[T] = {
+    RelationalGroupedDataset(this, cols.map(_.expr), RelationalGroupedDataset.RollupType)
   }
 
   /**
@@ -1654,8 +1654,8 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def cube(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.CubeType)
+  def cube(cols: Column*): RelationalGroupedDataset[T] = {
+    RelationalGroupedDataset(this, cols.map(_.expr), RelationalGroupedDataset.CubeType)
   }
 
   /**
@@ -1679,10 +1679,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def groupBy(col1: String, cols: String*): RelationalGroupedDataset = {
+  def groupBy(col1: String, cols: String*): RelationalGroupedDataset[T] = {
     val colNames: Seq[String] = col1 +: cols
     RelationalGroupedDataset(
-      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.GroupByType)
+      this, colNames.map(colName => resolve(colName)), RelationalGroupedDataset.GroupByType)
   }
 
   /**
@@ -1759,10 +1759,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def rollup(col1: String, cols: String*): RelationalGroupedDataset = {
+  def rollup(col1: String, cols: String*): RelationalGroupedDataset[T] = {
     val colNames: Seq[String] = col1 +: cols
     RelationalGroupedDataset(
-      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.RollupType)
+      this, colNames.map(colName => resolve(colName)), RelationalGroupedDataset.RollupType)
   }
 
   /**
@@ -1787,10 +1787,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def cube(col1: String, cols: String*): RelationalGroupedDataset = {
+  def cube(col1: String, cols: String*): RelationalGroupedDataset[T] = {
     val colNames: Seq[String] = col1 +: cols
     RelationalGroupedDataset(
-      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.CubeType)
+      this, colNames.map(colName => resolve(colName)), RelationalGroupedDataset.CubeType)
   }
 
   /**

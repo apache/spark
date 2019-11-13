@@ -26,6 +26,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -46,10 +47,12 @@ import org.apache.spark.sql.types.{NumericType, StructType}
  * @since 2.0.0
  */
 @Stable
-class RelationalGroupedDataset protected[sql](
-    private[sql] val df: DataFrame,
+class RelationalGroupedDataset[T] protected[sql](
+    private[sql] val ds: Dataset[T],
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
+
+  private val df = ds.toDF
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
@@ -127,6 +130,26 @@ class RelationalGroupedDataset protected[sql](
       }
     }
     (inputExpr: Expression) => exprToFunc(inputExpr)
+  }
+
+  def keyAs[U : Encoder]: KeyValueGroupedDataset[U, T] = {
+    val keyEncoder = encoderFor[U]
+    val aliasedGrps = groupingExprs.map { g =>
+     g.transformDown {
+       case u: UnresolvedAttribute => df.resolve(u.name)
+     }
+    }.map(alias)
+    val additionalCols = aliasedGrps.filter(g => !df.logicalPlan.outputSet.contains(g.toAttribute))
+    val qe = Dataset.ofRows(
+      df.sparkSession,
+      Project(df.logicalPlan.output ++ additionalCols, df.logicalPlan)).queryExecution
+
+    new KeyValueGroupedDataset(
+      keyEncoder,
+      ds.encoder,
+      qe,
+      df.logicalPlan.output,
+      aliasedGrps.map(_.toAttribute))
   }
 
   /**
@@ -314,7 +337,7 @@ class RelationalGroupedDataset protected[sql](
    * @param pivotColumn Name of the column to pivot.
    * @since 1.6.0
    */
-  def pivot(pivotColumn: String): RelationalGroupedDataset = pivot(Column(pivotColumn))
+  def pivot(pivotColumn: String): RelationalGroupedDataset[T] = pivot(Column(pivotColumn))
 
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
@@ -343,7 +366,7 @@ class RelationalGroupedDataset protected[sql](
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
    */
-  def pivot(pivotColumn: String, values: Seq[Any]): RelationalGroupedDataset = {
+  def pivot(pivotColumn: String, values: Seq[Any]): RelationalGroupedDataset[T] = {
     pivot(Column(pivotColumn), values)
   }
 
@@ -367,7 +390,7 @@ class RelationalGroupedDataset protected[sql](
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
    */
-  def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset = {
+  def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset[T] = {
     pivot(Column(pivotColumn), values)
   }
 
@@ -383,7 +406,7 @@ class RelationalGroupedDataset protected[sql](
    * @param pivotColumn he column to pivot.
    * @since 2.4.0
    */
-  def pivot(pivotColumn: Column): RelationalGroupedDataset = {
+  def pivot(pivotColumn: Column): RelationalGroupedDataset[T] = {
     // This is to prevent unintended OOM errors when the number of distinct values is large
     val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
     // Get the distinct values of the column and sort them so its consistent
@@ -419,7 +442,7 @@ class RelationalGroupedDataset protected[sql](
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
    */
-  def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
+  def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset[T] = {
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
         val valueExprs = values.map(_ match {
@@ -427,7 +450,7 @@ class RelationalGroupedDataset protected[sql](
           case v => Literal.apply(v)
         })
         new RelationalGroupedDataset(
-          df,
+          ds,
           groupingExprs,
           RelationalGroupedDataset.PivotType(pivotColumn.expr, valueExprs))
       case _: RelationalGroupedDataset.PivotType =>
@@ -446,7 +469,7 @@ class RelationalGroupedDataset protected[sql](
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
    */
-  def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
+  def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset[T] = {
     pivot(pivotColumn, values.asScala)
   }
 
@@ -534,7 +557,7 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def flatMapCoGroupsInPandas(
-      r: RelationalGroupedDataset,
+      r: RelationalGroupedDataset[_],
       expr: PythonUDF): DataFrame = {
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       "Must pass a cogrouped map udf")
@@ -584,11 +607,11 @@ class RelationalGroupedDataset protected[sql](
 
 private[sql] object RelationalGroupedDataset {
 
-  def apply(
-      df: DataFrame,
+  def apply[T](
+      ds: Dataset[T],
       groupingExprs: Seq[Expression],
-      groupType: GroupType): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(df, groupingExprs, groupType: GroupType)
+      groupType: GroupType): RelationalGroupedDataset[T] = {
+    new RelationalGroupedDataset(ds, groupingExprs, groupType: GroupType)
   }
 
   /**
