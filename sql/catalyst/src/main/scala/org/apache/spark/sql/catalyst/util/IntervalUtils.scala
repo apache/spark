@@ -733,4 +733,40 @@ object IntervalUtils {
 
     new CalendarInterval(totalMonths, totalDays, micros)
   }
+
+  /**
+   * Adjust interval so 30-day time periods are represented as months.
+   */
+  def justifyDays(interval: CalendarInterval): CalendarInterval = {
+    val monthToDays = interval.months * DAYS_PER_MONTH
+    val totalDays = monthToDays + interval.days
+    val months = Math.toIntExact(totalDays / DAYS_PER_MONTH)
+    val days = totalDays % DAYS_PER_MONTH
+    new CalendarInterval(months, days.toInt, interval.microseconds)
+  }
+
+  /**
+   * Adjust interval so 24-hour time periods are represented as days.
+   */
+  def justifyHours(interval: CalendarInterval): CalendarInterval = {
+    val dayToUs = MICROS_PER_DAY * interval.days
+    val totalUs = Math.addExact(interval.microseconds, dayToUs)
+    val days = totalUs / MICROS_PER_DAY
+    val microseconds = totalUs % MICROS_PER_DAY
+    new CalendarInterval(interval.months, days.toInt, microseconds)
+  }
+
+  /**
+   * Adjust interval using justifyHours and justifyDays, with additional sign adjustments.
+   */
+  def justifyInterval(interval: CalendarInterval): CalendarInterval = {
+    val monthToDays = DAYS_PER_MONTH * interval.months
+    val dayToUs = Math.multiplyExact(monthToDays + interval.days, MICROS_PER_DAY)
+    val totalUs = Math.addExact(interval.microseconds, dayToUs)
+    val microseconds = totalUs % MICROS_PER_DAY
+    val totalDays = totalUs / MICROS_PER_DAY
+    val days = totalDays % DAYS_PER_MONTH
+    val months = totalDays / DAYS_PER_MONTH
+    new CalendarInterval(months.toInt, days.toInt, microseconds)
+  }
 }
