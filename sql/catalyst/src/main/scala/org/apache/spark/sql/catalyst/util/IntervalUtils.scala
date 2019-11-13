@@ -100,20 +100,6 @@ object IntervalUtils {
     Decimal(result, 18, 6)
   }
 
-  /**
-   * Converts a string to [[CalendarInterval]] case-insensitively.
-   *
-   * @throws IllegalArgumentException if the input string is not in valid interval format.
-   */
-  def fromString(str: String): CalendarInterval = {
-    if (str == null) throw new IllegalArgumentException("Interval string cannot be null")
-    val interval = stringToInterval(UTF8String.fromString(str))
-    if (interval == null) {
-      throw new IllegalArgumentException(s"Invalid interval string: $str")
-    }
-    interval
-  }
-
   private def toLongWithRange(
       fieldName: IntervalUnit,
       s: String,
@@ -251,30 +237,6 @@ object IntervalUtils {
   }
 
   /**
-   * Parse second_nano string in ss.nnnnnnnnn format to microseconds
-   */
-  private def parseSecondNano(secondNano: String): Long = {
-    def parseSeconds(secondsStr: String): Long = {
-      toLongWithRange(
-        SECOND,
-        secondsStr,
-        Long.MinValue / MICROS_PER_SECOND,
-        Long.MaxValue / MICROS_PER_SECOND) * MICROS_PER_SECOND
-    }
-
-    secondNano.split("\\.") match {
-      case Array(secondsStr) => parseSeconds(secondsStr)
-      case Array("", nanosStr) => parseNanos(nanosStr, false)
-      case Array(secondsStr, nanosStr) =>
-        val seconds = parseSeconds(secondsStr)
-        Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
-      case _ =>
-        throw new IllegalArgumentException(
-          "Interval string does not match second-nano format of ss.nnnnnnnnn")
-    }
-  }
-
-  /**
    * Gets interval duration
    *
    * @param interval The interval to get duration
@@ -397,20 +359,40 @@ object IntervalUtils {
   private final val millisStr = unitToUtf8(MILLISECOND)
   private final val microsStr = unitToUtf8(MICROSECOND)
 
+  /**
+   * A safe version of `stringToInterval`. It returns null for invalid input string.
+   */
+  def safeStringToInterval(input: UTF8String): CalendarInterval = {
+    try {
+      stringToInterval(input)
+    } catch {
+      case _: IllegalArgumentException => null
+    }
+  }
+
+  /**
+   * Converts a string to [[CalendarInterval]] case-insensitively.
+   *
+   * @throws IllegalArgumentException if the input string is not in valid interval format.
+   */
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
+    var state = PREFIX
+    def exceptionWithState(msg: String, e: Exception = null) = {
+      throw new IllegalArgumentException(s"Error parsing interval in state '$state', $msg", e)
+    }
 
     if (input == null) {
-      return null
+      exceptionWithState("interval string cannot be null")
     }
     // scalastyle:off caselocale .toLowerCase
     val s = input.trim.toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
     if (bytes.isEmpty) {
-      return null
+      exceptionWithState("interval string cannot be empty")
     }
-    var state = PREFIX
+
     var i = 0
     var currentValue: Long = 0
     var isNegative: Boolean = false
@@ -427,13 +409,17 @@ object IntervalUtils {
       }
     }
 
+    def nextWord: UTF8String = {
+      s.substring(i, s.numBytes()).subStringIndex(UTF8String.blankString(1), 1)
+    }
+
     while (i < bytes.length) {
       val b = bytes(i)
       state match {
         case PREFIX =>
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
-              return null
+              exceptionWithState("interval string cannot be empty")
             } else {
               i += intervalStr.numBytes()
             }
@@ -450,7 +436,7 @@ object IntervalUtils {
               i += 1
             case _ if '0' <= b && b <= '9' =>
               isNegative = false
-            case _ => return null
+            case _ => exceptionWithState( s"Unrecognized sign '$nextWord'")
           }
           currentValue = 0
           fraction = 0
@@ -465,13 +451,14 @@ object IntervalUtils {
               try {
                 currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
               } catch {
-                case _: ArithmeticException => return null
+                case _: ArithmeticException =>
+                  exceptionWithState(s"'$currentValue$nextWord' out of range")
               }
             case ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = (NANOS_PER_SECOND / 10).toInt
               state = VALUE_FRACTIONAL_PART
-            case _ => return null
+            case _ => exceptionWithState(s"invalid value '$nextWord'")
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
@@ -482,14 +469,14 @@ object IntervalUtils {
             case ' ' =>
               fraction /= NANOS_PER_MICROS.toInt
               state = TRIM_BEFORE_UNIT
-            case _ => return null
+            case _ => exceptionWithState(s"invalid value fractional part '$fraction$nextWord'")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
         case UNIT_BEGIN =>
           // Checks that only seconds can have the fractional part
           if (b != 's' && fractionScale >= 0) {
-            return null
+            exceptionWithState(s"'$nextWord' with fractional part is unsupported")
           }
           if (isNegative) {
             currentValue = -currentValue
@@ -533,18 +520,18 @@ object IntervalUtils {
                 } else if (s.matchAt(microsStr, i)) {
                   microseconds = Math.addExact(microseconds, currentValue)
                   i += microsStr.numBytes()
-                } else return null
-              case _ => return null
+                } else exceptionWithState(s"invalid unit '$nextWord'")
+              case _ => exceptionWithState(s"invalid unit '$nextWord'")
             }
           } catch {
-            case _: ArithmeticException => return null
+            case e: ArithmeticException => exceptionWithState(e.getMessage, e)
           }
           state = UNIT_SUFFIX
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
             case ' ' => state = TRIM_BEFORE_SIGN
-            case _ => return null
+            case _ => exceptionWithState(s"invalid unit suffix '$nextWord'")
           }
           i += 1
         case UNIT_END =>
@@ -552,7 +539,7 @@ object IntervalUtils {
             case ' ' =>
               i += 1
               state = TRIM_BEFORE_SIGN
-            case _ => return null
+            case _ => exceptionWithState(s"invalid unit suffix '$nextWord'")
           }
       }
     }
@@ -562,7 +549,6 @@ object IntervalUtils {
         new CalendarInterval(months, days, microseconds)
       case _ => null
     }
-
     result
   }
 

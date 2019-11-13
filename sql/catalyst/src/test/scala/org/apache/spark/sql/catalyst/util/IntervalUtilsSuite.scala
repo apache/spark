@@ -28,20 +28,20 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 class IntervalUtilsSuite extends SparkFunSuite {
 
   private def checkFromString(input: String, expected: CalendarInterval): Unit = {
-    assert(fromString(input) === expected)
     assert(stringToInterval(UTF8String.fromString(input)) === expected)
+    assert(safeStringToInterval(UTF8String.fromString(input)) === expected)
   }
 
   private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
     try {
-      fromString(input)
+      stringToInterval(UTF8String.fromString(input))
       fail("Expected to throw an exception for the invalid input")
     } catch {
       case e: IllegalArgumentException =>
         val msg = e.getMessage
         assert(msg.contains(errorMsg))
     }
-    assert(stringToInterval(UTF8String.fromString(input)) === null)
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
   private def testSingleUnit(
@@ -69,7 +69,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromInvalidString(null, "cannot be null")
 
     for (input <- Seq("", " ", "interval", "interval1 day", "foo", "foo 1 day")) {
-      checkFromInvalidString(input, "Invalid interval string")
+      checkFromInvalidString(input, "Error parsing interval")
     }
   }
 
@@ -93,8 +93,8 @@ class IntervalUtilsSuite extends SparkFunSuite {
     // Allow duplicated units and summarize their values
     checkFromString("1 day 10 day", new CalendarInterval(0, 11, 0))
     // Only the seconds units can have the fractional part
-    checkFromInvalidString("1.5 days", "Invalid interval string")
-    checkFromInvalidString("1. hour", "Invalid interval string")
+    checkFromInvalidString("1.5 days", "'days' with fractional part is unsupported")
+    checkFromInvalidString("1. hour", "'hour' with fractional part is unsupported")
   }
 
   test("string to interval: seconds with fractional part") {
@@ -106,7 +106,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromString("-1.5 seconds", new CalendarInterval(0, 0, -1500000))
     // truncate nanoseconds to microseconds
     checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 999999))
-    checkFromInvalidString("0.123456789123 seconds", "Invalid interval string")
+    checkFromInvalidString("0.123456789123 seconds", "invalid value fractional part '123456789123'")
   }
 
   test("from year-month string") {
@@ -173,7 +173,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   test("interval duration") {
     def duration(s: String, unit: TimeUnit, daysPerMonth: Int): Long = {
-      IntervalUtils.getDuration(fromString(s), unit, daysPerMonth)
+      IntervalUtils.getDuration(stringToInterval(UTF8String.fromString(s)), unit, daysPerMonth)
     }
 
     assert(duration("0 seconds", TimeUnit.MILLISECONDS, 31) === 0)
@@ -192,7 +192,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   test("negative interval") {
     def isNegative(s: String, daysPerMonth: Int): Boolean = {
-      IntervalUtils.isNegative(fromString(s), daysPerMonth)
+      IntervalUtils.isNegative(stringToInterval(UTF8String.fromString(s)), daysPerMonth)
     }
 
     assert(isNegative("-1 months", 28))

@@ -21,13 +21,15 @@ import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.IntervalUtils.fromString
+import org.apache.spark.sql.catalyst.util.IntervalUtils.stringToInterval
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+  implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
+
   implicit def interval(s: String): Literal = {
-    Literal(fromString("interval " + s))
+    Literal(stringToInterval( "interval " + s))
   }
 
   test("millenniums") {
@@ -197,8 +199,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("multiply") {
     def check(interval: String, num: Double, expected: String): Unit = {
       checkEvaluation(
-        MultiplyInterval(Literal(fromString(interval)), Literal(num)),
-        if (expected == null) null else fromString(expected))
+        MultiplyInterval(Literal(stringToInterval(interval)), Literal(num)),
+        if (expected == null) null else stringToInterval(expected))
     }
 
     check("0 seconds", 10, "0 seconds")
@@ -215,8 +217,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("divide") {
     def check(interval: String, num: Double, expected: String): Unit = {
       checkEvaluation(
-        DivideInterval(Literal(fromString(interval)), Literal(num)),
-        if (expected == null) null else fromString(expected))
+        DivideInterval(Literal(stringToInterval(interval)), Literal(num)),
+        if (expected == null) null else stringToInterval(expected))
     }
 
     check("0 seconds", 10, "0 seconds")
