@@ -222,7 +222,7 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateTable: use default catalog for v2 sources when default catalog is set") {
-    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
     spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING foo")
 
     val testCatalog = catalog("testcat").asTableCatalog
@@ -489,7 +489,7 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateTableAsSelect: use default catalog for v2 sources when default catalog is set") {
-    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -710,7 +710,7 @@ class DataSourceV2SQLSuite
   }
 
   test("ShowTables: namespace is not specified and default v2 catalog is set") {
-    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
     spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
 
     // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
@@ -872,7 +872,7 @@ class DataSourceV2SQLSuite
   }
 
   test("ShowNamespaces: show root namespaces with default v2 catalog") {
-    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
 
     testShowNamespaces("SHOW NAMESPACES", Seq())
 
@@ -915,7 +915,7 @@ class DataSourceV2SQLSuite
     spark.conf.set(
       "spark.sql.catalog.testcat_no_namspace",
       classOf[BasicInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.default.catalog", "testcat_no_namspace")
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namspace")
 
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES")
