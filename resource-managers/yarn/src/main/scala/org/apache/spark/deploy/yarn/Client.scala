@@ -171,8 +171,13 @@ private[spark] class Client(
       yarnClient.init(hadoopConf)
       yarnClient.start()
 
-      logInfo("Requesting a new application from cluster with %d NodeManagers"
-        .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+      try {
+        logInfo("Requesting a new application from cluster with %d NodeManagers"
+          .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Yarn client may not implement given API $e")
+      }
 
       // Get a new application from our RM
       val newApp = yarnClient.createApplication()
