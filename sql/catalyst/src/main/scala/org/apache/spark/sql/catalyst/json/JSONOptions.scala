@@ -26,8 +26,6 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.IntervalStyle
-import org.apache.spark.sql.internal.SQLConf.IntervalStyle.IntervalStyle
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
