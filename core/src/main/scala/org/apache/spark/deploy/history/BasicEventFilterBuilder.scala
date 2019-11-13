@@ -40,10 +40,8 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
     val stages = _liveJobToStages.getOrElse(jobEnd.jobId, Seq.empty[Int])
     _liveJobToStages -= jobEnd.jobId
-    stages.foreach { stage =>
-      _stageToTasks -= stage
-      _stageToRDDs -= stage
-    }
+    _stageToTasks --= stages
+    _stageToRDDs --= stages
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
