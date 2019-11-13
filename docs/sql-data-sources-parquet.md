@@ -296,18 +296,6 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   </td>
 </tr>
 <tr>
-  <td><code>spark.sql.optimizer.metadataOnly</code></td>
-  <td>true</td>
-  <td>
-    <p>
-      When true, enable the metadata-only query optimization that use the table's metadata to
-      produce the partition columns instead of table scans. It applies when all the columns scanned
-      are partition columns and the query has an aggregate operator that satisfies distinct
-      semantics.
-    </p>
-  </td>
-</tr>
-<tr>
   <td><code>spark.sql.parquet.writeLegacyFormat</code></td>
   <td>false</td>
   <td>

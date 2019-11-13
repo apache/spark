@@ -48,6 +48,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
           if projectList.forall(_.isInstanceOf[Attribute]) =>
           reorder(p, p.output)
       }
+
       // After reordering is finished, convert OrderedJoin back to Join
       result transformDown {
         case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond)
@@ -175,8 +176,17 @@ object JoinReorderDP extends PredicateHelper with Logging {
         assert(topOutputSet == p.outputSet)
         // Keep the same order of final output attributes.
         p.copy(projectList = output)
+      case finalPlan if !sameOutput(finalPlan, output) =>
+        Project(output, finalPlan)
       case finalPlan =>
         finalPlan
+    }
+  }
+
+  private def sameOutput(plan: LogicalPlan, expectedOutput: Seq[Attribute]): Boolean = {
+    val thisOutput = plan.output
+    thisOutput.length == expectedOutput.length && thisOutput.zip(expectedOutput).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
     }
   }
 

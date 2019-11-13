@@ -115,7 +115,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         SparkSubmitUtils.buildIvySettings(
-          Some("http://www.datanucleus.org/downloads/maven2"),
+          Some("https://maven-central.storage-download.googleapis.com/repos/central/data/"),
           ivyPath),
         exclusions = version.exclusions)
     }
@@ -182,7 +182,6 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("org.slf4j") ||
     name.startsWith("org.apache.log4j") || // log4j1.x
     name.startsWith("org.apache.logging.log4j") || // log4j2
-    name.startsWith("org.apache.derby.") ||
     name.startsWith("org.apache.spark.") ||
     (sharesHadoopClasses && isHadoopClass) ||
     name.startsWith("scala.") ||

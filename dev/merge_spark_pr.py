@@ -453,8 +453,13 @@ def main():
 
     url = pr["url"]
 
+    # Warn if the PR is WIP
+    if "[WIP]" in pr["title"]:
+        msg = "The PR title has `[WIP]`:\n%s\nContinue?" % pr["title"]
+        continue_maybe(msg)
+
     # Decide whether to use the modified title or not
-    modified_title = standardize_jira_ref(pr["title"])
+    modified_title = standardize_jira_ref(pr["title"]).rstrip(".")
     if modified_title != pr["title"]:
         print("I've re-written the title as follows to match the standard format:")
         print("Original: %s" % pr["title"])
@@ -470,7 +475,24 @@ def main():
     else:
         title = pr["title"]
 
-    body = pr["body"]
+    modified_body = re.sub(re.compile(r'<!--[^>]*-->\n?', re.DOTALL), '', pr["body"]).lstrip()
+    if modified_body != pr["body"]:
+        print("=" * 80)
+        print(modified_body)
+        print("=" * 80)
+        print("I've removed the comments from PR template like the above:")
+        result = input("Would you like to use the modified body? (y/n): ")
+        if result.lower() == "y":
+            body = modified_body
+            print("Using modified body:")
+        else:
+            body = pr["body"]
+            print("Using original body:")
+        print("=" * 80)
+        print(body)
+        print("=" * 80)
+    else:
+        body = pr["body"]
     target_ref = pr["base"]["ref"]
     user_login = pr["user"]["login"]
     base_ref = pr["head"]["ref"]

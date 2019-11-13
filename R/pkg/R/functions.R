@@ -3337,7 +3337,7 @@ setMethod("size",
 
 #' @details
 #' \code{slice}: Returns an array containing all the elements in x from the index start
-#' (or starting from the end if start is negative) with the specified length.
+#' (array indices start at 1, or from the end if start is negative) with the specified length.
 #'
 #' @rdname column_collection_functions
 #' @param start an index indicating the first element occurring in the result.

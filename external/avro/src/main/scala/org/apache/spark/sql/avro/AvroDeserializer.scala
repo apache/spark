@@ -223,6 +223,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (UNION, _) =>
         val allTypes = avroType.getTypes.asScala
         val nonNullTypes = allTypes.filter(_.getType != NULL)
+        val nonNullAvroType = Schema.createUnion(nonNullTypes.asJava)
         if (nonNullTypes.nonEmpty) {
           if (nonNullTypes.length == 1) {
             newWriter(nonNullTypes.head, catalystType, path)
@@ -251,7 +252,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
                     (updater, ordinal, value) => {
                       val row = new SpecificInternalRow(st)
                       val fieldUpdater = new RowUpdater(row)
-                      val i = GenericData.get().resolveUnion(avroType, value)
+                      val i = GenericData.get().resolveUnion(nonNullAvroType, value)
                       fieldWriters(i)(fieldUpdater, i, value)
                       updater.set(ordinal, row)
                     }

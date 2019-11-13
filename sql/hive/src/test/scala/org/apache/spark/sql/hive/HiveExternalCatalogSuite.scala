@@ -114,9 +114,18 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     assert(catalog.getDatabase("dbWithNullDesc").description == "")
   }
 
-  test("SPARK-23831: Add org.apache.derby to IsolatedClientLoader") {
-    val client1 = HiveUtils.newClientForMetadata(new SparkConf, new Configuration)
-    val client2 = HiveUtils.newClientForMetadata(new SparkConf, new Configuration)
-    assert(!client1.equals(client2))
+  test("SPARK-29498 CatalogTable to HiveTable should not change the table's ownership") {
+    val catalog = newBasicCatalog()
+    val owner = "SPARK-29498"
+    val hiveTable = CatalogTable(
+      identifier = TableIdentifier("spark_29498", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      owner = owner,
+      schema = new StructType().add("i", "int"),
+      provider = Some("hive"))
+
+    catalog.createTable(hiveTable, ignoreIfExists = false)
+    assert(catalog.getTable("db1", "spark_29498").owner === owner)
   }
 }

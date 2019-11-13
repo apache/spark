@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -246,9 +247,11 @@ class ExpressionParserSuite extends PlanTest {
     intercept("foo(a x)", "extraneous input 'x'")
   }
 
+  private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
+
   test("lambda functions") {
-    assertEqual("x -> x + 1", LambdaFunction('x + 1, Seq('x.attr)))
-    assertEqual("(x, y) -> x + y", LambdaFunction('x + 'y, Seq('x.attr, 'y.attr)))
+    assertEqual("x -> x + 1", LambdaFunction(lv('x) + 1, Seq(lv('x))))
+    assertEqual("(x, y) -> x + y", LambdaFunction(lv('x) + lv('y), Seq(lv('x), lv('y))))
   }
 
   test("window function expressions") {
@@ -606,7 +609,19 @@ class ExpressionParserSuite extends PlanTest {
 
     // Hive nanosecond notation.
     assertEqual("interval 13.123456789 seconds", intervalLiteral("second", "13.123456789"))
-    assertEqual("interval -13.123456789 second", intervalLiteral("second", "-13.123456789"))
+    assertEqual(
+      "interval -13.123456789 second",
+      Literal(new CalendarInterval(
+        0,
+        -13 * DateTimeUtils.MICROS_PER_SECOND - 123 * DateTimeUtils.MICROS_PER_MILLIS - 456)))
+    assertEqual(
+      "interval 13.123456 second",
+      Literal(new CalendarInterval(
+        0,
+        13 * DateTimeUtils.MICROS_PER_SECOND + 123 * DateTimeUtils.MICROS_PER_MILLIS + 456)))
+    assertEqual(
+      "interval 1.001 second",
+      Literal(CalendarInterval.fromString("interval 1 second 1 millisecond")))
 
     // Non Existing unit
     intercept("interval 10 nanoseconds", "No interval can be constructed")

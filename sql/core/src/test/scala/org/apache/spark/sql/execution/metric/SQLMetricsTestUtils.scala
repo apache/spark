@@ -100,29 +100,31 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       provider: String,
       dataFormat: String,
       tableName: String): Unit = {
-    withTempPath { dir =>
-      spark.sql(
-        s"""
-           |CREATE TABLE $tableName(a int, b int)
-           |USING $provider
-           |PARTITIONED BY(a)
-           |LOCATION '${dir.toURI}'
-         """.stripMargin)
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-      assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+    withTable(tableName) {
+      withTempPath { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE $tableName(a int, b int)
+             |USING $provider
+             |PARTITIONED BY(a)
+             |LOCATION '${dir.toURI}'
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-      val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
-        .selectExpr("id a", "id b")
+        val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
+          .selectExpr("id a", "id b")
 
-      // 40 files, 80 rows, 40 dynamic partitions.
-      verifyWriteDataMetrics(Seq(40, 40, 80)) {
-        df.union(df).repartition(2, $"a")
-          .write
-          .format(dataFormat)
-          .mode("overwrite")
-          .insertInto(tableName)
+        // 40 files, 80 rows, 40 dynamic partitions.
+        verifyWriteDataMetrics(Seq(40, 40, 80)) {
+          df.union(df).repartition(2, $"a")
+            .write
+            .format(dataFormat)
+            .mode("overwrite")
+            .insertInto(tableName)
+        }
+        assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
       }
-      assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
     }
   }
 

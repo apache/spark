@@ -25,7 +25,7 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
@@ -36,7 +36,7 @@ trait SharedSparkSession
   with Eventually { self: Suite =>
 
   protected def sparkConf = {
-    new SparkConf()
+    val conf = new SparkConf()
       .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
       .set("spark.unsafe.exceptionOnMemoryLeak", "true")
       .set(SQLConf.CODEGEN_FALLBACK.key, "false")
@@ -45,6 +45,9 @@ trait SharedSparkSession
       // this rule may potentially block testing of other optimization rules such as
       // ConstantPropagation etc.
       .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
+    conf.set(
+      StaticSQLConf.WAREHOUSE_PATH,
+      conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
   }
 
   /**

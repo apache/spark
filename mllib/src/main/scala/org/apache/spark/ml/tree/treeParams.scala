@@ -40,43 +40,43 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   with HasCheckpointInterval with HasSeed {
 
   /**
-   * Maximum depth of the tree (>= 0).
+   * Maximum depth of the tree (nonnegative).
    * E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * (default = 5)
    * @group param
    */
   final val maxDepth: IntParam =
-    new IntParam(this, "maxDepth", "Maximum depth of the tree. (>= 0)" +
+    new IntParam(this, "maxDepth", "Maximum depth of the tree. (Nonnegative)" +
       " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
       ParamValidators.gtEq(0))
 
   /**
    * Maximum number of bins used for discretizing continuous features and for choosing how to split
    * on features at each node.  More bins give higher granularity.
-   * Must be >= 2 and >= number of categories in any categorical feature.
+   * Must be at least 2 and at least number of categories in any categorical feature.
    * (default = 32)
    * @group param
    */
   final val maxBins: IntParam = new IntParam(this, "maxBins", "Max number of bins for" +
-    " discretizing continuous features.  Must be >=2 and >= number of categories for any" +
-    " categorical feature.", ParamValidators.gtEq(2))
+    " discretizing continuous features.  Must be at least 2 and at least number of categories" +
+    " for any categorical feature.", ParamValidators.gtEq(2))
 
   /**
    * Minimum number of instances each child must have after split.
    * If a split causes the left or right child to have fewer than minInstancesPerNode,
    * the split will be discarded as invalid.
-   * Should be >= 1.
+   * Must be at least 1.
    * (default = 1)
    * @group param
    */
   final val minInstancesPerNode: IntParam = new IntParam(this, "minInstancesPerNode", "Minimum" +
     " number of instances each child must have after split.  If a split causes the left or right" +
     " child to have fewer than minInstancesPerNode, the split will be discarded as invalid." +
-    " Should be >= 1.", ParamValidators.gtEq(1))
+    " Must be at least 1.", ParamValidators.gtEq(1))
 
   /**
    * Minimum information gain for a split to be considered at a tree node.
-   * Should be >= 0.0.
+   * Should be at least 0.0.
    * (default = 0.0)
    * @group param
    */
@@ -372,7 +372,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
    * Supported options:
    *  - "auto": Choose automatically for task:
    *            If numTrees == 1, set to "all."
-   *            If numTrees > 1 (forest), set to "sqrt" for classification and
+   *            If numTrees greater than 1 (forest), set to "sqrt" for classification and
    *              to "onethird" for regression.
    *  - "all": use all features
    *  - "onethird": use 1/3 of the features
@@ -424,8 +424,8 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /**
-   * Number of trees to train (>= 1).
-   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
+   * Number of trees to train (at least 1).
+   * If 1, then no bootstrapping is used.  If greater than 1, then bootstrapping is done.
    * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
    * (default = 20)
    *
@@ -434,7 +434,8 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
    * are a bit different.
    * @group param
    */
-  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
+  final val numTrees: IntParam =
+    new IntParam(this, "numTrees", "Number of trees to train (at least 1)",
     ParamValidators.gtEq(1))
 
   setDefault(numTrees -> 20)

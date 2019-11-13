@@ -73,7 +73,7 @@ class StateOperatorProgress private[sql](
  * a trigger. Each event relates to processing done for a single trigger of the streaming
  * query. Events are emitted even when no new data is available to be processed.
  *
- * @param id An unique query id that persists across restarts. See `StreamingQuery.id()`.
+ * @param id A unique query id that persists across restarts. See `StreamingQuery.id()`.
  * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
  * @param name User-specified name of the query, null if not specified.
  * @param timestamp Beginning time of the trigger in ISO8601 format, i.e. UTC timestamps.

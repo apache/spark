@@ -21,9 +21,9 @@ import java.util.UUID
 
 import scala.language.implicitConversions
 
-import org.apache.spark.{HashPartitioner, Partition, TaskContext, TaskContextImpl}
+import org.apache.spark.{HashPartitioner, TaskContext, TaskContextImpl}
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String

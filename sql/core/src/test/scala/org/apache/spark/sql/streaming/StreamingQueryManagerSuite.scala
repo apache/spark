@@ -36,21 +36,26 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.util.Utils
 
-class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
+class StreamingQueryManagerSuite extends StreamTest {
 
   import AwaitTerminationTester._
   import testImplicits._
 
   override val streamingTimeout = 20.seconds
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     assert(spark.streams.active.isEmpty)
     spark.streams.resetTerminated()
   }
 
-  after {
-    assert(spark.streams.active.isEmpty)
-    spark.streams.resetTerminated()
+  override def afterEach(): Unit = {
+    try {
+      assert(spark.streams.active.isEmpty)
+      spark.streams.resetTerminated()
+    } finally {
+      super.afterEach()
+    }
   }
 
   testQuietly("listing") {
@@ -84,7 +89,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  testQuietly("awaitAnyTermination without timeout and resetTerminated") {
+  testRetry("awaitAnyTermination without timeout and resetTerminated") {
     val datasets = Seq.fill(5)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)

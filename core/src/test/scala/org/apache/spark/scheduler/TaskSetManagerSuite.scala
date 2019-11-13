@@ -1398,7 +1398,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(taskSetManager1.isZombie)
     assert(taskSetManager1.runningTasks === 9)
 
-    val taskSet2 = FakeTask.createTaskSet(10, stageAttemptId = 1)
+    val taskSet2 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 1)
     sched.submitTasks(taskSet2)
     sched.resourceOffers(
       (11 until 20).map { idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) })

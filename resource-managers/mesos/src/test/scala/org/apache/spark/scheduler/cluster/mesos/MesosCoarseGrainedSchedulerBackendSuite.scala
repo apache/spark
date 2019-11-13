@@ -588,6 +588,30 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
+  test("SPARK-28778 '--hostname' shouldn't be set for executor when virtual network is enabled") {
+    setBackend()
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+    val offer = createOffer("o1", "s1", mem, cpu)
+
+    assert(backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+
+    setBackend(Map("spark.executor.uri" -> "hdfs://test/executor.jar"))
+    assert(backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+
+    setBackend(Map("spark.mesos.network.name" -> "test"))
+    assert(!backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+
+    setBackend(Map(
+      "spark.mesos.network.name" -> "test",
+      "spark.executor.uri" -> "hdfs://test/executor.jar"
+    ))
+    assert(!backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+  }
+
   test("supports spark.scheduler.minRegisteredResourcesRatio") {
     val expectedCores = 1
     setBackend(Map(

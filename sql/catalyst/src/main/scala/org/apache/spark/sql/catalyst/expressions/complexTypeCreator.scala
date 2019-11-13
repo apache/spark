@@ -124,7 +124,7 @@ private [sql] object GenArrayData {
       val unsafeArraySizeInBytes =
         UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
-      val baseOffset = Platform.BYTE_ARRAY_OFFSET
+      val baseOffset = "Platform.BYTE_ARRAY_OFFSET"
 
       val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>

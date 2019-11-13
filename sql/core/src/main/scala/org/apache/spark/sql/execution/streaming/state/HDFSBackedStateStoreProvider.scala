@@ -43,7 +43,7 @@ import org.apache.spark.util.{SizeEstimator, Utils}
 
 /**
  * An implementation of [[StateStoreProvider]] and [[StateStore]] in which all the data is backed
- * by files in a HDFS-compatible file system. All updates to the store has to be done in sets
+ * by files in an HDFS-compatible file system. All updates to the store has to be done in sets
  * transactionally, and each set of updates increments the store's version. These versions can
  * be used to re-execute the updates (by retries in RDD operations) on the correct version of
  * the store, and regenerate the store version.
@@ -79,7 +79,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   //   java.util.ConcurrentModificationException
   type MapType = java.util.concurrent.ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-  /** Implementation of [[StateStore]] API which is backed by a HDFS-compatible file system */
+  /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
   class HDFSBackedStateStore(val version: Long, mapToUpdate: MapType)
     extends StateStore {
 

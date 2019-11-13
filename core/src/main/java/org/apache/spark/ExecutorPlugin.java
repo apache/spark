@@ -20,18 +20,18 @@ package org.apache.spark;
 import org.apache.spark.annotation.DeveloperApi;
 
 /**
- * A plugin which can be automaticaly instantiated within each Spark executor.  Users can specify
+ * A plugin which can be automatically instantiated within each Spark executor.  Users can specify
  * plugins which should be created with the "spark.executor.plugins" configuration.  An instance
  * of each plugin will be created for every executor, including those created by dynamic allocation,
  * before the executor starts running any tasks.
  *
  * The specific api exposed to the end users still considered to be very unstable.  We will
- * hopefully be able to keep compatability by providing default implementations for any methods
+ * hopefully be able to keep compatibility by providing default implementations for any methods
  * added, but make no guarantees this will always be possible across all Spark releases.
  *
  * Spark does nothing to verify the plugin is doing legitimate things, or to manage the resources
  * it uses.  A plugin acquires the same privileges as the user running the task.  A bad plugin
- * could also intefere with task execution and make the executor fail in unexpected ways.
+ * could also interfere with task execution and make the executor fail in unexpected ways.
  */
 @DeveloperApi
 public interface ExecutorPlugin {

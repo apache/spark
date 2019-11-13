@@ -80,7 +80,7 @@ _have_pandas = _pandas_requirement_message is None
 _have_pyarrow = _pyarrow_requirement_message is None
 _test_compiled = _test_not_compiled_message is None
 
-from pyspark import SparkContext
+from pyspark import SparkContext, SparkConf
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
@@ -88,7 +88,7 @@ from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_
 from pyspark.sql.types import _array_unsigned_int_typecode_ctype_mappings
 from pyspark.sql.types import _merge_type
 from pyspark.tests import QuietTest, ReusedPySparkTestCase, PySparkTestCase, SparkSubmitTests
-from pyspark.sql.functions import UserDefinedFunction, sha2, lit
+from pyspark.sql.functions import UserDefinedFunction, sha2, lit, input_file_name
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
@@ -564,17 +564,17 @@ class SQLTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
-    def test_udf_in_left_semi_join_condition(self):
-        # regression test for SPARK-25314
-        from pyspark.sql.functions import udf
-        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
-        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1)])
-        f = udf(lambda a, b: a == b, BooleanType())
-        df = left.join(right, f("a", "b"), "leftsemi")
-        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
-            df.collect()
+    def test_udf_in_left_outer_join_condition(self):
+        # regression test for SPARK-26147
+        from pyspark.sql.functions import udf, col
+        left = self.spark.createDataFrame([Row(a=1)])
+        right = self.spark.createDataFrame([Row(b=1)])
+        f = udf(lambda a: str(a), StringType())
+        # The join condition can't be pushed down, as it refers to attributes from both sides.
+        # The Python UDF only refer to attributes from one side, so it's evaluable.
+        df = left.join(right, f("a") == col("b").cast("string"), how="left_outer")
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
-            self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
+            self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
     def test_udf_and_common_filter_in_join_condition(self):
         # regression test for SPARK-25314
@@ -587,20 +587,9 @@ class SQLTests(ReusedSQLTestCase):
         # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
         self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1, b=1, b1=1, b2=1)])
 
-    def test_udf_and_common_filter_in_left_semi_join_condition(self):
-        # regression test for SPARK-25314
-        # test the complex scenario with both udf and common filter
-        from pyspark.sql.functions import udf
-        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
-        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
-        f = udf(lambda a, b: a == b, BooleanType())
-        df = left.join(right, [f("a", "b"), left.a1 == right.b1], "left_semi")
-        # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
-        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
-
     def test_udf_not_supported_in_join_condition(self):
         # regression test for SPARK-25314
-        # test python udf is not supported in join type besides left_semi and inner join.
+        # test python udf is not supported in join type except inner join.
         from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
@@ -615,6 +604,7 @@ class SQLTests(ReusedSQLTestCase):
         runWithJoinType("left", "LeftOuter")
         runWithJoinType("right", "RightOuter")
         runWithJoinType("leftanti", "LeftAnti")
+        runWithJoinType("leftsemi", "LeftSemi")
 
     def test_udf_without_arguments(self):
         self.spark.catalog.registerFunction("foo", lambda: "bar")
@@ -841,6 +831,29 @@ class SQLTests(ReusedSQLTestCase):
         df2 = self.spark.read.json(rdd2).select(input_file_name().alias('file'))
         row2 = df2.select(sameText(df2['file'])).first()
         self.assertTrue(row2[0].find("people.json") != -1)
+
+    def test_input_file_name_reset_for_rdd(self):
+        rdd = self.sc.textFile('python/test_support/hello/hello.txt').map(lambda x: {'data': x})
+        df = self.spark.createDataFrame(rdd, "data STRING")
+        df.select(input_file_name().alias('file')).collect()
+
+        non_file_df = self.spark.range(100).select(input_file_name())
+
+        results = non_file_df.collect()
+        self.assertTrue(len(results) == 100)
+
+        # [SPARK-24605]: if everything was properly reset after the last job, this should return
+        # empty string rather than the file read in the last job.
+        for result in results:
+            self.assertEqual(result[0], '')
+
+    def test_input_file_name_udf(self):
+        from pyspark.sql.functions import udf, input_file_name
+
+        df = self.spark.read.text('python/test_support/hello/hello.txt')
+        df = df.select(udf(lambda x: x)("value"), input_file_name().alias('file'))
+        file_name = df.collect()[0].file
+        self.assertTrue("python/test_support/hello/hello.txt" in file_name)
 
     def test_udf_defers_judf_initialization(self):
         # This is separate of  UDFInitializationTests
@@ -3702,6 +3715,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
             self.spark._jvm.OnSuccessCall.isCalled(),
             "The callback from the query execution listener should not be called before 'collect'")
         self.spark.sql("SELECT * FROM range(1)").collect()
+        self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty(10000)
         self.assertTrue(
             self.spark._jvm.OnSuccessCall.isCalled(),
             "The callback from the query execution listener should be called after 'collect'")
@@ -3716,6 +3730,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 "The callback from the query execution listener should not be "
                 "called before 'toPandas'")
             self.spark.sql("SELECT * FROM range(1)").toPandas()
+            self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty(10000)
             self.assertTrue(
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'")
@@ -4533,6 +4548,32 @@ class ArrowTests(ReusedSQLTestCase):
 
         self.assertPandasEqual(pdf, df_from_python.toPandas())
         self.assertPandasEqual(pdf, df_from_pandas.toPandas())
+
+
+@unittest.skipIf(
+    not _have_pandas or not _have_pyarrow,
+    _pandas_requirement_message or _pyarrow_requirement_message)
+class MaxResultArrowTests(unittest.TestCase):
+    # These tests are separate as 'spark.driver.maxResultSize' configuration
+    # is a static configuration to Spark context.
+
+    @classmethod
+    def setUpClass(cls):
+        cls.spark = SparkSession(SparkContext(
+            'local[4]', cls.__name__, conf=SparkConf().set("spark.driver.maxResultSize", "10k")))
+
+        # Explicitly enable Arrow and disable fallback.
+        cls.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
+        cls.spark.conf.set("spark.sql.execution.arrow.fallback.enabled", "false")
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "spark"):
+            cls.spark.stop()
+
+    def test_exception_by_max_results(self):
+        with self.assertRaisesRegexp(Exception, "is bigger than"):
+            self.spark.range(0, 10000, 1, 100).toPandas()
 
 
 class EncryptionArrowTests(ArrowTests):
@@ -5933,8 +5974,15 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
                 grouped_df.apply(column_name_typo).collect()
-            with self.assertRaisesRegexp(Exception, "No cast implemented"):
-                grouped_df.apply(invalid_positional_types).collect()
+            from distutils.version import LooseVersion
+            import pyarrow as pa
+            if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+                # TODO: see ARROW-1949. Remove when the minimum PyArrow version becomes 0.11.0.
+                with self.assertRaisesRegexp(Exception, "No cast implemented"):
+                    grouped_df.apply(invalid_positional_types).collect()
+            else:
+                with self.assertRaisesRegexp(Exception, "an integer is required"):
+                    grouped_df.apply(invalid_positional_types).collect()
 
     def test_positional_assignment_conf(self):
         import pandas as pd

@@ -323,9 +323,9 @@ select timestamp '2016-33-11 20:54:00.000'
 -- !query 34
 select interval 13.123456789 seconds, interval -13.123456789 second
 -- !query 34 schema
-struct<interval 13 seconds 123 milliseconds 456 microseconds:calendarinterval,interval -12 seconds -876 milliseconds -544 microseconds:calendarinterval>
+struct<interval 13 seconds 123 milliseconds 456 microseconds:calendarinterval,interval -13 seconds -123 milliseconds -456 microseconds:calendarinterval>
 -- !query 34 output
-interval 13 seconds 123 milliseconds 456 microseconds	interval -12 seconds -876 milliseconds -544 microseconds
+interval 13 seconds 123 milliseconds 456 microseconds	interval -13 seconds -123 milliseconds -456 microseconds
 
 
 -- !query 35

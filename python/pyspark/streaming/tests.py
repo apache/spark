@@ -1519,11 +1519,7 @@ def search_kafka_assembly_jar():
     kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-0-8-assembly")
     jars = search_jar(kafka_assembly_dir, "spark-streaming-kafka-0-8-assembly")
     if not jars:
-        raise Exception(
-            ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
-            "You need to build Spark with "
-            "'build/sbt -Pkafka-0-8 assembly/package streaming-kafka-0-8-assembly/assembly' or "
-            "'build/mvn -DskipTests -Pkafka-0-8 package' before running this test.")
+        return None
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kafka assembly JARs: %s; please "
                          "remove all but one") % (", ".join(jars)))
@@ -1579,13 +1575,11 @@ if __name__ == "__main__":
     kafka_assembly_jar = search_kafka_assembly_jar()
     flume_assembly_jar = search_flume_assembly_jar()
     kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
+    jars_list = [j for j in (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar) if j]
+    jars = ",".join(jars_list)
 
-    if kinesis_asl_assembly_jar is None:
-        kinesis_jar_present = False
-        jars = "%s,%s" % (kafka_assembly_jar, flume_assembly_jar)
-    else:
-        kinesis_jar_present = True
-        jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
+    kinesis_jar_present = kinesis_asl_assembly_jar in jars_list
+    kafka08_jar_present = kafka_assembly_jar in jars_list
 
     existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
     jars_args = "--jars %s" % jars
@@ -1601,12 +1595,16 @@ if __name__ == "__main__":
             "Skipped test_flume_stream (enable by setting environment variable %s=1"
             % flume_test_environ_var)
 
-    if are_kafka_tests_enabled:
+    if kafka08_jar_present:
         testcases.append(KafkaStreamTests)
     else:
-        sys.stderr.write(
-            "Skipped test_kafka_stream (enable by setting environment variable %s=1"
-            % kafka_test_environ_var)
+        sys.stderr.write("Skipping kafka-0-8 tests as the optional kafka-0-8 profile was "
+                         "not compiled into a JAR. To run these tests, "
+                         "you need to build Spark with 'build/sbt -Pkafka-0-8 assembly/package "
+                         "streaming-kafka-0-8-assembly/assembly' or "
+                         "'build/mvn -DskipTests -Pkafka-0-8 package' before running this test. "
+                         "Note that kafka-0-8 is not compatible with Scala version 2.12 and "
+                         "higher.")
 
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)

@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
 import scala.sys.process._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
@@ -166,6 +167,10 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       """.stripMargin.getBytes("utf8"))
     // scalastyle:on line.size.limit
 
+    if (PROCESS_TABLES.testingVersions.isEmpty) {
+      fail("Fail to get the lates Spark versions to test.")
+    }
+
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
       val sparkHome = new File(sparkTestingDir, s"spark-$version")
       if (!sparkHome.exists()) {
@@ -203,7 +208,20 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
-  val testingVersions = Seq("2.1.3", "2.2.2", "2.3.2")
+  val testingVersions: Seq[String] = {
+    import scala.io.Source
+    try {
+      Source.fromURL("https://dist.apache.org/repos/dist/release/spark/").mkString
+        .split("\n")
+        .filter(_.contains("""<li><a href="spark-"""))
+        .filterNot(_.contains("preview"))
+        .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
+        .filter(_ < org.apache.spark.SPARK_VERSION)
+    } catch {
+      // do not throw exception during object initialization.
+      case NonFatal(_) => Nil
+    }
+  }
 
   protected var spark: SparkSession = _
 
@@ -257,19 +275,10 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
 
       // SPARK-22356: overlapped columns between data and partition schema in data source tables
       val tbl_with_col_overlap = s"tbl_with_col_overlap_$index"
-      // For Spark 2.2.0 and 2.1.x, the behavior is different from Spark 2.0, 2.2.1, 2.3+
-      if (testingVersions(index).startsWith("2.1") || testingVersions(index) == "2.2.0") {
-        spark.sql("msck repair table " + tbl_with_col_overlap)
-        assert(spark.table(tbl_with_col_overlap).columns === Array("i", "j", "p"))
-        checkAnswer(spark.table(tbl_with_col_overlap), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
-        assert(sql("desc " + tbl_with_col_overlap).select("col_name")
-          .as[String].collect().mkString(",").contains("i,j,p"))
-      } else {
-        assert(spark.table(tbl_with_col_overlap).columns === Array("i", "p", "j"))
-        checkAnswer(spark.table(tbl_with_col_overlap), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
-        assert(sql("desc " + tbl_with_col_overlap).select("col_name")
-          .as[String].collect().mkString(",").contains("i,p,j"))
-      }
+      assert(spark.table(tbl_with_col_overlap).columns === Array("i", "p", "j"))
+      checkAnswer(spark.table(tbl_with_col_overlap), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
+      assert(sql("desc " + tbl_with_col_overlap).select("col_name")
+        .as[String].collect().mkString(",").contains("i,p,j"))
     }
   }
 }

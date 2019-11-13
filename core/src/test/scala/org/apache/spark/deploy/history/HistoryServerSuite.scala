@@ -634,6 +634,49 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
+  test("access history application defaults to the last attempt id") {
+
+    def getRedirectUrl(url: URL): (Int, String) = {
+      val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+      connection.setRequestMethod("GET")
+      connection.setUseCaches(false)
+      connection.setDefaultUseCaches(false)
+      connection.setInstanceFollowRedirects(false)
+      connection.connect()
+      val code = connection.getResponseCode()
+      val location = connection.getHeaderField("Location")
+      (code, location)
+    }
+
+    def buildPageAttemptUrl(appId: String, attemptId: Option[Int]): URL = {
+      attemptId match {
+        case Some(id) =>
+          new URL(s"http://localhost:$port/history/$appId/$id")
+        case None =>
+          new URL(s"http://localhost:$port/history/$appId")
+      }
+    }
+
+    val oneAttemptAppId = "local-1430917381534"
+    HistoryServerSuite.getUrl(buildPageAttemptUrl(oneAttemptAppId, None))
+
+    val multiAttemptAppid = "local-1430917381535"
+    val lastAttemptId = Some(2)
+    val lastAttemptUrl = buildPageAttemptUrl(multiAttemptAppid, lastAttemptId)
+    Seq(None, Some(1), Some(2)).foreach { attemptId =>
+      val url = buildPageAttemptUrl(multiAttemptAppid, attemptId)
+      val (code, location) = getRedirectUrl(url)
+      assert(code === 302, s"Unexpected status code $code for $url")
+      attemptId match {
+        case None =>
+          assert(location.stripSuffix("/") === lastAttemptUrl.toString)
+        case _ =>
+          assert(location.stripSuffix("/") === url.toString)
+      }
+      HistoryServerSuite.getUrl(new URL(location))
+    }
+  }
+
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
     HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/api/v1/$path"))
   }

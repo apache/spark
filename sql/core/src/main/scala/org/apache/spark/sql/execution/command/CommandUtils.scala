@@ -35,16 +35,14 @@ object CommandUtils extends Logging {
 
   /** Change statistics after changing data by commands. */
   def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
-    if (table.stats.nonEmpty) {
-      val catalog = sparkSession.sessionState.catalog
-      if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
-        val newTable = catalog.getTableMetadata(table.identifier)
-        val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
-        val newStats = CatalogStatistics(sizeInBytes = newSize)
-        catalog.alterTableStats(table.identifier, Some(newStats))
-      } else {
-        catalog.alterTableStats(table.identifier, None)
-      }
+    val catalog = sparkSession.sessionState.catalog
+    if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+      val newTable = catalog.getTableMetadata(table.identifier)
+      val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
+      val newStats = CatalogStatistics(sizeInBytes = newSize)
+      catalog.alterTableStats(table.identifier, Some(newStats))
+    } else if (table.stats.nonEmpty) {
+      catalog.alterTableStats(table.identifier, None)
     }
   }
 
@@ -59,9 +57,7 @@ object CommandUtils extends Logging {
         val paths = partitions.map(x => new Path(x.storage.locationUri.get))
         val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
         val pathFilter = new PathFilter with Serializable {
-          override def accept(path: Path): Boolean = {
-            DataSourceUtils.isDataPath(path) && !path.getName.startsWith(stagingDir)
-          }
+          override def accept(path: Path): Boolean = isDataPath(path, stagingDir)
         }
         val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(
           paths, sessionState.newHadoopConf(), pathFilter, spark)
@@ -93,8 +89,7 @@ object CommandUtils extends Logging {
       val size = if (fileStatus.isDirectory) {
         fs.listStatus(path)
           .map { status =>
-            if (!status.getPath.getName.startsWith(stagingDir) &&
-              DataSourceUtils.isDataPath(path)) {
+            if (isDataPath(status.getPath, stagingDir)) {
               getPathSize(fs, status.getPath)
             } else {
               0L
@@ -152,5 +147,9 @@ object CommandUtils extends Logging {
       }
     }
     newStats
+  }
+
+  private def isDataPath(path: Path, stagingDir: String): Boolean = {
+    !path.getName.startsWith(stagingDir) && DataSourceUtils.isDataPath(path)
   }
 }

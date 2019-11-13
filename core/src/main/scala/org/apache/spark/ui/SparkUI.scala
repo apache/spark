@@ -140,6 +140,9 @@ private[spark] class SparkUI private (
     streamingJobProgressListener = Option(sparkListener)
   }
 
+  def clearStreamingJobProgressListener(): Unit = {
+    streamingJobProgressListener = None
+  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)

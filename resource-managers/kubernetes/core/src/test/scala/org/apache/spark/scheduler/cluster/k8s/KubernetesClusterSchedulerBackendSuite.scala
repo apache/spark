@@ -37,6 +37,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private val requestExecutorsService = new DeterministicScheduler()
   private val sparkConf = new SparkConf(false)
     .set("spark.executor.instances", "3")
+    .set("spark.app.id", TEST_SPARK_APP_ID)
 
   @Mock
   private var sc: SparkContext = _
@@ -82,8 +83,10 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(taskScheduler.sc).thenReturn(sc)
     when(sc.conf).thenReturn(sparkConf)
     driverEndpoint = ArgumentCaptor.forClass(classOf[RpcEndpoint])
-    when(rpcEnv.setupEndpoint(
-      mockitoEq(CoarseGrainedSchedulerBackend.ENDPOINT_NAME), driverEndpoint.capture()))
+    when(
+      rpcEnv.setupEndpoint(
+        mockitoEq(CoarseGrainedSchedulerBackend.ENDPOINT_NAME),
+        driverEndpoint.capture()))
       .thenReturn(driverEndpointRef)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
@@ -95,9 +98,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       podAllocator,
       lifecycleEventHandler,
       watchEvents,
-      pollEvents) {
-      override def applicationId(): String = TEST_SPARK_APP_ID
-    }
+      pollEvents)
   }
 
   test("Start all components") {
@@ -122,8 +123,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   test("Remove executor") {
     schedulerBackendUnderTest.start()
-    schedulerBackendUnderTest.doRemoveExecutor(
-      "1", ExecutorKilled)
+    schedulerBackendUnderTest.doRemoveExecutor("1", ExecutorKilled)
     verify(driverEndpointRef).send(RemoveExecutor("1", ExecutorKilled))
   }
 

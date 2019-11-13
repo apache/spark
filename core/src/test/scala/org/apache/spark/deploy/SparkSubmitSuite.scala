@@ -72,27 +72,31 @@ trait TestPrematureExit {
     mainObject.printStream = printStream
 
     @volatile var exitedCleanly = false
+    val original = mainObject.exitFn
     mainObject.exitFn = (_) => exitedCleanly = true
-
-    @volatile var exception: Exception = null
-    val thread = new Thread {
-      override def run() = try {
-        mainObject.main(input)
-      } catch {
-        // Capture the exception to check whether the exception contains searchString or not
-        case e: Exception => exception = e
+    try {
+      @volatile var exception: Exception = null
+      val thread = new Thread {
+        override def run() = try {
+          mainObject.main(input)
+        } catch {
+          // Capture the exception to check whether the exception contains searchString or not
+          case e: Exception => exception = e
+        }
       }
-    }
-    thread.start()
-    thread.join()
-    if (exitedCleanly) {
-      val joined = printStream.lineBuffer.mkString("\n")
-      assert(joined.contains(searchString))
-    } else {
-      assert(exception != null)
-      if (!exception.getMessage.contains(searchString)) {
-        throw exception
+      thread.start()
+      thread.join()
+      if (exitedCleanly) {
+        val joined = printStream.lineBuffer.mkString("\n")
+        assert(joined.contains(searchString))
+      } else {
+        assert(exception != null)
+        if (!exception.getMessage.contains(searchString)) {
+          throw exception
+        }
       }
+    } finally {
+      mainObject.exitFn = original
     }
   }
 }
@@ -582,7 +586,7 @@ class SparkSubmitSuite
   }
 
   // TODO(SPARK-9603): Building a package is flaky on Jenkins Maven builds.
-  // See https://gist.github.com/shivaram/3a2fecce60768a603dac for a error log
+  // See https://gist.github.com/shivaram/3a2fecce60768a603dac for an error log
   ignore("correctly builds R packages included in a jar with --packages") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
@@ -960,6 +964,25 @@ class SparkSubmitSuite
       checkDownloadedFile(sourcePath, outputPath)
       deleteTempOutputFile(outputPath)
     }
+  }
+
+  test("remove copies of application jar from classpath") {
+    val fs = File.separator
+    val sparkConf = new SparkConf(false)
+    val hadoopConf = new Configuration()
+    val secMgr = new SecurityManager(sparkConf)
+
+    val appJarName = "myApp.jar"
+    val jar1Name = "myJar1.jar"
+    val jar2Name = "myJar2.jar"
+    val userJar = s"file:/path${fs}to${fs}app${fs}jar$fs$appJarName"
+    val jars = s"file:/$jar1Name,file:/$appJarName,file:/$jar2Name"
+
+    val resolvedJars = DependencyUtils
+      .resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf, secMgr)
+
+    assert(!resolvedJars.contains(appJarName))
+    assert(resolvedJars.contains(jar1Name) && resolvedJars.contains(jar2Name))
   }
 
   test("Avoid re-upload remote resources in yarn client mode") {

@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.{QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
-import org.apache.spark.sql.functions.{avg, broadcast, col, lit, max}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -168,10 +167,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
         .select("int")
 
       val plan = df.queryExecution.executedPlan
-      assert(!plan.find(p =>
+      assert(plan.find(p =>
         p.isInstanceOf[WholeStageCodegenExec] &&
           p.asInstanceOf[WholeStageCodegenExec].child.children(0)
-            .isInstanceOf[SortMergeJoinExec]).isDefined)
+            .isInstanceOf[SortMergeJoinExec]).isEmpty)
       assert(df.collect() === Array(Row(1), Row(2)))
     }
   }
@@ -202,6 +201,13 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
 
     assert(wholeStageCodeGenExec.isDefined)
     wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
+  }
+
+  def genCode(ds: Dataset[_]): Seq[CodeAndComment] = {
+    val plan = ds.queryExecution.executedPlan
+    val wholeStageCodeGenExecs = plan.collect { case p: WholeStageCodegenExec => p }
+    assert(wholeStageCodeGenExecs.nonEmpty, "WholeStageCodegenExec is expected")
+    wholeStageCodeGenExecs.map(_.doCodeGen()._2)
   }
 
   ignore("SPARK-21871 check if we can get large code size when compiling too long functions") {
@@ -283,9 +289,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       val df = spark.range(100)
       val join = df.join(df, "id")
       val plan = join.queryExecution.executedPlan
-      assert(!plan.find(p =>
+      assert(plan.find(p =>
         p.isInstanceOf[WholeStageCodegenExec] &&
-          p.asInstanceOf[WholeStageCodegenExec].codegenStageId == 0).isDefined,
+          p.asInstanceOf[WholeStageCodegenExec].codegenStageId == 0).isEmpty,
         "codegen stage IDs should be preserved through ReuseExchange")
       checkAnswer(join, df.toDF)
     }
@@ -295,18 +301,13 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     import testImplicits._
 
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME.key -> "true") {
-      val bytecodeSizeHisto = CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE
-
-      // the same query run twice should hit the codegen cache
-      spark.range(3).select('id + 2).collect
-      val after1 = bytecodeSizeHisto.getCount
-      spark.range(3).select('id + 2).collect
-      val after2 = bytecodeSizeHisto.getCount // same query shape as above, deliberately
-      // bytecodeSizeHisto's count is always monotonically increasing if new compilation to
-      // bytecode had occurred. If the count stayed the same that means we've got a cache hit.
-      assert(after1 == after2, "Should hit codegen cache. No new compilation to bytecode expected")
-
-      // a different query can result in codegen cache miss, that's by design
+      // the same query run twice should produce identical code, which would imply a hit in
+      // the generated code cache.
+      val ds1 = spark.range(3).select('id + 2)
+      val code1 = genCode(ds1)
+      val ds2 = spark.range(3).select('id + 2)
+      val code2 = genCode(ds2) // same query shape as above, deliberately
+      assert(code1 == code2, "Should produce same code")
     }
   }
 
@@ -329,5 +330,42 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     val abc = ab.join(c, Seq("key"), "left")
 
     checkAnswer(abc, Row(1, "a"))
+  }
+
+  test("SPARK-26680: Stream in groupBy does not cause StackOverflowError") {
+    val groupByCols = Stream(col("key"))
+    val df = Seq((1, 2), (2, 3), (1, 3)).toDF("key", "value")
+      .groupBy(groupByCols: _*)
+      .max("value")
+
+    checkAnswer(df, Seq(Row(1, 3), Row(2, 3)))
+  }
+
+  test("SPARK-26572: evaluate non-deterministic expressions for aggregate results") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val baseTable = Seq(1, 1).toDF("idx")
+
+      // BroadcastHashJoinExec with a HashAggregateExec child containing no aggregate expressions
+      val distinctWithId = baseTable.distinct().withColumn("id", monotonically_increasing_id())
+        .join(baseTable, "idx")
+      assert(distinctWithId.queryExecution.executedPlan.collectFirst {
+        case WholeStageCodegenExec(
+          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _))) => true
+      }.isDefined)
+      checkAnswer(distinctWithId, Seq(Row(1, 0), Row(1, 0)))
+
+      // BroadcastHashJoinExec with a HashAggregateExec child containing a Final mode aggregate
+      // expression
+      val groupByWithId =
+        baseTable.groupBy("idx").sum().withColumn("id", monotonically_increasing_id())
+        .join(baseTable, "idx")
+      assert(groupByWithId.queryExecution.executedPlan.collectFirst {
+        case WholeStageCodegenExec(
+          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _))) => true
+      }.isDefined)
+      checkAnswer(groupByWithId, Seq(Row(1, 2, 0), Row(1, 2, 0)))
+    }
   }
 }

@@ -17,13 +17,20 @@
 
 package org.apache.spark.rpc.netty
 
+import java.util.concurrent.ExecutionException
+
+import scala.concurrent.duration._
+
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.network.client.TransportClient
 import org.apache.spark.rpc._
 
-class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar {
+class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
+
+  private implicit val signaler: Signaler = ThreadSignaler
 
   override def createRpcEnv(
       conf: SparkConf,
@@ -83,5 +90,49 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar {
     assertRequestMessageEquals(
       msg3,
       RequestMessage(nettyEnv, client, msg3.serialize(nettyEnv)))
+  }
+
+  test("StackOverflowError should be sent back and Dispatcher should survive") {
+    val numUsableCores = 2
+    val conf = new SparkConf
+    val config = RpcEnvConfig(
+      conf,
+      "test",
+      "localhost",
+      "localhost",
+      0,
+      new SecurityManager(conf),
+      numUsableCores,
+      clientMode = false)
+    val anotherEnv = new NettyRpcEnvFactory().create(config)
+    anotherEnv.setupEndpoint("StackOverflowError", new RpcEndpoint {
+      override val rpcEnv = anotherEnv
+
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        // scalastyle:off throwerror
+        case msg: String => throw new StackOverflowError
+        // scalastyle:on throwerror
+        case num: Int => context.reply(num)
+      }
+    })
+
+    val rpcEndpointRef = env.setupEndpointRef(anotherEnv.address, "StackOverflowError")
+    try {
+      // Send `numUsableCores` messages to trigger `numUsableCores` `StackOverflowError`s
+      for (_ <- 0 until numUsableCores) {
+        val e = intercept[SparkException] {
+          rpcEndpointRef.askSync[String]("hello")
+        }
+        // The root cause `e.getCause.getCause` because it is boxed by Scala Promise.
+        assert(e.getCause.isInstanceOf[ExecutionException])
+        assert(e.getCause.getCause.isInstanceOf[StackOverflowError])
+      }
+      failAfter(10.seconds) {
+        assert(rpcEndpointRef.askSync[Int](100) === 100)
+      }
+    } finally {
+      anotherEnv.shutdown()
+      anotherEnv.awaitTermination()
+    }
   }
 }

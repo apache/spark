@@ -33,6 +33,7 @@ import org.apache.mesos.SchedulerDriver
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
@@ -272,33 +273,47 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         .getOrElse {
           throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
         }
-      val runScript = new File(executorSparkHome, "./bin/spark-class").getPath
-      command.setValue(
-        "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
-          .format(prefixEnv, runScript) +
-        s" --driver-url $driverURL" +
-        s" --executor-id $taskId" +
-        s" --hostname ${executorHostname(offer)}" +
-        s" --cores $numCores" +
-        s" --app-id $appId")
+      val executable = new File(executorSparkHome, "./bin/spark-class").getPath
+      val runScript = "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
+        .format(prefixEnv, executable)
+
+      command.setValue(buildExecutorCommand(runScript, taskId, numCores, offer))
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.get.split('/').last.split('.').head
-      command.setValue(
-        s"cd $basename*; $prefixEnv " +
-        "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
-        s" --driver-url $driverURL" +
-        s" --executor-id $taskId" +
-        s" --hostname ${executorHostname(offer)}" +
-        s" --cores $numCores" +
-        s" --app-id $appId")
+      val runScript = s"cd $basename*; $prefixEnv " +
+        "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend"
+
+      command.setValue(buildExecutorCommand(runScript, taskId, numCores, offer))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetcherCache))
     }
 
     conf.getOption("spark.mesos.uris").foreach(setupUris(_, command, useFetcherCache))
 
     command.build()
+  }
+
+  private def buildExecutorCommand(
+      runScript: String, taskId: String, numCores: Int, offer: Offer): String = {
+
+    val sb = new StringBuilder()
+      .append(runScript)
+      .append(" --driver-url ")
+      .append(driverURL)
+      .append(" --executor-id ")
+      .append(taskId)
+      .append(" --cores ")
+      .append(numCores)
+      .append(" --app-id ")
+      .append(appId)
+
+    if (sc.conf.get(NETWORK_NAME).isEmpty) {
+      sb.append(" --hostname ")
+      sb.append(offer.getHostname)
+    }
+
+    sb.toString()
   }
 
   protected def driverURL: String = {
@@ -635,7 +650,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             externalShufflePort,
             sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
               s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s")}s"),
-            sc.conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
+            sc.conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
         slave.shuffleRegistered = true
       }
 
@@ -778,15 +793,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private def numExecutors(): Int = {
     slaves.values.map(_.taskIDs.size).sum
-  }
-
-  private def executorHostname(offer: Offer): String = {
-    if (sc.conf.get(NETWORK_NAME).isDefined) {
-      // The agent's IP is not visible in a CNI container, so we bind to 0.0.0.0
-      "0.0.0.0"
-    } else {
-      offer.getHostname
-    }
   }
 
   override def fetchHadoopDelegationTokens(): Option[Array[Byte]] = {

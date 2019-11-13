@@ -262,7 +262,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 object HDFSMetadataLog {
 
   /**
-   * Verify if batchIds are continuous and between `startId` and `endId`.
+   * Verify if batchIds are continuous and between `startId` and `endId` (both inclusive and
+   * startId assumed to be <= endId).
    *
    * @param batchIds the sorted ids to verify.
    * @param startId the start id. If it's set, batchIds should start with this id.

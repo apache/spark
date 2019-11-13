@@ -2597,4 +2597,48 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
   }
+
+  test("SPARK-26057: attribute deduplication on already analyzed plans") {
+    withTempView("a", "b", "v") {
+      val df1 = Seq(("1-1", 6)).toDF("id", "n")
+      df1.createOrReplaceTempView("a")
+      val df3 = Seq("1-1").toDF("id")
+      df3.createOrReplaceTempView("b")
+      spark.sql(
+        """
+          |SELECT a.id, n as m
+          |FROM a
+          |WHERE EXISTS(
+          |  SELECT 1
+          |  FROM b
+          |  WHERE b.id = a.id)
+        """.stripMargin).createOrReplaceTempView("v")
+      val res = spark.sql(
+        """
+          |SELECT a.id, n, m
+          |  FROM a
+          |  LEFT OUTER JOIN v ON v.id = a.id
+        """.stripMargin)
+      checkAnswer(res, Row("1-1", 6, 6))
+    }
+  }
+
+  test("SPARK-27671: Fix analysis exception when casting null in nested field in struct") {
+    val df = sql("SELECT * FROM VALUES (('a', (10, null))), (('b', (10, 50))), " +
+      "(('c', null)) AS tab(x, y)")
+    checkAnswer(df, Row("a", Row(10, null)) :: Row("b", Row(10, 50)) :: Row("c", null) :: Nil)
+
+    val cast = sql("SELECT cast(struct(1, null) AS struct<a:int,b:int>)")
+    checkAnswer(cast, Row(Row(1, null)) :: Nil)
+  }
+
+  test("sample should not duplicated the input data") {
+    val df1 = spark.range(10).select($"id" as "id1", $"id" % 5 as "key1")
+    val df2 = spark.range(10).select($"id" as "id2", $"id" % 5 as "key2")
+    val sampled = df1.join(df2, $"key1" === $"key2")
+      .sample(0.5, 42)
+      .select("id1", "id2")
+    val idTuples = sampled.collect().map(row => row.getLong(0) -> row.getLong(1))
+    assert(idTuples.length == idTuples.toSet.size)
+  }
 }

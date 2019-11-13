@@ -261,3 +261,16 @@ a.expandbutton {
     color: #999999;
     text-decoration: underline;
 }
+
+.title-table {
+  clear: left;
+  display: inline-block;
+}
+
+.table-dataTable {
+  width: 100%;
+}
+
+.container-fluid-div {
+  width: 200px;
+}

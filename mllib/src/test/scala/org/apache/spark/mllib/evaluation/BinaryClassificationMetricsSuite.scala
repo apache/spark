@@ -155,6 +155,17 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
         (1.0, 1.0), (1.0, 1.0)
       ) ==
       downsampledROC)
+
+    val downsampledRecall = downsampled.recallByThreshold().collect().sorted.toList
+    assert(
+      // May have to add 1 if the sample factor didn't divide evenly
+      numBins + (if (scoreAndLabels.size % numBins == 0) 0 else 1) ==
+      downsampledRecall.size)
+    assert(
+      List(
+        (0.1, 1.0), (0.2, 1.0), (0.4, 0.75), (0.6, 0.75), (0.8, 0.25)
+      ) ==
+      downsampledRecall)
   }
 
 }

@@ -162,6 +162,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("015-03-18")).isEmpty)
     assert(stringToDate(UTF8String.fromString("015")).isEmpty)
     assert(stringToDate(UTF8String.fromString("02015")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("1999 08 01")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("1999-08 01")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("1999 08")).isEmpty)
   }
 
   test("string to time") {
@@ -338,6 +341,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       checkStringToTimestamp("2015-03-18T12:03.17-20:0", None)
       checkStringToTimestamp("2015-03-18T12:03.17-0:70", None)
       checkStringToTimestamp("2015-03-18T12:03.17-1:0:0", None)
+      checkStringToTimestamp("1999 08 01", None)
+      checkStringToTimestamp("1999-08 01", None)
+      checkStringToTimestamp("1999 08", None)
 
       // Truncating the fractional seconds
       c = Calendar.getInstance(TimeZone.getTimeZone("GMT+00:00"))
@@ -577,6 +583,12 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     }
   }
 
+  test("trailing characters while converting string to timestamp") {
+    val s = UTF8String.fromString("2019-10-31T10:59:23Z:::")
+    val time = DateTimeUtils.stringToTimestamp(s, DateTimeUtils.defaultTimeZone())
+    assert(time == None)
+  }
+
   test("truncTimestamp") {
     def testTrunc(
         level: Int,
@@ -665,12 +677,12 @@ class DateTimeUtilsSuite extends SparkFunSuite {
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
-      "Kwajalein" -> Set(8632),
+      "Kwajalein" -> Set(8632, 8633),
       "Pacific/Apia" -> Set(15338),
       "Pacific/Enderbury" -> Set(9130, 9131),
       "Pacific/Fakaofo" -> Set(15338),
       "Pacific/Kiritimati" -> Set(9130, 9131),
-      "Pacific/Kwajalein" -> Set(8632),
+      "Pacific/Kwajalein" -> Set(8632, 8633),
       "MIT" -> Set(15338))
     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)

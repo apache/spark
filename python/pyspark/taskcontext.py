@@ -147,8 +147,8 @@ class BarrierTaskContext(TaskContext):
     @classmethod
     def _getOrCreate(cls):
         """Internal function to get or create global BarrierTaskContext."""
-        if cls._taskContext is None:
-            cls._taskContext = BarrierTaskContext()
+        if not isinstance(cls._taskContext, BarrierTaskContext):
+            cls._taskContext = object.__new__(cls)
         return cls._taskContext
 
     @classmethod

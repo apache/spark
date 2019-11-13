@@ -72,7 +72,7 @@ object SVDPlusPlus {
 
     // calculate global rating mean
     edges.cache()
-    val (rs, rc) = edges.map(e => (e.attr, 1L)).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+    val (rs, rc) = edges.map(e => (e.attr, 1L)).fold((0, 0))((a, b) => (a._1 + b._1, a._2 + b._2))
     val u = rs / rc
 
     // construct graph

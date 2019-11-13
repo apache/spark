@@ -31,6 +31,7 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -209,6 +210,24 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
     assert(LastOptions.parameters("opt3") == "3")
+  }
+
+  test("pass partitionBy as options") {
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_PASS_PARTITION_BY_AS_OPTIONS.key -> s"$flag") {
+        Seq(1).toDF.write
+          .format("org.apache.spark.sql.test")
+          .partitionBy("col1", "col2")
+          .save()
+
+        if (flag) {
+          val partColumns = LastOptions.parameters(DataSourceUtils.PARTITIONING_COLUMNS_KEY)
+          assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
+        } else {
+          assert(!LastOptions.parameters.contains(DataSourceUtils.PARTITIONING_COLUMNS_KEY))
+        }
+      }
+    }
   }
 
   test("save mode") {

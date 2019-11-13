@@ -102,8 +102,8 @@ object SparkAWSCredentials {
      *
      * @note The given AWS keypair will be saved in DStream checkpoints if checkpointing is
      * enabled. Make sure that your checkpoint directory is secure. Prefer using the
-     * [[http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default default provider chain]]
-     * instead if possible.
+     * default provider chain instead if possible
+     * (http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default).
      *
      * @param accessKeyId AWS access key ID
      * @param secretKey AWS secret key

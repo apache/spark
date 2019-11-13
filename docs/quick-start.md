@@ -341,6 +341,7 @@ Note that Spark artifacts are tagged with a Scala version.
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_{{site.SCALA_BINARY_VERSION}}</artifactId>
       <version>{{site.SPARK_VERSION}}</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 </project>

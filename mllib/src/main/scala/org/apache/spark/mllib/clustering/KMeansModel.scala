@@ -113,7 +113,7 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
     KMeansModel.SaveLoadV2_0.save(sc, this, path)
   }
 
-  override protected def formatVersion: String = "1.0"
+  override protected def formatVersion: String = "2.0"
 }
 
 @Since("1.4.0")

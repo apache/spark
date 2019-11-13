@@ -34,7 +34,6 @@ import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatcher
 import org.mockito.Matchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
-import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
@@ -48,16 +47,21 @@ import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
-class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
+class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
   private var testDir: File = null
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
   }
 
-  after {
-    Utils.deleteRecursively(testDir)
+  override def afterEach(): Unit = {
+    try {
+      Utils.deleteRecursively(testDir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   /** Create a fake log file using the new log format used in Spark 1.3+ */
@@ -330,6 +334,45 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(!log2.exists())
   }
 
+  test("should not clean inprogress application with lastUpdated time less than maxTime") {
+    val firstFileModifiedTime = TimeUnit.DAYS.toMillis(1)
+    val secondFileModifiedTime = TimeUnit.DAYS.toMillis(6)
+    val maxAge = TimeUnit.DAYS.toMillis(7)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf().set(MAX_LOG_AGE_S, maxAge / 1000), clock)
+    val log = newLogFile("inProgressApp1", None, inProgress = true)
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1"))
+    )
+    clock.setTime(firstFileModifiedTime)
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
+      SparkListenerJobStart(0, 1L, Nil, null)
+    )
+
+    clock.setTime(secondFileModifiedTime)
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    clock.setTime(TimeUnit.DAYS.toMillis(10))
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
+      SparkListenerJobStart(0, 1L, Nil, null),
+      SparkListenerJobEnd(0, 1L, JobSucceeded)
+    )
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    // This should not trigger any cleanup
+    updateAndCheck(provider) { list =>
+      list.size should be(1)
+    }
+  }
+
   test("log cleaner for inProgress files") {
     val firstFileModifiedTime = TimeUnit.SECONDS.toMillis(10)
     val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
@@ -448,7 +491,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1 second), interval(10 millis)) {
+      eventually(timeout(3.second), interval(10.milliseconds)) {
         provider.getConfig().keys should not contain ("HDFS State")
       }
     } finally {
@@ -456,7 +499,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
-  test("provider reports error after FS leaves safe mode") {
+  testRetry("provider reports error after FS leaves safe mode") {
     testDir.delete()
     val clock = new ManualClock()
     val provider = new SafeModeTestProvider(createTestConf(), clock)
@@ -466,7 +509,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1 second), interval(10 millis)) {
+      eventually(timeout(3.second), interval(10.milliseconds)) {
         verify(errorHandler).uncaughtException(any(), any())
       }
     } finally {
@@ -830,11 +873,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     writeFile(accessGranted, true, None,
       SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
       SparkListenerApplicationEnd(5L))
+    var isReadable = false
     val mockedFs = spy(provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
       argThat(new ArgumentMatcher[Path]() {
         override def matches(path: Any): Boolean = {
-          path.asInstanceOf[Path].getName.toLowerCase == "accessdenied"
+          path.asInstanceOf[Path].getName.toLowerCase == "accessdenied" && !isReadable
         }
       }))
     val mockedProvider = spy(provider)
@@ -842,9 +886,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
     }
-    writeFile(accessDenied, true, None,
-      SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None),
-      SparkListenerApplicationEnd(5L))
     // Doing 2 times in order to check the blacklist filter too
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
@@ -852,8 +893,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val accessDeniedPath = new Path(accessDenied.getPath)
     assert(mockedProvider.isBlacklisted(accessDeniedPath))
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
+    isReadable = true
     mockedProvider.cleanLogs()
-    assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+    updateAndCheck(mockedProvider) { list =>
+      assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+      assert(list.exists(_.name == "accessDenied"))
+      assert(list.exists(_.name == "accessGranted"))
+      list.size should be(2)
+    }
   }
 
   test("check in-progress event logs absolute length") {

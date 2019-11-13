@@ -141,6 +141,21 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp2, 14, 21, None)))
   }
 
+  testWithMinPartitions("SPARK-28489: never drop offsets", 6) { calc =>
+    assert(
+      calc.getRanges(
+        fromOffsets = Map(tp1 -> 0, tp2 -> 0, tp3 -> 0),
+        untilOffsets = Map(tp1 -> 10, tp2 -> 10, tp3 -> 1)) ==
+        Seq(
+          KafkaOffsetRange(tp1, 0, 3, None),
+          KafkaOffsetRange(tp1, 3, 6, None),
+          KafkaOffsetRange(tp1, 6, 10, None),
+          KafkaOffsetRange(tp2, 0, 3, None),
+          KafkaOffsetRange(tp2, 3, 6, None),
+          KafkaOffsetRange(tp2, 6, 10, None),
+          KafkaOffsetRange(tp3, 0, 1, None)))
+  }
+
   private val tp1 = new TopicPartition("t1", 1)
   private val tp2 = new TopicPartition("t2", 1)
   private val tp3 = new TopicPartition("t3", 1)

@@ -243,7 +243,7 @@ MIT License
 core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
 core/src/main/resources/org/apache/spark/ui/static/*dataTables*
 core/src/main/resources/org/apache/spark/ui/static/graphlib-dot.min.js
-ore/src/main/resources/org/apache/spark/ui/static/jquery*
+core/src/main/resources/org/apache/spark/ui/static/jquery*
 core/src/main/resources/org/apache/spark/ui/static/sorttable.js
 docs/js/vendor/anchor.min.js
 docs/js/vendor/jquery*

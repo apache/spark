@@ -374,6 +374,18 @@ The following configurations are optional:
   <td>streaming and batch</td>
   <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
 </tr>
+<tr>
+  <td>minPartitions</td>
+  <td>int</td>
+  <td>none</td>
+  <td>streaming and batch</td>
+  <td>Desired minimum number of partitions to read from Kafka.
+  By default, Spark has a 1-1 mapping of topicPartitions to Spark partitions consuming from Kafka.
+  If you set this option to a value greater than your topicPartitions, Spark will divvy up large
+  Kafka partitions to smaller pieces. Please note that this configuration is like a `hint`: the
+  number of Spark tasks will be **approximately** `minPartitions`. It can be less or more depending on
+  rounding errors or Kafka partitions that didn't receive any new data.</td>
+</tr>
 </table>
 
 ## Writing Data to Kafka

@@ -273,8 +273,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
     }
 
-    if (driverUrl == null || executorId == null || hostname == null || cores <= 0 ||
-      appId == null) {
+    if (hostname == null) {
+      hostname = Utils.localHostName()
+      log.info(s"Executor hostname is not provided, will use '$hostname' to advertise itself")
+    }
+
+    if (driverUrl == null || executorId == null || cores <= 0 || appId == null) {
       printUsageAndExit()
     }
 

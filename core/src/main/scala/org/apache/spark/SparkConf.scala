@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
+import scala.concurrent.duration._
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
@@ -609,13 +610,14 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
 
-    val executorTimeoutThreshold = getTimeAsSeconds("spark.network.timeout", "120s")
-    val executorHeartbeatInterval = getTimeAsSeconds("spark.executor.heartbeatInterval", "10s")
+    val executorTimeoutThresholdMs =
+      getTimeAsSeconds("spark.network.timeout", "120s") * 1000
+    val executorHeartbeatIntervalMs = get(EXECUTOR_HEARTBEAT_INTERVAL)
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
-    require(executorTimeoutThreshold > executorHeartbeatInterval, "The value of " +
-      s"spark.network.timeout=${executorTimeoutThreshold}s must be no less than the value of " +
-      s"spark.executor.heartbeatInterval=${executorHeartbeatInterval}s.")
+    require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
+      s"spark.network.timeout=${executorTimeoutThresholdMs}ms must be no less than the value of " +
+      s"spark.executor.heartbeatInterval=${executorHeartbeatIntervalMs}ms.")
   }
 
   /**
@@ -623,7 +625,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * configuration out for debugging.
    */
   def toDebugString: String = {
-    getAll.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
+    Utils.redact(this, getAll).sorted.map { case (k, v) => k + "=" + v }.mkString("\n")
   }
 
 }
@@ -749,7 +751,6 @@ private[spark] object SparkConf extends Logging {
    */
   def isExecutorStartupConf(name: String): Boolean = {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
-    name.startsWith("spark.ssl") ||
     name.startsWith("spark.rpc") ||
     name.startsWith("spark.network") ||
     isSparkPortConf(name)

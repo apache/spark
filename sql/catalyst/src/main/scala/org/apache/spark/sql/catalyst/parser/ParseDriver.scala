@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractSqlParser extends ParserInterface with Logging {
+abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Logging {
 
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
@@ -84,14 +84,14 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
+    lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
+    parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
 
     try {
       try {
@@ -125,13 +125,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
-class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
+class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
   val astBuilder = new AstBuilder(conf)
 }
 
 /** For test-only. */
-object CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder(new SQLConf())
+object CatalystSqlParser extends AbstractSqlParser(SQLConf.get) {
+  val astBuilder = new AstBuilder(SQLConf.get)
 }
 
 /**

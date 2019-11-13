@@ -208,6 +208,17 @@ class ExecutorClassLoaderSuite
     intercept[java.lang.ClassNotFoundException] {
       classLoader.loadClass("ReplFakeClassDoesNotExist").newInstance()
     }
+
+    // classLoader.getResourceAsStream() should also be able to fetch the Class file
+    val fakeClassInputStream = classLoader.getResourceAsStream("ReplFakeClass2.class")
+    try {
+      val magic = new Array[Byte](4)
+      fakeClassInputStream.read(magic)
+      // first 4 bytes should match the magic number of Class file
+      assert(magic === Array[Byte](0xCA.toByte, 0xFE.toByte, 0xBA.toByte, 0xBE.toByte))
+    } finally {
+      if (fakeClassInputStream != null) fakeClassInputStream.close()
+    }
   }
 
 }

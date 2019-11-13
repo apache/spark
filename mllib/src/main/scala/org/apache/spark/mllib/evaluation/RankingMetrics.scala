@@ -138,6 +138,8 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         var dcg = 0.0
         var i = 0
         while (i < n) {
+          // Base of the log doesn't matter for calculating NDCG,
+          // if the relevance value is binary.
           val gain = 1.0 / math.log(i + 2)
           if (i < pred.length && labSet.contains(pred(i))) {
             dcg += gain
