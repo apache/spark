@@ -1675,17 +1675,16 @@ object SQLConf {
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
     .doc("This configuration will be deprecated in the future releases and replaced by" +
-      "spark.sql.dialect.ansi.enabled, we keep it now for forward compatibility.")
+      "spark.sql.dialect.spark.ansi.enabled, we keep it now for forward compatibility.")
     .booleanConf
     .createWithDefault(false)
 
-  val DIALECT_SPARK_ANSI_ENABLED = buildConf("spark.sql.dialect.ansi.enabled")
+  val DIALECT_SPARK_ANSI_ENABLED = buildConf("spark.sql.dialect.spark.ansi.enabled")
     .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
       "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
       "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
       "the SQL parser.")
-    .booleanConf
-    .createWithDefault(false)
+    .fallbackConf(ANSI_ENABLED)
 
   val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
     buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
@@ -2529,8 +2528,7 @@ class SQLConf extends Serializable with Logging {
 
   def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString
 
-  def dialectSparkAnsiEnabled: Boolean =
-    getConf(DIALECT_SPARK_ANSI_ENABLED) || getConf(ANSI_ENABLED)
+  def dialectSparkAnsiEnabled: Boolean = getConf(DIALECT_SPARK_ANSI_ENABLED)
 
   def ansiEnabled: Boolean = usePostgreSQLDialect || dialectSparkAnsiEnabled
 

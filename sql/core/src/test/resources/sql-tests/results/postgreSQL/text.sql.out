@@ -151,11 +151,11 @@ edcba
 
 
 -- !query 18
-set spark.sql.dialect.ansi.enabled=false
+set spark.sql.dialect.spark.ansi.enabled=false
 -- !query 18 schema
 struct<key:string,value:string>
 -- !query 18 output
-spark.sql.dialect.ansi.enabled	false
+spark.sql.dialect.spark.ansi.enabled	false
 
 
 -- !query 19
@@ -177,11 +177,11 @@ struct<i:bigint,left('ahoj', t.`i`):string,right('ahoj', t.`i`):string>
 
 
 -- !query 20
-set spark.sql.dialect.ansi.enabled=true
+set spark.sql.dialect.spark.ansi.enabled=true
 -- !query 20 schema
 struct<key:string,value:string>
 -- !query 20 output
-spark.sql.dialect.ansi.enabled	true
+spark.sql.dialect.spark.ansi.enabled	true
 
 
 -- !query 21
