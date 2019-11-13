@@ -201,7 +201,7 @@ case class ExistsExec(
 
   override def eval(input: InternalRow): Any = {
     require(result.isDefined, s"$this has not finished")
-    result
+    result.get
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
