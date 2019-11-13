@@ -744,7 +744,7 @@ private[spark] class MapOutputTrackerMaster(
       case Some (shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
           MapOutputTracker.convertMapStatuses(
-            shuffleId, startPartition, endPartition, statuses)
+            shuffleId, startPartition, endPartition, statuses, 0, shuffleStatus.mapStatuses.length)
         }
       case None =>
         Iterator.empty
@@ -806,7 +806,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     val statuses = getStatuses(shuffleId, conf)
     try {
       MapOutputTracker.convertMapStatuses(
-        shuffleId, startPartition, endPartition, statuses)
+        shuffleId, startPartition, endPartition, statuses, 0, statuses.length)
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
@@ -983,7 +983,8 @@ private[spark] object MapOutputTracker extends Logging {
    * @param startPartition Start of map output partition ID range (included in range)
    * @param endPartition End of map output partition ID range (excluded from range)
    * @param statuses List of map statuses, indexed by map partition index.
-   * @param mapIndex When specified, only shuffle blocks from this mapper will be processed.
+   * @param startMapId Start Map ID.
+   * @param endMapId End Map ID.
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
    *         tuples describing the shuffle blocks that are stored at that block manager.
@@ -993,55 +994,7 @@ private[spark] object MapOutputTracker extends Logging {
       startPartition: Int,
       endPartition: Int,
       statuses: Array[MapStatus],
-      mapIndex : Option[Int] = None): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    assert (statuses != null)
-    val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
-    val iter = statuses.iterator.zipWithIndex
-    for ((status, mapIndex) <- mapIndex.map(index => iter.filter(_._2 == index)).getOrElse(iter)) {
-      if (status == null) {
-        val errorMessage = s"Missing an output location for shuffle $shuffleId"
-        logError(errorMessage)
-        throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
-      } else {
-        for (part <- startPartition until endPartition) {
-          val size = status.getSizeForBlock(part)
-          if (size != 0) {
-            splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-              ((ShuffleBlockId(shuffleId, status.mapId, part), size, mapIndex))
-          }
-        }
-      }
-    }
-
-    splitsByAddress.iterator
-  }
-
-  /**
-   * Given an array of map statuses, a range map output partitions and a range
-   * mappers (startMapId, endMapId),returns a sequence that, for each block manager ID,
-   * lists the shuffle block IDs and corresponding shuffle
-   * block sizes stored at that block manager.
-   * Note that empty blocks are filtered in the result.
-   *
-   * If any of the statuses is null (indicating a missing location due to a failed mapper),
-   * throws a FetchFailedException.
-   *
-   * @param shuffleId Identifier for the shuffle
-   * @param startPartition Start map output partition ID
-   * @param endPartition End map output partition ID
-   * @param statuses List of map statuses, indexed by map partition index.
-   * @param startMapId Start Map ID
-   * @param endMapId End map ID
-   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
-   *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
-   *         tuples describing the shuffle blocks that are stored at that block manager.
-   */
-  def convertMapStatuses(
-      shuffleId: Int,
-      startPartition: Int,
-      endPartition: Int,
-      statuses: Array[MapStatus],
-      startMapId: Int,
+      startMapId : Int,
       endMapId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
