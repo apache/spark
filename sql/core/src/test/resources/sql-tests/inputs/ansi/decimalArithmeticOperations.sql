@@ -1,2 +1,4 @@
--- throw an exception instead of returning NULL, according to SQL ANSI 2011
+-- SPARK-23179: SQL ANSI 2011 states that in case of overflow during arithmetic operations,
+-- an exception should be thrown instead of returning NULL.
+-- This is what most of the SQL DBs do (eg. SQLServer, DB2).
 --import decimalArithmeticOperations.sql
