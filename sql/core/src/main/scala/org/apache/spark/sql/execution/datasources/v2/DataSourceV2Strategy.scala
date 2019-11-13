@@ -157,19 +157,25 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       OverwritePartitionsDynamicExec(
         r.table.asWritable, writeOptions.asOptions, planLater(query)) :: Nil
 
-    case DeleteFromTable(DataSourceV2ScanRelation(table, _, output), condition) =>
-      if (condition.exists(SubqueryExpression.hasSubquery)) {
-        throw new AnalysisException(
-          s"Delete by condition with subquery is not supported: $condition")
+    case DeleteFromTable(relation, condition) =>
+      relation match {
+        case DataSourceV2ScanRelation(table, _, output) =>
+          if (condition.exists(SubqueryExpression.hasSubquery)) {
+            throw new AnalysisException(
+              s"Delete by condition with subquery is not supported: $condition")
+          }
+          // fail if any filter cannot be converted.
+          // correctness depends on removing all matching data.
+          val filters = DataSourceStrategy.normalizeFilters(condition.toSeq, output)
+              .flatMap(splitConjunctivePredicates(_).map {
+                f => DataSourceStrategy.translateFilter(f).getOrElse(
+                  throw new AnalysisException(s"Exec update failed:" +
+                      s" cannot translate expression to source filter: $f"))
+              }).toArray
+          DeleteFromTableExec(table.asDeletable, filters) :: Nil
+        case _ =>
+          throw new AnalysisException("DELETE is only supported with v2 tables.")
       }
-      // fail if any filter cannot be converted. correctness depends on removing all matching data.
-      val filters = DataSourceStrategy.normalizeFilters(condition.toSeq, output)
-          .flatMap(splitConjunctivePredicates(_).map {
-            f => DataSourceStrategy.translateFilter(f).getOrElse(
-              throw new AnalysisException(s"Exec update failed:" +
-                  s" cannot translate expression to source filter: $f"))
-          }).toArray
-      DeleteFromTableExec(table.asDeletable, filters) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
