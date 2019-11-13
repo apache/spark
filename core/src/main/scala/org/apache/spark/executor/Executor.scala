@@ -283,8 +283,7 @@ private[spark] class Executor(
   }
 
   def stop(): Unit = {
-    if (!executorShutdown.get()) {
-      executorShutdown.compareAndSet(false, true)
+    if (!executorShutdown.getAndSet(true)) {
       env.metricsSystem.report()
       try {
         metricsPoller.stop()
