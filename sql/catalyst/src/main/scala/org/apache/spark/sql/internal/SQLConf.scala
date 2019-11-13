@@ -1093,6 +1093,15 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
+  val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
+    buildConf("spark.sql.streaming.stopActiveRunOnRestart")
+    .doc("Running multiple runs of the same streaming query concurrently is not supported. " +
+      "If we find a concurrent active run for a streaming query (in the same or different " +
+      "SparkSessions on the same cluster) and this flag is true, we will stop the old streaming " +
+      "query run to start the new one.")
+    .booleanConf
+    .createWithDefault(true)
+
   val STREAMING_JOIN_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.join.stateFormatVersion")
       .internal()
