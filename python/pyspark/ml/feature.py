@@ -3774,9 +3774,13 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
         return self._set(outputCol=value)
 
 
-class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
+                       JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that filters out stop words from input.
+    Since 3.0.0, :py:class:`StopWordsRemover` can filter out multiple columns at once by setting
+    the :py:attr:`inputCols` parameter. Note that when both the :py:attr:`inputCol` and
+    :py:attr:`inputCols` parameters are set, an Exception will be thrown.
 
     .. note:: null values from input array are preserved unless adding null to stopWords explicitly.
 
@@ -3795,6 +3799,17 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     True
     >>> loadedRemover.getCaseSensitive() == remover.getCaseSensitive()
     True
+    >>> df2 = spark.createDataFrame([(["a", "b", "c"], ["a", "b"])], ["text1", "text2"])
+    >>> remover2 = StopWordsRemover(stopWords=["b"])
+    >>> remover2.setInputCols(["text1", "text2"]).setOutputCols(["words1", "words2"])
+    StopWordsRemover...
+    >>> remover2.transform(df2).show()
+    +---------+------+------+------+
+    |    text1| text2|words1|words2|
+    +---------+------+------+------+
+    |[a, b, c]|[a, b]|[a, c]|   [a]|
+    +---------+------+------+------+
+    ...
 
     .. versionadded:: 1.6.0
     """
@@ -3808,10 +3823,10 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
-                 locale=None):
+                 locale=None, inputCols=None, outputCols=None):
         """
         __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
-        locale=None)
+                 locale=None, inputCols=None, outputCols=None)
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
@@ -3824,10 +3839,10 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     @keyword_only
     @since("1.6.0")
     def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
-                  locale=None):
+                  locale=None, inputCols=None, outputCols=None):
         """
         setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
-        locale=None)
+                  locale=None, inputCols=None, outputCols=None)
         Sets params for this StopWordRemover.
         """
         kwargs = self._input_kwargs
@@ -3886,6 +3901,20 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
 
     @staticmethod
     @since("2.0.0")
