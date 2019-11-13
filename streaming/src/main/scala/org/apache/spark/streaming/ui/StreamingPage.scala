@@ -321,7 +321,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 if (hasStream) {
                   <span class="expand-input-rate">
                     <span class="expand-input-rate-arrow arrow-closed"></span>
-                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="right">
+                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="top">
                       <strong>Input Rate</strong>
                     </a>
                   </span>
@@ -351,7 +351,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Scheduling Delay {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "right")}</strong></div>
+              <div><strong>Scheduling Delay {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "top")}</strong></div>
               <div>Avg: {schedulingDelay.formattedAvg}</div>
             </div>
           </td>
@@ -361,7 +361,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Processing Time {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "right")}</strong></div>
+              <div><strong>Processing Time {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "top")}</strong></div>
               <div>Avg: {processingTime.formattedAvg}</div>
             </div>
           </td>
@@ -371,7 +371,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "right")}</strong></div>
+              <div><strong>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</strong></div>
               <div>Avg: {totalDelay.formattedAvg}</div>
             </div>
           </td>

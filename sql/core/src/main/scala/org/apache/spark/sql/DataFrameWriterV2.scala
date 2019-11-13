@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.IntegerType
@@ -95,19 +95,21 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   @scala.annotation.varargs
   override def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T] = {
+    def ref(name: String): NamedReference = LogicalExpressions.parseReference(name)
+
     val asTransforms = (column +: columns).map(_.expr).map {
       case Years(attr: Attribute) =>
-        LogicalExpressions.years(attr.name)
+        LogicalExpressions.years(ref(attr.name))
       case Months(attr: Attribute) =>
-        LogicalExpressions.months(attr.name)
+        LogicalExpressions.months(ref(attr.name))
       case Days(attr: Attribute) =>
-        LogicalExpressions.days(attr.name)
+        LogicalExpressions.days(ref(attr.name))
       case Hours(attr: Attribute) =>
-        LogicalExpressions.hours(attr.name)
+        LogicalExpressions.hours(ref(attr.name))
       case Bucket(Literal(numBuckets: Int, IntegerType), attr: Attribute) =>
-        LogicalExpressions.bucket(numBuckets, attr.name)
+        LogicalExpressions.bucket(numBuckets, Array(ref(attr.name)))
       case attr: Attribute =>
-        LogicalExpressions.identity(attr.name)
+        LogicalExpressions.identity(ref(attr.name))
       case expr =>
         throw new AnalysisException(s"Invalid partition transformation: ${expr.sql}")
     }

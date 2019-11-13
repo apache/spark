@@ -702,6 +702,11 @@ class LinearRegressionModel private[ml] (
    */
   @Since("1.6.0")
   override def write: GeneralMLWriter = new GeneralMLWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"LinearRegressionModel: uid=$uid, numFeatures=$numFeatures"
+  }
 }
 
 /** A writer for LinearRegression that handles the "internal" (or default) format */
