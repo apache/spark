@@ -1150,8 +1150,7 @@ object DateTimeUtils {
     threadLocalDateFormat.remove()
   }
 
-  class MicrosCalendar(timeZone: TimeZone, locale: Locale)
-    extends GregorianCalendar(timeZone, locale) {
+  class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
     def getMicros(): SQLTimestamp = {
       var fraction = fields(Calendar.MILLISECOND)
       if (fraction < MICROS_PER_MILLIS) {
@@ -1165,13 +1164,9 @@ object DateTimeUtils {
     }
   }
 
-  def fastParseToMicros(
-      parser: FastDateFormat,
-      s: String,
-      timeZone: TimeZone,
-      locale: Locale): SQLTimestamp = {
+  def fastParseToMicros(parser: FastDateFormat, s: String, tz: TimeZone): SQLTimestamp = {
     val pos = new java.text.ParsePosition(0)
-    val cal = new MicrosCalendar(timeZone, locale)
+    val cal = new MicrosCalendar(tz)
     cal.clear()
     if (!parser.parse(s, pos, cal)) {
       throw new IllegalArgumentException(s)

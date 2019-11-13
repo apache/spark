@@ -684,13 +684,12 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("fast parse to micros") {
-    val locale = Locale.US
     val timeZone = TimeZoneUTC
     def check(pattern: String, input: String, reference: String): Unit = {
-      val parser = FastDateFormat.getInstance(pattern, timeZone, locale)
+      val parser = FastDateFormat.getInstance(pattern, timeZone, Locale.US)
       val expected = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(reference), timeZone).get
-      val actual = fastParseToMicros(parser, input, timeZone, locale)
+      val actual = fastParseToMicros(parser, input, timeZone)
       assert(actual === expected)
     }
     check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
