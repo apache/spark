@@ -116,7 +116,7 @@ object ListenerEventsTestHelper {
   }
 
   def createExecutorRemovedEvent(executorId: Int): SparkListenerExecutorRemoved = {
-    createExecutorRemovedEvent(executorId.toString, 0)
+    createExecutorRemovedEvent(executorId.toString, 10L)
   }
 
   /** Create an executor added event for the specified executor Id. */

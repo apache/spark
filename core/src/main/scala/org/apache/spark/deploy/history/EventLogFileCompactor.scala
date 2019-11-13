@@ -176,6 +176,8 @@ class FilteredEventLogFileRewriter(
   }
 
   private def applyFilter(filter: EventFilter, event: SparkListenerEvent): Option[Boolean] = {
+    // This pattern match should have same list of event types, but it would be safe even if
+    // it's out of sync, once filter doesn't mark events to filter out for unknown event types.
     event match {
       case event: SparkListenerStageSubmitted => filter.filterStageSubmitted(event)
       case event: SparkListenerStageCompleted => filter.filterStageCompleted(event)
