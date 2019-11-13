@@ -428,7 +428,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         scheduler.executorDecommission(executorId)
       }
       shouldDisable
-  }
+    }
 
     /**
      * Stop making resource offers for the given executor. The executor is marked as lost with
