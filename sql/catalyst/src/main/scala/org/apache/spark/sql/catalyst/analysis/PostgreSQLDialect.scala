@@ -37,7 +37,8 @@ object PostgreSQLDialect {
       val conf = SQLConf.get
       if (conf.usePostgreSQLDialect) {
         plan.transformExpressions {
-          case Cast(child, dataType, timeZoneId) if dataType == BooleanType =>
+          case Cast(child, dataType, timeZoneId)
+            if child.dataType != BooleanType && dataType == BooleanType =>
             PostgreCastToBoolean(child, timeZoneId)
         }
       } else {
