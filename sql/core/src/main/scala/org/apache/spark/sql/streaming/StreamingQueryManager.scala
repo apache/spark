@@ -383,11 +383,12 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       }
     }
 
+    // stop() will clear the queryId from activeStreamingQueries as well as activeQueries
     activeRunOpt.foreach(_.stop())
 
     activeQueriesSharedLock.synchronized {
       // We still can have a race condition when two concurrent instances try to start the same
-      // stream, while a third one was already active. In this case, we throw a
+      // stream, while a third one was already active and stopped above. In this case, we throw a
       // ConcurrentModificationException.
       val oldActiveQuery = sparkSession.sharedState.activeStreamingQueries.put(
         query.id, query.streamingQuery) // we need to put the StreamExecution, not the wrapper
