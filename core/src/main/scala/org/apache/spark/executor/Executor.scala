@@ -249,7 +249,7 @@ private[spark] class Executor(
   }
 
   def stop(): Unit = {
-    if(!executorShutdown.getAndSet(true)) {
+    if (!executorShutdown.getAndSet(true)) {
       env.metricsSystem.report()
       heartbeater.shutdown()
       heartbeater.awaitTermination(10, TimeUnit.SECONDS)
