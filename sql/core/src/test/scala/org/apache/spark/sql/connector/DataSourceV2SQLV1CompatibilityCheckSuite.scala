@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataSourceV2SQLV1CompatibilityCheckSuite extends QueryTest
@@ -40,13 +41,11 @@ class DataSourceV2SQLV1CompatibilityCheckSuite extends QueryTest
 
   test("DeleteFrom: DELETE is only supported with v2 tables") {
     val v1Table = "tbl"
-    // val format = classOf[V1FallbackTableCatalog].getName
-    val format = "parquet"
     withTable(v1Table) {
-      sql(s"CREATE TABLE $v1Table (id bigint, data string, p int)" +
-          s" USING $format PARTITIONED BY (id, p)")
+      sql(s"CREATE TABLE $v1Table" +
+          s" USING ${classOf[SimpleScanSource].getName} OPTIONS (from=0,to=1)")
       val exc = intercept[AnalysisException] {
-        sql(s"DELETE FROM $v1Table WHERE id = 2")
+        sql(s"DELETE FROM $v1Table WHERE i = 2")
       }
 
       assert(exc.getMessage.contains("DELETE is only supported with v2 tables"))
