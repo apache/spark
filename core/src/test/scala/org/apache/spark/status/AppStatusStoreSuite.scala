@@ -92,12 +92,12 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-28638: only successful tasks have taskSummary when with disk kvstore (LevelDB)") {
+  test("SPARK-26260: only successful tasks have taskSummary when with disk kvstore (LevelDB)") {
     val testDir = Utils.createTempDir()
-    val store = KVUtils.open(testDir, getClass().getName())
+    val diskStore = KVUtils.open(testDir, getClass().getName())
 
-    (0 until 5).foreach { i => store.write(newTaskData(i, status = "FAILED")) }
-    Seq(new AppStatusStore(store)).foreach { appStore =>
+    (0 until 5).foreach { i => diskStore.write(newTaskData(i, status = "FAILED")) }
+    Seq(new AppStatusStore(diskStore)).foreach { appStore =>
       val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
       assert(summary.size === 0)
     }
@@ -126,21 +126,19 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
-  test("summary should contain successful tasks only when with disk kvstore (LevelDB)") {
-
+  test("SPARK-26260: summary should contain successful tasks only when with LevelDB store") {
     val testDir = Utils.createTempDir()
-
-    val store = KVUtils.open(testDir, getClass().getName())
+    val diskStore = KVUtils.open(testDir, getClass().getName())
 
     for (i <- 0 to 5) {
       if (i % 2 == 1) {
-        store.write(newTaskData(i, status = "FAILED"))
+        diskStore.write(newTaskData(i, status = "FAILED"))
       } else {
-        store.write(newTaskData(i))
+        diskStore.write(newTaskData(i))
       }
     }
 
-    Seq(new AppStatusStore(store)).foreach { appStore =>
+    Seq(new AppStatusStore(diskStore)).foreach { appStore =>
       val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
 
       val values = Array(0.0, 2.0, 4.0)
@@ -150,7 +148,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
         assert(expected === actual)
       }
     }
-    store.close()
+    diskStore.close()
     Utils.deleteRecursively(testDir)
   }
 
