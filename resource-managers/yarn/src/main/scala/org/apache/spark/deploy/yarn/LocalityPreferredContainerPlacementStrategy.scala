@@ -82,7 +82,6 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
 private[yarn] class LocalityPreferredContainerPlacementStrategy(
     val sparkConf: SparkConf,
     val yarnConf: Configuration,
-    val resource: Resource,
     resolver: SparkRackResolver) {
 
   /**
@@ -104,11 +103,12 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       numLocalityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
       allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
-      localityMatchedPendingAllocations: Seq[ContainerRequest]
+      localityMatchedPendingAllocations: Seq[ContainerRequest],
+      resource: Resource
     ): Array[ContainerLocalityPreferences] = {
     val updatedHostToContainerCount = expectedHostToContainerCount(
       numLocalityAwareTasks, hostToLocalTaskCount, allocatedHostToContainersMap,
-        localityMatchedPendingAllocations)
+        localityMatchedPendingAllocations, resource)
     val updatedLocalityAwareContainerNum = updatedHostToContainerCount.values.sum
 
     // The number of containers to allocate, divided into two groups, one with preferred locality,
@@ -154,7 +154,8 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
   /**
    * Calculate the number of executors need to satisfy the given number of pending tasks.
    */
-  private def numExecutorsPending(numTasksPending: Int): Int = {
+  private def numExecutorsPending(numTasksPending: Int, resource: Resource): Int = {
+    // TODO - do we need more here?
     val coresPerExecutor = resource.getVirtualCores
     (numTasksPending * sparkConf.get(CPUS_PER_TASK) + coresPerExecutor - 1) / coresPerExecutor
   }
@@ -175,14 +176,15 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
       allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
-      localityMatchedPendingAllocations: Seq[ContainerRequest]
+      localityMatchedPendingAllocations: Seq[ContainerRequest],
+      resource: Resource
     ): Map[String, Int] = {
     val totalLocalTaskNum = hostToLocalTaskCount.values.sum
     val pendingHostToContainersMap = pendingHostToContainerCount(localityMatchedPendingAllocations)
 
     hostToLocalTaskCount.map { case (host, count) =>
       val expectedCount =
-        count.toDouble * numExecutorsPending(localityAwareTasks) / totalLocalTaskNum
+        count.toDouble * numExecutorsPending(localityAwareTasks, resource) / totalLocalTaskNum
       // Take the locality of pending containers into consideration
       val existedCount = allocatedHostToContainersMap.get(host).map(_.size).getOrElse(0) +
         pendingHostToContainersMap.getOrElse(host, 0.0)

@@ -51,8 +51,8 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
 
   private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
       extends YarnSchedulerBackend(scheduler, sc) {
-    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[(String, ResourceProfile), Int]): Unit = {
-      this.hostToLocalTaskCount = hostToLocalTaskCount
+    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[Int, Map[String, Int]]): Unit = {
+      this.rpHostToLocalTaskCount = hostToLocalTaskCount
     }
   }
 
@@ -68,14 +68,15 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
       numRequested <- 0 until 10
       hostToLocalCount <- IndexedSeq(
-        Map.empty[(String, ResourceProfile), Int],
-        Map(("a", defaultResourceProf) -> 1, ("b", defaultResourceProf) -> 2)
+        Map.empty[Int, Map[String, Int]],
+        Map(defaultResourceProf.id -> Map("a" -> 1, "b" -> 2))
       )
     } {
       yarnSchedulerBackendExtended.setHostToLocalTaskCount(hostToLocalCount)
       sched.setNodeBlacklist(blacklist)
-      val req = yarnSchedulerBackendExtended.prepareRequestExecutors(numRequested)
-      assert(req.requestedTotal === numRequested)
+      val request = Map(defaultResourceProf -> numRequested)
+      val req = yarnSchedulerBackendExtended.prepareRequestExecutors(request)
+      assert(req.resourceProfileToTotalExecs(defaultResourceProf) === numRequested)
       assert(req.nodeBlacklist === blacklist)
       val hosts =
         req.hostToLocalTaskCount(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID).keySet

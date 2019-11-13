@@ -593,7 +593,8 @@ private[spark] class ApplicationMaster(
           }
       }
       try {
-        val numPendingAllocate = allocator.getPendingAllocate.size
+        // TODO - do we need to do anything per ResourceProfile here?
+        val numPendingAllocate = allocator.getNumContainersPendingAllocate
         var sleepStartNs = 0L
         var sleepInterval = 200L // ms
         allocatorLock.synchronized {
