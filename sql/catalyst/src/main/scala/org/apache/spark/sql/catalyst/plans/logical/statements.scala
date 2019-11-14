@@ -273,7 +273,7 @@ case class DescribeTableStatement(
  * A DESCRIBE NAMESPACE statement, as parsed from SQL.
  */
 case class DescribeNamespaceStatement(
-    dbName: Seq[String],
+    namespace: Seq[String],
     extended: Boolean) extends ParsedStatement
 
 /**

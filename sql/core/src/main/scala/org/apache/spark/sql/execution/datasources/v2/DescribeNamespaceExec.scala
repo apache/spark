@@ -49,7 +49,7 @@ case class DescribeNamespaceExec(
     val nsMetadata = nsCatalog.loadNamespaceMetadata(ns)
     val properties = nsMetadata.asScala.toSeq.filter(p => !RESERVED_PROPERTIES.contains(p._1))
 
-    rows += toCatalystRow("Namespace Name", ns.head)
+    rows += toCatalystRow("Namespace Name", ns.last)
     rows += toCatalystRow("Description", nsMetadata.get(COMMENT_TABLE_PROP))
     rows += toCatalystRow("Location", nsMetadata.get(LOCATION_TABLE_PROP))
     if (isExtended && properties.nonEmpty) {

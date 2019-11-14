@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, Star, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.{DescribeNamespaceSchema, DescribeTableSchema}
+import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -263,7 +263,11 @@ case class DescribeNamespace(
     namespace: Seq[String],
     extended: Boolean) extends Command {
 
-  override def output: Seq[Attribute] = DescribeNamespaceSchema.describeNamespaceAttributes()
+  override def output: Seq[Attribute] = Seq(
+    AttributeReference("name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the column").build())(),
+    AttributeReference("value", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "value of the column").build())())
 }
 
 /**
