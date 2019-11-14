@@ -81,6 +81,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val changes = Seq(TableChange.setProperty("location", newLoc))
       createAlterTable(nameParts, catalog, tableName, changes)
 
+    case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
+      AlterNamespaceSetProperties(catalog, nameParts, properties)
+
     case AlterViewSetPropertiesStatement(
          NonSessionCatalog(catalog, tableName), props) =>
       throw new AnalysisException(

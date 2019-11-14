@@ -91,8 +91,8 @@ statement
         ((COMMENT comment=STRING) |
          locationSpec |
          (WITH (DBPROPERTIES | PROPERTIES) tablePropertyList))*        #createNamespace
-    | ALTER database db=errorCapturingIdentifier
-        SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
+    | ALTER (database | NAMESPACE) multipartIdentifier
+        SET (DBPROPERTIES | PROPERTIES) tablePropertyList              #setNamespaceProperties
     | ALTER database db=errorCapturingIdentifier
         SET locationSpec                                               #setDatabaseLocation
     | DROP (database | NAMESPACE) (IF EXISTS)? multipartIdentifier

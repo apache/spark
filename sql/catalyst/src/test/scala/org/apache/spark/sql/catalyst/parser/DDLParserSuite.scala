@@ -1160,6 +1160,22 @@ class DDLParserSuite extends AnalysisTest {
       DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = true))
   }
 
+  test("alter namespace set dbproperties") {
+    val sql1 = "ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"
+    val sql2 = "ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"
+    val sql3 = "ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"
+
+    comparePlans(parsePlan(sql1),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+    comparePlans(parsePlan(sql2),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a")))
+    comparePlans(parsePlan(sql3),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("b" -> "b")))
+  }
+
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),
