@@ -35,6 +35,25 @@ import org.apache.spark.internal.config.EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, Utils}
 
+/**
+ * This class compacts the old event log files into one compact file, via two phases reading:
+ *
+ * 1) Initialize available [[EventFilterBuilder]] instances, and replay the old event log files with
+ * builders, so that these builders can gather the information to create [[EventFilter]] instances.
+ * 2) Initialize [[EventFilter]] instances from [[EventFilterBuilder]] instances, and replay the
+ * old event log files with filters. Rewrite the content to the compact file if the filters decide
+ * to filter in.
+ *
+ * This class assumes caller will provide the sorted list of files which are sorted by the index of
+ * event log file - caller should keep in mind that this class doesn't care about the semantic of
+ * ordering.
+ *
+ * When compacting the files, the range of compaction for given file list is determined as:
+ * (rightmost compact file ~ the file where there're `maxFilesToRetain` files on the right side)
+ *
+ * If there's no compact file in the list, it starts from the first file. If there're not enough
+ * files after rightmost compact file, compaction will be skipped.
+ */
 class EventLogFileCompactor(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
@@ -42,15 +61,11 @@ class EventLogFileCompactor(
 
   private val maxFilesToRetain: Int = sparkConf.get(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN)
 
-  // FIXME: javadoc - caller should provide event log files (either compacted or original)
-  //  sequentially if the last event log file is already a compacted file, everything
-  //  will be skipped
   def compact(eventLogFiles: Seq[FileStatus]): Seq[FileStatus] = {
     if (eventLogFiles.length <= maxFilesToRetain) {
       return eventLogFiles
     }
 
-    // skip everything if the last file is already a compacted file
     if (EventLogFileWriter.isCompacted(eventLogFiles.last.getPath)) {
       return Seq(eventLogFiles.last)
     }
@@ -75,7 +90,6 @@ class EventLogFileCompactor(
         builders.map(_.createFilter()))
       val compactedPath = rewriter.rewrite(filesToCompact)
 
-      // cleanup files which are replaced with new compacted file.
       cleanupCompactedFiles(filesToCompact)
 
       fs.getFileStatus(new Path(compactedPath)) :: filesToRetain.toList
@@ -111,6 +125,12 @@ class EventLogFileCompactor(
   }
 }
 
+/**
+ * This class rewrites the event log files into one compact file: the compact file will only
+ * contain the events which pass the filters. Events will be filtered out only when all filters
+ * decide to filter out the event or don't mind about the event. Otherwise, the original line for
+ * the event is written to the compact file as it is.
+ */
 class FilteredEventLogFileRewriter(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
@@ -212,6 +232,11 @@ class FilteredEventLogFileRewriter(
   }
 }
 
+/**
+ * This class helps to write compact file; to avoid reimplement everything, it extends
+ * [[SingleEventLogFileWriter]], but only `originalFilePath` is used to determine the
+ * path of compact file.
+ */
 class CompactedEventLogFileWriter(
     originalFilePath: Path,
     appId: String,

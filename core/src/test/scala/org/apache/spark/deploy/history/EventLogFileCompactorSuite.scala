@@ -20,15 +20,16 @@ package org.apache.spark.deploy.history
 import java.io.File
 
 import scala.io.{Codec, Source}
+
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.jackson.JsonMethods.parse
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config.EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
-
 
 class EventLogFileCompactorSuite extends SparkFunSuite {
   private val sparkConf = testSparkConf()

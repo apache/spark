@@ -22,6 +22,11 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 
+/**
+ * This class tracks both live jobs and live executors, and pass the list to the
+ * [[BasicEventFilter]] to help BasicEventFilter to filter out finished jobs
+ * (+ stages/tasks/RDDs) and dead executors.
+ */
 private[spark] class BasicEventFilterBuilder extends SparkListener with EventFilterBuilder {
   private val _liveJobToStages = new mutable.HashMap[Int, Seq[Int]]
   private val _stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
@@ -66,6 +71,11 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
   override def createFilter(): EventFilter = BasicEventFilter(this)
 }
 
+/**
+ * This class filters out events which are related to the finished jobs or dead executors,
+ * based on the given information. The events which are not related to the job and executor
+ * will be considered as "Don't mind".
+ */
 private[spark] class BasicEventFilter(
     liveJobToStages: Map[Int, Seq[Int]],
     stageToTasks: Map[Int, Set[Long]],

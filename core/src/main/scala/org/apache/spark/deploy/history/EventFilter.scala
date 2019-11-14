@@ -19,10 +19,26 @@ package org.apache.spark.deploy.history
 
 import org.apache.spark.scheduler._
 
+/**
+ * EventFilterBuilder provides the interface to gather the information from events being received
+ * by [[SparkListenerInterface]], and create a new [[EventFilter]] instance which leverages
+ * information gathered to decide whether the event should be filtered or not.
+ */
 private[spark] trait EventFilterBuilder extends SparkListenerInterface {
   def createFilter(): EventFilter
 }
 
+/**
+ * [[EventFilter]] decides whether the given event should be filtered in, or filtered out when
+ * compacting event log files.
+ *
+ * The meaning of return values of each filterXXX method are following:
+ * - Some(true): Filter in this event.
+ * - Some(false): Filter out this event.
+ * - None: Don't mind about this event. No problem even other filters decide to filter out.
+ *
+ * Please refer [[FilteredEventLogFileRewriter]] for more details on how the filter will be used.
+ */
 private[spark] trait EventFilter {
   def filterStageCompleted(event: SparkListenerStageCompleted): Option[Boolean] = None
 
