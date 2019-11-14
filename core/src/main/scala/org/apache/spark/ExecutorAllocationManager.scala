@@ -275,7 +275,7 @@ private[spark] class ExecutorAllocationManager(
    * The maximum number of executors we would need under the current load to satisfy all running
    * and pending tasks, rounded up.
    */
-  private def maxNumExecutorsNeededPerResourceProfile(rp: Int): Int = {
+  private def maxNumExecutorsNeededPerResourceProfileId(rp: Int): Int = {
     val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp) +
       listener.totalRunningTasksPerResourceProfile(rp)
     logWarning(s"max needed executor rp: $rp numpending $numRunningOrPendingTasks")
@@ -333,8 +333,7 @@ private[spark] class ExecutorAllocationManager(
 
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
       listener.resourceProfileIdToResourceProfile.foreach { case (rProfId, resourceProfile) =>
-        val maxNeeded = maxNumExecutorsNeededPerResourceProfile(rProfId)
-        logInfo("max needed for rp: " + rProfId + " is: " + maxNeeded)
+        val maxNeeded = maxNumExecutorsNeededPerResourceProfileId(rProfId)
         val targetExecs =
           numExecutorsTargetPerResourceProfile.getOrElseUpdate(resourceProfile, initialNumExecutors)
         if (maxNeeded < targetExecs) {
@@ -377,11 +376,9 @@ private[spark] class ExecutorAllocationManager(
       rp: ResourceProfile,
       updatesNeeded: mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
   ): Int = {
-
     val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfile(rp)
     // update the target number (add or remove)
     val delta = updateTargetFn(maxNeeded, rp)
-
     if (delta != 0) {
       updatesNeeded(rp) = ExecutorAllocationManager.TargetNumUpdates(delta, oldNumExecutorsTarget)
     }
@@ -452,28 +449,25 @@ private[spark] class ExecutorAllocationManager(
     }
   }
 
-    private def decrementExecutors(maxNeeded: Int, rp: ResourceProfile): Int = {
-      val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfile(rp)
-      numExecutorsTargetPerResourceProfile(rp) = math.max(maxNeeded, minNumExecutors)
-      numExecutorsToAddPerResourceProfileId(rp.id) = 1
-      numExecutorsTargetPerResourceProfile(rp) - oldNumExecutorsTarget
-    }
+  private def decrementExecutors(maxNeeded: Int, rp: ResourceProfile): Int = {
+    val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfile(rp)
+    numExecutorsTargetPerResourceProfile(rp) = math.max(maxNeeded, minNumExecutors)
+    numExecutorsToAddPerResourceProfileId(rp.id) = 1
+    numExecutorsTargetPerResourceProfile(rp) - oldNumExecutorsTarget
+  }
 
-    /**
-     * Update the target number of executors and figure out how many to add.
-     * If the cap on the number of executors is reached, give up and reset the
-     * number of executors to add next round instead of continuing to double it.
-     *
-     * @param maxNumExecutorsNeeded the maximum number of executors all currently running or pending
-     *                              tasks could fill
-     * @param rp                    the ResourceProfile of the executors
-     * @return the number of additional executors actually requested.
-     */
+  /**
+   * Update the target number of executors and figure out how many to add.
+   * If the cap on the number of executors is reached, give up and reset the
+   * number of executors to add next round instead of continuing to double it.
+   *
+   * @param maxNumExecutorsNeeded the maximum number of executors all currently running or pending
+   *                              tasks could fill
+   * @param rp                    the ResourceProfile of the executors
+   * @return the number of additional executors actually requested.
+   */
   private def addExecutors(maxNumExecutorsNeeded: Int, rp: ResourceProfile): Int = {
-
-    logWarning("in add executors max: " + maxNumExecutorsNeeded)
-    val oldNumExecutorsTarget =
-      numExecutorsTargetPerResourceProfile.getOrElseUpdate(rp, 0)
+    val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfile(rp)
     // Do not request more executors if it would put our target over the upper bound
     // this is doing a max check per ResourceProfile
     if (oldNumExecutorsTarget >= maxNumExecutors) {
@@ -482,29 +476,23 @@ private[spark] class ExecutorAllocationManager(
       numExecutorsToAddPerResourceProfileId(rp.id) = 1
       return 0
     }
-    logWarning(" 1 : " +  numExecutorsTargetPerResourceProfile(rp))
-
     // There's no point in wasting time ramping up to the number of executors we already have, so
     // make sure our target is at least as much as our current allocation:
     numExecutorsTargetPerResourceProfile(rp) =
       math.max(numExecutorsTargetPerResourceProfile(rp),
         executorMonitor.executorCountWithResourceProfile(rp.id))
 
-    logWarning(" 2 : " +  numExecutorsTargetPerResourceProfile(rp))
     // Boost our target with the number to add for this round:
     numExecutorsTargetPerResourceProfile(rp) +=
       numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rp.id, 0)
-    logWarning(" 3 : " +  numExecutorsTargetPerResourceProfile(rp))
 
     // Ensure that our target doesn't exceed what we need at the present moment:
     numExecutorsTargetPerResourceProfile(rp) =
       math.min(numExecutorsTargetPerResourceProfile(rp), maxNumExecutorsNeeded)
-    logWarning(" 4 : " +  numExecutorsTargetPerResourceProfile(rp))
 
     // Ensure that our target fits within configured bounds:
     numExecutorsTargetPerResourceProfile(rp) = math.max(
       math.min(numExecutorsTargetPerResourceProfile(rp), maxNumExecutors), minNumExecutors)
-    logWarning(" 5 : " +  numExecutorsTargetPerResourceProfile(rp))
 
     val delta = numExecutorsTargetPerResourceProfile(rp) - oldNumExecutorsTarget
     logWarning("add executors delta is: " + delta + " old is: " + oldNumExecutorsTarget)
@@ -536,25 +524,24 @@ private[spark] class ExecutorAllocationManager(
       if (rpId == UNKNOWN_RESOURCE_PROFILE_ID) {
         logWarning(s"Not removing executor $executorIdsToBeRemoved because couldn't find " +
           "ResourceProfile for it!")
-      }
-
-      // get the running total as we remove or initialize it to the count - pendingRemoval
-      val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
-        (executorMonitor.executorCountWithResourceProfile(rpId) -
-          executorMonitor.pendingRemovalCountPerResourceProfileId(rpId)))
-      val rp = listener.resourceProfileIdToResourceProfile(rpId)
-      logWarning(s"new executor total : $newExecutorTotal")
-
-      if (newExecutorTotal - 1 < minNumExecutors) {
-        logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
-          s"$newExecutorTotal executor(s) left (minimum number of executor limit $minNumExecutors)")
-      } else if (newExecutorTotal - 1 < numExecutorsTargetPerResourceProfile(rp)) {
-        logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
-          s"$newExecutorTotal executor(s) left (number of executor " +
-          s"target ${numExecutorsTargetPerResourceProfile(rp)})")
       } else {
-        executorIdsToBeRemoved += executorIdToBeRemoved
-        numExecutorsTotalPerRpId(rpId) -= 1
+        // get the running total as we remove or initialize it to the count - pendingRemoval
+        val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
+          (executorMonitor.executorCountWithResourceProfile(rpId) -
+            executorMonitor.pendingRemovalCountPerResourceProfileId(rpId)))
+        val rp = listener.resourceProfileIdToResourceProfile(rpId)
+        if (newExecutorTotal - 1 < minNumExecutors) {
+          logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
+            s"are only $newExecutorTotal executor(s) left (minimum number of executor limit " +
+            s"$minNumExecutors)")
+        } else if (newExecutorTotal - 1 < numExecutorsTargetPerResourceProfile(rp)) {
+          logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
+            s"$newExecutorTotal executor(s) left (number of executor " +
+            s"target ${numExecutorsTargetPerResourceProfile(rp)})")
+        } else {
+          executorIdsToBeRemoved += executorIdToBeRemoved
+          numExecutorsTotalPerRpId(rpId) -= 1
+        }
       }
     }
 
@@ -640,9 +627,7 @@ private[spark] class ExecutorAllocationManager(
     private val stageAttemptToSpeculativeTaskIndices =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
 
-    // private val stageAttemptToResourceProfile =
-      // new mutable.HashMap[StageAttempt, ResourceProfile]
-    val resourceProfileIdToStageAttempt =
+    private val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
     val resourceProfileIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
 
@@ -675,7 +660,7 @@ private[spark] class ExecutorAllocationManager(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
         logInfo("adding to execResourceReqsToNumTasks: " + numTasks)
         numExecutorsToAddPerResourceProfileId.getOrElseUpdate(profId, 1)
-        // TODO - currently never remove, we could remove is all executors using a profile exit
+        // Note we never remove profiles from resourceProfileIdToResourceProfile
         resourceProfileIdToResourceProfile.getOrElseUpdate(profId, stageResourceProf)
         numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, 0)
 
@@ -707,8 +692,7 @@ private[spark] class ExecutorAllocationManager(
       val stageAttemptId = stageCompleted.stageInfo.attemptNumber()
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       allocationManager.synchronized {
-        // do NOT remove stageAttempt from stageAttemptToNumRunningTasks
-        // or resourceProfileIdToStageAttempt,
+        // do NOT remove stageAttempt from stageAttemptToNumRunningTask
         // because the attempt may still have running tasks,
         // even after another attempt for the stage is submitted.
         val numTasks = stageAttemptToNumTasks(stageAttempt)
@@ -717,10 +701,6 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToTaskIndices -= stageAttempt
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
-        // TODO - need to do this somewhere but have to be careful about late events
-        // val rp = stageAttemptToResourceProfile(stageAttempt)
-        // resourceProfileIdToStageAttempt(rp.id) -= stageAttempt
-        // stageAttemptToResourceProfile -= stageAttempt
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
@@ -768,6 +748,21 @@ private[spark] class ExecutorAllocationManager(
           if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
             logWarning("stage attempt num running 0: " + stageAttempt)
             stageAttemptToNumRunningTask -= stageAttempt
+            if (!stageAttemptToNumTasks.contains(stageAttempt)) {
+              val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
+                v.contains(stageAttempt)
+              }.keys
+              if (rpForStage.size == 1) {
+                logWarning(s"removing stage attmpe $stageAttempt for rp: ${rpForStage.head}")
+                // be careful about the removal from here due to late tasks, make sure stage is
+                // really complete and no tasks left
+                resourceProfileIdToStageAttempt(rpForStage.head) -= stageAttempt
+              } else {
+                logWarning(s"Should have exactly one resource profile for stage $stageAttempt," +
+                  s" but have $rpForStage")
+              }
+            }
+
           }
         }
         // If the task failed, we expect it to be resubmitted later. To ensure we have
@@ -860,8 +855,6 @@ private[spark] class ExecutorAllocationManager(
 
     def totalRunningTasksPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
-      logWarning(s"totalRunningTasksPerResourceProfile resource profile is: $rp attempts $attempts")
-
       // attempts is a Set, change to Seq so we keep all values
       attempts.map { attempt =>
         stageAttemptToNumRunningTask.getOrElseUpdate(attempt, 0)
@@ -919,13 +912,14 @@ private[spark] class ExecutorAllocationManager(
       })
     }
 
-    // TODO - how to do metrics per stage????
-    registerGauge("numberExecutorsToAdd", 0, 0)
+    // the metrics are going to return the numbers for the default ResourceProfile
+    registerGauge("numberExecutorsToAdd",
+      numExecutorsToAddPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
     registerGauge("numberExecutorsPendingToRemove", executorMonitor.pendingRemovalCount, 0)
     registerGauge("numberAllExecutors", executorMonitor.executorCount, 0)
-    // TODO - fix
-    registerGauge("numberTargetExecutors", 0, 0)
-    registerGauge("numberMaxNeededExecutors", 0, 0)
+    registerGauge("numberTargetExecutors", numExecutorsTargetPerResourceProfile(defaultProfile), 0)
+    registerGauge("numberMaxNeededExecutors",
+      maxNumExecutorsNeededPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
   }
 }
 

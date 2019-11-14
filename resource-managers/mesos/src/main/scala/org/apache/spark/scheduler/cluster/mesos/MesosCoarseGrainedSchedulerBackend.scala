@@ -763,13 +763,14 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       super.applicationId
     }
 
-  override def doRequestTotalExecutors(requestedTotal: Int,
-      resources: Option[Map[ResourceProfile, Int]] = None): Future[Boolean] = Future.successful {
+  override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = Future.successful {
     // We don't truly know if we can fulfill the full amount of executors
     // since at coarse grain it depends on the amount of slaves available.
-    val totalRequested = resources.getOrElse(requestedTotal)
-    logInfo("Capping the total amount of executors to " + requestedTotal)
-    executorLimitOption = Some(requestedTotal)
+    val rp = ResourceProfile.getOrCreateDefaultProfile(sc.conf)
+    val numExecs = resourceProfileToTotalExecs.getOrElse(rp, 0)
+    logInfo("Capping the total amount of executors to " + numExecs)
+    executorLimitOption = Some(numExecs)
     // Update the locality wait start time to continue trying for locality.
     localityWaitStartTimeNs = System.nanoTime()
     true

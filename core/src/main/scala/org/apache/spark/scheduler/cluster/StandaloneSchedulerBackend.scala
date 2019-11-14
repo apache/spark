@@ -198,8 +198,10 @@ private[spark] class StandaloneSchedulerBackend(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
     // resources profiles not supported
     Option(client) match {
-      case Some(c) => c.requestTotalExecutors(resourceProfileToTotalExecs(
-        ResourceProfile.getOrCreateDefaultProfile(sc.conf)))
+      case Some(c) =>
+        val rp = ResourceProfile.getOrCreateDefaultProfile(sc.conf)
+        val numExecs = resourceProfileToTotalExecs.getOrElse(rp, 0)
+        c.requestTotalExecutors(numExecs)
       case None =>
         logWarning("Attempted to request executors before driver fully initialized.")
         Future.successful(false)
