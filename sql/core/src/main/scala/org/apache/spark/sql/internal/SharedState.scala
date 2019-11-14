@@ -52,7 +52,7 @@ private[sql] class SharedState(
     initialConfigs: scala.collection.Map[String, String])
   extends Logging {
 
-  SharedState.setFsUrlStreamHandlerFactoryIfNeeded(sparkContext.conf)
+  SharedState.setFsUrlStreamHandlerFactory(sparkContext.conf)
 
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
@@ -193,21 +193,23 @@ private[sql] class SharedState(
 }
 
 object SharedState extends Logging {
-  private var initialized = false
-  private def setFsUrlStreamHandlerFactoryIfNeeded(conf: SparkConf): Unit = {
-    synchronized {
-      if (!initialized) {
+  @volatile private var factory: Option[FsUrlStreamHandlerFactory] = None
+  private lazy val defaultFactory = new FsUrlStreamHandlerFactory()
+  private def setFsUrlStreamHandlerFactory(conf: SparkConf): Unit = {
+    factory match {
+      case Some(_) =>
+        logWarning("FsUrlStreamHandlerFactory has been already initialized, " +
+          "so it can not be modified")
+      case None => synchronized {
         try {
           if (conf.getBoolean("spark.fsUrlStreamHandlerFactory.enabled", true)) {
-            URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+            URL.setURLStreamHandlerFactory(defaultFactory)
+            factory = Some(defaultFactory)
           }
         } catch {
           case e: Error =>
             logWarning("URL.setURLStreamHandlerFactory failed to set " +
               "FsUrlStreamHandlerFactory", e)
-        } finally {
-          // don't retry on failure
-          initialized = true
         }
       }
     }
