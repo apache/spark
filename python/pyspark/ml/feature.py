@@ -187,7 +187,7 @@ class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOu
         return self._set(outputCols=value)
 
 
-class _LSHParams(HasInputCol, HasOutputCol, HasRelativeError):
+class _LSHParams(HasInputCol, HasOutputCol):
     """
     Mixin for Locality Sensitive Hashing (LSH) algorithm parameters.
     """
@@ -227,13 +227,6 @@ class _LSH(JavaEstimator, _LSHParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @since("3.0.0")
-    def setRelativeError(self, value):
-        """
-        Sets the value of :py:attr:`relativeError`.
-        """
-        return self._set(relativeError=value)
-
 
 class _LSHModel(JavaModel, _LSHParams):
     """
@@ -251,13 +244,6 @@ class _LSHModel(JavaModel, _LSHParams):
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
-
-    @since("3.0.0")
-    def setRelativeError(self, value):
-        """
-        Sets the value of :py:attr:`relativeError`.
-        """
-        return self._set(relativeError=value)
 
     def approxNearestNeighbors(self, dataset, key, numNearestNeighbors, distCol="distCol"):
         """
@@ -340,8 +326,6 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
     ...         (3, Vectors.dense([1.0, 1.0]),)]
     >>> df = spark.createDataFrame(data, ["id", "features"])
     >>> brp = BucketedRandomProjectionLSH()
-    >>> brp.getRelativeError()
-    0.001
     >>> brp.setInputCol("features")
     BucketedRandomProjectionLSH...
     >>> brp.setOutputCol("hashes")
@@ -398,10 +382,10 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
-                 bucketLength=None, relativeError=0.001):
+                 bucketLength=None):
         """
         __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
-                 bucketLength=None, relativeError=0.001)
+                 bucketLength=None)
         """
         super(BucketedRandomProjectionLSH, self).__init__()
         self._java_obj = \
@@ -413,10 +397,10 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
     @keyword_only
     @since("2.2.0")
     def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
-                  bucketLength=None, relativeError=0.001):
+                  bucketLength=None):
         """
         setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
-                  bucketLength=None, relativeError=0.001)
+                  bucketLength=None)
         Sets params for this BucketedRandomProjectionLSH.
         """
         kwargs = self._input_kwargs
@@ -1937,8 +1921,6 @@ class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaM
     ...         (2, Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df = spark.createDataFrame(data, ["id", "features"])
     >>> mh = MinHashLSH()
-    >>> mh.getRelativeError()
-    0.001
     >>> mh.setInputCol("features")
     MinHashLSH...
     >>> mh.setOutputCol("hashes")
@@ -1981,11 +1963,9 @@ class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaM
     """
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
-                 relativeError=0.001):
+    def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1):
         """
-        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
-                 relativeError=0.001)
+        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1)
         """
         super(MinHashLSH, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
@@ -1995,11 +1975,9 @@ class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaM
 
     @keyword_only
     @since("2.2.0")
-    def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
-                  relativeError=0.001):
+    def setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1):
         """
-        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
-                  relativeError=0.001)
+        setParams(self, inputCol=None, outputCol=None, seed=None, numHashTables=1)
         Sets params for this MinHashLSH.
         """
         kwargs = self._input_kwargs

@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, ParamValidators}
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasRelativeError}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 /**
  * Params for [[LSH]].
  */
-private[ml] trait LSHParams extends HasInputCol with HasOutputCol with HasRelativeError {
+private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   /**
    * Param for the number of hash tables used in LSH OR-amplification.
    *
@@ -71,10 +71,6 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /** @group expertSetParam */
-  @Since("3.0.0")
-  def setRelativeError(value: Double): this.type = set(relativeError, value)
 
   /**
    * The hash function of LSH, mapping an input feature vector to multiple hash vectors.
@@ -117,7 +113,8 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       numNearestNeighbors: Int,
       singleProbe: Boolean,
       distCol: String): Dataset[_] = {
-    require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
+    require(numNearestNeighbors > 0 && numNearestNeighbors <= dataset.count(), "The number of" +
+      " nearest neighbors cannot be less than 1 or greater than the number of elements in dataset")
     // Get Hash Value of the key
     val keyHash = hashFunction(key)
     val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
@@ -143,13 +140,23 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       val hashDistCol = hashDistUDF(col($(outputCol)))
 
       // Compute threshold to get exact k elements.
-      val quantile = numNearestNeighbors.toDouble / modelDataset.count()
-      val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistUDF(col($(outputCol))))
-      val hashThreshold = modelDatasetWithDist.stat
-        .approxQuantile(distCol, Array(quantile), $(relativeError))
+      val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
+      var filtered: DataFrame = null
+      var requestedNum = numNearestNeighbors
+      do {
+        requestedNum *= 2
+        if (requestedNum > modelDataset.count()) {
+          requestedNum = modelDataset.count().toInt
+        }
+        var quantile = requestedNum.toDouble / modelDataset.count()
+        var hashThreshold = modelDatasetWithDist.stat
+          .approxQuantile(distCol, Array(quantile), 0.001)
 
-      // Filter the dataset where the hash value is less than the threshold.
-      modelDatasetWithDist.filter(hashDistCol <= hashThreshold(0))
+        // Filter the dataset where the hash value is less than the threshold.
+        filtered = modelDatasetWithDist.filter(hashDistCol <= hashThreshold(0))
+      }
+      while (filtered.count() < numNearestNeighbors)
+      filtered
     }
 
     // Get the top k nearest neighbor by their distance to the key
@@ -318,10 +325,6 @@ private[ml] abstract class LSH[T <: LSHModel[T]]
 
   /** @group setParam */
   def setNumHashTables(value: Int): this.type = set(numHashTables, value)
-
-  /** @group expertSetParam */
-  @Since("3.0.0")
-  def setRelativeError(value: Double): this.type = set(relativeError, value)
 
   /**
    * Validate and create a new instance of concrete LSHModel. Because different LSHModel may have
