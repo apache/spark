@@ -498,12 +498,11 @@ object IntervalUtils {
         case SIGN =>
           currentValue = 0
           fraction = 0
-          // Sets the scale to an invalid value to track fraction presence
-          // in the BEGIN_UNIT_NAME state
-          // We Preset next state from SIGN to TRIM_BEFORE_VALUE. If we meet '.' in the SIGN state,
+          // We preset next state from SIGN to TRIM_BEFORE_VALUE. If we meet '.' in the SIGN state,
           // we need to reset next state to `VALUE_FRACTIONAL_PART`, otherwise stay the same.
-          // Same logic for the fractionScale.
           state = TRIM_BEFORE_VALUE
+          // We preset the scale to an invalid value to track fraction presence in the UNIT_BEGIN
+          // state. Same resetting logic for the scale as the state.
           fractionScale = -1
           b match {
             case '-' =>
