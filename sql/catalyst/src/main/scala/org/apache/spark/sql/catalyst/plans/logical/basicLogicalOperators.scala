@@ -708,6 +708,8 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
+  override def producedAttributes: AttributeSet = AttributeSet(output diff child.output)
+
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override protected def validConstraints: Set[Expression] = Set.empty[Expression]
