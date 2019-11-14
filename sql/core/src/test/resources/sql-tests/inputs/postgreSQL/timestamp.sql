@@ -18,7 +18,7 @@ CREATE TABLE TIMESTAMP_TBL (d1 timestamp) USING parquet;
 
 -- PostgreSQL implicitly casts string literals to data with timestamp types, but
 -- Spark does not support that kind of implicit casts.
-INSERT INTO TIMESTAMP_TBL VALUES timestamp(('now'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'));
 -- SELECT pg_sleep(0.1);
 
 -- BEGIN;
