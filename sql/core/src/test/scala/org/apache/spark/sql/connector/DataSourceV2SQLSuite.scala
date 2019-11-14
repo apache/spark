@@ -116,6 +116,23 @@ class DataSourceV2SQLSuite
       Row("data", "string", "")))
   }
 
+  test("DescribeNamespace using v2 catalog") {
+    spark.sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns_name COMMENT " +
+      "'test namespace' LOCATION '/tmp/ns_test'")
+    val descriptionDf = spark.sql("DESCRIBE NAMESPACE testcat.ns_name")
+    assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+      Seq(
+        ("name", StringType),
+        ("value", StringType)
+      ))
+    val description = descriptionDf.collect()
+    assert(description === Seq(
+      Row("Namespace Name", "ns_name"),
+      Row("Description", "test namespace"),
+      Row("Location", "/tmp/ns_test")
+    ))
+  }
+
   test("DescribeTable with v2 catalog when table does not exist.") {
     intercept[AnalysisException] {
       spark.sql("DESCRIBE TABLE testcat.table_name")
