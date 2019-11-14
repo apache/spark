@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
 import java.net.{URI, URISyntaxException}
-import java.nio.file.FileSystems
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -29,7 +27,7 @@ import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -57,15 +55,19 @@ import org.apache.spark.sql.util.SchemaUtils
  * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
  * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
  *
+ * Use "CREATE TABLE t1 LIKE t2 USING file_format"
+ * to specify new file format for t1 from a data source table t2.
+ *
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name [locationSpec]
+ *   LIKE [other_db_name.]existing_table_name [USING provider] [locationSpec]
  * }}}
  */
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
+    provider: Option[String],
     location: Option[String],
     ifNotExists: Boolean) extends RunnableCommand {
 
@@ -73,7 +75,14 @@ case class CreateTableLikeCommand(
     val catalog = sparkSession.sessionState.catalog
     val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
 
-    val newProvider = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+    val newProvider = if (provider.isDefined) {
+      if (!DDLUtils.isHiveTable(provider)) {
+        // check the validation of provider input, invalid provider will throw
+        // AnalysisException, ClassNotFoundException, or NoClassDefFoundError
+        DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
+      }
+      provider
+    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else {
       sourceTableDesc.provider
@@ -278,6 +287,13 @@ case class LoadDataCommand(
     val catalog = sparkSession.sessionState.catalog
     val targetTable = catalog.getTableMetadata(table)
     val tableIdentwithDB = targetTable.identifier.quotedString
+    val normalizedSpec = partition.map { spec =>
+      PartitioningUtils.normalizePartitionSpec(
+        spec,
+        targetTable.partitionColumnNames,
+        tableIdentwithDB,
+        sparkSession.sessionState.conf.resolver)
+    }
 
     if (targetTable.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
@@ -296,13 +312,6 @@ case class LoadDataCommand(
           s"but number of columns in provided partition spec (${partition.get.size}) " +
           s"do not match number of partitioned columns in table " +
           s"(${targetTable.partitionColumnNames.size})")
-      }
-      partition.get.keys.foreach { colName =>
-        if (!targetTable.partitionColumnNames.contains(colName)) {
-          throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
-            s"but the specified partition spec refers to a column that is not partitioned: " +
-            s"'$colName'")
-        }
       }
     } else {
       if (partition.nonEmpty) {
@@ -353,7 +362,7 @@ case class LoadDataCommand(
       catalog.loadPartition(
         targetTable.identifier,
         loadPath.toString,
-        partition.get,
+        normalizedSpec.get,
         isOverwrite,
         inheritTableSpecs = true,
         isSrcLocal = isLocal)
@@ -859,12 +868,8 @@ case class ShowColumnsCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val resolver = sparkSession.sessionState.conf.resolver
     val lookupTable = databaseName match {
       case None => tableName
-      case Some(db) if tableName.database.exists(!resolver(_, db)) =>
-        throw new AnalysisException(
-          s"SHOW COLUMNS with conflicting databases: '$db' != '${tableName.database.get}'")
       case Some(db) => TableIdentifier(tableName.identifier, Some(db))
     }
     val table = catalog.getTempViewOrPermanentTableMetadata(lookupTable)

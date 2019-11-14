@@ -64,7 +64,10 @@ public abstract class Operation {
   protected final QueryState queryState;
 
   protected static final EnumSet<FetchOrientation> DEFAULT_FETCH_ORIENTATION_SET =
-      EnumSet.of(FetchOrientation.FETCH_NEXT,FetchOrientation.FETCH_FIRST);
+      EnumSet.of(
+          FetchOrientation.FETCH_NEXT,
+          FetchOrientation.FETCH_FIRST,
+          FetchOrientation.FETCH_PRIOR);
 
   protected Operation(HiveSession parentSession, OperationType opType) {
     this(parentSession, null, opType);

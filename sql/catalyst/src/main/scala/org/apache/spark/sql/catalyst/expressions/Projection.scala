@@ -127,12 +127,6 @@ object UnsafeProjection
     InterpretedUnsafeProjection.createProjection(in)
   }
 
-  protected def toUnsafeExprs(exprs: Seq[Expression]): Seq[Expression] = {
-    exprs.map(_ transform {
-      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-    })
-  }
-
   /**
    * Returns an UnsafeProjection for given StructType.
    *
@@ -153,7 +147,7 @@ object UnsafeProjection
    * Returns an UnsafeProjection for given sequence of bound Expressions.
    */
   def create(exprs: Seq[Expression]): UnsafeProjection = {
-    createObject(toUnsafeExprs(exprs))
+    createObject(exprs)
   }
 
   def create(expr: Expression): UnsafeProjection = create(Seq(expr))

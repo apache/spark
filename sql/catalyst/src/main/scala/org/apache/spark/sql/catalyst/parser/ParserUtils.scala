@@ -116,7 +116,7 @@ object ParserUtils {
     var enclosure: Character = null
     val sb = new StringBuilder(b.length())
 
-    def appendEscapedChar(n: Char) {
+    def appendEscapedChar(n: Char): Unit = {
       n match {
         case '0' => sb.append('\u0000')
         case '\'' => sb.append('\'')

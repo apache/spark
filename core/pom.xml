@@ -292,6 +292,16 @@
     <dependency>
       <groupId>io.dropwizard.metrics</groupId>
       <artifactId>metrics-graphite</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>com.rabbitmq</groupId>
+          <artifactId>amqp-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>io.dropwizard.metrics</groupId>
+      <artifactId>metrics-jmx</artifactId>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -555,6 +565,15 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>scala-2.13</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
 

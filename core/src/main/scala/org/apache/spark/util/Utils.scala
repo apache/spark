@@ -95,7 +95,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
@@ -999,7 +999,7 @@ private[spark] object Utils extends Logging {
    * Allow setting a custom host name because when we run on Mesos we need to use the same
    * hostname it reports to the master.
    */
-  def setCustomHostname(hostname: String) {
+  def setCustomHostname(hostname: String): Unit = {
     // DEBUG code
     Utils.checkHost(hostname)
     customHostname = Some(hostname)
@@ -1026,11 +1026,11 @@ private[spark] object Utils extends Logging {
     customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
-  def checkHost(host: String) {
+  def checkHost(host: String): Unit = {
     assert(host != null && host.indexOf(':') == -1, s"Expected hostname (not IP) but got $host")
   }
 
-  def checkHostPort(hostPort: String) {
+  def checkHostPort(hostPort: String): Unit = {
     assert(hostPort != null && hostPort.indexOf(':') != -1,
       s"Expected host and port but got $hostPort")
   }
@@ -1280,7 +1280,7 @@ private[spark] object Utils extends Logging {
       inputStream: InputStream,
       processLine: String => Unit): Thread = {
     val t = new Thread(threadName) {
-      override def run() {
+      override def run(): Unit = {
         for (line <- Source.fromInputStream(inputStream).getLines()) {
           processLine(line)
         }
@@ -1297,7 +1297,7 @@ private[spark] object Utils extends Logging {
    *
    * NOTE: This method is to be called by the spark-started JVM process.
    */
-  def tryOrExit(block: => Unit) {
+  def tryOrExit(block: => Unit): Unit = {
     try {
       block
     } catch {
@@ -1314,7 +1314,7 @@ private[spark] object Utils extends Logging {
    * user-started JVM process completely; in contrast, tryOrExit is to be called in the
    * spark-started JVM process .
    */
-  def tryOrStopSparkContext(sc: SparkContext)(block: => Unit) {
+  def tryOrStopSparkContext(sc: SparkContext)(block: => Unit): Unit = {
     try {
       block
     } catch {
@@ -1352,7 +1352,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Executes the given block. Log non-fatal errors if any, and only throw fatal errors */
-  def tryLogNonFatalError(block: => Unit) {
+  def tryLogNonFatalError(block: => Unit): Unit = {
     try {
       block
     } catch {
@@ -1671,7 +1671,7 @@ private[spark] object Utils extends Logging {
     var inSingleQuote = false
     var inDoubleQuote = false
     val curWord = new StringBuilder
-    def endWord() {
+    def endWord(): Unit = {
       buf += curWord.toString
       curWord.clear()
     }
@@ -2342,7 +2342,7 @@ private[spark] object Utils extends Logging {
   /**
    * configure a new log4j level
    */
-  def setLogLevel(l: org.apache.log4j.Level) {
+  def setLogLevel(l: org.apache.log4j.Level): Unit = {
     val rootLogger = org.apache.log4j.Logger.getRootLogger()
     rootLogger.setLevel(l)
     // Setting threshold to null as rootLevel will define log level for spark-shell
@@ -3064,7 +3064,7 @@ private[spark] class RedirectThread(
   extends Thread(name) {
 
   setDaemon(true)
-  override def run() {
+  override def run(): Unit = {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
       Utils.tryWithSafeFinally {

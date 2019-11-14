@@ -23,12 +23,13 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
 
+import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.kafka010.KafkaConfigUpdater
+import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaTokenClusterConf, KafkaTokenUtil}
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.{AvailableOffsetRange, UNKNOWN_OFFSET}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.util.{ShutdownHookManager, UninterruptibleThread}
@@ -46,6 +47,13 @@ private[kafka010] class InternalKafkaConsumer(
 
   val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
+  private[kafka010] val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(
+    SparkEnv.get.conf, kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
+      .asInstanceOf[String])
+
+  // Kafka consumer is not able to give back the params instantiated with so we need to store it.
+  // It must be updated whenever a new consumer is created.
+  private[kafka010] var kafkaParamsWithSecurity: ju.Map[String, Object] = _
   private val consumer = createConsumer()
 
   /**
@@ -106,10 +114,10 @@ private[kafka010] class InternalKafkaConsumer(
 
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer(): KafkaConsumer[Array[Byte], Array[Byte]] = {
-    val updatedKafkaParams = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
-      .setAuthenticationConfigIfNeeded()
+    kafkaParamsWithSecurity = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
+      .setAuthenticationConfigIfNeeded(clusterConfig)
       .build()
-    val c = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
+    val c = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParamsWithSecurity)
     val tps = new ju.ArrayList[TopicPartition]()
     tps.add(topicPartition)
     c.assign(tps)
@@ -516,13 +524,25 @@ private[kafka010] class KafkaDataConsumer(
     fetchedData.withNewPoll(records.listIterator, offsetAfterPoll)
   }
 
-  private def getOrRetrieveConsumer(): InternalKafkaConsumer = _consumer match {
-    case None =>
-      _consumer = Option(consumerPool.borrowObject(cacheKey, kafkaParams))
-      require(_consumer.isDefined, "borrowing consumer from pool must always succeed.")
-      _consumer.get
+  private[kafka010] def getOrRetrieveConsumer(): InternalKafkaConsumer = {
+    if (!_consumer.isDefined) {
+      retrieveConsumer()
+    }
+    require(_consumer.isDefined, "Consumer must be defined")
+    if (!KafkaTokenUtil.isConnectorUsingCurrentToken(_consumer.get.kafkaParamsWithSecurity,
+        _consumer.get.clusterConfig)) {
+      logDebug("Cached consumer uses an old delegation token, invalidating.")
+      releaseConsumer()
+      consumerPool.invalidateKey(cacheKey)
+      fetchedDataPool.invalidate(cacheKey)
+      retrieveConsumer()
+    }
+    _consumer.get
+  }
 
-    case Some(consumer) => consumer
+  private def retrieveConsumer(): Unit = {
+    _consumer = Option(consumerPool.borrowObject(cacheKey, kafkaParams))
+    require(_consumer.isDefined, "borrowing consumer from pool must always succeed.")
   }
 
   private def getOrRetrieveFetchedData(offset: Long): FetchedData = _fetchedData match {
@@ -593,7 +613,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       consumerPool.close()
     } catch {
       case e: Throwable =>
-        logWarning("Ignoring Exception while shutting down pools from shutdown hook", e)
+        logWarning("Ignoring exception while shutting down pools from shutdown hook", e)
     }
   }
 
@@ -617,6 +637,11 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     }
 
     new KafkaDataConsumer(topicPartition, kafkaParams, consumerPool, fetchedDataPool)
+  }
+
+  private[kafka010] def clear(): Unit = {
+    consumerPool.reset()
+    fetchedDataPool.reset()
   }
 
   private def reportDataLoss0(

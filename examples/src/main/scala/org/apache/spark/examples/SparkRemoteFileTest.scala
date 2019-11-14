@@ -25,7 +25,7 @@ import org.apache.spark.sql.SparkSession
 
 /** Usage: SparkRemoteFileTest [file] */
 object SparkRemoteFileTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       System.err.println("Usage: SparkRemoteFileTest <file>")
       System.exit(1)

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -73,15 +73,14 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
         ${CodeGenerator.javaType(dt)} $originValue = (${CodeGenerator.javaType(dt)})($eval);
         ${ev.value} = (${CodeGenerator.javaType(dt)})(-($originValue));
       """})
-    case _: CalendarIntervalType => defineCodeGen(ctx, ev, c => s"$c.negate()")
+    case _: CalendarIntervalType =>
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      defineCodeGen(ctx, ev, c => s"$iu.negate($c)")
   }
 
-  protected override def nullSafeEval(input: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input.asInstanceOf[CalendarInterval].negate()
-    } else {
-      numeric.negate(input)
-    }
+  protected override def nullSafeEval(input: Any): Any = dataType match {
+    case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
+    case  _ => numeric.negate(input)
   }
 
   override def sql: String = s"(- ${child.sql})"
@@ -151,7 +150,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
 
   // Name of the function for the exact version of this expression in [[Math]].
-  // If the option "spark.sql.failOnIntegralTypeOverflow" is enabled and there is corresponding
+  // If the option "spark.sql.ansi.enabled" is enabled and there is corresponding
   // function in [[Math]], the exact function will be called instead of evaluation with [[symbol]].
   def exactMathMethod: Option[String] = None
 
@@ -160,7 +159,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
       // Overflow is handled in the CheckOverflow operator
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
     case CalendarIntervalType =>
-      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$calendarIntervalMethod($eval2)")
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
@@ -228,12 +228,10 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input1.asInstanceOf[CalendarInterval].add(input2.asInstanceOf[CalendarInterval])
-    } else {
-      numeric.plus(input1, input2)
-    }
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case CalendarIntervalType => IntervalUtils.add(
+      input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case _ => numeric.plus(input1, input2)
   }
 
   override def exactMathMethod: Option[String] = Some("addExact")
@@ -258,12 +256,10 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input1.asInstanceOf[CalendarInterval].subtract(input2.asInstanceOf[CalendarInterval])
-    } else {
-      numeric.minus(input1, input2)
-    }
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case CalendarIntervalType => IntervalUtils.subtract(
+      input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case _ => numeric.minus(input1, input2)
   }
 
   override def exactMathMethod: Option[String] = Some("subtractExact")
@@ -448,7 +444,7 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
   usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
   examples = """
     Examples:
-      > SELECT 2 _FUNC_ 1.8;
+      > SELECT 2 % 1.8;
        0.2
       > SELECT MOD(2, 1.8);
        0.2

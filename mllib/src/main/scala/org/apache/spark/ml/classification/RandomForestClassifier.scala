@@ -143,6 +143,7 @@ class RandomForestClassifier @Since("1.4.0") (
     val trees = RandomForest
       .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
+    trees.foreach(copyValues(_))
 
     val numFeatures = trees.head.numFeatures
     instr.logNumClasses(numClasses)
@@ -259,7 +260,8 @@ class RandomForestClassificationModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"RandomForestClassificationModel (uid=$uid) with $getNumTrees trees"
+    s"RandomForestClassificationModel: uid=$uid, numTrees=$getNumTrees, numClasses=$numClasses, " +
+      s"numFeatures=$numFeatures"
   }
 
   /**

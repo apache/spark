@@ -65,8 +65,8 @@ Copyright 2009-2014 The Apache Software Foundation
 Objenesis
 Copyright 2006-2013 Joe Walnes, Henri Tremblay, Leonardo Mesquita
 
-Apache XBean :: ASM 5 shaded (repackaged)
-Copyright 2005-2015 The Apache Software Foundation
+Apache XBean :: ASM shaded (repackaged)
+Copyright 2005-2019 The Apache Software Foundation
 
 --------------------------------------
 
@@ -661,6 +661,9 @@ Copyright 2017 The Apache Software Foundation
 Apache Commons CLI
 Copyright 2001-2009 The Apache Software Foundation
 
+Apache Commons Daemon
+Copyright 1999-2019 The Apache Software Foundation
+
 Google Guice - Extensions - Servlet
 Copyright 2006-2011 Google, Inc.
 
@@ -1140,16 +1143,34 @@ limitations under the License.
 dropwizard-metrics-hadoop-metrics2-reporter
 Copyright 2016 Josh Elser
 
+Hive Beeline
+Copyright 2019 The Apache Software Foundation
+
+Hive CLI
+Copyright 2019 The Apache Software Foundation
+
 Hive Common
 Copyright 2019 The Apache Software Foundation
 
+Hive JDBC
+Copyright 2019 The Apache Software Foundation
+
+Hive Query Language
+Copyright 2019 The Apache Software Foundation
+
 Hive Llap Common
+Copyright 2019 The Apache Software Foundation
+
+Hive Metastore
 Copyright 2019 The Apache Software Foundation
 
 Hive Serde
 Copyright 2019 The Apache Software Foundation
 
 Hive Service RPC
+Copyright 2019 The Apache Software Foundation
+
+Hive Shims
 Copyright 2019 The Apache Software Foundation
 
 Hive Shims 0.23
@@ -1359,9 +1380,151 @@ Copyright 2019 The Apache Software Foundation
    See the License for the specific language governing permissions and
    limitations under the License.
 
+Android JSON library
+Copyright (C) 2010 The Android Open Source Project
+
+This product includes software developed by
+The Android Open Source Project
+
 Apache Velocity
 
 Copyright (C) 2000-2007 The Apache Software Foundation
 
 This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
+
+Apache Yetus - Audience Annotations
+Copyright 2015-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+Ehcache V3
+Copyright 2014-2016 Terracotta, Inc.
+
+The product includes software from the Apache Commons Lang project,
+under the Apache License 2.0 (see: org.ehcache.impl.internal.classes.commonslang)
+
+Apache Geronimo JCache Spec 1.0
+Copyright 2003-2014 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby-kerb Admin
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby-kerb Client
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby-kerb Common
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby-kerb core
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby-kerb Crypto
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby-kerb Identity
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby-kerb Server
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerb Simple Kdc
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby-kerb Util
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby ASN1 Project
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby Config
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby PKIX Project
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby Util
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Kerby XDR Project
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Token provider
+Copyright 2014-2017 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+
+Metrics
+Copyright 2010-2013 Coda Hale and Yammer, Inc.
+
+This product includes software developed by Coda Hale and Yammer, Inc.
+
+This product includes code derived from the JSR-166 project (ThreadLocalRandom, Striped64,
+LongAdder), which was released with the following comments:
+
+    Written by Doug Lea with assistance from members of JCP JSR-166
+    Expert Group and released to the public domain, as explained at
+    http://creativecommons.org/publicdomain/zero/1.0/

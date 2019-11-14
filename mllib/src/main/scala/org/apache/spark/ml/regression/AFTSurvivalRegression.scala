@@ -31,10 +31,9 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat.SummaryBuilderImpl._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
@@ -215,15 +214,12 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val featuresSummarizer = {
-      val seqOp = (c: MultivariateOnlineSummarizer, v: AFTPoint) => c.add(v.features)
-      val combOp = (c1: MultivariateOnlineSummarizer, c2: MultivariateOnlineSummarizer) => {
-        c1.merge(c2)
-      }
-      instances.treeAggregate(
-        new MultivariateOnlineSummarizer
-      )(seqOp, combOp, $(aggregationDepth))
-    }
+    val featuresSummarizer = instances.treeAggregate(
+      createSummarizerBuffer("mean", "variance", "count"))(
+      seqOp = (c: SummarizerBuffer, v: AFTPoint) => c.add(v.features),
+      combOp = (c1: SummarizerBuffer, c2: SummarizerBuffer) => c1.merge(c2),
+      depth = $(aggregationDepth)
+    )
 
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
     val numFeatures = featuresStd.size
@@ -315,6 +311,9 @@ class AFTSurvivalRegressionModel private[ml] (
     @Since("1.6.0") val scale: Double)
   extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with MLWritable {
 
+  @Since("3.0.0")
+  lazy val numFeatures: Int = coefficients.size
+
   /** @group setParam */
   @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -390,6 +389,11 @@ class AFTSurvivalRegressionModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter =
     new AFTSurvivalRegressionModel.AFTSurvivalRegressionModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"AFTSurvivalRegressionModel: uid=$uid, numFeatures=$numFeatures"
+  }
 }
 
 @Since("1.6.0")
