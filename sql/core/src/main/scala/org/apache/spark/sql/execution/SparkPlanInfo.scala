@@ -33,7 +33,8 @@ class SparkPlanInfo(
     val simpleString: String,
     val children: Seq[SparkPlanInfo],
     val metadata: Map[String, String],
-    val metrics: Seq[SQLMetricInfo]) {
+    val metrics: Seq[SQLMetricInfo],
+    val codegenStageId: Option[Int] = None) {
 
   override def hashCode(): Int = {
     // hashCode of simpleString should be good enough to distinguish the plans from each other
@@ -62,6 +63,11 @@ private[execution] object SparkPlanInfo {
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
     }
 
+    val codegenStageId = plan match {
+      case physicalOperator: WholeStageCodegenExec => Some(physicalOperator.codegenStageId)
+      case _ => None
+    }
+
     // dump the file scan metadata (e.g file path) to event log
     val metadata = plan match {
       case fileScan: FileSourceScanExec => fileScan.metadata
@@ -71,6 +77,8 @@ private[execution] object SparkPlanInfo {
       plan.nodeName,
       plan.simpleString(SQLConf.get.maxToStringFields),
       children.map(fromSparkPlan),
-      metadata, metrics)
+      metadata,
+      metrics,
+      codegenStageId)
   }
 }

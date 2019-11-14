@@ -88,7 +88,8 @@ object SparkPlanGraph {
           planInfo.nodeName,
           planInfo.simpleString,
           mutable.ArrayBuffer[SparkPlanGraphNode](),
-          metrics)
+          metrics,
+          planInfo.codegenStageId)
         nodes += cluster
 
         buildSparkPlanGraphNode(
@@ -157,7 +158,8 @@ private[ui] class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
-    val metrics: Seq[SQLPlanMetric]) {
+    val metrics: Seq[SQLPlanMetric],
+    val codegenStageId: Option[Int] = None) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
     val builder = new mutable.StringBuilder(name)
@@ -189,8 +191,9 @@ private[ui] class SparkPlanGraphCluster(
     name: String,
     desc: String,
     val nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
-    metrics: Seq[SQLPlanMetric])
-  extends SparkPlanGraphNode(id, name, desc, metrics) {
+    metrics: Seq[SQLPlanMetric],
+    codegenStageId: Option[Int] = None)
+  extends SparkPlanGraphNode(id, name, desc, metrics, codegenStageId) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
@@ -198,9 +201,9 @@ private[ui] class SparkPlanGraphCluster(
       require(duration.length == 1)
       val id = duration(0).accumulatorId
       if (metricsValue.contains(duration(0).accumulatorId)) {
-        name + "\n\n" + metricsValue(id)
+        s"$name (${codegenStageId.getOrElse(0)})\n\n${metricsValue(id)}"
       } else {
-        name
+        s"$name (${codegenStageId.getOrElse(0)})"
       }
     } else {
       name
