@@ -37,9 +37,10 @@ import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
+import org.apache.spark.{JobExecutionStatus, SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
+import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
@@ -50,6 +51,7 @@ import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
+import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
 class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
@@ -1333,7 +1335,60 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
   }
 
-  // FIXME: add end-to-end test for compaction, or mock to verify whether compact is being called
+  test("compact event log files when replaying to rebuild app") {
+    withTempDir { dir =>
+      val conf = createTestConf()
+      conf.set(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN, 1)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      // 1, 2 will be compacted into one file, 3 is the dummy file to ensure max files to retain
+      val logPath1 = EventLogTestHelper.writeEventLogFile(conf, hadoopConf, dir, 1, Seq(
+        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)))
+      val logPath2 = EventLogTestHelper.writeEventLogFile(conf, hadoopConf, dir, 2, Seq(
+        SparkListenerUnpersistRDD(1), SparkListenerJobEnd(1, 1, JobSucceeded)))
+      val logPath3 = EventLogTestHelper.writeEventLogFile(conf, hadoopConf, dir, 3, Seq(
+        SparkListenerExecutorAdded(3, "exec1", new ExecutorInfo("host1", 1, Map.empty)),
+        SparkListenerJobStart(2, 4, Seq.empty),
+        SparkListenerJobEnd(2, 5, JobSucceeded)))
+      val logPaths = Seq(logPath1, logPath2, logPath3)
+
+      val store = new InMemoryStore
+      val appStore = new AppStatusStore(store)
+      val reader = mock(classOf[EventLogFileReader])
+      when(reader.listEventLogFiles).thenReturn(logPaths.map { p => fs.getFileStatus(new Path(p)) })
+
+      val provider = new FsHistoryProvider(conf)
+      provider.rebuildAppStore(store, reader, 0)
+
+      // files being compacted are deleted
+      assert(!fs.exists(new Path(logPath1)))
+      assert(!fs.exists(new Path(logPath2)))
+
+      // new compact file should be available
+      assert(fs.exists(new Path(logPath2 + EventLogFileWriter.COMPACTED)))
+
+      // retained file is not touched
+      assert(fs.exists(new Path(logPath3)))
+
+      // replayed store doesn't have any job, as events for job are removed while compacting
+      intercept[NoSuchElementException] {
+        appStore.job(1)
+      }
+
+      // but other events should be available even they were in original files to compact
+      val appInfo = appStore.applicationInfo()
+      assert(appInfo.id === "app")
+      assert(appInfo.name === "app")
+
+      // all events in retained file should be available, even they're related to finished jobs
+      val exec1 = appStore.executorSummary("exec1")
+      assert(exec1.hostPort === "host1")
+      val job2 = appStore.job(2)
+      assert(job2.status === JobExecutionStatus.SUCCEEDED)
+    }
+  }
 
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated

@@ -944,9 +944,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * Rebuilds the application state store from its event log.
+   * Rebuilds the application state store from its event log. Exposed for testing.
    */
-  private def rebuildAppStore(
+  private[spark] def rebuildAppStore(
       store: KVStore,
       reader: EventLogFileReader,
       lastUpdated: Long): Unit = {

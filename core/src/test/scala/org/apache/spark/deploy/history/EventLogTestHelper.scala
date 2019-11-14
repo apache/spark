@@ -17,12 +17,17 @@
 
 package org.apache.spark.deploy.history
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
+import org.apache.spark.scheduler.SparkListenerEvent
+import org.apache.spark.util.JsonProtocol
 
 object EventLogTestHelper {
   def getUniqueApplicationId: String = "test-" + System.currentTimeMillis
@@ -55,5 +60,24 @@ object EventLogTestHelper {
       writer.writeEvent(eventStr, flushLogger = true)
       eventStr
     }
+  }
+
+  def writeEventLogFile(
+      sparkConf: SparkConf,
+      hadoopConf: Configuration,
+      dir: File,
+      idx: Int,
+      events: Seq[SparkListenerEvent]): String = {
+    // to simplify the code, we don't concern about file name being matched with the naming rule
+    // of event log file
+    val writer = new SingleEventLogFileWriter(s"app$idx", None, dir.toURI, sparkConf, hadoopConf)
+    writer.start()
+    events.foreach { event => writer.writeEvent(convertEvent(event), flushLogger = true) }
+    writer.stop()
+    writer.logPath
+  }
+
+  def convertEvent(event: SparkListenerEvent): String = {
+    compact(render(JsonProtocol.sparkEventToJson(event)))
   }
 }

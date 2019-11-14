@@ -19,14 +19,17 @@ package org.apache.spark.deploy.history
 
 import java.io.File
 
+import scala.io.{Codec, Source}
+
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.json4s.jackson.JsonMethods.{compact, render}
+import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config.EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN
 import org.apache.spark.scheduler._
-import org.apache.spark.util.JsonProtocol
+import org.apache.spark.util.{JsonProtocol, Utils}
+
 
 class EventLogFileCompactorSuite extends SparkFunSuite {
   private val sparkConf = testSparkConf()
@@ -134,22 +137,44 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
     }
   }
 
-  // TODO: Would we want to verify the result of compact file here? Because we already have it in
-  //   FilteredEventLogFileRewriterSuite, and adding tests everywhere seem to be redundant.
+  test("events for finished job are filtered out in new compact file") {
+    withTempDir { dir =>
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
 
-  private def writeDummyEventLogFile(dir: File, idx: Int): String = {
-    // to simplify the code, we don't concern about file name being matched with the naming rule
-    // of event log file
-    val writer = new SingleEventLogFileWriter(s"app$idx", None, dir.toURI, sparkConf, hadoopConf)
-    writer.start()
-    writer.writeEvent(convertEvent(
-      SparkListenerApplicationStart("app", Some("app"), 0, "user", None)), flushLogger = true)
-    writer.stop()
-    writer.logPath
+      // 1, 2 will be compacted into one file, 3~5 are dummies to ensure max files to retain
+      val logPath1 = EventLogTestHelper.writeEventLogFile(sparkConf, hadoopConf, dir, 1, Seq(
+        SparkListenerUnpersistRDD(0), SparkListenerJobStart(1, 0, Seq.empty)))
+      val logPath2 = EventLogTestHelper.writeEventLogFile(sparkConf, hadoopConf, dir, 2, Seq(
+        SparkListenerJobEnd(1, 1, JobSucceeded), SparkListenerUnpersistRDD(1)))
+      val logPaths = Seq(logPath1, logPath2) ++ (3 to 5).map { idx =>
+        writeDummyEventLogFile(dir, idx)
+      }
+
+      val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs)
+      val fileStatuses = logPaths.map { p => fs.getFileStatus(new Path(p))  }
+      val filesToRead = compactor.compact(fileStatuses)
+
+      // 3 (max file to retain) + 1 (compacted file)
+      assert(filesToRead.length === 4)
+      val compactFilePath = filesToRead.head.getPath
+
+      Utils.tryWithResource(EventLogFileReader.openEventLog(compactFilePath, fs)) { is =>
+        val lines = Source.fromInputStream(is)(Codec.UTF8).getLines()
+        var linesLength = 0
+        lines.foreach { line =>
+          linesLength += 1
+          val event = JsonProtocol.sparkEventFromJson(parse(line))
+          assert(!event.isInstanceOf[SparkListenerJobStart] &&
+            !event.isInstanceOf[SparkListenerJobEnd])
+        }
+        assert(linesLength === 2, "Compacted file should have only two events being filtered in")
+      }
+    }
   }
 
-  private def convertEvent(event: SparkListenerEvent): String = {
-    compact(render(JsonProtocol.sparkEventToJson(event)))
+  private def writeDummyEventLogFile(dir: File, idx: Int): String = {
+    EventLogTestHelper.writeEventLogFile(sparkConf, hadoopConf, dir, idx,
+      Seq(SparkListenerApplicationStart("app", Some("app"), 0, "user", None)))
   }
 
   private def testSparkConf(): SparkConf = {
