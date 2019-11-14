@@ -23,11 +23,12 @@ import java.time.Instant
 import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.{Function => JFunction}
-
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
+
 import org.apache.commons.lang3.time.FastDateFormat
+
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
