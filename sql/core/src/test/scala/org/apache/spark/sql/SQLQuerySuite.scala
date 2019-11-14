@@ -3305,7 +3305,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-29682: Aggregation conflicts are resolved") {
+  test("SPARK-29682: Conflicting attributes in Expand are resolved") {
     val numsDF = Seq(1, 2, 3).toDF("nums")
     val cubeDF = numsDF.cube("nums").agg(max(lit(0)).as("agcol"))
 
