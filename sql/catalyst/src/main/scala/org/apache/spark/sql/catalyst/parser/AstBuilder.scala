@@ -1917,12 +1917,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
             case _: HiveStringType | StringType if !isNegative => Literal(vUTF8Str, StringType)
             case b: BinaryType if !isNegative => Literal(vUTF8Str.getBytes, b)
             case d: DecimalType =>
-              val block = {
-                val bd = new java.math.BigDecimal(v)
-                val sd = Decimal(bd, d.precision, d.scale)
-                if (isNegative) -sd else sd
-              }
-              createNumLiteral(block, d)
+              createNumLiteral( {
+                if (isNegative) {
+                  -Decimal(BigDecimal(v).underlying(), d.precision, d.scale)
+                } else {
+                  Decimal(BigDecimal(v).underlying(), d.precision, d.scale)
+                }
+              }, d)
             case i: CalendarIntervalType =>
               val interval = IntervalUtils.fromString(v)
               val signedInterval = if (isNegative) IntervalUtils.negate(interval) else interval

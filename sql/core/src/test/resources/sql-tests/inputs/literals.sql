@@ -144,6 +144,7 @@ select -bigint '1';
 -- float/double
 select float '1';
 select -float '-1';
+select float '1a';
 select double '1';
 select -double '1';
 
@@ -158,5 +159,8 @@ select binary 'SPARK-29896';
 select decimal '1.000001';
 select decimal(10, 2) '11.1';
 select decimal(2, 0) '11.1';
-select decimal(2, 1) '11.1';
+select decimal(3, 1) '11.1';
 select decimal(39, 1) '11.1';
+select decimal(10, 2) '11.a';
+select decimal(38, 0) '1E37';
+select decimal(38, 0) '1E38';
