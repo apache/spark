@@ -83,13 +83,18 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         numPartitionsSet.headOption
       }
 
-      // Read bucketed tables always obeys numShufflePartitions because maxNumPostShufflePartitions
-      // is usually much larger than numShufflePartitions,
-      // which causes some bucket map join lose efficacy after enabling adaptive execution.
+      // If there are non-shuffle children that satisfy the required distribution, we have
+      // some tradeoffs when picking the expected number of shuffle partitions:
+      // 1. We should avoid shuffling these children.
+      // 2. We should have a reasonable parallelism.
       val nonShuffleChildrenNumPartitions =
         childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
           .map(_.outputPartitioning.numPartitions)
       val expectedChildrenNumPartitions = if (nonShuffleChildrenNumPartitions.nonEmpty) {
+        // Here we pick the max number of partitions among these non-shuffle children as the
+        // expected number of shuffle partitions. However, if it's smaller than
+        // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
+        // expected number of shuffle partitions.
         math.max(nonShuffleChildrenNumPartitions.max, conf.numShufflePartitions)
       } else {
         childrenNumPartitions.max
