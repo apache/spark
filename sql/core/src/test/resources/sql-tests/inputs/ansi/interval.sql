@@ -1,6 +1,3 @@
--- Turns on ANSI mode
-SET spark.sql.ansi.enabled=true;
-
 select
   '1' second,
   2  seconds,
@@ -184,5 +181,7 @@ select date '2012-01-01' + interval (a + 1) day from t;
 
 select date '2012-01-01' + (a + 1) day from t;
 
--- Turns off ANSI mode
-SET spark.sql.ansi.enabled=false;
+-- malformed interval literal with ansi mode
+select 1 year to month;
+select '1' year to second;
+select 1 year '2-1' year to month;

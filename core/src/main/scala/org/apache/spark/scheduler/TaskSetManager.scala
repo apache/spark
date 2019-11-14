@@ -799,6 +799,15 @@ private[spark] class TaskSetManager(
             info.id, taskSet.id, tid, ef.description))
           return
         }
+        if (ef.className == classOf[TaskOutputFileAlreadyExistException].getName) {
+          // If we can not write to output file in the task, there's no point in trying to
+          // re-execute it.
+          logError("Task %s in stage %s (TID %d) can not write to output file: %s; not retrying"
+            .format(info.id, taskSet.id, tid, ef.description))
+          abort("Task %s in stage %s (TID %d) can not write to output file: %s".format(
+            info.id, taskSet.id, tid, ef.description))
+          return
+        }
         val key = ef.description
         val now = clock.getTimeMillis()
         val (printFull, dupCount) = {
