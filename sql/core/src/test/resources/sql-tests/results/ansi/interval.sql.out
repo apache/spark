@@ -845,15 +845,15 @@ select interval 30 day day day
 
 
 -- !query 93
-select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where v is null
+select sum(cast(null as interval))
 -- !query 93 schema
-struct<sum(CAST(v AS INTERVAL)):interval>
+struct<sum(CAST(NULL AS INTERVAL)):interval>
 -- !query 93 output
 NULL
 
 
 -- !query 94
-select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where 1=0
+select sum(cast(v as interval)) from VALUES ('1 seconds') t(v) where 1=0
 -- !query 94 schema
 struct<sum(CAST(v AS INTERVAL)):interval>
 -- !query 94 output
@@ -920,8 +920,8 @@ struct<sv:interval>
 -- !query 101
 SELECT
     i,
-    Sum(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-FROM VALUES(1,'1 seconds'),(1,'2 seconds'),(2,NULL),(2,NULL) t(i,v)
+    sum(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+FROM VALUES(1, '1 seconds'), (1, '2 seconds'), (2, NULL), (2, NULL) t(i,v)
 -- !query 101 schema
 struct<i:int,sum(CAST(v AS INTERVAL)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):interval>
 -- !query 101 output

@@ -137,10 +137,10 @@ select interval 30 day day day;
 
 -- sum interval values
 -- null
-select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where v is null;
+select sum(cast(null as interval));
 
 -- empty set
-select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where 1=0;
+select sum(cast(v as interval)) from VALUES ('1 seconds') t(v) where 1=0;
 
 -- basic interval sum
 select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v);
@@ -164,8 +164,8 @@ having sv is not null;
 -- window
 SELECT
     i,
-    Sum(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-FROM VALUES(1,'1 seconds'),(1,'2 seconds'),(2,NULL),(2,NULL) t(i,v);
+    sum(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+FROM VALUES(1, '1 seconds'), (1, '2 seconds'), (2, NULL), (2, NULL) t(i,v);
 
 -- average with interval type
 -- null
