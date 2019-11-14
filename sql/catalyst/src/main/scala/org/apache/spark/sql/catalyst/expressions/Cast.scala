@@ -646,7 +646,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // DoubleConverter
-  private[this] def castToDouble(from: DataType): Any => Any = from match {
+  protected[this] def castToDouble(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => {
         val doubleStr = s.toString
@@ -1482,7 +1482,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  private[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
+  protected[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case StringType =>
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
