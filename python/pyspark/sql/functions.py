@@ -589,8 +589,8 @@ def rand(seed=None):
     .. note:: The function is non-deterministic in general case.
 
     >>> df.withColumn('rand', rand(seed=42) * 3).collect()
-    [Row(age=2, name=u'Alice', rand=2.4052597283576684),
-     Row(age=5, name=u'Bob', rand=2.3913904055683974)]
+    [Row(name=u'Alice', age=2, rand=2.4052597283576684),
+     Row(name=u'Bob', age=5, rand=2.3913904055683974)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -609,8 +609,8 @@ def randn(seed=None):
     .. note:: The function is non-deterministic in general case.
 
     >>> df.withColumn('randn', randn(seed=42)).collect()
-    [Row(age=2, name=u'Alice', randn=1.1027054481455365),
-    Row(age=5, name=u'Bob', randn=0.7400395449950132)]
+    [Row(name=u'Alice', age=2, randn=1.1027054481455365),
+    Row(name=u'Bob', age=5, randn=0.7400395449950132)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -2379,11 +2379,11 @@ def to_json(col, options={}):
     >>> data = [(1, Row(name='Alice', age=2))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json=u'{"age":2,"name":"Alice"}')]
+    [Row(json=u'{"name":"Alice","age":2}')]
     >>> data = [(1, [Row(name='Alice', age=2), Row(name='Bob', age=3)])]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json=u'[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]')]
+    [Row(json=u'[{"name":"Alice","age":2},{"name":"Bob","age":3}]')]
     >>> data = [(1, {"name": "Alice"})]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
@@ -2475,7 +2475,7 @@ def to_csv(col, options={}):
     >>> data = [(1, Row(name='Alice', age=2))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_csv(df.value).alias("csv")).collect()
-    [Row(csv=u'2,Alice')]
+    [Row(csv=u'Alice,2')]
     """
 
     sc = SparkContext._active_spark_context
