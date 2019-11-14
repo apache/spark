@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, Star, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
+import org.apache.spark.sql.catalyst.plans.{DescribeNamespaceSchema, DescribeTableSchema}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -254,6 +254,17 @@ case class DropNamespace(
     namespace: Seq[String],
     ifExists: Boolean,
     cascade: Boolean) extends Command
+
+/**
+ * The logical plan of the DESCRIBE NAMESPACE command that works for v2 catalogs.
+ */
+case class DescribeNamespace(
+    catalog: CatalogPlugin,
+    namespace: Seq[String],
+    extended: Boolean) extends Command {
+
+  override def output: Seq[Attribute] = DescribeNamespaceSchema.describeNamespaceAttributes()
+}
 
 /**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
