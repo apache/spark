@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
-
 
 /**
  * The [[Partition]] used by [[LocalShuffledRowRDD]]. A pre-shuffle partition
@@ -29,7 +30,9 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsRe
  * (`startPostShufflePartitionIndex` to `endPostShufflePartitionIndex - 1`, inclusive).
  */
 private final class LocalShuffledRowRDDPartition(
-    val preShufflePartitionIndex: Int) extends Partition {
+    val preShufflePartitionIndex: Int,
+    val startPreShufflePartitionIndex: Int,
+    val endPreShufflePartitionIndex: Int) extends Partition {
   override val index: Int = preShufflePartitionIndex
 }
 
@@ -52,7 +55,8 @@ private final class LocalShuffledRowRDDPartition(
  */
 class LocalShuffledRowRDD(
      var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
-     metrics: Map[String, SQLMetric])
+     metrics: Map[String, SQLMetric],
+     specifiedPartitionStartIndices: Option[Array[Int]] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   private[this] val numReducers = dependency.partitioner.numPartitions
@@ -60,11 +64,29 @@ class LocalShuffledRowRDD(
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
-  override def getPartitions: Array[Partition] = {
+  private[this] val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
+    case Some(indices) => indices
+    case None =>
+      // When specifiedPartitionStartIndices is not defined, every post-shuffle partition
+      // corresponds to a pre-shuffle partition.
+      (0 until numReducers).toArray
+  }
 
-    Array.tabulate[Partition](numMappers) { i =>
-      new LocalShuffledRowRDDPartition(i)
+  private[this] val partitionEndIndices: Array[Int] =
+    Array.tabulate[Int](partitionStartIndices.length) { i =>
+      if (i < partitionStartIndices.length -1) {
+        partitionStartIndices(i + 1)
+      } else numReducers - 1
+  }
+
+  override def getPartitions: Array[Partition] = {
+    val partitions = ArrayBuffer[Partition]()
+    for (i <- 0 to numMappers) {
+      partitionStartIndices.zip(partitionEndIndices).map { case (start, end) =>
+        partitions += new LocalShuffledRowRDDPartition(i, start, end)
+      }
     }
+    partitions.toArray
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
@@ -79,12 +101,11 @@ class LocalShuffledRowRDD(
     // `SQLShuffleReadMetricsReporter` will update its own metrics for SQL exchange operator,
     // as well as the `tempMetrics` for basic shuffle metrics.
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
-
-    val reader = SparkEnv.get.shuffleManager.getReaderForOneMapper(
+    val reader = SparkEnv.get.shuffleManager.getReaderForRange(
       dependency.shuffleHandle,
       mapIndex,
-      0,
-      numReducers,
+      localRowPartition.startPreShufflePartitionIndex,
+      localRowPartition.endPreShufflePartitionIndex,
       context,
       sqlMetricsReporter)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)

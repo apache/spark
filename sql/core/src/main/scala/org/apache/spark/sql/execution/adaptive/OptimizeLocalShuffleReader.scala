@@ -28,17 +28,19 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, B
 import org.apache.spark.sql.internal.SQLConf
 
 object BroadcastJoinWithShuffleLeft {
-  def unapply(plan: SparkPlan): Option[(QueryStageExec, BuildSide)] = plan match {
-    case join: BroadcastHashJoinExec if ShuffleQueryStageExec.isShuffleQueryStageExec(join.left) =>
-      Some((join.left.asInstanceOf[QueryStageExec], join.buildSide))
+  def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
+    case join: BroadcastHashJoinExec if join.left.isInstanceOf[QueryStageExec]
+      || join.left.isInstanceOf[CoalescedShuffleReaderExec] =>
+      Some((join.left, join.buildSide))
     case _ => None
   }
 }
 
 object BroadcastJoinWithShuffleRight {
-  def unapply(plan: SparkPlan): Option[(QueryStageExec, BuildSide)] = plan match {
-    case join: BroadcastHashJoinExec if ShuffleQueryStageExec.isShuffleQueryStageExec(join.right) =>
-      Some((join.right.asInstanceOf[QueryStageExec], join.buildSide))
+  def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
+    case join: BroadcastHashJoinExec if join.right.isInstanceOf[QueryStageExec]
+      || join.right.isInstanceOf[CoalescedShuffleReaderExec] =>
+      Some((join.right, join.buildSide))
     case _ => None
   }
 }
@@ -64,10 +66,24 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     // Add local reader in probe side.
     val withProbeSideLocalReader = plan.transformDown {
       case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildRight) =>
-        val localReader = LocalShuffleReaderExec(shuffleStage)
+        val localReader = if (shuffleStage.isInstanceOf[CoalescedShuffleReaderExec]) {
+          val left = shuffleStage.asInstanceOf[CoalescedShuffleReaderExec]
+          LocalShuffleReaderExec(
+            left.child, partitionStartIndices = Some(left.partitionStartIndices))
+        } else {
+          shuffleStage.asInstanceOf[QueryStageExec]
+          LocalShuffleReaderExec(shuffleStage)
+        }
         join.asInstanceOf[BroadcastHashJoinExec].copy(left = localReader)
       case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildLeft) =>
-        val localReader = LocalShuffleReaderExec(shuffleStage)
+        val localReader = if (shuffleStage.isInstanceOf[CoalescedShuffleReaderExec]) {
+          val right = shuffleStage.asInstanceOf[CoalescedShuffleReaderExec]
+          LocalShuffleReaderExec(
+            right.child, partitionStartIndices = Some(right.partitionStartIndices))
+        } else {
+          shuffleStage.asInstanceOf[QueryStageExec]
+          LocalShuffleReaderExec(shuffleStage)
+        }
         join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
     }
 
@@ -90,11 +106,37 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     // additional shuffle introduced.
     optimizedPlan.transformDown {
       case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildLeft) =>
-        val localReader = LocalShuffleReaderExec(shuffleStage)
-        join.asInstanceOf[BroadcastHashJoinExec].copy(left = localReader)
+        val left = shuffleStage match {
+        case b: BroadcastQueryStageExec => b.plan.child
+        case ReusedQueryStageExec(_, b: BroadcastQueryStageExec, _) => b.plan.child
+        }
+        if (left.isInstanceOf[CoalescedShuffleReaderExec]) {
+          val localReader = LocalShuffleReaderExec(
+            left.asInstanceOf[CoalescedShuffleReaderExec].child,
+            partitionStartIndices = Some(left.asInstanceOf[CoalescedShuffleReaderExec].
+              partitionStartIndices))
+          val newBroadExchange = shuffleStage.asInstanceOf[BroadcastQueryStageExec].
+            plan.copy(child = localReader)
+          val newBroadStage = shuffleStage.asInstanceOf[BroadcastQueryStageExec].
+            copy(plan = newBroadExchange)
+          join.asInstanceOf[BroadcastHashJoinExec].copy(left = newBroadStage)
+        } else join
       case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildRight) =>
-        val localReader = LocalShuffleReaderExec(shuffleStage)
-        join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
+        val right = shuffleStage match {
+          case b: BroadcastQueryStageExec => b.plan.child
+          case ReusedQueryStageExec(_, b: BroadcastQueryStageExec, _) => b.plan.child
+        }
+        if (right.isInstanceOf[CoalescedShuffleReaderExec]) {
+          val localReader = LocalShuffleReaderExec(
+            right.asInstanceOf[CoalescedShuffleReaderExec].child,
+            partitionStartIndices = Some(right.asInstanceOf[CoalescedShuffleReaderExec].
+              partitionStartIndices))
+          val newBroadExchange = shuffleStage.asInstanceOf[BroadcastQueryStageExec].
+            plan.copy(child = localReader)
+          val newBroadStage = shuffleStage.asInstanceOf[BroadcastQueryStageExec].
+            copy(plan = newBroadExchange)
+          join.asInstanceOf[BroadcastHashJoinExec].copy(right = newBroadStage)
+        } else join
     }
   }
 }
@@ -107,7 +149,9 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
  * @param child It's usually `ShuffleQueryStageExec` or `ReusedQueryStageExec`, but can be the
  *              shuffle exchange node during canonicalization.
  */
-case class LocalShuffleReaderExec(child: SparkPlan) extends UnaryExecNode {
+case class LocalShuffleReaderExec(
+    child: SparkPlan,
+    partitionStartIndices: Option[Array[Int]] = None) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -124,9 +168,9 @@ case class LocalShuffleReaderExec(child: SparkPlan) extends UnaryExecNode {
     if (cachedShuffleRDD == null) {
       cachedShuffleRDD = child match {
         case stage: ShuffleQueryStageExec =>
-          stage.plan.createLocalShuffleRDD()
+          stage.plan.createLocalShuffleRDD(partitionStartIndices)
         case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-          stage.plan.createLocalShuffleRDD()
+          stage.plan.createLocalShuffleRDD(partitionStartIndices)
       }
     }
     cachedShuffleRDD

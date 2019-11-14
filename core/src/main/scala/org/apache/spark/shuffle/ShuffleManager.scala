@@ -58,7 +58,7 @@ private[spark] trait ShuffleManager {
    * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive)
    * that are produced by one specific mapper. Called on executors by reduce tasks.
    */
-  def getReaderForOneMapper[K, C](
+  def getReaderForRange[K, C](
       handle: ShuffleHandle,
       mapIndex: Int,
       startPartition: Int,

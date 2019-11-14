@@ -171,6 +171,13 @@ trait Partitioning {
     required.requiredNumPartitions.forall(_ == numPartitions) && satisfies0(required)
   }
 
+  final def changePartitionNumber(
+       partitioning: Partitioning,
+       partitionNum: Int): Partitioning = partitioning match {
+    case h: HashPartitioning => h.copy(numPartitions = partitionNum)
+    case _ => partitioning
+  }
+
   /**
    * The actual method that defines whether this [[Partitioning]] can satisfy the given
    * [[Distribution]], after the `numPartitions` check.
