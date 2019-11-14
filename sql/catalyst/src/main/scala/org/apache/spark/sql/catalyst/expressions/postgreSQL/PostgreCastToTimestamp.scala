@@ -27,12 +27,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 case class PostgreCastToTimestamp(child: Expression, timeZoneId: Option[String])
-  extends CastBase{
+  extends PostgreCastBase {
   override def dataType: DataType = TimestampType
-
-  override protected def ansiEnabled: Boolean = SQLConf.get.ansiEnabled
-
-  override def nullable: Boolean = true
 
   /** Returns a copy of this expression with the specified timeZoneId. */
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -48,9 +44,9 @@ case class PostgreCastToTimestamp(child: Expression, timeZoneId: Option[String])
         s"Cannot cast type $from to Timestamp.")
   }
 
-  private[this] def castToTimestampCode(
-                                         from: DataType,
-                                         ctx: CodegenContext): CastFunction = from match {
+  override def castToTimestampCode(
+      from: DataType,
+      ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       super.castToTimestampCode(from, ctx)
     case DateType =>
