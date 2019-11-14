@@ -520,7 +520,6 @@ object IntervalUtils {
               state = VALUE_FRACTIONAL_PART
             case _ => return null
           }
-
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
           b match {
