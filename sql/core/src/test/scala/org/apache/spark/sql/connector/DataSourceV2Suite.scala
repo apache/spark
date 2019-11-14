@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, ClusteredPartitioning, Distribution, Partitioning, SparkHashPartitioning}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -155,9 +155,14 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("partitioning reporting") {
+  test("group by partitioning reporting") {
     import org.apache.spark.sql.functions.{count, sum}
-    Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
+    Seq(
+      classOf[PartitionAwareDataSource],
+      classOf[SparkHashPartitionAwareDataSource],
+      classOf[JavaPartitionAwareDataSource],
+      classOf[V2DefinedClusteredPartitionAwareDataSource]
+    ).foreach { cls =>
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
         checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
@@ -185,6 +190,30 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
         assert(groupByAPlusB.queryExecution.executedPlan.collectFirst {
           case e: ShuffleExchangeExec => e
         }.isDefined)
+      }
+    }
+  }
+
+  test("join partitioning reporting") {
+    import org.apache.spark.sql.functions.{count, sum}
+    Seq(
+      classOf[SparkHashPartitionAwareDataSource]
+    ).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
+
+        val joinByI = df.join(df, "i")
+        val executedPLan = joinByI.queryExecution.executedPlan
+        assert(executedPLan.collectFirst {
+          case e: ShuffleExchangeExec => e
+        }.isEmpty)
+
+        val unpartitionedDf = spark.read.format(classOf[PartitionAwareDataSource].getName).load
+        val joinByIOneSide = df.join(unpartitionedDf, "i")
+        assert(joinByIOneSide.queryExecution.executedPlan.collectFirst {
+          case e: ShuffleExchangeExec => e
+        }.size == 1)
       }
     }
   }
@@ -678,6 +707,58 @@ class PartitionAwareDataSource extends TableProvider {
     override def satisfy(distribution: Distribution): Boolean = distribution match {
       case c: ClusteredDistribution => c.clusteredColumns.contains("i")
       case _ => false
+    }
+  }
+}
+
+class SparkHashPartitionAwareDataSource extends TableProvider {
+
+  class MyScanBuilder extends SimpleScanBuilder
+    with SupportsReportPartitioning{
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      // Note that we don't have same value of column `a` across partitions.
+      Array(
+        SpecificInputPartition(Array(1, 1, 3), Array(4, 4, 6)),
+        SpecificInputPartition(Array(2, 4, 4), Array(6, 2, 2)))
+    }
+
+    override def createReaderFactory(): PartitionReaderFactory = {
+      SpecificReaderFactory
+    }
+
+    override def outputPartitioning(): Partitioning = new SparkHashPartitioning(Array("i"), 2)
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder()
+    }
+  }
+}
+
+class V2DefinedClusteredPartitionAwareDataSource extends TableProvider {
+
+  class MyScanBuilder extends SimpleScanBuilder
+    with SupportsReportPartitioning{
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      // Note that we don't have same value of column `a` across partitions.
+      Array(
+        SpecificInputPartition(Array(1, 1, 3), Array(4, 4, 6)),
+        SpecificInputPartition(Array(2, 4, 4), Array(6, 2, 2)))
+    }
+
+    override def createReaderFactory(): PartitionReaderFactory = {
+      SpecificReaderFactory
+    }
+
+    override def outputPartitioning(): Partitioning = new ClusteredPartitioning(Array("i"), 2)
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder()
     }
   }
 }
