@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.fastParseToMicros
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.getDateTimeParser
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -53,6 +53,8 @@ class JacksonParser(
 
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
+
+  private val dateTimeParser = getDateTimeParser(options.dateFormat, options.timeZone)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
@@ -217,7 +219,7 @@ class JacksonParser(
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.
           Long.box {
-            Try(fastParseToMicros(options.timestampFormat, stringValue, options.timeZone))
+            Try(dateTimeParser.parse(stringValue))
               .getOrElse {
                 // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
                 // compatibility.

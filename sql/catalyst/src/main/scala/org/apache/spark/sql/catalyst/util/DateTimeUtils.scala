@@ -18,17 +18,16 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.text.{DateFormat, SimpleDateFormat}
+import java.text.{DateFormat, ParsePosition, SimpleDateFormat}
 import java.time.Instant
 import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.{Function => JFunction}
+
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
-
 import org.apache.commons.lang3.time.FastDateFormat
-
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1168,22 +1167,28 @@ object DateTimeUtils {
     threadLocalDateFormat.remove()
   }
 
-  private class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
+  class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
     def getMicros(digitsInFraction: Int): SQLTimestamp = {
       val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
       d / Decimal.POW_10(digitsInFraction)
     }
   }
 
-  def fastParseToMicros(parser: FastDateFormat, s: String, tz: TimeZone): SQLTimestamp = {
-    val pos = new java.text.ParsePosition(0)
-    val cal = new MicrosCalendar(tz)
-    cal.clear()
-    if (!parser.parse(s, pos, cal)) {
-      throw new IllegalArgumentException(s)
+  class DateTimeParser(format: FastDateFormat, digitsInFraction: Int, cal: MicrosCalendar) {
+    private val startPos = new ParsePosition(0)
+
+    def parse(s: String): SQLTimestamp = {
+      cal.clear()
+      if (!format.parse(s, startPos, cal)) {
+        throw new IllegalArgumentException(s)
+      }
+      val micros = cal.getMicros(digitsInFraction)
+      cal.set(Calendar.MILLISECOND, 0)
+      cal.getTimeInMillis * MICROS_PER_MILLIS + micros
     }
-    val micros = cal.getMicros(parser.getPattern.count(_ == 'S'))
-    cal.set(Calendar.MILLISECOND, 0)
-    cal.getTimeInMillis * MICROS_PER_MILLIS + micros
+  }
+
+  def getDateTimeParser(format: FastDateFormat, tz: TimeZone): DateTimeParser = {
+    new DateTimeParser(format, format.getPattern.count(_ == 'S'), new MicrosCalendar(tz))
   }
 }
