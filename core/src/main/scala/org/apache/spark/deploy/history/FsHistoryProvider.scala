@@ -18,23 +18,23 @@
 package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
+import java.lang.{Long => JLong}
 import java.nio.file.Files
 import java.util.{Date, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
-import java.util.zip.{ZipEntry, ZipOutputStream}
+import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.ExecutionException
 import scala.io.Source
-import scala.util.Try
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
-import com.google.common.io.ByteStreams
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
+import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 import org.fusesource.leveldbjni.internal.NativeDB
@@ -47,7 +47,6 @@ import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
@@ -1170,6 +1169,7 @@ private[history] case class LogInfo(
     appId: Option[String],
     attemptId: Option[String],
     fileSize: Long,
+    @JsonDeserialize(contentAs = classOf[JLong])
     lastIndex: Option[Long],
     isComplete: Boolean)
 
@@ -1177,6 +1177,7 @@ private[history] class AttemptInfoWrapper(
     val info: ApplicationAttemptInfo,
     val logPath: String,
     val fileSize: Long,
+    @JsonDeserialize(contentAs = classOf[JLong])
     val lastIndex: Option[Long],
     val adminAcls: Option[String],
     val viewAcls: Option[String],

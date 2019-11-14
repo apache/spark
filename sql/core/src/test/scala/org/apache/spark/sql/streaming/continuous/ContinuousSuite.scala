@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming.continuous
 
+import java.sql.Timestamp
+
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql._
@@ -98,6 +100,21 @@ class ContinuousSuite extends ContinuousSuiteBase {
       AddData(input, 3, 4, 5),
       StartStream(),
       CheckAnswer(0, 1, 2, 3, 4, 5))
+  }
+
+  test("SPARK-29642: basic with various types") {
+    val input = ContinuousMemoryStream[String]
+
+    testStream(input.toDF())(
+      AddData(input, "0", "1", "2"),
+      CheckAnswer("0", "1", "2"))
+
+    val input2 = ContinuousMemoryStream[(String, Timestamp)]
+
+    val timestamp = Timestamp.valueOf("2015-06-11 10:10:10.100")
+    testStream(input2.toDF())(
+      AddData(input2, ("0", timestamp), ("1", timestamp)),
+      CheckAnswer(("0", timestamp), ("1", timestamp)))
   }
 
   test("map") {

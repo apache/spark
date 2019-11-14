@@ -24,7 +24,7 @@ import java.nio.file.{Files => JavaFiles}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, EnumSet, Properties}
+import java.util.{Arrays, EnumSet, Locale, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
 import javax.net.ssl._
@@ -214,12 +214,20 @@ private[spark] object TestUtils {
    * Asserts that exception message contains the message. Please note this checks all
    * exceptions in the tree.
    */
-  def assertExceptionMsg(exception: Throwable, msg: String): Unit = {
+  def assertExceptionMsg(exception: Throwable, msg: String, ignoreCase: Boolean = false): Unit = {
+    def contain(msg1: String, msg2: String): Boolean = {
+      if (ignoreCase) {
+        msg1.toLowerCase(Locale.ROOT).contains(msg2.toLowerCase(Locale.ROOT))
+      } else {
+        msg1.contains(msg2)
+      }
+    }
+
     var e = exception
-    var contains = e.getMessage.contains(msg)
+    var contains = contain(e.getMessage, msg)
     while (e.getCause != null && !contains) {
       e = e.getCause
-      contains = e.getMessage.contains(msg)
+      contains = contain(e.getMessage, msg)
     }
     assert(contains, s"Exception tree doesn't contain the expected message: $msg")
   }

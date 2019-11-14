@@ -25,7 +25,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCols, HasOutputCols}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /** Private trait for params and common methods for OneHotEncoder and OneHotEncoderModel */
 private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
-    with HasInputCols with HasOutputCols {
+  with HasInputCol with HasInputCols with HasOutputCol with HasOutputCols {
 
   /**
    * Param for how to handle invalid data during transform().
@@ -68,12 +68,21 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
   @Since("2.3.0")
   def getDropLast: Boolean = $(dropLast)
 
+  /** Returns the input and output column names corresponding in pair. */
+  private[feature] def getInOutCols(): (Array[String], Array[String]) = {
+    if (isSet(inputCol)) {
+      (Array($(inputCol)), Array($(outputCol)))
+    } else {
+      ($(inputCols), $(outputCols))
+    }
+  }
+
   protected def validateAndTransformSchema(
       schema: StructType,
       dropLast: Boolean,
       keepInvalid: Boolean): StructType = {
-    val inputColNames = $(inputCols)
-    val outputColNames = $(outputCols)
+    ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol), Seq(outputCols))
+    val (inputColNames, outputColNames) = getInOutCols()
 
     require(inputColNames.length == outputColNames.length,
       s"The number of input columns ${inputColNames.length} must be the same as the number of " +
@@ -83,7 +92,7 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
     inputColNames.foreach(SchemaUtils.checkNumericType(schema, _))
 
     // Prepares output columns with proper attributes by examining input columns.
-    val inputFields = $(inputCols).map(schema(_))
+    val inputFields = inputColNames.map(schema(_))
 
     val outputFields = inputFields.zip(outputColNames).map { case (inputField, outputColName) =>
       OneHotEncoderCommon.transformOutputColumnSchema(
@@ -125,6 +134,14 @@ class OneHotEncoder @Since("3.0.0") (@Since("3.0.0") override val uid: String)
 
   /** @group setParam */
   @Since("3.0.0")
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
   def setInputCols(values: Array[String]): this.type = set(inputCols, values)
 
   /** @group setParam */
@@ -150,13 +167,14 @@ class OneHotEncoder @Since("3.0.0") (@Since("3.0.0") override val uid: String)
   override def fit(dataset: Dataset[_]): OneHotEncoderModel = {
     transformSchema(dataset.schema)
 
+    val (inputColumns, outputColumns) = getInOutCols()
     // Compute the plain number of categories without `handleInvalid` and
     // `dropLast` taken into account.
     val transformedSchema = validateAndTransformSchema(dataset.schema, dropLast = false,
       keepInvalid = false)
-    val categorySizes = new Array[Int]($(outputCols).length)
+    val categorySizes = new Array[Int](outputColumns.length)
 
-    val columnToScanIndices = $(outputCols).zipWithIndex.flatMap { case (outputColName, idx) =>
+    val columnToScanIndices = outputColumns.zipWithIndex.flatMap { case (outputColName, idx) =>
       val numOfAttrs = AttributeGroup.fromStructField(
         transformedSchema(outputColName)).size
       if (numOfAttrs < 0) {
@@ -170,8 +188,8 @@ class OneHotEncoder @Since("3.0.0") (@Since("3.0.0") override val uid: String)
     // Some input columns don't have attributes or their attributes don't have necessary info.
     // We need to scan the data to get the number of values for each column.
     if (columnToScanIndices.length > 0) {
-      val inputColNames = columnToScanIndices.map($(inputCols)(_))
-      val outputColNames = columnToScanIndices.map($(outputCols)(_))
+      val inputColNames = columnToScanIndices.map(inputColumns(_))
+      val outputColNames = columnToScanIndices.map(outputColumns(_))
 
       // When fitting data, we want the plain number of categories without `handleInvalid` and
       // `dropLast` taken into account.
@@ -287,7 +305,7 @@ class OneHotEncoderModel private[ml] (
 
   @Since("3.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    val inputColNames = $(inputCols)
+    val (inputColNames, _) = getInOutCols()
 
     require(inputColNames.length == categorySizes.length,
       s"The number of input columns ${inputColNames.length} must be the same as the number of " +
@@ -306,8 +324,9 @@ class OneHotEncoderModel private[ml] (
    */
   private def verifyNumOfValues(schema: StructType): StructType = {
     val configedSizes = getConfigedCategorySizes
-    $(outputCols).zipWithIndex.foreach { case (outputColName, idx) =>
-      val inputColName = $(inputCols)(idx)
+    val (inputColNames, outputColNames) = getInOutCols()
+    outputColNames.zipWithIndex.foreach { case (outputColName, idx) =>
+      val inputColName = inputColNames(idx)
       val attrGroup = AttributeGroup.fromStructField(schema(outputColName))
 
       // If the input metadata specifies number of category for output column,
@@ -327,10 +346,11 @@ class OneHotEncoderModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema, logging = true)
     val keepInvalid = $(handleInvalid) == OneHotEncoder.KEEP_INVALID
+    val (inputColNames, outputColNames) = getInOutCols()
 
-    val encodedColumns = $(inputCols).indices.map { idx =>
-      val inputColName = $(inputCols)(idx)
-      val outputColName = $(outputCols)(idx)
+    val encodedColumns = inputColNames.indices.map { idx =>
+      val inputColName = inputColNames(idx)
+      val outputColName = outputColNames(idx)
 
       val outputAttrGroupFromSchema =
         AttributeGroup.fromStructField(transformedSchema(outputColName))
@@ -345,7 +365,7 @@ class OneHotEncoderModel private[ml] (
       encoder(col(inputColName).cast(DoubleType), lit(idx))
         .as(outputColName, metadata)
     }
-    dataset.withColumns($(outputCols), encodedColumns)
+    dataset.withColumns(outputColNames, encodedColumns)
   }
 
   @Since("3.0.0")
@@ -356,6 +376,13 @@ class OneHotEncoderModel private[ml] (
 
   @Since("3.0.0")
   override def write: MLWriter = new OneHotEncoderModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"OneHotEncoderModel: uid=$uid, dropLast=${$(dropLast)}, handleInvalid=${$(handleInvalid)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(outputCols).map(c => s", numOutputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("3.0.0")
