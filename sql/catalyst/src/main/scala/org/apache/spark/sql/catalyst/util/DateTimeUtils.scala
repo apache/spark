@@ -1168,16 +1168,37 @@ object DateTimeUtils {
     threadLocalDateFormat.remove()
   }
 
+  /**
+   * The custom sub-class of `GregorianCalendar` is needed to get access to
+   * the array of parsed `fields` immediately after parsing. We cannot use
+   * the `get()` method because it performs normalization of the fraction
+   * part. Accordingly, the `MILLISECOND` field doesn't contain original value.
+   */
   class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
+    // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
+    // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
+    // if the `MILLISECOND` field was parsed to `1234`.
     def getMicros(digitsInFraction: Int): SQLTimestamp = {
+      // Append `digitsInFraction` zeros to the field: 1234 -> 1234000000
       val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
+      // Take the first 6 digits from `d`: 1234000000 -> 123400
+      // The rest contains exactly `digitsInFraction`: `0000` = 10 ^ digitsInFraction
+      // So, the result is `(1234 * 1000000) / (10 ^ digitsInFraction)
       d / Decimal.POW_10(digitsInFraction)
     }
   }
 
+  /**
+   * An instance of the class is aimed to re-use many times. It contains helper objects
+   * that can be reused between `parse()` invokes.
+   * @param format The parser itself.
+   * @param digitsInFraction The number of digits in the seconds fraction precalculated
+   *                         from the pattern. For `ss.SSSS`, it is 4.
+   * @param cal The calendar which can get microseconds from the second fraction.
+   */
   class DateTimeParser(format: FastDateFormat, digitsInFraction: Int, cal: MicrosCalendar) {
     def parse(s: String): SQLTimestamp = {
-      cal.clear()
+      cal.clear() // Clear the calendar because it can be re-used many times
       if (!format.parse(s, new ParsePosition(0), cal)) {
         throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
       }
