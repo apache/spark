@@ -11,7 +11,7 @@ struct<>
 
 
 -- !query 1
-INSERT INTO TIMESTAMP_TBL VALUES timestamp(('now'))
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'))
 -- !query 1 schema
 struct<>
 -- !query 1 output
