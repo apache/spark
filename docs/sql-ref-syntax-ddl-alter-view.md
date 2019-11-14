@@ -52,8 +52,7 @@ the properties.
 
 #### Syntax
 {% highlight sql %}
-ALTER VIEW view_identifier SET TBLPROPERTIES
-  (property_key=property_val [, ...])
+ALTER VIEW view_identifier SET TBLPROPERTIES (property_key=property_val [, ...])
 {% endhighlight %}
 
 #### Parameters
@@ -82,8 +81,7 @@ Drop one or more properties of an existing view. If the specified keys do not ex
 
 #### Syntax
 {% highlight sql %}
-ALTER VIEW view_identifier UNSET TBLPROPERTIES [IF EXISTS]
-  (property_key [, ...])
+ALTER VIEW view_identifier UNSET TBLPROPERTIES [IF EXISTS] (property_key [, ...])
 {% endhighlight %}
 
 #### Parameters
@@ -127,7 +125,7 @@ ALTER VIEW view_identifier AS select_statement
   </dd>
   <dt><code><em>select_statement</em></code></dt>
   <dd>
-    Specifies the definition of the view, detail check [select_statement](sql-ref-syntax-qry-select.html)
+    Specifies the definition of the view, detail check <a href="sql-ref-syntax-qry-select.html">select_statement</a>
   </dd>
 </dl>
 
@@ -153,7 +151,6 @@ DESCRIBE TABLE EXTENDED tempdb1.v2;
 |Table                       |v2        |       |
 +----------------------------+----------+-------+
 
--- Use `DESC TABLE EXTENDED tempdb1.v2` before and after the `ALTER VIEW` statement to verify the changes.
 -- Before ALTER VIEW SET TBLPROPERTIES
 DESC TABLE EXTENDED tempdb1.v2;
 
@@ -187,7 +184,6 @@ DESC TABLE EXTENDED tempdb1.v2;
 |Table Properties            |[created.by.user=John, created.date=01-01-2001, ....]|       |
 +----------------------------+-----------------------------------------------------+-------+
 
--- Use `DESC TABLE EXTENDED tempdb1.v2` before and after the `ALTER VIEW` to verify the change.
 -- Remove the key `created.by.user` and `created.date` from `TBLPROPERTIES`
 ALTER VIEW tempdb1.v2 UNSET TBLPROPERTIES ('created.by.user', 'created.date');
 
@@ -206,7 +202,6 @@ DESC TABLE EXTENDED tempdb1.v2;
 |Table Properties            |[....]    |       |
 +----------------------------+----------+-------+
 
--- Use `DESC TABLE EXTENDED tempdb1.v2` before and after the `ALTER VIEW` statement to verify.
 -- Change the view definition
 ALTER VIEW tempdb1.v2 AS SELECT * FROM tempdb1.v1;
 
