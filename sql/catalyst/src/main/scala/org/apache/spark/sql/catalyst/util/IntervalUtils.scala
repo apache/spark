@@ -496,6 +496,15 @@ object IntervalUtils {
           state = TRIM_BEFORE_SIGN
         case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
         case SIGN =>
+          currentValue = 0
+          fraction = 0
+          // Sets the scale to an invalid value to track fraction presence
+          // in the BEGIN_UNIT_NAME state
+          // We Preset next state from SIGN to TRIM_BEFORE_VALUE. If we meet '.' in the SIGN state,
+          // we need to reset next state to `VALUE_FRACTIONAL_PART`, otherwise stay the same.
+          // Same logic for the fractionScale.
+          state = TRIM_BEFORE_VALUE
+          fractionScale = -1
           b match {
             case '-' =>
               isNegative = true
@@ -505,14 +514,14 @@ object IntervalUtils {
               i += 1
             case _ if '0' <= b && b <= '9' =>
               isNegative = false
+            case '.' =>
+              isNegative = false
+              fractionScale = (NANOS_PER_SECOND / 10).toInt
+              i += 1
+              state = VALUE_FRACTIONAL_PART
             case _ => return null
           }
-          currentValue = 0
-          fraction = 0
-          // Sets the scale to an invalid value to track fraction presence
-          // in the BEGIN_UNIT_NAME state
-          fractionScale = -1
-          state = TRIM_BEFORE_VALUE
+
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
           b match {
