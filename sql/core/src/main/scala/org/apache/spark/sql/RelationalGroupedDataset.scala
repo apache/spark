@@ -132,6 +132,12 @@ class RelationalGroupedDataset[T] protected[sql](
     (inputExpr: Expression) => exprToFunc(inputExpr)
   }
 
+  /**
+   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions
+   * of current `RelationalGroupedDataset`.
+   *
+   * @since 3.0.0
+   */
   def keyAs[U : Encoder]: KeyValueGroupedDataset[U, T] = {
     val keyEncoder = encoderFor[U]
     val aliasedGrps = groupingExprs.map(alias)
