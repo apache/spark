@@ -17,17 +17,20 @@
 package org.apache.spark.sql.catalyst.expressions.postgreSQL
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{CastBase, Expression, TimeZoneAwareExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.UTF8String.IntWrapper
 
 case class PostgreCastToInteger(child: Expression, timeZoneId: Option[String])
   extends CastBase{
   override def dataType: DataType = IntegerType
 
-  override protected def ansiEnabled: Boolean = SQLConf.get.ansiEnabled
+  override protected def ansiEnabled: Boolean =
+    throw new AnalysisException("PostgreSQL dialect doesn't support ansi mode")
 
   override def nullable: Boolean = true
 
@@ -35,22 +38,45 @@ case class PostgreCastToInteger(child: Expression, timeZoneId: Option[String])
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def castToInt(from: DataType): Any => Any = from match {
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ByteType | TimestampType | DateType =>
-      throw new AnalysisException(
-        s"Cannot cast type $from to Integer.")
-    case _ =>
-      super.castToInt(from)
+      TypeCheckResult.TypeCheckFailure(s"Cannot cast type ${child.dataType} to int")
+    case _ => TypeCheckResult.TypeCheckSuccess
   }
 
-  private[this] def castToIntCode(
+  override def castToInt(from: DataType): Any => Any = from match {
+    case StringType =>
+      val result = new IntWrapper()
+      buildCast[UTF8String](_, s => if (s.toInt(result)) {
+        result.value
+      } else {
+        throw new AnalysisException(s"invalid input syntax for type numeric: $s")
+      })
+    case BooleanType =>
+      buildCast[Boolean](_, b => if (b) 1 else 0)
+    case x: NumericType =>
+      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
+  }
+
+  override def castToIntCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
-    case ByteType | TimestampType | DateType =>
-      (_, _, _) =>
-        val fromType = JavaCode.javaType(from)
-        code"""throw new AnalysisException("Cannot cast type $fromType to Integer.");"""
-    case _ => super.castToIntCode(from, ctx)
+    case StringType =>
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
+      (c, evPrim, evNull) =>
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
+          if ($c.toInt($wrapper)) {
+            $evPrim = $wrapper.value;
+          } else {
+            $evNull = throw new AnalysisException(s"invalid input syntax for type numeric: $c;
+          }
+          $wrapper = null;
+        """
+    case BooleanType =>
+      (c, evPrim, _) => code"$evPrim = $c ? 1 : 0;"
+    case _: NumericType =>
+      (c, evPrim, _) => code"$evPrim = (int) $c;"
   }
 
   override def toString: String = s"PostgreCastToInt($child as ${dataType.simpleString})"
