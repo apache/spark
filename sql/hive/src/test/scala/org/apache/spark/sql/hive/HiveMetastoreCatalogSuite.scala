@@ -362,29 +362,20 @@ class DataSourceWithHiveMetastoreCatalogSuite
     }
   }
 
-  test("SPARK-29869: HiveMetastoreCatalog#convertToLogicalRelation throws AssertionError") {
+  test("SPARK-29869: fix HiveMetastoreCatalog#convertToLogicalRelation throws AssertionError") {
     withTempPath(dir => {
       val baseDir = s"${dir.getCanonicalFile.toURI.toString}/test"
-      val partitionDir = s"${dir.getCanonicalFile.toURI.toString}/test/dt=20191113"
-      val file = new Path(partitionDir, "file.parquet")
-      val fs = file.getFileSystem(new Configuration())
-      fs.createNewFile(file)
-      withTable("test") {
-        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true",
-          SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+      val partitionLikeDir = s"${dir.getCanonicalFile.toURI.toString}/test/dt=20191113"
+      spark.range(3).selectExpr("id").write.parquet(partitionLikeDir)
+      withTable("non_partition_table") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
           spark.sql(
             s"""
-               |CREATE EXTERNAL TABLE `test`(key string)
-               |ROW FORMAT SERDE
-               |  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-               |STORED AS INPUTFORMAT
-               |  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-               |OUTPUTFORMAT
-               |  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-               |LOCATION '$baseDir'
+               |CREATE TABLE non_partition_table (id bigint)
+               |STORED AS PARQUET LOCATION '$baseDir'
                |""".stripMargin)
-          val e = intercept[AssertionError](spark.sql("select * from test")).getMessage
-          assert(e.contains("assertion failed"))
+          assert(spark.sql("select * from non_partition_table").collect() ===
+            Array(Row(0), Row(1), Row(2)))
         }
       }
     })

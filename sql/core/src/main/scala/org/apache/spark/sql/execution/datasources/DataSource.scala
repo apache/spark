@@ -330,7 +330,9 @@ case class DataSource(
    *                        is considered as a non-streaming file based data source. Since we know
    *                        that files already exist, we don't need to check them again.
    */
-  def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
+  def resolveRelation(
+      checkFilesExist: Boolean = true,
+      needPartitionInferring: Boolean = true): BaseRelation = {
     val relation = (providingInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
@@ -391,7 +393,7 @@ case class DataSource(
         } else {
           val globbedPaths = checkAndGlobPathIfNecessary(
             checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
-          val index = createInMemoryFileIndex(globbedPaths)
+          val index = createInMemoryFileIndex(globbedPaths, needPartitionInferring)
           val (resultDataSchema, resultPartitionSchema) =
             getOrInferFileFormatSchema(format, () => index)
           (index, resultDataSchema, resultPartitionSchema)
@@ -427,7 +429,6 @@ case class DataSource(
           "in the data schema",
           equality)
     }
-
     relation
   }
 
@@ -551,10 +552,12 @@ case class DataSource(
   }
 
   /** Returns an [[InMemoryFileIndex]] that can be used to get partition schema and file list. */
-  private def createInMemoryFileIndex(globbedPaths: Seq[Path]): InMemoryFileIndex = {
+  private def createInMemoryFileIndex(
+      globbedPaths: Seq[Path],
+      needPartitionInferring: Boolean = true): InMemoryFileIndex = {
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-    new InMemoryFileIndex(
-      sparkSession, globbedPaths, options, userSpecifiedSchema, fileStatusCache)
+    new InMemoryFileIndex(sparkSession, globbedPaths, options, userSpecifiedSchema,
+      fileStatusCache, needPartitionInferring)
   }
 
   /**
