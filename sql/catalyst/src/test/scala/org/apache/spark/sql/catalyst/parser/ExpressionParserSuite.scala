@@ -448,7 +448,7 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("x'A1OC'")
 
     // Unsupported datatype.
-    intercept("GEO '(10,-6)'", "Literals of type 'GEO' are currently not supported.")
+    intercept("GEO '(10,-6)'", "DataType geo is not supported.")
   }
 
   test("literals") {
