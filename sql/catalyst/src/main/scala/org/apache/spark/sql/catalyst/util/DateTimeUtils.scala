@@ -1168,7 +1168,7 @@ object DateTimeUtils {
     threadLocalDateFormat.remove()
   }
 
-  class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
+  private class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
     def getMicros(digitsInFraction: Int): SQLTimestamp = {
       val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
       d / Decimal.POW_10(digitsInFraction)
