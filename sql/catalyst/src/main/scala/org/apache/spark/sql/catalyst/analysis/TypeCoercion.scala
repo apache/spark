@@ -499,7 +499,8 @@ object TypeCoercion {
         findWiderCommonType(list.map(_.dataType)) match {
           case Some(listType) =>
             val finalDataType = findCommonTypeForBinaryComparison(value.dataType, listType, conf)
-              .orElse(findWiderTypeWithoutStringPromotionForTwo(value.dataType, listType))
+              .orElse(findWiderTypeForDecimal(value.dataType, listType))
+              .orElse(findTightestCommonType(value.dataType, listType))
             finalDataType.map(t => i.withNewChildren(i.children.map(Cast(_, t)))).getOrElse(i)
           case None => i
         }
