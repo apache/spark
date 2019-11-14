@@ -139,7 +139,6 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       val hashDistUDF = udf((x: Seq[Vector]) => hashDistance(x, keyHash), DataTypes.DoubleType)
       val hashDistCol = hashDistUDF(col($(outputCol)))
 
-      // Compute threshold to get exact k elements.
       val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
       var filtered: DataFrame = null
       var requestedNum = numNearestNeighbors
