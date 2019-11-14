@@ -38,7 +38,8 @@ class ConsoleWrite(schema: StructType, options: CaseInsensitiveStringMap)
   assert(SparkSession.getActiveSession.isDefined)
   protected val spark = SparkSession.getActiveSession.get
 
-  def createStreamingWriterFactory(): StreamingDataWriterFactory = PackedRowWriterFactory
+  def createStreamingWriterFactory(numPartitions: Int): StreamingDataWriterFactory =
+    PackedRowWriterFactory
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     // We have to print a "Batch" label for the epoch for compatibility with the pre-data source V2

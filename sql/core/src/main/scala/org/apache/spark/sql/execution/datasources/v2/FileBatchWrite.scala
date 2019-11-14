@@ -44,7 +44,7 @@ class FileBatchWrite(
     committer.abortJob(job)
   }
 
-  override def createBatchWriterFactory(): DataWriterFactory = {
+  override def createBatchWriterFactory(numPartitions: Int): DataWriterFactory = {
     FileWriterFactory(description, committer)
   }
 }

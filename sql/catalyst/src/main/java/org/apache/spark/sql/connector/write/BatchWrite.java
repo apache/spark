@@ -45,8 +45,10 @@ public interface BatchWrite {
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
+   *
+   * @param numPartitions The number of partitions of the RDD that is going to be written.
    */
-  DataWriterFactory createBatchWriterFactory();
+  DataWriterFactory createBatchWriterFactory(int numPartitions);
 
   /**
    * Returns whether Spark should use the commit coordinator to ensure that at most one task for

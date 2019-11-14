@@ -40,7 +40,7 @@ private[kafka010] class KafkaBatchWrite(
 
   validateQuery(schema.toAttributes, producerParams, topic)
 
-  override def createBatchWriterFactory(): KafkaBatchWriterFactory =
+  override def createBatchWriterFactory(numPartitions: Int): KafkaBatchWriterFactory =
     KafkaBatchWriterFactory(topic, producerParams, schema)
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {}

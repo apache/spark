@@ -72,7 +72,8 @@ case class ForeachWriterTable[T](
           override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
           override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
-          override def createStreamingWriterFactory(): StreamingDataWriterFactory = {
+          override def createStreamingWriterFactory(
+              numPartitions: Int): StreamingDataWriterFactory = {
             val rowConverter: InternalRow => T = converter match {
               case Left(enc) =>
                 val boundEnc = enc.resolveAndBind(

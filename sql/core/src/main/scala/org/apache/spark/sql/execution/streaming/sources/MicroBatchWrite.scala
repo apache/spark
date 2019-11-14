@@ -36,8 +36,8 @@ class MicroBatchWrite(eppchId: Long, val writeSupport: StreamingWrite) extends B
     writeSupport.abort(eppchId, messages)
   }
 
-  override def createBatchWriterFactory(): DataWriterFactory = {
-    new MicroBatchWriterFactory(eppchId, writeSupport.createStreamingWriterFactory())
+  override def createBatchWriterFactory(numPartitions: Int): DataWriterFactory = {
+    new MicroBatchWriterFactory(eppchId, writeSupport.createStreamingWriterFactory(numPartitions))
   }
 }
 

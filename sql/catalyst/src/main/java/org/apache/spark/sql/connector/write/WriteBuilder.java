@@ -56,16 +56,6 @@ public interface WriteBuilder {
   }
 
   /**
-   * Passes the number of partitions of the input data from Spark to data source.
-   *
-   * @return a new builder with the `schema`. By default it returns `this`, which means the given
-   *         `numPartitions` is ignored. Please override this method to take the `numPartitions`.
-   */
-  default WriteBuilder withNumPartitions(int numPartitions) {
-    return this;
-  }
-
-  /**
    * Returns a {@link BatchWrite} to write data to batch source. By default this method throws
    * exception, data sources must overwrite this method to provide an implementation, if the
    * {@link Table} that creates this write returns {@link TableCapability#BATCH_WRITE} support in

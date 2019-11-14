@@ -140,7 +140,7 @@ class MemoryStreamingWrite(
     val sink: MemorySink, schema: StructType, needTruncate: Boolean)
   extends StreamingWrite {
 
-  override def createStreamingWriterFactory: MemoryWriterFactory = {
+  override def createStreamingWriterFactory(numPartitions: Int): MemoryWriterFactory = {
     MemoryWriterFactory(schema)
   }
 

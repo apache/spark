@@ -58,7 +58,7 @@ private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsTruncate
 }
 
 private[noop] object NoopBatchWrite extends BatchWrite {
-  override def createBatchWriterFactory(): DataWriterFactory = NoopWriterFactory
+  override def createBatchWriterFactory(numPartitions: Int): DataWriterFactory = NoopWriterFactory
   override def commit(messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
 }
@@ -74,7 +74,7 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
 }
 
 private[noop] object NoopStreamingWrite extends StreamingWrite {
-  override def createStreamingWriterFactory(): StreamingDataWriterFactory =
+  override def createStreamingWriterFactory(numPartitions: Int): StreamingDataWriterFactory =
     NoopStreamingDataWriterFactory
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}

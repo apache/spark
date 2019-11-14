@@ -38,8 +38,9 @@ case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPl
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = write.createStreamingWriterFactory()
-    val rdd = new ContinuousWriteRDD(query.execute(), writerFactory)
+    val queryRdd = query.execute()
+    val writerFactory = write.createStreamingWriterFactory(queryRdd.partitions.length)
+    val rdd = new ContinuousWriteRDD(queryRdd, writerFactory)
 
     logInfo(s"Start processing data source write support: $write. " +
       s"The input RDD has ${rdd.partitions.length} partitions.")
