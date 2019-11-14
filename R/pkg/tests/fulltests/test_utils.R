@@ -113,11 +113,11 @@ test_that("cleanClosure on R functions", {
   # Test for combination for nested and sequenctial functions in a closure
   f1 <- function(x) x + 1
   f2 <- function(x) f1(x) + 2
-  user_func <- function(x) { f1(x); f2(x) }
-  c_user_func_env <- environment(cleanClosure(user_func))
-  expect_equal(length(c_user_func_env), 2)
-  inner_c_user_func_env <- environment(c_user_func_env$f2)
-  expect_equal(length(inner_c_user_func_env), 1)
+  userFunc <- function(x) { f1(x); f2(x) }
+  cUserFuncEnv <- environment(cleanClosure(userFunc))
+  expect_equal(length(cUserFuncEnv), 2)
+  innerCUserFuncEnv <- environment(cUserFuncEnv$f2)
+  expect_equal(length(innerCUserFuncEnv), 1)
 
   # Test for function (and variable) definitions.
   f <- function(x) {
