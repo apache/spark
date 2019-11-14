@@ -433,4 +433,12 @@ class VectorsSuite extends SparkMLFunSuite {
     intercept[IllegalArgumentException]{sv / 0}
   }
 
+  test("vector negation") {
+    val dv = Vectors.dense(arr)
+    assert((-dv).toArray === Array(-0.1, 0.0, -0.3, -0.4))
+
+    val sv = Vectors.sparse(n, indices, values)
+    assert((-sv).toArray === Array(-0.1, 0.0, -0.3, -0.4))
+  }
+
 }

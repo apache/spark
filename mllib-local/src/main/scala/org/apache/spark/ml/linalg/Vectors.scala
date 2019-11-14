@@ -208,6 +208,12 @@ sealed trait Vector extends Serializable {
     }
   }
 
+  /**
+   * Negate a vector.
+   */
+  @Since("3.0.0")
+  def unary_- : Vector = this * -1
+
 }
 
 /**
