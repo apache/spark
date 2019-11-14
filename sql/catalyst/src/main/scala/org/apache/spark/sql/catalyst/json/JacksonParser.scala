@@ -54,7 +54,7 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
-  @transient private lazy val dateTimeParser =
+  @transient private lazy val timestampParser =
     getDateTimeParser(options.timestampFormat, options.timeZone)
 
   /**
@@ -218,7 +218,7 @@ class JacksonParser(
         case VALUE_STRING =>
           val stringValue = parser.getText
           Long.box {
-            Try(dateTimeParser.parse(stringValue)).getOrElse {
+            Try(timestampParser.parse(stringValue)).getOrElse {
               // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
               DateTimeUtils.stringToTime(stringValue).getTime * 1000L
