@@ -461,7 +461,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Seq[Seq[Int]](Seq(1), Seq(2), Seq(2, 4), null)))
     )
 
-   assert(intercept[AnalysisException] {
+    assert(intercept[AnalysisException] {
       df3.selectExpr("array_sort(a)").collect()
     }.getMessage().contains("argument 1 requires array type, however, '`a`' is of string type"))
   }
