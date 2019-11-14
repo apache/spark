@@ -793,17 +793,17 @@ true
 -- !query 95
 SELECT cast(1 as string) in (cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 -- !query 95 schema
-struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS TIMESTAMP) IN (CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) AS TIMESTAMP))):boolean>
 -- !query 95 output
-false
+NULL
 
 
 -- !query 96
 SELECT cast(1 as string) in (cast('2017-12-11 09:30:00' as date)) FROM t
 -- !query 96 schema
-struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(2017-12-11 09:30:00 AS DATE) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS DATE) IN (CAST(CAST(2017-12-11 09:30:00 AS DATE) AS DATE))):boolean>
 -- !query 96 output
-false
+NULL
 
 
 -- !query 97
@@ -1084,9 +1084,9 @@ cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS DECIMA
 -- !query 128
 SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast(2 as string)) FROM t
 -- !query 128 schema
-struct<(CAST(CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) AS STRING) IN (CAST(CAST(2 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) AS TIMESTAMP) IN (CAST(CAST(2 AS STRING) AS TIMESTAMP))):boolean>
 -- !query 128 output
-false
+NULL
 
 
 -- !query 129
@@ -1189,9 +1189,9 @@ cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS DECIMAL(10,0)
 -- !query 140
 SELECT cast('2017-12-12 09:30:00' as date) in (cast(2 as string)) FROM t
 -- !query 140 schema
-struct<(CAST(CAST(2017-12-12 09:30:00 AS DATE) AS STRING) IN (CAST(CAST(2 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(2017-12-12 09:30:00 AS DATE) AS DATE) IN (CAST(CAST(2 AS STRING) AS DATE))):boolean>
 -- !query 140 output
-false
+NULL
 
 
 -- !query 141
@@ -2306,7 +2306,7 @@ cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12
 -- !query 272
 SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.0' as timestamp), cast(1 as string)) FROM t
 -- !query 272 schema
-struct<(CAST(CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) AS STRING) IN (CAST(CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) AS STRING), CAST(CAST(1 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) AS TIMESTAMP) IN (CAST(CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) AS TIMESTAMP), CAST(CAST(1 AS STRING) AS TIMESTAMP))):boolean>
 -- !query 272 output
 true
 
@@ -2411,7 +2411,7 @@ cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:
 -- !query 284
 SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as date), cast(1 as string)) FROM t
 -- !query 284 schema
-struct<(CAST(CAST(2017-12-12 09:30:00 AS DATE) AS STRING) IN (CAST(CAST(2017-12-12 09:30:00 AS DATE) AS STRING), CAST(CAST(1 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(2017-12-12 09:30:00 AS DATE) AS DATE) IN (CAST(CAST(2017-12-12 09:30:00 AS DATE) AS DATE), CAST(CAST(1 AS STRING) AS DATE))):boolean>
 -- !query 284 output
 true
 

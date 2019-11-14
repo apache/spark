@@ -241,15 +241,6 @@ object TypeCoercion {
       })
   }
 
-  private def findInCommonType(
-      valueType: DataType, listTypes: Seq[DataType], conf: SQLConf): Option[DataType] = {
-    findWiderCommonType(listTypes) match {
-      case Some(d) => findCommonTypeForBinaryComparison(valueType, d, conf)
-        .orElse(findWiderTypeWithoutStringPromotionForTwo(valueType, d))
-      case _ => None
-    }
-  }
-
   /**
    * Similar to [[findWiderTypeForTwo]] that can handle decimal types, but can't promote to
    * string. If the wider decimal type exceeds system limitation, this rule will truncate
@@ -505,8 +496,11 @@ object TypeCoercion {
         }
 
       case i @ In(value, list) if list.exists(_.dataType != value.dataType) =>
-        findInCommonType(value.dataType, list.map(_.dataType), conf) match {
-          case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
+        findWiderCommonType(list.map(_.dataType)) match {
+          case Some(listType) =>
+            val finalDataType = findCommonTypeForBinaryComparison(value.dataType, listType, conf)
+            .orElse(findWiderTypeWithoutStringPromotionForTwo(value.dataType, listType))
+            finalDataType.map(t => i.withNewChildren(i.children.map(Cast(_, t)))).getOrElse(i)
           case None => i
         }
     }
