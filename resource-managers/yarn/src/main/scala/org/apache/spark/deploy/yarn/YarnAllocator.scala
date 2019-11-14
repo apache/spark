@@ -89,7 +89,6 @@ private[yarn] class YarnAllocator(
   private val releasedContainers = Collections.newSetFromMap[ContainerId](
     new ConcurrentHashMap[ContainerId, java.lang.Boolean])
 
-  // TODO - doesn't seem like we need the name of executor here, could just be a count
   // can be done separately though
   private val runningExecutorsPerResourceProfileId =
     new ConcurrentHashMap[Int, java.util.Set[String]]()
@@ -121,11 +120,9 @@ private[yarn] class YarnAllocator(
   private val allocatorBlacklistTracker =
     new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
 
-  // TODO - does this need to be concurrent, doesn't look like it
   private val targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]
   targetNumExecutorsPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
-
 
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
   // list of requesters that should be responded to once we find out why the given executor
@@ -173,13 +170,12 @@ private[yarn] class YarnAllocator(
     resource
   }
 
-  // resourceProfileId -> Resource
-  private[yarn] val allResources = new mutable.HashMap[Int, Resource]
-  allResources(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = resource
+  private[yarn] val rpIdToYarnResource = new mutable.HashMap[Int, Resource]
+  rpIdToYarnResource(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = resource
 
-  // TODO - do we ever remove profiles?
-  private[yarn] val allResourceProfiles = new mutable.HashMap[Int, ResourceProfile]
-  allResourceProfiles(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
+  // TODO - do we want to add removal of profiles?
+  private[yarn] val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
+  rpIdToResourceProfile(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
@@ -274,7 +270,7 @@ private[yarn] class YarnAllocator(
    */
   private def getPendingAtLocation(location: String): Map[Int, Seq[ContainerRequest]] = {
     val allContainerRequests = new mutable.HashMap[Int, Seq[ContainerRequest]]
-    allResources.map { case (id, profResource) =>
+    rpIdToYarnResource.map { case (id, profResource) =>
       val result = amClient.getMatchingRequests(getContainerPriority(id), location, profResource)
         .asScala.flatMap(_.asScala)
       allContainerRequests(id) = result
@@ -295,7 +291,7 @@ private[yarn] class YarnAllocator(
     var cores = executorCores
     val customResources = new mutable.HashMap[String, String]
     resourceProfileToTotalExecs.foreach { case (rp, num) =>
-      if (!allResources.contains(rp.id)) {
+      if (!rpIdToYarnResource.contains(rp.id)) {
         getOrUpdateRunningExecutorForRPId(rp.id)
         logInfo(s"resource profile ${rp.id} doesn't exist")
         val execResources = rp.executorResources
@@ -327,8 +323,8 @@ private[yarn] class YarnAllocator(
           heapMem + offHeapMem + overheadMem + pysparkMem, cores)
         ResourceRequestHelper.setResourceRequests(customResources.toMap, resource)
         logDebug(s"Created resource capability: $resource")
-        allResources(rp.id) = resource
-        allResourceProfiles(rp.id) = rp
+        rpIdToYarnResource(rp.id) = resource
+        rpIdToResourceProfile(rp.id) = rp
       }
     }
   }
@@ -460,7 +456,7 @@ private[yarn] class YarnAllocator(
 
       if (missing > 0) {
 
-        val resource = allResources(rpId)
+        val resource = rpIdToYarnResource(rpId)
 
         // TODO - test this log message
         if (log.isInfoEnabled()) {
@@ -669,7 +665,7 @@ private[yarn] class YarnAllocator(
     // count.
 
     // this should be exactly what we requested
-    val resourceForRP = allResources(rpId)
+    val resourceForRP = rpIdToYarnResource(rpId)
 
     logDebug(s"Calling amClient.getMatchingRequests with parameters: " +
         s"priority: ${allocatedContainer.getPriority}, " +
@@ -716,7 +712,7 @@ private[yarn] class YarnAllocator(
         allocatedContainerToHostMap.put(containerId, executorHostname)
       }
 
-      val rp = allResourceProfiles(rpId)
+      val rp = rpIdToResourceProfile(rpId)
       val containerMem = rp.executorResources.get(ResourceProfile.MEMORY).
         map(_.amount).getOrElse(executorMemory)
       val containerCores = rp.executorResources.get(ResourceProfile.CORES).
