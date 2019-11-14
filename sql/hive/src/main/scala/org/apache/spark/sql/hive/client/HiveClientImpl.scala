@@ -645,6 +645,8 @@ private[hive] class HiveClientImpl(
         // whose specs are supersets of this partial spec. E.g. If a table has partitions
         // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
         val parts = client.getPartitions(hiveTable, s.asJava).asScala
+        // Check whether the partition we are going to drop is empty.
+        // We make a dummy one for the empty partition. See [SPARK-29786] for more details.
         parts.foreach { partition =>
           val partPath = partition.getDataLocation
           if (isEmptyPath(partPath)) {
