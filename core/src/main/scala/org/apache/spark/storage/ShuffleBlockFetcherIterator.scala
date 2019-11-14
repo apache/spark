@@ -19,7 +19,8 @@ package org.apache.spark.storage
 
 import java.io.{InputStream, IOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util
+import java.util.concurrent.{CompletableFuture, LinkedBlockingQueue, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -30,7 +31,6 @@ import org.apache.commons.io.IOUtils
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.client.AsyncResponseCallback
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
@@ -487,28 +487,28 @@ final class ShuffleBlockFetcherIterator(
     if (immutableHostLocalBlocksWithoutDirs.nonEmpty) {
       logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
         s"${immutableHostLocalBlocksWithoutDirs.mkString(", ")}")
+      val hostLocalDirsCompletable = new CompletableFuture[util.Map[String, Array[String]]]()
       hostLocalDirManager.getHostLocalDirs(
         immutableHostLocalBlocksWithoutDirs.keys.map(_.executorId).toArray,
-        new AsyncResponseCallback[java.util.Map[String, Array[String]]] {
-            override def onSuccess(dirs: java.util.Map[String, Array[String]]): Unit = {
-              immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
-                blockInfos.takeWhile { case (blockId, _, mapIndex) =>
-                  fetchHostLocalBlock(
-                    blockId,
-                    mapIndex,
-                    dirs.get(hostLocalBmId.executorId),
-                    hostLocalBmId)
-                }
-              }
+        hostLocalDirsCompletable)
+      hostLocalDirsCompletable.whenComplete((dirs, throwable) => {
+        if (dirs != null ) {
+          immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
+            blockInfos.takeWhile { case (blockId, _, mapIndex) =>
+              fetchHostLocalBlock(
+                blockId,
+                mapIndex,
+                dirs.get(hostLocalBmId.executorId),
+                hostLocalBmId)
             }
-
-            override def onFailure(t: Throwable): Unit = {
-              logError(s"Error occurred while fetching local blocks", t)
-              val (hostLocalBmId, (blockId, _, mapIndex) :: _) =
-                immutableHostLocalBlocksWithoutDirs.head
-              results.put(FailureFetchResult(blockId, mapIndex, hostLocalBmId, t))
-            }
-          })
+          }
+        } else {
+          logError(s"Error occurred while fetching host local blocks", throwable)
+          val (hostLocalBmId, blockInfoSeq) = immutableHostLocalBlocksWithoutDirs.head
+          val (blockId, _, mapIndex) = blockInfoSeq.head
+          results.put(FailureFetchResult(blockId, mapIndex, hostLocalBmId, throwable))
+        }
+      })
     }
     if (hostLocalBlocksWithCachedDirs.nonEmpty) {
       logDebug(s"Synchronous fetching host-local blocks with cached executors' dir: " +
@@ -516,7 +516,7 @@ final class ShuffleBlockFetcherIterator(
       hostLocalBlocksWithCachedDirs.foreach { case (_, blockInfos, localDirs) =>
         blockInfos.foreach { case (blockId, _, mapIndex) =>
           if (!fetchHostLocalBlock(blockId, mapIndex, localDirs.get, bmId)) {
-              return
+            return
           }
         }
       }

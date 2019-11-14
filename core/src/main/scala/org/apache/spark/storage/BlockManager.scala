@@ -22,7 +22,7 @@ import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -45,7 +45,7 @@ import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.client.{AsyncResponseCallback, StreamCallbackWithID}
+import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -115,6 +115,7 @@ private[spark] class ByteBufferBlockData(
 }
 
 private[spark] class HostLocalDirManager(
+    futureExecutionContext: ExecutionContext,
     cacheSize: Int,
     externalBlockStoreClient: ExternalBlockStoreClient,
     host: String,
@@ -127,27 +128,24 @@ private[spark] class HostLocalDirManager(
       .build[String, Array[String]]()
 
   private[spark] def getCachedHostLocalDirs()
-    : scala.collection.Map[String, Array[String]] = synchronized {
+    : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
     import scala.collection.JavaConverters._
     return executorIdToLocalDirsCache.asMap().asScala
   }
 
   private[spark] def getHostLocalDirs(
       executorIds: Array[String],
-      callback: AsyncResponseCallback[java.util.Map[String, Array[String]]]): Unit = synchronized {
-    externalBlockStoreClient.getHostLocalDirs(
-      host,
-      externalShuffleServicePort,
-      executorIds,
-      new AsyncResponseCallback[java.util.Map[String, Array[String]]] {
-
-        override def onSuccess(result: java.util.Map[String, Array[String]]): Unit = {
-          executorIdToLocalDirsCache.putAll(result)
-          callback.onSuccess(result)
-        }
-
-        override def onFailure(t: Throwable): Unit = callback.onFailure(t)
-      })
+      hostLocalDirsCompletable: CompletableFuture[java.util.Map[String, Array[String]]]): Unit = {
+    Future {
+      externalBlockStoreClient.getHostLocalDirs(
+        host,
+        externalShuffleServicePort,
+        executorIds,
+        hostLocalDirsCompletable)
+      hostLocalDirsCompletable.thenAccept(hostLocalDirs => executorIdToLocalDirsCache.synchronized {
+        executorIdToLocalDirsCache.putAll(hostLocalDirs)
+      }).get()
+    }(futureExecutionContext)
   }
 }
 
@@ -477,6 +475,7 @@ private[spark] class BlockManager(
       if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED)) {
         externalBlockStoreClient.map { blockStoreClient =>
           new HostLocalDirManager(
+            futureExecutionContext,
             conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
             blockStoreClient,
             blockManagerId.host,

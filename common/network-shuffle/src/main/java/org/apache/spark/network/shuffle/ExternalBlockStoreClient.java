@@ -23,21 +23,15 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.Uninterruptibles;
-import org.apache.spark.network.client.AsyncResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.shuffle.protocol.*;
-import org.apache.spark.network.util.NettyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,8 +53,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
-  private final ExecutorService localDirsGetterThreadPool =
-    Executors.newCachedThreadPool(NettyUtils.createThreadFactory("Host local dirs getter"));
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
@@ -203,48 +195,39 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       String host,
       int port,
       String[] execIds,
-      AsyncResponseCallback<Map<String, String[]>> callback) {
+      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
     checkInit();
     GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
-    int MAX_ATTEMPTS = conf.maxIORetries();
-    int SLEEP_TIME_SECS = 5;
-    localDirsGetterThreadPool.submit(() -> {
-      for (int i = 1; i <= MAX_ATTEMPTS; i++) {
-        try {
-          sendGetHostLocalDirs(host, port, getLocalDirsMessage, callback);
-        } catch(Exception e) {
-          if (i < MAX_ATTEMPTS) {
-            logger.error("Failed to get the executors' local dirs from the external shuffle " +
-              "server, will retry " + (MAX_ATTEMPTS - i) + " more times after waiting " +
-              SLEEP_TIME_SECS + " seconds...", e);
-            Uninterruptibles.sleepUninterruptibly(SLEEP_TIME_SECS, TimeUnit.SECONDS);
-          } else {
-            logger.error("Unable to get the executors' local dirs from the external shuffle " +
-              "server due to: ", e);
-            callback.onFailure(e);
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      client.sendRpc(getLocalDirsMessage.toByteBuffer(), new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+          try {
+            BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
+            hostLocalDirsCompletable.complete(
+              ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
+          } catch (Throwable t) {
+            logger.warn("Error trying to get the host local dirs for " +
+            Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
+              t.getCause());
+            hostLocalDirsCompletable.completeExceptionally(t);
+          } finally {
+            client.close();
           }
         }
-      }
-    });
-  }
 
-  private void sendGetHostLocalDirs(
-      String host,
-      int port,
-      GetLocalDirsForExecutors getLocalDirsMessage,
-      AsyncResponseCallback<Map<String, String[]>> cb) throws IOException, InterruptedException {
-    TransportClient client = clientFactory.createClient(host, port);
-    try {
-      ByteBuffer buf =
-        client.sendRpcSync(getLocalDirsMessage.toByteBuffer(), registrationTimeoutMs);
-      BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(buf);
-      cb.onSuccess(((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
-    } catch (Exception e) {
-      logger.error("Error trying to get the host local dirs for " +
-        Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
-        e.getCause());
-    } finally {
-      client.close();
+        @Override
+        public void onFailure(Throwable t) {
+          logger.warn("Error trying to get the host local dirs for " +
+            Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
+              t.getCause());
+            hostLocalDirsCompletable.completeExceptionally(t);
+          client.close();
+        }
+      });
+    } catch (IOException | InterruptedException e) {
+      hostLocalDirsCompletable.completeExceptionally(e);
     }
   }
 
@@ -255,6 +238,5 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       clientFactory.close();
       clientFactory = null;
     }
-    localDirsGetterThreadPool.shutdown();
   }
 }

@@ -23,7 +23,7 @@ import java.nio.ByteBuffer;
  * Callback for the result of a single RPC. This will be invoked once with either success or
  * failure.
  */
-public interface RpcResponseCallback extends AsyncResponseCallback<ByteBuffer> {
+public interface RpcResponseCallback {
   /**
    * Successful serialized result from server.
    *
