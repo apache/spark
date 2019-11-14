@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -1094,6 +1093,15 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
+  val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
+    buildConf("spark.sql.streaming.stopActiveRunOnRestart")
+    .doc("Running multiple runs of the same streaming query concurrently is not supported. " +
+      "If we find a concurrent active run for a streaming query (in the same or different " +
+      "SparkSessions on the same cluster) and this flag is true, we will stop the old streaming " +
+      "query run to start the new one.")
+    .booleanConf
+    .createWithDefault(true)
+
   val STREAMING_JOIN_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.join.stateFormatVersion")
       .internal()
@@ -2019,10 +2027,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val DEFAULT_V2_CATALOG = buildConf("spark.sql.default.catalog")
-    .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+  val DEFAULT_CATALOG = buildConf("spark.sql.defaultCatalog")
+    .doc("Name of the default catalog. This will be the current catalog if users have not " +
+      "explicitly set the current catalog yet.")
     .stringConf
-    .createOptional
+    .createWithDefault(SESSION_CATALOG_NAME)
 
   val V2_SESSION_CATALOG_IMPLEMENTATION =
     buildConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME")
@@ -2555,8 +2564,6 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
-
-  def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 

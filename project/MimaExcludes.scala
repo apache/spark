@@ -36,8 +36,8 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
-    // [SPARK-28091[CORE] Extend Spark metrics system with user-defined metrics using executor plugins
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExecutorPlugin.init"),
+    // [SPARK-29399][core] Remove old ExecutorPlugin interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ExecutorPlugin"),
 
     // [SPARK-][SQL][CORE][MLLIB] Remove more old deprecated items in Spark 3
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLContext.createExternalTable"),
@@ -108,13 +108,13 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart.copy"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart.this"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart$"),
-    
+
     // [SPARK-27630][CORE] Properly handle task end events from completed stages
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerSpeculativeTaskSubmitted.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerSpeculativeTaskSubmitted.copy"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerSpeculativeTaskSubmitted.this"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerSpeculativeTaskSubmitted$"),
-    
+
     // [SPARK-26632][Core] Separate Thread Configurations of Driver and Executor
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf"),
 
