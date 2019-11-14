@@ -1889,7 +1889,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
   <td>
     Capacity for eventLog queue in Spark listener bus, which hold events for Event logging listeners
-    that write events to eventLogs. Consider increasing value if listener events corresponding to eventLog queue
+    that write events to eventLogs. Consider increasing value if the listener events corresponding to eventLog queue
     are dropped. Increasing this value may result in the driver using more memory.
   </td>
 </tr>
@@ -1898,8 +1898,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
   <td>
     Capacity for streams queue in Spark listener bus, which hold events for internal streaming listener.
-    Consider increasing value if listener events corresponding to streams queue are dropped. Increasing this
-    value may result in the driver using more memory.
+    Consider increasing value if the listener events corresponding to streams queue are dropped. Increasing
+    this value may result in the driver using more memory.
   </td>
 </tr>
 <tr>
