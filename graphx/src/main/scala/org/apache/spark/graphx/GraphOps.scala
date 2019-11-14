@@ -415,13 +415,24 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+    * Run PageRank for a fixed number of iterations returning a graph with vertex attributes
+    * containing the PageRank and edge attributes the normalized edge weight.
+    *
+    * @see [[org.apache.spark.graphx.lib.PageRank$#run]]
+    */
+  def staticPageRank(numIter: Int, resetProb: Double = 0.15): Graph[Double, Double] = {
+    PageRank.run(graph, numIter, resetProb)
+  }
+
+  /**
    * Run PageRank for a fixed number of iterations returning a graph with vertex attributes
-   * containing the PageRank and edge attributes the normalized edge weight.
+   * containing the PageRank and edge attributes the normalized edge weight, optionally including
+   * including a previous pageRank computation to be used as a start point for the new iterations
    *
    * @see [[org.apache.spark.graphx.lib.PageRank$#run]]
    */
-  def staticPageRank(numIter: Int, resetProb: Double = 0.15,
-                     prePageRank: Option[Graph[Double, Double]] = None): Graph[Double, Double] = {
+  def staticPageRank(numIter: Int, resetProb: Double,
+                     prePageRank: Option[Graph[Double, Double]]): Graph[Double, Double] = {
     PageRank.run(graph, numIter, resetProb, prePageRank)
   }
 

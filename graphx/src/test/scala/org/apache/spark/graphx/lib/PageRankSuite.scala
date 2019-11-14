@@ -85,7 +85,7 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
     var iterWithCheckPoint = 1
     var staticGraphRankWithCheckPoint = graph.ops.staticPageRank(iterWithCheckPoint,
       resetProb, Some(staticGraphRankPartial)).vertices.cache()
-    while (!(compareRanks(staticGraphRankWithCheckPoint, dynamicRanks) < errorTol)) {
+    while (compareRanks(staticGraphRankWithCheckPoint, dynamicRanks) >= errorTol) {
       iterWithCheckPoint += 1
       staticGraphRankWithCheckPoint = graph.ops.staticPageRank(iterWithCheckPoint,
         resetProb, Some(staticGraphRankPartial)).vertices.cache()
