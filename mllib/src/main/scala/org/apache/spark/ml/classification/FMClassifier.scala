@@ -175,7 +175,14 @@ class FMClassifier @Since("3.0.0") (
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> AdamW)
 
-  override protected def train(dataset: Dataset[_]): FMClassifierModel = instrumented { instr =>
+  override protected[spark] def train(dataset: Dataset[_]): FMClassifierModel = {
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    train(dataset, handlePersistence)
+  }
+
+  protected[spark] def train(
+      dataset: Dataset[_],
+      handlePersistence: Boolean): FMClassifierModel = instrumented { instr =>
     val data: RDD[(Double, OldVector)] =
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
@@ -184,7 +191,8 @@ class FMClassifier @Since("3.0.0") (
             s" FMClassifier currently only supports binary classification.")
           (label, features)
       }
-    data.persist(StorageLevel.MEMORY_AND_DISK)
+
+    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 
     val numClasses = 2
     if (isDefined(thresholds)) {
@@ -206,6 +214,8 @@ class FMClassifier @Since("3.0.0") (
 
     val (bias, linear, factors) = splitCoefficients(
       coefficients, numFeatures, $(factorSize), $(fitBias), $(fitLinear))
+
+    if (handlePersistence) data.unpersist()
 
     copyValues(new FMClassifierModel(uid, bias, linear, factors))
   }

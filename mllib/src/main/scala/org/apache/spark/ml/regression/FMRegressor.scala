@@ -390,13 +390,21 @@ class FMRegressor @Since("3.0.0") (
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> AdamW)
 
-  override protected def train(dataset: Dataset[_]): FMRegressorModel = instrumented { instr =>
+  override protected[spark] def train(dataset: Dataset[_]): FMRegressorModel = {
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    train(dataset, handlePersistence)
+  }
+
+  protected[spark] def train(
+      dataset: Dataset[_],
+      handlePersistence: Boolean): FMRegressorModel = instrumented { instr =>
     val data: RDD[(Double, OldVector)] =
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
           (label, features)
       }
-    data.persist(StorageLevel.MEMORY_AND_DISK)
+
+    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
@@ -410,6 +418,8 @@ class FMRegressor @Since("3.0.0") (
 
     val (bias, linear, factors) = splitCoefficients(
       coefficients, numFeatures, $(factorSize), $(fitBias), $(fitLinear))
+
+    if (handlePersistence) data.unpersist()
 
     copyValues(new FMRegressorModel(uid, bias, linear, factors))
   }
