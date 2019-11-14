@@ -403,4 +403,13 @@ class VectorsSuite extends SparkMLFunSuite {
     assert(sv.dot(dv) === 0.26)
     assert(dv.dot(sv) === 0.26)
   }
+
+  test("scalar multiplication") {
+    val dv = Vectors.dense(arr)
+    assert((dv * 10).toArray === Array(1, 0, 3, 4))
+
+    val sv = Vectors.sparse(n, indices, values)
+    assert((sv * 10).toArray === Array(1, 0, 3, 4))
+  }
+
 }

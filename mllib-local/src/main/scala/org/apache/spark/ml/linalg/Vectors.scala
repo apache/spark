@@ -186,6 +186,17 @@ sealed trait Vector extends Serializable {
    */
   @Since("3.0.0")
   def dot(v: Vector): Double = BLAS.dot(this, v)
+
+  /**
+   * Multiply a vector by a scalar.
+   */
+  @Since("3.0.0")
+  def *(a: Double): Vector = {
+    val that = copy
+    BLAS.scal(a, that)
+    that
+  }
+
 }
 
 /**
