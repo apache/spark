@@ -439,17 +439,6 @@ class ResolveSessionCatalog(
     parts
   }
 
-  private def parseV1Database(dbName: Seq[String], sql: String): String = {
-    val CatalogAndIdentifierParts(catalog, parts) = dbName
-    if (!isSessionCatalog(catalog)) {
-      throw new AnalysisException(s"$sql is only supported with v1 databases.")
-    }
-    if (parts.length != 1) {
-      throw new NoSuchNamespaceException(parts.quoted)
-    }
-    parts.head
-  }
-
   private def buildCatalogTable(
       table: TableIdentifier,
       schema: StructType,

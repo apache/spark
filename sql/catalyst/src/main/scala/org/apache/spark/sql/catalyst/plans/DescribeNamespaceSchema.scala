@@ -24,6 +24,6 @@ private[sql] object DescribeNamespaceSchema {
   def describeNamespaceAttributes(): Seq[AttributeReference] = Seq(
     AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("col_value", StringType, nullable = false,
+    AttributeReference("col_value", StringType, nullable = true,
       new MetadataBuilder().putString("comment", "value of the column").build())())
 }
