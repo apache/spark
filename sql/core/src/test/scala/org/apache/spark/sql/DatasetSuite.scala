@@ -1860,6 +1860,27 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("groupBy.keyAs") {
+    val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData( 3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+    val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData( 3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+
+    val df3 = df1.groupBy("id").keyAs[Int]
+      .cogroup(df2.groupBy("id").keyAs[Int]) { case (key, data1, data2) =>
+        if (key == 1) {
+          Iterator(DoubleData(key, (data1 ++ data2).foldLeft("")((cur, next) => cur + next.val1)))
+        } else Iterator.empty
+      }
+    checkDataset(df3, DoubleData(1, "onetwo"))
+
+    // Assert that no extra shuffle introduced by cogroup.
+    val exchanges = df3.queryExecution.executedPlan.collect {
+      case h: ShuffleExchangeExec => h
+    }
+    assert(exchanges.size == 2)
+  }
 }
 
 object AssertExecutionId {
