@@ -30,8 +30,6 @@ import org.apache.spark.sql.functions.{avg, col}
 
 class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
 
-  import testImplicits._
-
   private val seed = 10
   @transient var crossDataset: DataFrame = _
 
