@@ -1176,11 +1176,9 @@ object DateTimeUtils {
   }
 
   class DateTimeParser(format: FastDateFormat, digitsInFraction: Int, cal: MicrosCalendar) {
-    private val startPos = new ParsePosition(0)
-
     def parse(s: String): SQLTimestamp = {
       cal.clear()
-      if (!format.parse(s, startPos, cal)) {
+      if (!format.parse(s, new ParsePosition(0), cal)) {
         throw new IllegalArgumentException(s)
       }
       val micros = cal.getMicros(digitsInFraction)

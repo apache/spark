@@ -54,7 +54,8 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
-  private val dateTimeParser = getDateTimeParser(options.dateFormat, options.timeZone)
+  @transient private lazy val dateTimeParser =
+    getDateTimeParser(options.timestampFormat, options.timeZone)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
@@ -216,15 +217,12 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING =>
           val stringValue = parser.getText
-          // This one will lose microseconds parts.
-          // See https://issues.apache.org/jira/browse/SPARK-10681.
           Long.box {
-            Try(dateTimeParser.parse(stringValue))
-              .getOrElse {
-                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility.
-                DateTimeUtils.stringToTime(stringValue).getTime * 1000L
-              }
+            Try(dateTimeParser.parse(stringValue)).getOrElse {
+              // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              DateTimeUtils.stringToTime(stringValue).getTime * 1000L
+            }
           }
 
         case VALUE_NUMBER_INT =>
