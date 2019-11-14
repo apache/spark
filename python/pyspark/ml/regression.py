@@ -310,9 +310,6 @@ class LinearRegressionModel(JavaPredictionModel, _LinearRegressionParams, Genera
         java_lr_summary = self._call_java("evaluate", dataset)
         return LinearRegressionSummary(java_lr_summary)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class LinearRegressionSummary(JavaWrapper):
     """
@@ -728,9 +725,6 @@ class IsotonicRegressionModel(JavaModel, _IsotonicRegressionParams, JavaMLWritab
         regression.
         """
         return self._call_java("predictions")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, HasVarianceCol):
@@ -1766,9 +1760,6 @@ class AFTSurvivalRegressionModel(JavaModel, _AFTSurvivalRegressionParams,
         """
         return self._call_java("predict", features)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class _GeneralizedLinearRegressionParams(_JavaPredictorParams, HasFitIntercept, HasMaxIter,
                                          HasTol, HasRegParam, HasWeightCol, HasSolver,
@@ -2113,9 +2104,6 @@ class GeneralizedLinearRegressionModel(JavaPredictionModel, _GeneralizedLinearRe
         java_glr_summary = self._call_java("evaluate", dataset)
         return GeneralizedLinearRegressionSummary(java_glr_summary)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class GeneralizedLinearRegressionSummary(JavaWrapper):
     """
@@ -2283,9 +2271,6 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
         then the last element returned corresponds to the intercept.
         """
         return self._call_java("pValues")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 if __name__ == "__main__":

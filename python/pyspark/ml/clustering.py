@@ -191,9 +191,6 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
         """
         return self._call_java("predictProbability", value)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 @inherit_doc
 class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable):
@@ -512,9 +509,6 @@ class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadabl
         """
         return self._call_java("predict", value)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 @inherit_doc
 class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
@@ -767,9 +761,6 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
         Predict label for the given features.
         """
         return self._call_java("predict", value)
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 @inherit_doc
@@ -1160,9 +1151,6 @@ class LDAModel(JavaModel, _LDAParams):
         then this returns the fixed (given) value for the :py:attr:`LDA.docConcentration` parameter.
         """
         return self._call_java("estimatedDocConcentration")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 @inherit_doc

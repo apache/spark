@@ -131,9 +131,6 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("associationRules")
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 @ignore_unicode_prefix
 class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):

@@ -284,9 +284,6 @@ class _LSHModel(JavaModel, _LSHParams):
         threshold = TypeConverters.toFloat(threshold)
         return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class _BucketedRandomProjectionLSHParams():
     """
@@ -934,9 +931,6 @@ class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, Ja
         """
         return self._set(binary=value)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 @inherit_doc
 class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
@@ -1475,9 +1469,6 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
         """
         return self._call_java("numDocs")
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, HasRelativeError):
     """
@@ -1732,9 +1723,6 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable, JavaMLWritable):
         """
         return self._call_java("surrogateDF")
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 @inherit_doc
 class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, JavaMLWritable):
@@ -1920,9 +1908,6 @@ class MaxAbsScalerModel(JavaModel, _MaxAbsScalerParams, JavaMLReadable, JavaMLWr
         Max Abs vector.
         """
         return self._call_java("maxAbs")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 @inherit_doc
@@ -2213,9 +2198,6 @@ class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWr
         Max value for each original column during fitting.
         """
         return self._call_java("originalMax")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 @inherit_doc
@@ -2588,9 +2570,6 @@ class OneHotEncoderModel(JavaModel, _OneHotEncoderParams, JavaMLReadable, JavaML
         The array contains one value for each input column, in order.
         """
         return self._call_java("categorySizes")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 @inherit_doc
@@ -3109,9 +3088,6 @@ class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWr
         """
         return self._call_java("range")
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 @inherit_doc
 @ignore_unicode_prefix
@@ -3477,9 +3453,6 @@ class StandardScalerModel(JavaModel, _StandardScalerParams, JavaMLReadable, Java
         """
         return self._call_java("mean")
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol,
                            HasInputCols, HasOutputCols):
@@ -3748,9 +3721,6 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
         Ordered list of labels, corresponding to indices to be assigned.
         """
         return self._call_java("labels")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 @inherit_doc
@@ -4318,9 +4288,6 @@ class VectorIndexerModel(JavaModel, _VectorIndexerParams, JavaMLReadable, JavaML
         """
         return self._call_java("javaCategoryMaps")
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 @inherit_doc
 class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
@@ -4697,9 +4664,6 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable, JavaMLWritable):
         tuples = self._java_obj.findSynonymsArray(word, num)
         return list(map(lambda st: (st._1(), st._2()), list(tuples)))
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class _PCAParams(HasInputCol, HasOutputCol):
     """
@@ -4839,9 +4803,6 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable, JavaMLWritable):
         explained by each principal component.
         """
         return self._call_java("explainedVariance")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
@@ -5052,9 +5013,6 @@ class RFormulaModel(JavaModel, _RFormulaParams, JavaMLReadable, JavaMLWritable):
     def __str__(self):
         resolvedFormula = self._call_java("resolvedFormula")
         return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 class _ChiSqSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
@@ -5315,9 +5273,6 @@ class ChiSqSelectorModel(JavaModel, _ChiSqSelectorParams, JavaMLReadable, JavaML
         List of indices to select (filter).
         """
         return self._call_java("selectedFeatures")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 @inherit_doc

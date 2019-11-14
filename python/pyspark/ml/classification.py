@@ -356,9 +356,6 @@ class LinearSVCModel(JavaClassificationModel, _LinearSVCParams, JavaMLWritable, 
         """
         return self._call_java("intercept")
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class _LogisticRegressionParams(_JavaProbabilisticClassifierParams, HasRegParam,
                                 HasElasticNetParam, HasMaxIter, HasFitIntercept, HasTol,
@@ -814,9 +811,6 @@ class LogisticRegressionModel(JavaProbabilisticClassificationModel, _LogisticReg
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
         return BinaryLogisticRegressionSummary(java_blr_summary)
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 class LogisticRegressionSummary(JavaWrapper):
@@ -2043,9 +2037,6 @@ class NaiveBayesModel(JavaProbabilisticClassificationModel, _NaiveBayesParams, J
         """
         return self._call_java("theta")
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, HasMaxIter,
                                   HasTol, HasStepSize, HasSolver):
@@ -2273,9 +2264,6 @@ class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationMod
         the weights of layers.
         """
         return self._call_java("weights")
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 class _OneVsRestParams(_JavaClassifierParams, HasWeightCol):

@@ -555,9 +555,6 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("recommendForItemSubset", dataset, numUsers)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 if __name__ == "__main__":
     import doctest
