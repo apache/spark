@@ -492,9 +492,11 @@ class Params(Identifiable):
                     # set value by name if vaiid
                     paramMap[self.getParam(param)] = value
                 else:
-                    raise ValueError("Expecting a valid instance of Param, but received: {}".format(param))
+                    raise ValueError("Expecting a valid instance of Param, but received: {}"\
+                                     .format(param))
         elif extra is not None:
-            raise TypeError("Expecting a dict, but received an object of type {}.".format(type(extra)))
+            raise TypeError("Expecting a dict, but received an object of type {}."\
+                            .format(type(extra)))
         for param in self.params:
             # copy default params
             if param in self._defaultParamMap and to.hasParam(param.name):
