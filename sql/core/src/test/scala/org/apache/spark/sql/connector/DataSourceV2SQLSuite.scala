@@ -766,6 +766,43 @@ class DataSourceV2SQLSuite
     assert(expected === df.collect())
   }
 
+  test("SHOW TABLE EXTENDED not valid v1 database") {
+    val namespace = "testcat.ns1.ns2"
+    val table = "tbl"
+    withTable(s"$namespace.$table") {
+      spark.sql(s"CREATE TABLE $namespace.$table (id bigint, data string) " +
+        s"USING foo PARTITIONED BY (id)")
+
+      testV1CommandNamespace(s"SHOW TABLE EXTENDED FROM $namespace LIKE 'tb*'",
+        namespace)
+      testV1CommandNamespace(s"SHOW TABLE EXTENDED IN $namespace LIKE 'tb*'",
+        namespace)
+      testV1CommandNamespace("SHOW TABLE EXTENDED " +
+        s"FROM $namespace LIKE 'tb*' PARTITION(id=1)",
+        namespace)
+      testV1CommandNamespace("SHOW TABLE EXTENDED " +
+        s"IN $namespace LIKE 'tb*' PARTITION(id=1)",
+        namespace)
+    }
+  }
+
+  test("SHOW TABLE EXTENDED valid v1") {
+    val expected = Seq(Row("", "source", true), Row("", "source2", true))
+    val schema = new StructType()
+      .add("database", StringType, nullable = false)
+      .add("tableName", StringType, nullable = false)
+      .add("isTemporary", BooleanType, nullable = false)
+      .add("information", StringType, nullable = false)
+
+    val df = spark.sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
+    val result = df.collect()
+    val resultWithoutInfo = result.map{ case Row(db, table, temp, _) => Row(db, table, temp)}
+
+    assert(df.schema === schema)
+    assert(resultWithoutInfo === expected)
+    result.foreach{ case Row(_, _, _, info: String) => assert(info.length > 0)}
+  }
+
   test("CreateNameSpace: basic tests") {
     // Session catalog is used.
     withNamespace("ns") {
@@ -1624,6 +1661,13 @@ class DataSourceV2SQLSuite
       sql(s"$sqlCommand $sqlParams")
     }
     assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
+  }
+
+  private def testV1CommandNamespace(sqlCommand: String, namespace: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(s"$sqlCommand")
+    }
+    assert(e.message.contains(s"The database name is not valid: ${namespace}"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
