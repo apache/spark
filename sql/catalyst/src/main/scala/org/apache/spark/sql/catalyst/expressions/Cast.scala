@@ -596,7 +596,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
    *
    * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
-  private[this] def changePrecision(value: Decimal, decimalType: DecimalType): Decimal = {
+  protected[this] def changePrecision(value: Decimal, decimalType: DecimalType): Decimal = {
     if (value.changePrecision(decimalType.precision, decimalType.scale)) {
       value
     } else {
@@ -619,7 +619,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       decimalType.precision, decimalType.scale, Decimal.ROUND_HALF_UP, !ansiEnabled)
 
 
-  private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
+  protected[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
         changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
@@ -1073,7 +1073,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  private[this] def changePrecision(d: ExprValue, decimalType: DecimalType,
+  protected[this] def changePrecision(d: ExprValue, decimalType: DecimalType,
       evPrim: ExprValue, evNull: ExprValue, canNullSafeCast: Boolean): Block = {
     if (canNullSafeCast) {
       code"""
@@ -1099,7 +1099,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  private[this] def castToDecimalCode(
+  protected[this] def castToDecimalCode(
       from: DataType,
       target: DecimalType,
       ctx: CodegenContext): CastFunction = {
