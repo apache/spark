@@ -20,14 +20,13 @@ package org.apache.spark.deploy.history
 import java.io.File
 
 import scala.io.{Codec, Source}
-
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.jackson.JsonMethods.parse
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config.EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 
@@ -143,9 +142,11 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
 
       // 1, 2 will be compacted into one file, 3~5 are dummies to ensure max files to retain
       val logPath1 = EventLogTestHelper.writeEventLogFile(sparkConf, hadoopConf, dir, 1, Seq(
-        SparkListenerUnpersistRDD(0), SparkListenerJobStart(1, 0, Seq.empty)))
+        SparkListenerExecutorAdded(0, "exec1", new ExecutorInfo("host1", 1, Map.empty)),
+        SparkListenerJobStart(1, 0, Seq.empty)))
       val logPath2 = EventLogTestHelper.writeEventLogFile(sparkConf, hadoopConf, dir, 2, Seq(
-        SparkListenerJobEnd(1, 1, JobSucceeded), SparkListenerUnpersistRDD(1)))
+        SparkListenerJobEnd(1, 1, JobSucceeded),
+        SparkListenerExecutorAdded(2, "exec2", new ExecutorInfo("host2", 1, Map.empty))))
       val logPaths = Seq(logPath1, logPath2) ++ (3 to 5).map { idx =>
         writeDummyEventLogFile(dir, idx)
       }
