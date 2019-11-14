@@ -165,6 +165,10 @@ class ResolveSessionCatalog(
       }
       DescribeDatabaseCommand(nameParts.head, d.extended)
 
+    case DescribeDatabaseStatement(databaseName, extended) =>
+      val v1DatabaseName = parseV1Database(databaseName, "DESCRIBE DATABASE")
+      DescribeDatabaseCommand(v1DatabaseName, extended)
+
     case DescribeTableStatement(
          nameParts @ SessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       loadTable(catalog, tableName.asIdentifier).collect {
@@ -437,6 +441,17 @@ class ResolveSessionCatalog(
       throw new AnalysisException(s"$sql is only supported with v1 tables.")
     }
     parts
+  }
+
+  private def parseV1Database(dbName: Seq[String], sql: String): String = {
+    val CatalogAndIdentifierParts(catalog, parts) = dbName
+    if (!isSessionCatalog(catalog)) {
+      throw new AnalysisException(s"$sql is only supported with v1 databases.")
+    }
+    if (parts.length != 1) {
+      throw new NoSuchNamespaceException(parts.quoted)
+    }
+    parts.head
   }
 
   private def buildCatalogTable(

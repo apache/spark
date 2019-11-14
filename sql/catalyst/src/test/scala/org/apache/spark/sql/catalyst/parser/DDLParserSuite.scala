@@ -656,7 +656,6 @@ class DDLParserSuite extends AnalysisTest {
   test("describe database") {
     val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
     val sql2 = "DESCRIBE DATABASE a.b"
-
     comparePlans(parsePlan(sql1), DescribeNamespaceStatement(Seq("a", "b"), extended = true))
     comparePlans(parsePlan(sql2), DescribeNamespaceStatement(Seq("a", "b"), extended = false))
   }

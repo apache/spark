@@ -2900,13 +2900,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+<<<<<<< HEAD
    * Create a [[DescribeNamespaceStatement]].
+=======
+   * Create a [[DescribeDatabaseStatement]].
+>>>>>>> 5a55b2dbd414192bcf748918ed64c00a8738164b
    *
    * For example:
    * {{{
    *   DESCRIBE DATABASE [EXTENDED] database;
    * }}}
    */
+
   override def visitDescribeNamespace(ctx: DescribeNamespaceContext): LogicalPlan =
     withOrigin(ctx) {
     DescribeNamespaceStatement(
