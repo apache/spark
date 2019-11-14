@@ -29,6 +29,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
@@ -464,7 +465,8 @@ abstract class LDAModel private[ml] (
     val func = getTopicDistributionMethod
     val transformer = udf(func)
     dataset.withColumn($(topicDistributionCol),
-      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
+      AttributeGroup.toMeta($(topicDistributionCol), oldLocalModel.k))
   }
 
   /**

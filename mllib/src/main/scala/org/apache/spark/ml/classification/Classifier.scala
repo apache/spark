@@ -20,6 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
@@ -48,8 +49,9 @@ private[spark] trait ClassifierParams
    * and put it in an RDD with strong types.
    * Validates the label on the classifier is a valid integer in the range [0, numClasses).
    */
-  protected def extractInstances(dataset: Dataset[_],
-                                 numClasses: Int): RDD[Instance] = {
+  protected def extractInstances(
+      dataset: Dataset[_],
+      numClasses: Int): RDD[Instance] = {
     val validateInstance = (instance: Instance) => {
       val label = instance.label
       require(label.toLong == label && label >= 0 && label < numClasses, s"Classifier was given" +
@@ -200,17 +202,18 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     var outputData = dataset
     var numColsOutput = 0
     if (getRawPredictionCol != "") {
-      val predictRawUDF = udf { (features: Any) =>
+      val predictRawUDF = udf { features: Any =>
         predictRaw(features.asInstanceOf[FeaturesType])
       }
-      outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)))
+      outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)),
+        AttributeGroup.toMeta($(rawPredictionCol), numClasses))
       numColsOutput += 1
     }
     if (getPredictionCol != "") {
       val predUDF = if (getRawPredictionCol != "") {
         udf(raw2prediction _).apply(col(getRawPredictionCol))
       } else {
-        val predictUDF = udf { (features: Any) =>
+        val predictUDF = udf { features: Any =>
           predict(features.asInstanceOf[FeaturesType])
         }
         predictUDF(col(getFeaturesCol))

@@ -21,6 +21,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -216,7 +217,8 @@ class RandomForestClassificationModel private[ml] (
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { features: Vector => predictLeaf(features) }
-      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
+        AttributeGroup.toMeta($(leafCol), trees.length))
     } else {
       outputData
     }

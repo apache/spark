@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
@@ -210,7 +211,8 @@ class MinMaxScalerModel private[ml] (
       Vectors.dense(values).compressed
     }
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      AttributeGroup.toMeta($(outputCol), originalMin.size))
   }
 
   @Since("1.5.0")

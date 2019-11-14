@@ -88,8 +88,9 @@ private[ml] trait PredictorParams extends Params
    * and put it in an RDD with strong types.
    * Validate the output instances with the given function.
    */
-  protected def extractInstances(dataset: Dataset[_],
-                                 validateInstance: Instance => Unit): RDD[Instance] = {
+  protected def extractInstances(
+      dataset: Dataset[_],
+      validateInstance: Instance => Unit): RDD[Instance] = {
     extractInstances(dataset).map { instance =>
       validateInstance(instance)
       instance

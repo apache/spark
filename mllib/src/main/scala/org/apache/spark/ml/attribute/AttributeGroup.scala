@@ -250,4 +250,9 @@ object AttributeGroup {
       new AttributeGroup(field.name)
     }
   }
+
+  private[ml] def toMeta(name: String, numAttributes: Int): Metadata = {
+    val attrGroup = new AttributeGroup(name, numAttributes)
+    attrGroup.toMetadata()
+  }
 }

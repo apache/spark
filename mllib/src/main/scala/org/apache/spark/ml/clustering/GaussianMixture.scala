@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.impl.Utils.EPSILON
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
@@ -120,7 +121,8 @@ class GaussianMixtureModel private[ml] (
 
     if ($(probabilityCol).nonEmpty) {
       val probUDF = udf((vector: Vector) => predictProbability(vector))
-      outputData = outputData.withColumn($(probabilityCol), probUDF(vectorCol))
+      outputData = outputData.withColumn($(probabilityCol), probUDF(vectorCol),
+        AttributeGroup.toMeta($(probabilityCol), weights.length))
       numColsOutput += 1
     }
 

@@ -23,6 +23,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -297,7 +298,8 @@ class GBTClassificationModel private[ml](
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { features: Vector => predictLeaf(features) }
-      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
+        AttributeGroup.toMeta($(leafCol), trees.length))
     } else {
       outputData
     }

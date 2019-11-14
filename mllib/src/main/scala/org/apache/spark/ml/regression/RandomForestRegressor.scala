@@ -22,6 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -210,6 +211,7 @@ class RandomForestRegressionModel private[ml] (
       val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
+        .as($(leafCol), AttributeGroup.toMeta($(leafCol), trees.length))
     }
 
     if (predictionColNames.nonEmpty) {

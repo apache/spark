@@ -230,6 +230,7 @@ final class OneVsRestModel private[ml] (
 
       predictionColNames :+= getRawPredictionCol
       predictionColumns :+= rawPredictionUDF(col(accColName))
+        .as(getRawPredictionCol, AttributeGroup.toMeta(getRawPredictionCol, models.length))
     }
 
     if (getPredictionCol.nonEmpty) {

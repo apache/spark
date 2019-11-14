@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -308,7 +309,8 @@ class Word2VecModel private[ml] (
         sum
       }
     }
-    dataset.withColumn($(outputCol), word2Vec(col($(inputCol))))
+    dataset.withColumn($(outputCol), word2Vec(col($(inputCol))),
+      AttributeGroup.toMeta($(outputCol), ${vectorSize}))
   }
 
   @Since("1.4.0")
