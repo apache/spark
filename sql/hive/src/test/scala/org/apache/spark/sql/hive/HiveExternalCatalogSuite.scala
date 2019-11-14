@@ -90,6 +90,55 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     }
   }
 
+  test("create and drop partitions") {
+    Seq(true, false).foreach { batchDrop =>
+      val catalog = newEmptyCatalog()
+      val database = s"db_$batchDrop"
+      val table1 = "tbl1"
+      val table2 = "tbl2"
+      catalog.createDatabase(newDb(s"$database"), ignoreIfExists = false)
+      catalog.createTable(newTable(s"$table1", s"$database"),
+        ignoreIfExists = false)
+      catalog.createPartitions(s"$database", s"$table1",
+        Seq(part1, part2, part3), ignoreIfExists = false)
+      assert(catalogPartitionsEqual(catalog, s"$database", s"$table1",
+        Seq(part1, part2, part3)))
+
+      // drop partitions with only one partition
+      catalog.dropPartitions(
+        s"$database", s"$table1", Seq(part1.spec),
+        ignoreIfNotExists = false, purge = false, retainData = false,
+        supportBatch = batchDrop)
+      assert(catalogPartitionsEqual(catalog, s"$database", s"$table1", Seq(part2, part3)))
+
+      catalog.dropPartitions(
+        s"$database", s"$table1", Seq(part2.spec),
+        ignoreIfNotExists = false, purge = false, retainData = false, supportBatch = batchDrop)
+      assert(catalogPartitionsEqual(catalog, s"$database", s"$table1", Seq(part3)))
+
+      catalog.dropPartitions(
+        s"$database", s"$table1", Seq(part3.spec),
+        ignoreIfNotExists = false, purge = false, retainData = false, supportBatch = batchDrop)
+      assert(catalog.listPartitions(s"$database", s"$table1").isEmpty)
+
+      catalog.createTable(newTable(s"$table2", s"$database"), ignoreIfExists = false)
+      catalog.createPartitions(s"$database", s"$table2",
+        Seq(part1, part2, part3), ignoreIfExists = false)
+      assert(catalogPartitionsEqual(catalog, s"$database", s"$table2", Seq(part1, part2, part3)))
+
+      // drop partitions with some partitions
+      catalog.dropPartitions(
+        s"$database", s"$table2", Seq(part1.spec, part2.spec), ignoreIfNotExists = false,
+        purge = false, retainData = false, supportBatch = batchDrop)
+      assert(catalogPartitionsEqual(catalog, s"$database", s"$table2", Seq(part3)))
+
+      catalog.dropPartitions(
+        s"$database", s"$table2", Seq(part3.spec),
+        ignoreIfNotExists = false, purge = false, retainData = false, supportBatch = batchDrop)
+      assert(catalog.listPartitions(s"$database", s"$table2").isEmpty)
+    }
+  }
+
   test("SPARK-22306: alter table schema should not erase the bucketing metadata at hive side") {
     val catalog = newBasicCatalog()
     externalCatalog.client.runSqlHive(

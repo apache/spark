@@ -391,6 +391,35 @@ case class OuterReference(e: NamedExpression)
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
 }
 
+/**
+ * A place holder used to hold the name of the partition attributes specified when running commands
+ * involving partitions, eg. ALTER TABLE ... DROP PARTITIONS.
+ */
+case class PartitioningAttribute(
+    name: String,
+    override val exprId: ExprId = NamedExpression.newExprId)
+  extends Attribute with Unevaluable {
+  // We need a dataType to be used during analysis for resolving the expressions (see
+  // checkInputDataTypes). The String type is used because all the literals in PARTITION operations
+  // are parsed as strings and eventually casted later.
+  override def dataType: DataType = StringType
+  override def nullable: Boolean = false
+
+  override def qualifier: Seq[String] = throw new UnsupportedOperationException
+  override def withNullability(newNullability: Boolean): Attribute =
+    throw new UnsupportedOperationException
+  override def newInstance(): Attribute = throw new UnsupportedOperationException
+  override def withQualifier(newQualifier: Seq[String]): Attribute =
+    throw new UnsupportedOperationException
+  override def withName(newName: String): Attribute = throw new UnsupportedOperationException
+  override def withMetadata(newMetadata: Metadata): Attribute =
+    throw new UnsupportedOperationException
+
+  override lazy val canonicalized: Expression = this.copy(exprId = ExprId(0))
+
+  override def withExprId(newExprId: ExprId): Attribute = throw new UnsupportedOperationException
+}
+
 object VirtualColumn {
   // The attribute name used by Hive, which has different result than Spark, deprecated.
   val hiveGroupingIdName: String = "grouping__id"

@@ -188,7 +188,8 @@ trait ExternalCatalog {
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
       purge: Boolean,
-      retainData: Boolean): Unit
+      retainData: Boolean,
+      supportBatch: Boolean): Unit
 
   /**
    * Override the specs of one or many existing table partitions, assuming they exist.

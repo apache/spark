@@ -151,7 +151,7 @@ case class InsertIntoHadoopFsRelationCommand(
           if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
             val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
             if (deletedPartitions.nonEmpty) {
-              AlterTableDropPartitionCommand(
+              AlterTableDropPartitionCommand.fromSpecs(
                 catalogTable.get.identifier, deletedPartitions.toSeq,
                 ifExists = true, purge = false,
                 retainData = true /* already deleted */).run(sparkSession)

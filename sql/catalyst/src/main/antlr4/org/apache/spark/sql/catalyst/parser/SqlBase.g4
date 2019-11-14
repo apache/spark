@@ -161,8 +161,8 @@ statement
         partitionSpecLocation+                                         #addTablePartition
     | ALTER TABLE multipartIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
-    | ALTER (TABLE | VIEW) multipartIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
+    | ALTER (TABLE | VIEW) multipartIdentifier DROP (IF EXISTS)?
+        dropPartitionSpec (',' dropPartitionSpec)* PURGE?              #dropTablePartitions
     | ALTER TABLE multipartIdentifier
         (partitionSpec)? SET locationSpec                              #setTableLocation
     | ALTER TABLE multipartIdentifier RECOVER PARTITIONS               #recoverPartitions
@@ -326,6 +326,14 @@ partitionVal
 database
     : DATABASE
     | SCHEMA
+    ;
+
+dropPartitionSpec
+    : PARTITION '(' dropPartitionVal (',' dropPartitionVal)* ')'
+    ;
+
+dropPartitionVal
+    : identifier (comparisonOperator constant)?
     ;
 
 describeFuncName

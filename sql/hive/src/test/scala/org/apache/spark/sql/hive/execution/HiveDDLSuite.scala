@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.net.URI
 
+import scala.language.existentials
+
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
@@ -30,8 +32,9 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
+import org.apache.spark.sql.execution.command.{AlterTableDropPartitionCommand, DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
@@ -698,6 +701,330 @@ class HiveDDLSuite
         // drop table will not delete the data of external table
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
       }
+    }
+  }
+
+  def testDropPartition(dataType: DataType, value1: Any, value2: Any): Unit = {
+    withTable("tbl_x") {
+      sql(s"CREATE TABLE tbl_x (a INT) PARTITIONED BY (p ${dataType.sql})")
+      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = $value1)")
+      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = $value2)")
+      sql(s"ALTER TABLE tbl_x DROP PARTITION (p >= $value2)")
+      checkAnswer(sql("SHOW PARTITIONS tbl_x"),
+        Row(s"p=$value1") :: Nil)
+      sql(s"ALTER TABLE tbl_x DROP PARTITION (p = $value1)")
+      checkAnswer(sql("SHOW PARTITIONS tbl_x"), Nil)
+    }
+  }
+
+  test("SPARK-14922: Drop partitions by filter") {
+    withTable("sales") {
+      sql("CREATE TABLE sales (id INT) PARTITIONED BY (country STRING, quarter STRING)")
+      for (country <- Seq("AU", "US", "CA", "KR")) {
+        for (quarter <- 1 to 5) {
+          sql(s"ALTER TABLE sales ADD PARTITION (country = '$country', quarter = '$quarter')")
+        }
+      }
+      sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter > '2')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=AU/quarter=1") ::
+          Row("country=AU/quarter=2") ::
+          Row("country=CA/quarter=1") ::
+          Row("country=CA/quarter=2") ::
+          Row("country=KR/quarter=1") ::
+          Row("country=KR/quarter=2") ::
+          Row("country=KR/quarter=3") ::
+          Row("country=KR/quarter=4") ::
+          Row("country=KR/quarter=5") ::
+          Row("country=US/quarter=1") ::
+          Row("country=US/quarter=2") ::
+          Row("country=US/quarter=3") ::
+          Row("country=US/quarter=4") ::
+          Row("country=US/quarter=5") :: Nil)
+      sql("ALTER TABLE sales DROP PARTITION (country < 'CA'), PARTITION (quarter = '5')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=CA/quarter=1") ::
+          Row("country=CA/quarter=2") ::
+          Row("country=KR/quarter=1") ::
+          Row("country=KR/quarter=2") ::
+          Row("country=KR/quarter=3") ::
+          Row("country=KR/quarter=4") ::
+          Row("country=US/quarter=1") ::
+          Row("country=US/quarter=2") ::
+          Row("country=US/quarter=3") ::
+          Row("country=US/quarter=4") :: Nil)
+      sql("ALTER TABLE sales DROP PARTITION (country < 'KR'), PARTITION (quarter <= '1')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=2") ::
+          Row("country=KR/quarter=3") ::
+          Row("country=KR/quarter=4") ::
+          Row("country=US/quarter=2") ::
+          Row("country=US/quarter=3") ::
+          Row("country=US/quarter=4") :: Nil)
+      sql("ALTER TABLE sales DROP PARTITION (country = 'KR', quarter = '4')")
+      sql("ALTER TABLE sales DROP PARTITION (country = 'US', quarter = '3')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=2") ::
+          Row("country=KR/quarter=3") ::
+          Row("country=US/quarter=2") ::
+          Row("country=US/quarter=4") :: Nil)
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= '2'), PARTITION (quarter >= '4')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=3") :: Nil)
+      // According to the declarative partition spec definitions, this drops the union of target
+      // partitions without exceptions. Hive raises exceptions because it handles them sequentially.
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= '4'), PARTITION (quarter <= '3')")
+      checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
+    }
+    withTable("tbl_x") {
+      sql(s"CREATE TABLE tbl_x (a INT) PARTITIONED BY (p STRING)")
+      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = 'false')")
+      sql(s"ALTER TABLE tbl_x ADD PARTITION (p = 'true')")
+      sql(s"ALTER TABLE tbl_x DROP PARTITION (p >= 'true')")
+      checkAnswer(sql("SHOW PARTITIONS tbl_x"),
+        Row(s"p=false") :: Nil)
+      sql(s"ALTER TABLE tbl_x DROP PARTITION (p = 'false')")
+      checkAnswer(sql("SHOW PARTITIONS tbl_x"), Nil)
+    }
+    testDropPartition(IntegerType, 1, 2)
+    testDropPartition(LongType, 1L, 2L)
+    testDropPartition(ShortType, 1.toShort, 2.toShort)
+    testDropPartition(ByteType, 1.toByte, 2.toByte)
+    testDropPartition(FloatType, 1.0F, 2.0F)
+    testDropPartition(DoubleType, 1.0, 2.0)
+    testDropPartition(DecimalType(2, 1), Decimal(1.5), Decimal(2.5))
+  }
+
+  test("SPARK-14922: Partition formatted with booleanType " +
+    "can only be dropped with equal comparison") {
+    val message = intercept[AnalysisException] {
+      testDropPartition(BooleanType, false, true)
+    }.getMessage
+    assert(message.contains("partition formatted with booleanType can only be" +
+      " dropped with equal comparison"))
+  }
+
+  test("SPARK-14922: Drop partitions by only one partition filter") {
+    val table = "hive_table"
+    withTable(s"$table") {
+      sql(s"CREATE TABLE $table (id INT) PARTITIONED BY (name STRING ,quarter INT)")
+      val num = 100
+      for (name <- Seq("AU", "US", "CA", "KR")) {
+        for (quarter <- 1 to num) {
+          sql(s"ALTER TABLE $table ADD PARTITION (name = '$name', quarter = $quarter)")
+        }
+      }
+      sql(s"ALTER TABLE  $table  DROP PARTITION (quarter < $num)")
+      checkAnswer(sql(s"SHOW PARTITIONS  $table"),
+        Row(s"name=AU/quarter=$num") ::
+          Row(s"name=CA/quarter=$num") ::
+          Row(s"name=KR/quarter=$num") ::
+          Row(s"name=US/quarter=$num") :: Nil)
+
+      sql(s"ALTER TABLE  $table  DROP PARTITION (name <= 'AU')")
+      checkAnswer(sql(s"SHOW PARTITIONS  $table"),
+        Row(s"name=CA/quarter=$num") ::
+          Row(s"name=KR/quarter=$num") ::
+          Row(s"name=US/quarter=$num") :: Nil)
+    }
+  }
+
+  test("Test generatePartitionSpec with a simple Filter") {
+    val catalog = spark.sessionState.catalog
+    val timeZone = Option(spark.sessionState.conf.sessionLocalTimeZone)
+    val table_name = "table_name"
+    withTable(s"$table_name") {
+      val num = 10
+      val countrySeq = Seq("AU", "US", "CA", "KR")
+      // note: to avoid some error when we import in the head of the file, so we import here.
+      import org.apache.spark.sql.catalyst.expressions.{Expression, PartitioningAttribute}
+      import org.apache.spark.sql.catalyst.dsl.expressions._
+      val numAttr = PartitioningAttribute("num")
+
+      Seq((">", (a: Expression, b: Expression) => a > b),
+        (">=", (a: Expression, b: Expression) => a >= b),
+        ("<", (a: Expression, b: Expression) => a < b),
+        ("<=", (a: Expression, b: Expression) => a <= b),
+        ("<>", (a: Expression, b: Expression) => a =!= b),
+        ("!=", (a: Expression, b: Expression) => a =!= b)).foreach { case (op, predicateGen) =>
+        sql(s"DROP TABLE IF EXISTS $table_name")
+        sql(s"CREATE TABLE $table_name (id INT) PARTITIONED BY (num INT ,country STRING)")
+        val tableIdent = TableIdentifier(s"$table_name", Some("default"))
+        val alterTableDropPartitionCommand = new AlterTableDropPartitionCommand(tableIdent,
+          Seq(),
+          ifExists = true,
+          purge = false,
+          retainData = false)
+        val table = catalog.getTableMetadata(tableIdent)
+        val partitionColumns = table.partitionColumnNames
+        val partitionAttributes = table.partitionSchema.toAttributes.map(a => a.name -> a).toMap
+        for (country <- countrySeq) {
+          for (quarter <- 1 to num) {
+            sql(s"ALTER TABLE $table_name ADD PARTITION (num = $quarter, country = '$country')")
+          }
+        }
+        val tablePartitionSpecSeq = alterTableDropPartitionCommand.generatePartitionSpec(
+          Seq(predicateGen(numAttr, "2")),
+          partitionColumns,
+          partitionAttributes,
+          tableIdent,
+          catalog,
+          spark.sessionState.conf.resolver,
+          timeZone,
+          false)
+        op match {
+          case ">" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(3, num, countrySeq)).isEmpty)
+          case ">=" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(2, num, countrySeq)).isEmpty)
+          case "<" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(1, 1, countrySeq)).isEmpty)
+          case "<=" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(1, 2, countrySeq)).isEmpty)
+          case "!=" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(1, 1, countrySeq)
+            ++ getTablePartitionSpecs(3, num, countrySeq)).isEmpty)
+          case "<>" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(1, 1, countrySeq)
+            ++ getTablePartitionSpecs(3, num, countrySeq)).isEmpty)
+        }
+      }
+    }
+  }
+
+  test("Test generatePartitionSpec with complex Filters ") {
+    val catalog = spark.sessionState.catalog
+    val timeZone = Option(spark.sessionState.conf.sessionLocalTimeZone)
+    val table_name = "table_name"
+    withTable(s"$table_name") {
+      val num = 10
+      val countrySeq = Seq("AU", "US", "CA", "KR")
+      val newcountrySeq = Seq("AU", "CA")
+      // note: to avoid some error when we import in the head of the file, so we import here.
+      import org.apache.spark.sql.catalyst.expressions.{Expression, PartitioningAttribute}
+      import org.apache.spark.sql.catalyst.dsl.expressions._
+      val numAttr = PartitioningAttribute("num")
+      val countryAttr = PartitioningAttribute("country")
+
+      val predicateCountry = (a: Expression, b: Expression) => a <= b
+
+      Seq((">", (a: Expression, b: Expression) => a > b),
+        (">=", (a: Expression, b: Expression) => a >= b),
+        ("<", (a: Expression, b: Expression) => a < b),
+        ("<=", (a: Expression, b: Expression) => a <= b),
+        ("<>", (a: Expression, b: Expression) => a =!= b),
+        ("!=", (a: Expression, b: Expression) => a =!= b)).foreach { case (op, predicateGen) =>
+        sql(s"DROP TABLE IF EXISTS $table_name")
+        sql(s"CREATE TABLE $table_name (id INT) PARTITIONED BY (num INT ,country STRING)")
+        val tableIdent = TableIdentifier(s"$table_name", Some("default"))
+        val alterTableDropPartitionCommand = new AlterTableDropPartitionCommand(tableIdent,
+          Seq(),
+          ifExists = true,
+          purge = false,
+          retainData = false)
+        val table = catalog.getTableMetadata(tableIdent)
+        val partitionColumns = table.partitionColumnNames
+        val partitionAttributes = table.partitionSchema.toAttributes.map(a => a.name -> a).toMap
+        //
+        for (country <- countrySeq) {
+          for (quarter <- 1 to num) {
+            sql(s"ALTER TABLE $table_name ADD PARTITION (num = $quarter, country = '$country')")
+          }
+        }
+        val tablePartitionSpecSeq = alterTableDropPartitionCommand.generatePartitionSpec(
+          Seq(predicateGen(numAttr, "2"), predicateCountry(countryAttr, "CA")),
+          partitionColumns,
+          partitionAttributes,
+          tableIdent,
+          catalog,
+          spark.sessionState.conf.resolver,
+          timeZone,
+          false)
+
+        op match {
+          case ">" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(3, num,
+              newcountrySeq)).isEmpty)
+          case ">=" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(2, num,
+              newcountrySeq)).isEmpty)
+          case "<" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(1, 1,
+              newcountrySeq)).isEmpty)
+          case "<=" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(1, 2,
+              newcountrySeq)).isEmpty)
+          case "!=" =>
+            assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(1, 1,
+              newcountrySeq)
+              ++ getTablePartitionSpecs(3, num, newcountrySeq)).isEmpty)
+          case "<>" => assert(tablePartitionSpecSeq.diff(getTablePartitionSpecs(1, 1,
+            newcountrySeq) ++ getTablePartitionSpecs(3, num, newcountrySeq)).isEmpty)
+        }
+      }
+    }
+  }
+
+  def getTablePartitionSpecs(start: Int, end: Int, countrySeq: Seq[String]):
+      Seq[TablePartitionSpec] = {
+    val tablePartitionSpecs = Seq.newBuilder[TablePartitionSpec]
+    countrySeq.map { country =>
+      (start to end).map { quarter =>
+        tablePartitionSpecs += Map("num" -> quarter.toString, "country" -> country)
+      }
+    }
+    tablePartitionSpecs.result
+  }
+
+  test("SPARK-14922: Error handling for drop partitions by filter") {
+    withTable("sales") {
+      sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
+      val m = intercept[AnalysisException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown = 'KR')")
+      }.getMessage
+      assert(m.contains("unknown is not a valid partition column in table"))
+      val m2 = intercept[AnalysisException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown < 'KR')")
+      }.getMessage
+      assert(m2.contains("unknown is not a valid partition column in table"))
+      val m3 = intercept[AnalysisException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown <=> 'KR')")
+      }.getMessage
+      assert(m3.contains("'<=>' operator is not supported"))
+      val m4 = intercept[ParseException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown <=> upper('KR'))")
+      }.getMessage
+      assert(m4.contains("extraneous input"))
+      val m5 = intercept[ParseException] {
+        sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter)")
+      }.getMessage
+      assert(m5.contains("Invalid partition spec: quarter"))
+
+      sql(s"ALTER TABLE sales ADD PARTITION (country = 'KR', quarter = '3')")
+      sql(s"ALTER TABLE sales ADD PARTITION (country = 'KR', quarter = '5')")
+
+      // support executing `PARTITION (quarter <= '2')` which contains empty
+      // values to be compatible with Hive.
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= '4'), PARTITION (quarter <= '2')")
+
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=5") :: Nil)
+      val m7 = intercept[ParseException] {
+        sql("ALTER TABLE sales DROP PARTITION ( '4' > quarter)")
+      }.getMessage
+      assert(m7.contains("mismatched input ''4''"))
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=5") :: Nil)
+    }
+  }
+
+  test("SPARK-14922: Partition filter is not allowed in ADD PARTITION") {
+    withTable("sales") {
+      sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE sales ADD PARTITION (country = 'US', quarter < '1')")
+      }
+      assert(e.getMessage.contains("extraneous input '<'"))
     }
   }
 

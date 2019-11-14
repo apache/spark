@@ -59,6 +59,15 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
+  private def withBasicCatalogForBatchOrNotDropPartitionTest(f: SessionCatalog => Unit): Unit = {
+    val catalog = new SessionCatalog(newBasicCatalogForBatchOrNotDropPartitionTest())
+    try {
+      f(catalog)
+    } finally {
+      catalog.reset()
+    }
+  }
+
   private def withEmptyCatalog(f: SessionCatalog => Unit): Unit = {
     val catalog = new SessionCatalog(newEmptyCatalog())
     catalog.createDatabase(newDb("default"), ignoreIfExists = true)
@@ -861,115 +870,134 @@ abstract class SessionCatalogSuite extends AnalysisTest {
   }
 
   test("drop partitions") {
-    withBasicCatalog { catalog =>
-      assert(catalogPartitionsEqual(
-        catalog.externalCatalog.listPartitions("db2", "tbl2"), part1, part2))
-      catalog.dropPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(part1.spec),
-        ignoreIfNotExists = false,
-        purge = false,
-        retainData = false)
-      assert(catalogPartitionsEqual(
-        catalog.externalCatalog.listPartitions("db2", "tbl2"), part2))
-      // Drop partitions without explicitly specifying database
-      catalog.setCurrentDatabase("db2")
-      catalog.dropPartitions(
-        TableIdentifier("tbl2"),
-        Seq(part2.spec),
-        ignoreIfNotExists = false,
-        purge = false,
-        retainData = false)
-      assert(catalog.externalCatalog.listPartitions("db2", "tbl2").isEmpty)
-      // Drop multiple partitions at once
-      catalog.createPartitions(
-        TableIdentifier("tbl2", Some("db2")), Seq(part1, part2), ignoreIfExists = false)
-      assert(catalogPartitionsEqual(
-        catalog.externalCatalog.listPartitions("db2", "tbl2"), part1, part2))
-      catalog.dropPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(part1.spec, part2.spec),
-        ignoreIfNotExists = false,
-        purge = false,
-        retainData = false)
-      assert(catalog.externalCatalog.listPartitions("db2", "tbl2").isEmpty)
+    Seq(true, false).foreach { batchDrop =>
+      withBasicCatalogForBatchOrNotDropPartitionTest { catalog =>
+        assert(catalogPartitionsEqual(
+          catalog.externalCatalog.listPartitions(s"db2_$batchDrop", "tbl2"), part1, part2))
+        catalog.dropPartitions(
+          TableIdentifier("tbl2", Some(s"db2_$batchDrop")),
+          Seq(part1.spec),
+          ignoreIfNotExists = false,
+          purge = false,
+          retainData = false,
+          supportBatch = batchDrop)
+        assert(catalogPartitionsEqual(
+          catalog.externalCatalog.listPartitions(s"db2_$batchDrop", "tbl2"), part2))
+        // Drop partitions without explicitly specifying database
+        catalog.setCurrentDatabase(s"db2_$batchDrop")
+        catalog.dropPartitions(
+          TableIdentifier("tbl2"),
+          Seq(part2.spec),
+          ignoreIfNotExists = false,
+          purge = false,
+          retainData = false,
+          supportBatch = batchDrop)
+        assert(catalog.externalCatalog.listPartitions(s"db2_$batchDrop", "tbl2").isEmpty)
+        // Drop multiple partitions at once
+        catalog.createPartitions(
+          TableIdentifier("tbl2", Some(s"db2_$batchDrop")),
+          Seq(part1, part2), ignoreIfExists = false)
+        assert(catalogPartitionsEqual(
+          catalog.externalCatalog.listPartitions(s"db2_$batchDrop", "tbl2"), part1, part2))
+        catalog.dropPartitions(
+          TableIdentifier("tbl2", Some(s"db2_$batchDrop")),
+          Seq(part1.spec, part2.spec),
+          ignoreIfNotExists = false,
+          purge = false,
+          retainData = false,
+          supportBatch = batchDrop)
+        assert(catalog.externalCatalog.listPartitions(s"db2_$batchDrop", "tbl2").isEmpty)
+      }
     }
   }
 
   test("drop partitions when database/table does not exist") {
-    withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
-        catalog.dropPartitions(
-          TableIdentifier("tbl1", Some("unknown_db")),
-          Seq(),
-          ignoreIfNotExists = false,
-          purge = false,
-          retainData = false)
-      }
-      intercept[NoSuchTableException] {
-        catalog.dropPartitions(
-          TableIdentifier("does_not_exist", Some("db2")),
-          Seq(),
-          ignoreIfNotExists = false,
-          purge = false,
-          retainData = false)
+    Seq(true, false).foreach { batchDrop =>
+      withBasicCatalog { catalog =>
+        intercept[NoSuchDatabaseException] {
+          catalog.dropPartitions(
+            TableIdentifier("tbl1", Some("unknown_db")),
+            Seq(),
+            ignoreIfNotExists = false,
+            purge = false,
+            retainData = false,
+            supportBatch = batchDrop)
+        }
+        intercept[NoSuchTableException] {
+          catalog.dropPartitions(
+            TableIdentifier("does_not_exist", Some("db2")),
+            Seq(),
+            ignoreIfNotExists = false,
+            purge = false,
+            retainData = false,
+            supportBatch = batchDrop)
+        }
       }
     }
   }
 
   test("drop partitions that do not exist") {
-    withBasicCatalog { catalog =>
-      intercept[AnalysisException] {
+    Seq(true, false).foreach { batchDrop =>
+      withBasicCatalog { catalog =>
+        intercept[AnalysisException] {
+          catalog.dropPartitions(
+            TableIdentifier("tbl2", Some("db2")),
+            Seq(part3.spec),
+            ignoreIfNotExists = false,
+            purge = false,
+            retainData = false,
+            supportBatch = batchDrop)
+        }
         catalog.dropPartitions(
           TableIdentifier("tbl2", Some("db2")),
           Seq(part3.spec),
-          ignoreIfNotExists = false,
+          ignoreIfNotExists = true,
           purge = false,
-          retainData = false)
+          retainData = false,
+          supportBatch = batchDrop)
       }
-      catalog.dropPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(part3.spec),
-        ignoreIfNotExists = true,
-        purge = false,
-        retainData = false)
     }
   }
 
   test("drop partitions with invalid partition spec") {
-    withBasicCatalog { catalog =>
-      var e = intercept[AnalysisException] {
-        catalog.dropPartitions(
-          TableIdentifier("tbl2", Some("db2")),
-          Seq(partWithMoreColumns.spec),
-          ignoreIfNotExists = false,
-          purge = false,
-          retainData = false)
+    Seq(true, false).foreach { batchDrop =>
+      withBasicCatalog { catalog =>
+        var e = intercept[AnalysisException] {
+          catalog.dropPartitions(
+            TableIdentifier("tbl2", Some("db2")),
+            Seq(partWithMoreColumns.spec),
+            ignoreIfNotExists = false,
+            purge = false,
+            retainData = false,
+            supportBatch = batchDrop)
+        }
+        assert(e.getMessage.contains(
+          "Partition spec is invalid. The spec (a, b, c) must be contained within " +
+            "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        e = intercept[AnalysisException] {
+          catalog.dropPartitions(
+            TableIdentifier("tbl2", Some("db2")),
+            Seq(partWithUnknownColumns.spec),
+            ignoreIfNotExists = false,
+            purge = false,
+            retainData = false,
+            supportBatch = batchDrop)
+        }
+        assert(e.getMessage.contains(
+          "Partition spec is invalid. The spec (a, unknown) must be contained within " +
+            "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        e = intercept[AnalysisException] {
+          catalog.dropPartitions(
+            TableIdentifier("tbl2", Some("db2")),
+            Seq(partWithEmptyValue.spec, part1.spec),
+            ignoreIfNotExists = false,
+            purge = false,
+            retainData = false,
+            supportBatch = batchDrop)
+        }
+        assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains " +
+          "an empty partition column value"))
       }
-      assert(e.getMessage.contains(
-        "Partition spec is invalid. The spec (a, b, c) must be contained within " +
-          "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
-      e = intercept[AnalysisException] {
-        catalog.dropPartitions(
-          TableIdentifier("tbl2", Some("db2")),
-          Seq(partWithUnknownColumns.spec),
-          ignoreIfNotExists = false,
-          purge = false,
-          retainData = false)
-      }
-      assert(e.getMessage.contains(
-        "Partition spec is invalid. The spec (a, unknown) must be contained within " +
-          "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
-      e = intercept[AnalysisException] {
-        catalog.dropPartitions(
-          TableIdentifier("tbl2", Some("db2")),
-          Seq(partWithEmptyValue.spec, part1.spec),
-          ignoreIfNotExists = false,
-          purge = false,
-          retainData = false)
-      }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
-        "empty partition column value"))
     }
   }
 

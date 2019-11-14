@@ -149,7 +149,8 @@ private[hive] trait HiveClient {
       specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
       purge: Boolean,
-      retainData: Boolean): Unit
+      retainData: Boolean,
+      supportBatch: Boolean): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.

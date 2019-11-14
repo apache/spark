@@ -209,7 +209,7 @@ case class AlterTableRenamePartitionStatement(
  */
 case class AlterTableDropPartitionStatement(
     tableName: Seq[String],
-    specs: Seq[TablePartitionSpec],
+    specs: Seq[Seq[Expression]],
     ifExists: Boolean,
     purge: Boolean,
     retainData: Boolean) extends ParsedStatement

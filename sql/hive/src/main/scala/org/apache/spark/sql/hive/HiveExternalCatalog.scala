@@ -991,10 +991,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
       purge: Boolean,
-      retainData: Boolean): Unit = withClient {
+      retainData: Boolean,
+      supportBatch: Boolean): Unit = withClient {
     requireTableExists(db, table)
     client.dropPartitions(
-      db, table, parts.map(lowerCasePartitionSpec), ignoreIfNotExists, purge, retainData)
+      db, table, parts.map(lowerCasePartitionSpec), ignoreIfNotExists, purge, retainData,
+      supportBatch)
   }
 
   override def renamePartitions(

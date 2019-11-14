@@ -519,13 +519,13 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // with a version that is older than the minimum (1.2 in this case).
       try {
         client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
-          purge = true, retainData = false)
+          purge = true, retainData = false, supportBatch = true)
         assert(!versionsWithoutPurge.contains(version))
       } catch {
         case _: UnsupportedOperationException =>
           assert(versionsWithoutPurge.contains(version))
           client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
-            purge = false, retainData = false)
+            purge = false, retainData = false, supportBatch = true)
       }
 
       assert(client.getPartitionOption("default", "src_part", spec).isEmpty)

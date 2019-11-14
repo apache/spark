@@ -378,6 +378,16 @@ object PartitioningUtils {
     normalizedPartSpec.toMap
   }
 
+  def normalizePartitionColumn(
+      partition: String,
+      partColNames: Seq[String],
+      tblName: String,
+      resolver: Resolver): String = {
+    partColNames.find(resolver(_, partition)).getOrElse {
+      throw new AnalysisException(s"$partition is not a valid partition column in table $tblName.")
+    }
+  }
+
   /**
    * Resolves possible type conflicts between partitions by up-casting "lower" types using
    * [[findWiderTypeForPartitionColumn]].

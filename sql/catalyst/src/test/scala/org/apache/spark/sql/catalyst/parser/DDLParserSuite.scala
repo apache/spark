@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal, PartitioningAttribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
@@ -1458,31 +1458,33 @@ class DDLParserSuite extends AnalysisTest {
     assertUnsupported(sql1_view)
     assertUnsupported(sql2_view)
 
+    val dtAttr = PartitioningAttribute("dt")
+    val countryAttr = PartitioningAttribute("country")
     val expected1_table = AlterTableDropPartitionStatement(
       Seq("table_name"),
-      Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
+      Seq(Seq(EqualTo(dtAttr, Literal("2008-08-08")), EqualTo(countryAttr, Literal("us"))),
+        Seq(EqualTo(dtAttr, Literal("2009-09-09")), EqualTo(countryAttr, Literal("uk")))),
       ifExists = true,
       purge = false,
       retainData = false)
     val expected2_table = expected1_table.copy(ifExists = false)
     val expected1_purge = expected1_table.copy(purge = true)
 
-    comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
-    comparePlans(parsed1_purge, expected1_purge)
+    comparePlans(parsed1_table.canonicalized, expected1_table.canonicalized)
+    comparePlans(parsed2_table.canonicalized, expected2_table.canonicalized)
+    comparePlans(parsed1_purge.canonicalized, expected1_purge.canonicalized)
 
+    val dsAttr = PartitioningAttribute("ds")
     val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
     val expected3_table = AlterTableDropPartitionStatement(
       Seq("a", "b", "c"),
-      Seq(Map("ds" -> "2017-06-10")),
+      Seq(Seq(EqualTo(dsAttr, Literal("2017-06-10")))),
       ifExists = true,
       purge = false,
       retainData = false)
 
     val parsed3_table = parsePlan(sql3_table)
-    comparePlans(parsed3_table, expected3_table)
+    comparePlans(parsed3_table.canonicalized, expected3_table.canonicalized)
   }
 
   test("show current namespace") {

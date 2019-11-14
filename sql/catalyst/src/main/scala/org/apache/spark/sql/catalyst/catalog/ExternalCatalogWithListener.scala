@@ -203,8 +203,10 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       partSpecs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
       purge: Boolean,
-      retainData: Boolean): Unit = {
-    delegate.dropPartitions(db, table, partSpecs, ignoreIfNotExists, purge, retainData)
+      retainData: Boolean,
+      supportBatch: Boolean): Unit = {
+    delegate.dropPartitions(db, table, partSpecs, ignoreIfNotExists, purge, retainData,
+      supportBatch)
   }
 
   override def renamePartitions(

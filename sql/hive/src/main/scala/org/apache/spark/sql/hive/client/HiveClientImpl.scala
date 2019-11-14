@@ -28,21 +28,26 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.common.{ObjectPair, StatsSetupConst}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{IMetaStoreClient, TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable}
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, Order, SerDeInfo, StorageDescriptor}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, MetaException, NoSuchObjectException, Order, SerDeInfo, StorageDescriptor, Table => MetaStoreApiTable}
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
+import org.apache.hadoop.hive.ql.parse.SemanticException
+import org.apache.hadoop.hive.ql.plan.{ExprNodeColumnDesc, ExprNodeConstantDesc, ExprNodeDesc, ExprNodeGenericFuncDesc}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters
+import org.apache.hadoop.hive.serde2.typeinfo.{PrimitiveTypeInfo, TypeInfoFactory, TypeInfoUtils}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -622,8 +627,37 @@ private[hive] class HiveClientImpl(
       specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
       purge: Boolean,
+      retainData: Boolean,
+      supportBatch: Boolean): Unit = withHiveState {
+
+    // TODO(weixiuli): Spark can NOT support dropPartitions call with batch
+    // when HiveShim version is < v1_2 and HiveShim version is >= v3_0.
+
+    // The dropPartitionsWithBatch method uses ObjectPair class is same with
+    // HiveMetaStoreClient's dropPartitions, while the ObjectPair class has been changed from
+    // 'org.apache.hadoop.hive.common.ObjectPair' to
+    // 'org.apache.hadoop.hive.metastore.utils.ObjectPair' since HiveShim version is v3_0.
+    // link: https://issues.apache.org/jira/browse/HIVE-17980
+    // So if we want to support dropPartitions call with batch when HiveShim version is >= v3_0,
+    // we should use 'org.apache.hadoop.hive.metastore.utils.ObjectPair' instead of
+    // 'org.apache.hadoop.hive.common.ObjectPair'.
+
+    val supportVersion = Set(hive.v1_2, hive.v2_0, hive.v2_1, hive.v2_2, hive.v2_3)
+      .map(_.fullVersion)
+    if (supportVersion.contains(version.fullVersion) && supportBatch) {
+      dropPartitionsWithBatch(db, table, specs, ignoreIfNotExists, purge, retainData)
+    } else {
+      dropPartitionsOneByOne(db, table, specs, ignoreIfNotExists, purge, retainData)
+    }
+  }
+
+  def dropPartitionsOneByOne(
+      db: String,
+      table: String,
+      specs: Seq[TablePartitionSpec],
+      ignoreIfNotExists: Boolean,
+      purge: Boolean,
       retainData: Boolean): Unit = withHiveState {
-    // TODO: figure out how to drop multiple partitions in one call
     val hiveTable = client.getTable(db, table, true /* throw exception */)
     // do the check at first and collect all the matching partitions
     val matchingParts =
@@ -661,6 +695,47 @@ private[hive] class HiveClientImpl(
           throw e
       }
       droppedParts += partition
+    }
+  }
+
+  def dropPartitionsWithBatch(
+      db: String,
+      table: String,
+      specs: Seq[TablePartitionSpec],
+      ignoreIfNotExists: Boolean,
+      purge: Boolean,
+      retainData: Boolean): Unit = withHiveState {
+    val hiveTable = client.getTable(db, table, true /* throw exception */)
+    val partExprs = new java.util.ArrayList[ObjectPair[Integer, Array[Byte]]]
+    val maxBatches = sparkConf.getInt(s"spark.sql.dropPartition.maxBatches", 200)
+    val serializeObjectToKryoMethod = shim.getSerializeObjectToKryoMethod
+    serializeObjectToKryoMethod.setAccessible(true)
+    try {
+      specs.map { s =>
+        assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
+        s
+      }.distinct.map { spec =>
+        partExprs.add(new ObjectPair[Integer, Array[Byte]](spec.size,
+          serializeObjectToKryoMethod.invoke(null,
+            (new ExpressionBuilder(hiveTable.getTTable,
+              spec.asJava).build)).asInstanceOf[Array[Byte]]))
+        if (partExprs.size == maxBatches) {
+          shim.dropPartitions(client, db, table, partExprs, !retainData, purge, ignoreIfNotExists)
+          partExprs.clear()
+        }
+      }
+      if (partExprs.size > 0) {
+        shim.dropPartitions(client, db, table, partExprs, !retainData, purge, ignoreIfNotExists)
+      }
+    } catch {
+      case e: NoSuchObjectException =>
+        throw new AnalysisException(
+          "NoSuchObjectException while dropping partition." + e.getMessage)
+      case e: MetaException =>
+        throw new MetaException("MetaException while dropping partition." + e.getMessage)
+      case e: TException =>
+        throw new TException(
+          "TException while dropping partition.", e)
     }
   }
 
@@ -1205,4 +1280,62 @@ private[hive] object HiveClientImpl {
     StatsSetupConst.RAW_DATA_SIZE,
     StatsSetupConst.TOTAL_SIZE
   )
+
+  /**
+   * Helper class to help build ExprDesc tree to represent the partitions to be dropped.
+   * Note: At present, the ExpressionBuilder only constructs partition predicates where
+   * partition-keys equal specific values, and logical-AND expressions. E.g.
+   * ( dt = '20150310' AND region = 'US' )
+   * This only supports the partition-specs specified by the Map argument of:
+   * org.apache.hive.hcatalog.api.HCatClient#dropPartitions(String, String, Map , boolean)
+   */
+  case class ExpressionBuilder(val table: MetaStoreApiTable,
+         val partSpecs: java.util.Map[String, String]) {
+
+    private val partColumnTypesMap =
+      com.google.common.collect.Maps.newHashMap[String, PrimitiveTypeInfo]
+    // scalastyle:off caselocale
+    for (partField <- table.getPartitionKeys.asScala) {
+      partColumnTypesMap.put(partField.getName.toLowerCase,
+        TypeInfoFactory.getPrimitiveTypeInfo(partField.getType))
+    }
+
+    private def getTypeFor(partColumn: String): PrimitiveTypeInfo =
+      partColumnTypesMap.get(partColumn.toLowerCase)
+    // scalastyle:on caselocale
+    private def getTypeAppropriateValueFor(typeInfo: PrimitiveTypeInfo, value: String) = {
+      val converter = ObjectInspectorConverters.getConverter(
+        TypeInfoUtils.getStandardJavaObjectInspectorFromTypeInfo(TypeInfoFactory.stringTypeInfo),
+        TypeInfoUtils.getStandardJavaObjectInspectorFromTypeInfo(typeInfo))
+      converter.convert(value)
+    }
+
+    @throws[SemanticException]
+    def equalityPredicate(partColumn: String, value: String): ExprNodeGenericFuncDesc = {
+      val partColumnType = getTypeFor(partColumn)
+      val partColumnExpr = new ExprNodeColumnDesc(partColumnType, partColumn, null, true)
+      val valueExpr = new ExprNodeConstantDesc(partColumnType,
+        getTypeAppropriateValueFor(partColumnType, value))
+      binaryPredicate("=", partColumnExpr, valueExpr)
+    }
+
+    @throws[SemanticException]
+    def binaryPredicate(function: String, lhs: ExprNodeDesc, rhs: ExprNodeDesc):
+    ExprNodeGenericFuncDesc = {
+      new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo,
+        FunctionRegistry.getFunctionInfo(function).getGenericUDF,
+        com.google.common.collect.Lists.newArrayList(lhs, rhs))
+    }
+
+    @throws[SemanticException]
+    def build: ExprNodeGenericFuncDesc = {
+      var resultExpr: ExprNodeGenericFuncDesc = null
+      for (partSpec <- partSpecs.entrySet.asScala) {
+        val partExpr = equalityPredicate(partSpec.getKey.toString, partSpec.getValue.toString)
+        resultExpr = if (resultExpr == null) partExpr
+        else binaryPredicate("and", resultExpr, partExpr)
+      }
+      resultExpr
+    }
+  }
 }

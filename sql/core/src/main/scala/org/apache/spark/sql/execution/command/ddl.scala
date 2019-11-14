@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
@@ -546,7 +546,7 @@ case class AlterTableRenamePartitionCommand(
  */
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
-    specs: Seq[TablePartitionSpec],
+    partitionsFilters: Seq[Seq[Expression]],
     ifExists: Boolean,
     purge: Boolean,
     retainData: Boolean)
@@ -555,26 +555,114 @@ case class AlterTableDropPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    val timeZone = Option(sparkSession.sessionState.conf.sessionLocalTimeZone)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
-
-    val normalizedSpecs = specs.map { spec =>
-      PartitioningUtils.normalizePartitionSpec(
-        spec,
-        table.partitionColumnNames,
-        table.identifier.quotedString,
-        sparkSession.sessionState.conf.resolver)
+    val partitionColumns = table.partitionColumnNames
+    val partitionAttributes = table.partitionSchema.toAttributes.map(a => a.name -> a).toMap
+    val resolvedSpecs = partitionsFilters.flatMap { filtersSpec =>
+      if (hasComplexFilters(filtersSpec)) {
+        generatePartitionSpec(filtersSpec,
+          partitionColumns,
+          partitionAttributes,
+          table.identifier,
+          catalog,
+          sparkSession.sessionState.conf.resolver,
+          timeZone,
+          ifExists)
+      } else {
+        val partitionSpec = filtersSpec.map {
+          case EqualTo(key: Attribute, v: Literal) =>
+            key.name -> v.value.toString
+        }.toMap
+        PartitioningUtils.normalizePartitionSpec(
+          partitionSpec,
+          partitionColumns,
+          table.identifier.quotedString,
+          sparkSession.sessionState.conf.resolver) :: Nil
+      }
     }
-
+    // now drop partitions with batch only support 'DROP [IF EXISTS] PARTITION spec1' and
+    // do NOT support 'DROP [IF EXISTS] PARTITION spec1, PARTITION spec2, ...'.
     catalog.dropPartitions(
-      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
-      retainData = retainData)
+      table.identifier, resolvedSpecs, ignoreIfNotExists = ifExists, purge = purge,
+      retainData = retainData, supportBatch = partitionsFilters.size <= 1)
 
     CommandUtils.updateTableStats(sparkSession, table)
 
     Seq.empty[Row]
   }
 
+  def hasComplexFilters(partitionFilterSpec: Seq[Expression]): Boolean = {
+    partitionFilterSpec.exists(!_.isInstanceOf[EqualTo])
+  }
+
+  def generatePartitionSpec(
+      partitionFilterSpec: Seq[Expression],
+      partitionColumns: Seq[String],
+      partitionAttributes: Map[String, Attribute],
+      tableIdentifier: TableIdentifier,
+      catalog: SessionCatalog,
+      resolver: Resolver,
+      timeZone: Option[String],
+      ifExists: Boolean): Seq[TablePartitionSpec] = {
+    val filters = partitionFilterSpec.map { pFilter =>
+      pFilter.transform {
+        // Resolve the partition attributes
+        case partitionCol: PartitioningAttribute =>
+          val normalizedPartition = PartitioningUtils.normalizePartitionColumn(
+            partitionCol.name,
+            partitionColumns,
+            tableIdentifier.quotedString,
+            resolver)
+          partitionAttributes(normalizedPartition)
+      }.transform {
+        // Cast the partition value to the data type of the corresponding partition attribute
+        case cmp @ BinaryComparison(left, right) =>
+          if (!cmp.isInstanceOf[EqualTo] && left.dataType.isInstanceOf[BooleanType]) {
+            throw new AnalysisException(s"partition formatted " +
+              s"with booleanType can only be dropped with equal comparison.")
+          }
+          if (!left.dataType.sameType(right.dataType)) {
+            val dt = left.dataType
+            val lit = Literal(Cast(right, dt, timeZone).eval(), dt)
+            cmp.makeCopy(Array(left, lit))
+          } else {
+            cmp
+          }
+      }
+    }
+    val partitions = catalog.listPartitionsByFilter(tableIdentifier, filters)
+    if (partitions.isEmpty && !ifExists) {
+      // we should do nothing when dropping a partition which contains empty values
+      // to be compatible with Hive.
+      logWarning(s"There is no partition for ${filters.reduceLeft(And).sql}")
+    }
+    partitions.map(_.spec)
+  }
+}
+
+
+object AlterTableDropPartitionCommand {
+
+  def fromSpecs(
+      tableName: TableIdentifier,
+      specs: Seq[TablePartitionSpec],
+      ifExists: Boolean,
+      purge: Boolean,
+      retainData: Boolean): AlterTableDropPartitionCommand = {
+    AlterTableDropPartitionCommand(tableName,
+      specs.map(tablePartitionToPartitionFilters),
+      ifExists,
+      purge,
+      retainData)
+  }
+
+  def tablePartitionToPartitionFilters(spec: TablePartitionSpec): Seq[Expression] = {
+    spec.map {
+      case (key, value) => EqualTo(PartitioningAttribute(key), Literal(value))
+    }.toSeq
+  }
 }
 
 

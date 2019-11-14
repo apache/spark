@@ -29,9 +29,9 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
-import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.expressions.{Expression, JsonTuple, PartitioningAttribute}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan, Project, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTableDropPartitionStatement, Generate, InsertIntoDir, LogicalPlan, Project, ScriptTransformation}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -471,6 +471,39 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
        |ALTER TABLE table_name_1 EXCHANGE PARTITION
        |(dt='2008-08-08', country='us') WITH TABLE table_name_2
       """.stripMargin)
+  }
+
+  test("SPARK-23866: Support any comparison operator in ALTER TABLE ... DROP PARTITION") {
+    val sql1_table =
+      """
+        |ALTER TABLE table_name DROP IF EXISTS PARTITION
+        |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')
+      """.stripMargin
+    Seq((">", (a: Expression, b: Expression) => a > b),
+      (">=", (a: Expression, b: Expression) => a >= b),
+      ("<", (a: Expression, b: Expression) => a < b),
+      ("<=", (a: Expression, b: Expression) => a <= b),
+      ("<>", (a: Expression, b: Expression) => a =!= b),
+      ("!=", (a: Expression, b: Expression) => a =!= b)).foreach { case (op, predicateGen) =>
+      val genPlan = parser.parsePlan(sql1_table.replace("=", op))
+      val dtAttr = PartitioningAttribute("dt")
+      val countryAttr = PartitioningAttribute("country")
+      val expectedPlan = AlterTableDropPartitionStatement(
+        Seq("table_name"),
+        Seq(
+          Seq(predicateGen(dtAttr, "2008-08-08"), predicateGen(countryAttr, "us")),
+          Seq(predicateGen(dtAttr, "2009-09-09"), predicateGen(countryAttr, "uk"))),
+        ifExists = true,
+        purge = false,
+        retainData = false)
+      comparePlans(genPlan.canonicalized, expectedPlan.canonicalized)
+    }
+
+    // SPARK-23866: <=> is not supported
+    intercept("ALTER TABLE table_name DROP PARTITION (dt <=> 'a')", "operator is not supported in")
+
+    // SPARK-23866: Invalid partition specification
+    intercept("ALTER TABLE table_name DROP PARTITION (dt)", "Invalid partition spec:")
   }
 
   test("alter table: archive partition (not supported)") {

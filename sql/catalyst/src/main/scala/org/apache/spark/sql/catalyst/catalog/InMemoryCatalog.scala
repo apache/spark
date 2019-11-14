@@ -425,7 +425,8 @@ class InMemoryCatalog(
       partSpecs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
       purge: Boolean,
-      retainData: Boolean): Unit = synchronized {
+      retainData: Boolean,
+      supportBatch: Boolean): Unit = synchronized {
     requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
     if (!ignoreIfNotExists) {

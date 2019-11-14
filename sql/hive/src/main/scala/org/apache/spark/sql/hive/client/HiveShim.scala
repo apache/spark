@@ -27,8 +27,9 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.ObjectPair
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.IMetaStoreClient
+import org.apache.hadoop.hive.metastore.{IMetaStoreClient, PartitionDropOptions}
 import org.apache.hadoop.hive.metastore.api.{EnvironmentContext, Function => HiveFunction, FunctionType}
 import org.apache.hadoop.hive.metastore.api.{MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
@@ -153,6 +154,23 @@ private[client] sealed abstract class Shim {
       part: JList[String],
       deleteData: Boolean,
       purge: Boolean): Unit
+
+  def getSerializeObjectToKryoMethod(): Method =
+    throw new UnsupportedOperationException("Spark can NOT support " +
+      "getSerializeObjectToKryoMethod call when HiveShim version is < v1_2.")
+
+  def dropPartitions(
+     hive: Hive,
+     dbName: String,
+     tableName: String,
+     partExprs: JArrayList[ObjectPair[Integer, Array[Byte]]],
+     deleteData: Boolean,
+     purge: Boolean,
+     ifExists: Boolean,
+     needResults: Boolean = false): Unit = {
+    throw new UnsupportedOperationException("Spark can NOT support dropPartitions " +
+      "call when HiveShim version is < v1_2.")
+  }
 
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
@@ -973,6 +991,8 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       Utils.classForName("org.apache.hadoop.hive.metastore.PartitionDropOptions")
   private lazy val dropOptionsDeleteData = dropOptionsClass.getField("deleteData")
   private lazy val dropOptionsPurge = dropOptionsClass.getField("purgeData")
+  private lazy val dropOptionsReturnResults = dropOptionsClass.getField("returnResults")
+  private lazy val dropOptionsIfExists = dropOptionsClass.getField("ifExists")
   private lazy val dropPartitionMethod =
     findMethod(
       classOf[Hive],
@@ -995,6 +1015,11 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       txnIdInLoadDynamicPartitions)
   }
 
+  override def getSerializeObjectToKryoMethod(): Method = {
+    Utils.classForName("org.apache.hadoop.hive.ql.exec.Utilities")
+      .getDeclaredMethod("serializeObjectToKryo", classOf[java.io.Serializable])
+  }
+
   override def dropPartition(
       hive: Hive,
       dbName: String,
@@ -1008,6 +1033,23 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
     dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
   }
 
+  // TODO(weixiuli): Spark can NOT support dropPartitions call when HiveShim version is < v1_2.
+  override def dropPartitions(
+      hive: Hive,
+      dbName: String,
+      tableName: String,
+      partExprs: JArrayList[ObjectPair[Integer, Array[Byte]]],
+      deleteData: Boolean,
+      purge: Boolean,
+      ifExists: Boolean,
+      needResults: Boolean = false): Unit = {
+    val dropOptions = dropOptionsClass.newInstance().asInstanceOf[PartitionDropOptions]
+    dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
+    dropOptionsIfExists.setBoolean(dropOptions, ifExists)
+    dropOptionsReturnResults.setBoolean(dropOptions, needResults)
+    dropOptionsPurge.setBoolean(dropOptions, purge)
+    hive.getMSC.dropPartitions(dbName, tableName, partExprs, dropOptions)
+  }
 }
 
 private[client] class Shim_v2_0 extends Shim_v1_2 {
@@ -1081,7 +1123,12 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, listBucketingEnabled: JBoolean, isAcid, txnIdInLoadDynamicPartitions)
   }
-
+  // Use KryoPool instead of thread-local caching
+  // since HiveShim version >= v2_0(link: https://issues.apache.org/jira/browse/HIVE-12302)
+  override def getSerializeObjectToKryoMethod(): Method = {
+    Utils.classForName("org.apache.hadoop.hive.ql.exec.SerializationUtilities")
+      .getDeclaredMethod("serializeObjectToKryo", classOf[java.io.Serializable])
+  }
 }
 
 private[client] class Shim_v2_1 extends Shim_v2_0 {

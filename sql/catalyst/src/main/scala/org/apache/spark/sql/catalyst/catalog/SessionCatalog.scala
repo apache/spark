@@ -918,14 +918,16 @@ class SessionCatalog(
       specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
       purge: Boolean,
-      retainData: Boolean): Unit = {
+      retainData: Boolean,
+      supportBatch: Boolean): Unit = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
     requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(specs)
-    externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists, purge, retainData)
+    externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists, purge, retainData,
+      supportBatch)
   }
 
   /**
