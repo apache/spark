@@ -275,4 +275,35 @@ class IntervalUtilsSuite extends SparkFunSuite {
         assert(e.getMessage.contains("divide by zero"))
     }
   }
+
+  test("justify days") {
+    assert(justifyDays(fromString("1 month 35 day")) === new CalendarInterval(2, 5, 0))
+    assert(justifyDays(fromString("-1 month 35 day")) === new CalendarInterval(0, 5, 0))
+    assert(justifyDays(fromString("1 month -35 day")) === new CalendarInterval(0, -5, 0))
+    assert(justifyDays(fromString("-1 month -35 day")) === new CalendarInterval(-2, -5, 0))
+    assert(justifyDays(fromString("-1 month 2 day")) === new CalendarInterval(0, -28, 0))
+  }
+
+  test("justify hours") {
+    assert(justifyHours(fromString("29 day 25 hour")) ===
+      new CalendarInterval(0, 30, 1 * MICROS_PER_HOUR))
+    assert(justifyHours(fromString("29 day -25 hour")) ===
+      new CalendarInterval(0, 27, 23 * MICROS_PER_HOUR))
+    assert(justifyHours(fromString("-29 day 25 hour")) ===
+      new CalendarInterval(0, -27, -23 * MICROS_PER_HOUR))
+    assert(justifyHours(fromString("-29 day -25 hour")) ===
+      new CalendarInterval(0, -30, -1 * MICROS_PER_HOUR))
+  }
+
+  test("justify interval") {
+    assert(justifyInterval(fromString("1 month 29 day 25 hour")) ===
+      new CalendarInterval(2, 0, 1 * MICROS_PER_HOUR))
+    assert(justifyInterval(fromString("-1 month 29 day -25 hour")) ===
+      new CalendarInterval(0, -2, -1 * MICROS_PER_HOUR))
+    assert(justifyInterval(fromString("1 month -29 day -25 hour")) ===
+      new CalendarInterval(0, 0, -1 * MICROS_PER_HOUR))
+    assert(justifyInterval(fromString("-1 month -29 day -25 hour")) ===
+      new CalendarInterval(-2, 0, -1 * MICROS_PER_HOUR))
+    intercept[ArithmeticException](justifyInterval(new CalendarInterval(2, 0, Long.MaxValue)))
+  }
 }

@@ -74,3 +74,17 @@ select cast('+     1 second' as interval);
 select cast('-     1 second' as interval);
 select cast('- -1 second' as interval);
 select cast('- +1 second' as interval);
+
+-- justify intervals
+select justify_days(cast(null as interval));
+select justify_hours(cast(null as interval));
+select justify_interval(cast(null as interval));
+select justify_days(interval '1 month 59 day 25 hour');
+select justify_hours(interval '1 month 59 day 25 hour');
+select justify_interval(interval '1 month 59 day 25 hour');
+select justify_days(interval '1 month -59 day 25 hour');
+select justify_hours(interval '1 month -59 day 25 hour');
+select justify_interval(interval '1 month -59 day 25 hour');
+select justify_days(interval '1 month 59 day -25 hour');
+select justify_hours(interval '1 month 59 day -25 hour');
+select justify_interval(interval '1 month 59 day -25 hour');

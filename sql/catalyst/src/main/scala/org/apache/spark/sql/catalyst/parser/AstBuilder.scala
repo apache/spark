@@ -353,35 +353,29 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   override def visitDeleteFromTable(
       ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
-    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val table = UnresolvedRelation(visitMultipartIdentifier(ctx.multipartIdentifier()))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
+    val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val predicate = if (ctx.whereClause() != null) {
       Some(expression(ctx.whereClause().booleanExpression()))
     } else {
       None
     }
-
-    DeleteFromStatement(tableId, tableAlias, predicate)
+    DeleteFromTable(aliasedTable, predicate)
   }
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
-    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val table = UnresolvedRelation(visitMultipartIdentifier(ctx.multipartIdentifier()))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
-    val (attrs, values) = ctx.setClause().assignmentList().assignment().asScala.map {
-      kv => visitMultipartIdentifier(kv.key) -> expression(kv.value)
-    }.unzip
+    val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
+    val assignments = withAssignments(ctx.setClause().assignmentList())
     val predicate = if (ctx.whereClause() != null) {
       Some(expression(ctx.whereClause().booleanExpression()))
     } else {
       None
     }
 
-    UpdateTableStatement(
-      tableId,
-      tableAlias,
-      attrs,
-      values,
-      predicate)
+    UpdateTable(aliasedTable, assignments, predicate)
   }
 
   private def withAssignments(assignCtx: SqlBaseParser.AssignmentListContext): Seq[Assignment] =
