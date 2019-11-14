@@ -47,7 +47,7 @@ case class PostgreCastToInteger(child: Expression, timeZoneId: Option[String])
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case ByteType | TimestampType | DateType =>
-      (c, evPrim, evNull) =>
+      (_, _, _) =>
         val fromType = JavaCode.javaType(from)
         code"""throw new AnalysisException("Cannot cast type $fromType to Integer.");"""
     case _ => super.castToIntCode(from, ctx)

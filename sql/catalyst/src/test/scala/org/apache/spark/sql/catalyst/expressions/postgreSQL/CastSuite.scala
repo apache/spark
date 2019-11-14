@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.expressions.postgreSQL
 
+import java.sql.{Date, Timestamp}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
 
@@ -55,5 +57,11 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkPostgreCastStringToBoolean("o", null)
     checkPostgreCastStringToBoolean("abc", null)
     checkPostgreCastStringToBoolean("", null)
+  }
+
+  test("Unsupported data types to cast to integer") {
+    assert(PostgreCastToInteger(Literal(new Timestamp(1)), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToInteger(Literal(new Date(1)), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToInteger(Literal(1.toByte), None).checkInputDataTypes().isFailure)
   }
 }
