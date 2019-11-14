@@ -699,7 +699,7 @@ class JDBCSuite extends QueryTest
     JdbcDialects.unregisterDialect(testH2Dialect)
   }
 
-  test("Map TINYINT to ByteType via JdbcDialects") {
+  test("SPARK-26499: Map TINYINT to ByteType via JdbcDialects") {
     JdbcDialects.registerDialect(testH2DialectTinyInt)
     val df = spark.read.jdbc(urlWithUserAndPass, "test.inttypes", new Properties())
     val rows = df.collect()

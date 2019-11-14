@@ -440,7 +440,7 @@ object JdbcUtils extends Logging {
 
     case ByteType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.update(pos, rs.getByte(pos + 1))
+        row.setByte(pos, rs.getByte(pos + 1))
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
