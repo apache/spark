@@ -112,8 +112,6 @@ select -timestamp '1999-01-01';
 select -x'2379ACFe';
 select +integer '7';
 
-select +interval '1 second';
-
 -- typed literals
 -- boolean
 select boolean 'true';
