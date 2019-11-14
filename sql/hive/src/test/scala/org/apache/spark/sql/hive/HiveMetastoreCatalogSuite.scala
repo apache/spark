@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
@@ -357,5 +360,32 @@ class DataSourceWithHiveMetastoreCatalogSuite
       assert(sparkSession.metadataHive.runSqlHive("SELECT count(*) FROM t") ===
         Seq(table("src").count().toString))
     }
+  }
+
+  test("SPARK-29869: HiveMetastoreCatalog#convertToLogicalRelation throws AssertionError") {
+    withTempPath(dir => {
+      val baseDir = s"${dir.getCanonicalFile.toURI.toString}/test"
+      val partitionDir = s"${dir.getCanonicalFile.toURI.toString}/test/dt=20191113"
+      val file = new Path(partitionDir, "file.parquet")
+      val fs = file.getFileSystem(new Configuration())
+      fs.createNewFile(file)
+      withTable("test") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true",
+          SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+          spark.sql(
+            s"""
+               |CREATE EXTERNAL TABLE `test`(key string)
+               |ROW FORMAT SERDE
+               |  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+               |STORED AS INPUTFORMAT
+               |  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+               |OUTPUTFORMAT
+               |  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+               |LOCATION '$baseDir'
+               |""".stripMargin)
+          spark.sql("select * from test")
+        }
+      }
+    })
   }
 }

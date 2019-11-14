@@ -251,7 +251,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           catalogProxy.cacheTable(tableIdentifier, created)
           created
         }
-
         logicalRelation
       })
     }
@@ -260,12 +259,14 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     assert(result.output.length == relation.output.length,
       s"Target table has ${result.output.length} columns, " +
         s"but source table has ${relation.output.length} columns. " +
-        s"It may need to recreate the table ${relation.tableMeta.identifier}")
+        s"It may need to recreate the table ${relation.tableMeta.identifier} " +
+        s"or set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false to workaround.")
     result.output.zip(relation.output).foreach { case (a1, a2) =>
       assert(a1.dataType.sameType(a2.dataType),
         s"Data type of column ${a1.name} in target table is ${a1.dataType.typeName}, " +
           s"but column ${a2.name} in source table is ${a2.dataType.typeName}. " +
-          s"It may need to recreate the table ${relation.tableMeta.identifier}")
+          s"It may need to recreate the table ${relation.tableMeta.identifier} " +
+          s"or set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false to workaround.")
     }
     val newOutput = result.output.zip(relation.output).map {
       case (a1, a2) => a1.withExprId(a2.exprId)
