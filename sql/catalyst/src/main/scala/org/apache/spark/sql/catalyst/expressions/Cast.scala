@@ -666,7 +666,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // FloatConverter
-  private[this] def castToFloat(from: DataType): Any => Any = from match {
+  protected[this] def castToFloat(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => {
         val floatStr = s.toString
@@ -1451,7 +1451,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
   }
 
-  private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
+  protected[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case StringType =>
         val floatStr = ctx.freshVariable("floatStr", StringType)

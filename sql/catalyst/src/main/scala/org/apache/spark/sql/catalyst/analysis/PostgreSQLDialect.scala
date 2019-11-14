@@ -19,15 +19,15 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.Cast
-import org.apache.spark.sql.catalyst.expressions.postgreSQL.PostgreCastToBoolean
+import org.apache.spark.sql.catalyst.expressions.postgreSQL.{PostgreCastToBoolean, PostgreCastToFloat}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.sql.types.{BooleanType, FloatType, StringType}
 
 object PostgreSQLDialect {
   val postgreSQLDialectRules: List[Rule[LogicalPlan]] =
-    CastToBoolean ::
+    CastToBoolean :: CastToFloat ::
       Nil
 
   object CastToBoolean extends Rule[LogicalPlan] with Logging {
@@ -40,6 +40,23 @@ object PostgreSQLDialect {
           case Cast(child, dataType, timeZoneId)
             if child.dataType != BooleanType && dataType == BooleanType =>
             PostgreCastToBoolean(child, timeZoneId)
+        }
+      } else {
+        plan
+      }
+    }
+  }
+
+  object CastToFloat extends Rule[LogicalPlan] with Logging {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      // The SQL configuration `spark.sql.dialect` can be changed in runtime.
+      // To make sure the configuration is effective, we have to check it during rule execution.
+      val conf = SQLConf.get
+      if (conf.usePostgreSQLDialect) {
+        plan.transformExpressions {
+          case Cast(child, dataType, timeZoneId)
+            if child.dataType != FloatType && dataType == FloatType =>
+            PostgreCastToFloat(child, timeZoneId)
         }
       } else {
         plan
