@@ -101,6 +101,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
       val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
       assert(summary.size === 0)
     }
+    diskStore.close()
+    Utils.deleteRecursively(testDir)
   }
 
   test("SPARK-28638: summary should contain successful tasks only when with in memory kvstore") {
