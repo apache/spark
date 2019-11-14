@@ -132,6 +132,12 @@ class RelationalGroupedDataset[T] protected[sql](
     (inputExpr: Expression) => exprToFunc(inputExpr)
   }
 
+  /**
+   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions
+   * of current `RelationalGroupedDataset`.
+   *
+   * @since 3.0.0
+   */
   def keyAs[U : Encoder]: KeyValueGroupedDataset[U, T] = {
     val keyEncoder = encoderFor[U]
     val aliasedGrps = groupingExprs.map { g =>
@@ -143,28 +149,6 @@ class RelationalGroupedDataset[T] protected[sql](
     val qe = Dataset.ofRows(
       df.sparkSession,
       Project(df.logicalPlan.output ++ additionalCols, df.logicalPlan)).queryExecution
-
-    new KeyValueGroupedDataset(
-      keyEncoder,
-      ds.encoder,
-      qe,
-      df.logicalPlan.output,
-      aliasedGrps.map(_.toAttribute))
-  }
-
-  /**
-   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions
-   * of current `RelationalGroupedDataset`.
-   *
-   * @since 3.0.0
-   */
-  def keyAs[U : Encoder]: KeyValueGroupedDataset[U, T] = {
-    val keyEncoder = encoderFor[U]
-    val aliasedGrps = groupingExprs.map(alias)
-    val additionalCols = aliasedGrps.filter(g => !df.logicalPlan.outputSet.contains(g.toAttribute))
-    val qe = Dataset.ofRows(
-      df.sparkSession,
-      Project(additionalCols ++ df.logicalPlan.output, df.logicalPlan)).queryExecution
 
     new KeyValueGroupedDataset(
       keyEncoder,
