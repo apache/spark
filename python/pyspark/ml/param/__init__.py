@@ -484,8 +484,17 @@ class Params(Identifiable):
         :return: the target instance with param values copied
         """
         paramMap = self._paramMap.copy()
-        if extra is not None:
-            paramMap.update(extra)
+        if isinstance(extra, dict):
+            for param, value in extra.items():
+                if isinstance(param, Param):
+                    paramMap[param] = value
+                elif self.hasParam(param):
+                    # set value by name if vaiid
+                    paramMap[self.getParam(param)] = value
+                else:
+                    raise ValueError("Expecting a valid instance of Param, but received: {}".format(param))
+        elif extra is not None:
+            raise TypeError("Expecting a dict, but received an object of type {}.".format(type(extra)))
         for param in self.params:
             # copy default params
             if param in self._defaultParamMap and to.hasParam(param.name):

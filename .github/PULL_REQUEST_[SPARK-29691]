@@ -1,0 +1,36 @@
+### What changes were proposed in this pull request?
+
+Estimator.fit() and Model.transform() accept a dictionary of extra parameters whose values are used to overwrite
+those supplied at initialization or by default.  The keys are presumed to be valid Param objects.
+It is proposed to extend the API to allow strings as keys when they can be mapped to a valid parameter belonging to the
+target object, and otherwise to check that only Param objects are supplied as keys.
+
+### Why are the changes needed?
+
+Param objects are created by and bound to an instance of Params (Estimator, Model, or Transformer).
+They may be obtained from their parent as attributes, or by name through getParam.
+
+The documentation does not state that keys must be valid Param objects, nor describe how one may be obtained.
+The current behavior is to silently ignore keys which are not valid Param objects.
+
+### Does this PR introduce any user-facing change?
+
+Example:
+```
+extra = {"featuresCol": "features1"}
+lr = LogisticRegression()
+lr.fit(data, params=extra)
+```
+will now be equivalent to
+```
+lr = LogisticRegression(**extra)
+lr.fit(data)
+```
+Unrecognized parameters will now raise ValueError.
+
+(Note also that invalid parameters added to ParamGridBuilder which might have been ignored could now cause errors, if
+eventually the bad key arrives in a call to a fit method.)
+
+### How was this patch tested?
+
+Added method test_copy_param_extras_check to test_param.py.

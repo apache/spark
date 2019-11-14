@@ -308,6 +308,24 @@ class ParamTests(SparkSessionTestCase):
         self.assertEqual(tp._paramMap, copied_no_extra)
         self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
 
+    def test_copy_param_extras_check(self):
+        tp = TestParams(seed=42)
+        extra = {"maxIter": 10}
+        tp_copy = tp.copy(extra=extra)
+        self.assertEqual(tp.uid, tp_copy.uid)
+        for k, v in extra.items():
+            self.assertTrue(tp_copy.isDefined(k))
+            self.assertEqual(tp_copy.getOrDefault(k), v)
+        copied_no_extra = {}
+        for k, v in tp_copy._paramMap.items():
+            if k not in extra:
+                copied_no_extra[k] = v
+        self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
+        with self.assertRaises(ValueError):
+            tp.copy(extra={"unknown_parameter": None})
+        with self.assertRaises(TypeError):
+            tp.copy(extra={42: 42})
+
     def test_logistic_regression_check_thresholds(self):
         self.assertIsInstance(
             LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
