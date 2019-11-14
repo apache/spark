@@ -2272,6 +2272,9 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
         """
         return self._call_java("pValues")
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 if __name__ == "__main__":
     import doctest
