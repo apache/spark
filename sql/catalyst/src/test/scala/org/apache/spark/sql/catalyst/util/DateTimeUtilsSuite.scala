@@ -696,29 +696,41 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("fast parse to micros") {
-    val timeZone = TimeZoneUTC
-    def check(pattern: String, input: String, reference: String): Unit = {
-      val parser = getDateTimeParser(
-        FastDateFormat.getInstance(pattern, timeZone, Locale.US),
-        timeZone)
-      val expected = DateTimeUtils.stringToTimestamp(
-        UTF8String.fromString(reference), timeZone).get
-      val actual = parser.parse(input)
-      assert(actual === expected)
+    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+      def check(pattern: String, input: String, reference: String): Unit = {
+        val parser = getDateTimeParser(
+          FastDateFormat.getInstance(pattern, timeZone, Locale.US),
+          timeZone)
+        val expected = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(reference), timeZone).get
+        val actual = parser.parse(input)
+        assert(actual === expected)
+      }
+
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
+        "2019-10-14T09:39:07.3220000Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+        "2019-10-14T09:39:07.322000", "2019-10-14T09:39:07.322")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSX",
+        "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.000010Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.S",
+        "2019-10-14T09:39:07.1", "2019-10-14T09:39:07.1")
+      check("yyyy-MM-dd'T'HH:mm:ss.SS",
+        "2019-10-14T09:39:07.10", "2019-10-14T09:39:07.1")
+
+      try {
+        getDateTimeParser(
+          FastDateFormat.getInstance("yyyy/MM/dd HH_mm_ss.SSSSSS", timeZone, Locale.US),
+          timeZone).parse("2019/11/14 20#25#30.123456")
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("is an invalid timestamp"))
+      }
     }
-    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
-      "2019-10-14T09:39:07.3220000Z", "2019-10-14T09:39:07.322Z")
-    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
-      "2019-10-14T09:39:07.322000Z", "2019-10-14T09:39:07.322Z")
-    check("yyyy-MM-dd'T'HH:mm:ss.SSSX",
-      "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
-    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
-      "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
-    check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
-      "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.000010Z")
-    check("yyyy-MM-dd'T'HH:mm:ss.SX",
-      "2019-10-14T09:39:07.1Z", "2019-10-14T09:39:07.1Z")
-    check("yyyy-MM-dd'T'HH:mm:ss.SSX",
-      "2019-10-14T09:39:07.10Z", "2019-10-14T09:39:07.1Z")
   }
 }
