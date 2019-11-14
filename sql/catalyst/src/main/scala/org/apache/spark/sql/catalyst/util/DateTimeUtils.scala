@@ -1179,7 +1179,7 @@ object DateTimeUtils {
     def parse(s: String): SQLTimestamp = {
       cal.clear()
       if (!format.parse(s, new ParsePosition(0), cal)) {
-        throw new IllegalArgumentException(s)
+        throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
       }
       val micros = cal.getMicros(digitsInFraction)
       cal.set(Calendar.MILLISECOND, 0)
