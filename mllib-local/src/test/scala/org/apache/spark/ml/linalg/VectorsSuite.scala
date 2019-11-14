@@ -412,4 +412,25 @@ class VectorsSuite extends SparkMLFunSuite {
     assert((sv * 10).toArray === Array(1, 0, 3, 4))
   }
 
+  test("scalar division") {
+    val tol = 1e-15 // margin for round-off error
+
+    val dv = Vectors.dense(arr)
+    val dAns = (dv / 10).toArray
+    assert(dAns(0) ~== 0.01 relTol tol)
+    assert(dAns(1) ~== 0.00 relTol tol)
+    assert(dAns(2) ~== 0.03 relTol tol)
+    assert(dAns(3) ~== 0.04 relTol tol)
+
+    val sv = Vectors.sparse(n, indices, values)
+    val sAns = (sv / 10).toArray
+    assert(sAns(0) ~== 0.01 relTol tol)
+    assert(sAns(1) ~== 0.00 relTol tol)
+    assert(sAns(2) ~== 0.03 relTol tol)
+    assert(sAns(3) ~== 0.04 relTol tol)
+
+    intercept[IllegalArgumentException]{dv / 0}
+    intercept[IllegalArgumentException]{sv / 0}
+  }
+
 }

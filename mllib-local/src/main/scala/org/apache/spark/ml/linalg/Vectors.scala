@@ -197,6 +197,17 @@ sealed trait Vector extends Serializable {
     that
   }
 
+  /**
+   * Divide a vector by a scalar.
+   */
+  @Since("3.0.0")
+  def /(a: Double): Vector = {
+    a match {
+      case 0 => throw new IllegalArgumentException("division by zero")
+      case _ => this * (1 / a)
+    }
+  }
+
 }
 
 /**
