@@ -22,6 +22,7 @@ import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
@@ -36,9 +37,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{IntervalUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
-import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
+import org.apache.spark.sql.catalyst.util.postgreSQL.{StringUtils => PgStringUtils}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1849,58 +1851,87 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * {{{
    *   [TYPE] '[VALUE]'
    * }}}
-   * Currently Date, Timestamp, Interval, Binary and INTEGER typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
-    val value = string(ctx.STRING)
-    val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
+    val v = string(ctx.STRING)
+    val vUTF8Str = UTF8String.fromString(v)
+    val valueType = ctx.dataType.getText.toUpperCase(Locale.ROOT)
     val isNegative = ctx.negativeSign != null
 
-    def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
-      f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
-        throw new ParseException(s"Cannot parse the $valueType value: $value", ctx)
+    def throwParseException(ex: Throwable = null) = {
+      val negativeSign: String = if (isNegative) "-" else ""
+      val pe = new ParseException(s"Cannot parse the $negativeSign$valueType value:" +
+        s" $v.${Option(ex).map(e => " " + e.getMessage).getOrElse("")}", ctx)
+      Option(ex).foreach(e => pe.setStackTrace(e.getStackTrace))
+      throw pe
+    }
+
+    def stringToLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
+      f(vUTF8Str).map(Literal(_, t)).getOrElse(throwParseException())
+    }
+
+    def createNumLiteral(block: => Any, dt: DataType): Literal = {
+      try {
+        Literal(block, dt)
+      } catch {
+        case NonFatal(e) => throwParseException(e)
       }
     }
+
     try {
       valueType match {
-        case "DATE" if !isNegative =>
-          toLiteral(stringToDate(_, getZoneId(SQLConf.get.sessionLocalTimeZone)), DateType)
-        case "TIMESTAMP" if !isNegative =>
-          val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
-          toLiteral(stringToTimestamp(_, zoneId), TimestampType)
-        case "INTERVAL" =>
-          val interval = try {
-            IntervalUtils.fromString(value)
-          } catch {
-            case e: IllegalArgumentException =>
-              val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
-              ex.setStackTrace(e.getStackTrace)
-              throw ex
+        case "X" =>
+          if (isNegative) {
+            throwParseException()
           }
-          val signedInterval = if (isNegative) IntervalUtils.negate(interval) else interval
-          Literal(signedInterval, CalendarIntervalType)
-        case "X" if !isNegative =>
-          val padding = if (value.length % 2 != 0) "0" else ""
-          Literal(DatatypeConverter.parseHexBinary(padding + value))
-        case "INTEGER" =>
-          val i = try {
-            value.toInt
-          } catch {
-            case e: NumberFormatException =>
-              val ex = new ParseException(s"Cannot parse the Int value: $value, $e", ctx)
-              ex.setStackTrace(e.getStackTrace)
-              throw ex
+          val padding = if (v.length % 2 != 0) "0" else ""
+          Literal(DatatypeConverter.parseHexBinary(padding + v))
+        case _ =>
+          CatalystSqlParser.parseDataType(valueType) match {
+            case b: BooleanType if !isNegative =>
+              val res = if (SQLConf.get.usePostgreSQLDialect) {
+                val isTrue = PgStringUtils.isTrueString(vUTF8Str)
+                if (isTrue || PgStringUtils.isFalseString(vUTF8Str)) {
+                  isTrue
+                } else throwParseException()
+              } else {
+                val isTrue = StringUtils.isTrueString(vUTF8Str)
+                if (isTrue || StringUtils.isFalseString(vUTF8Str)) {
+                  isTrue
+                } else throwParseException()
+              }
+              Literal(res, b)
+            case b: ByteType =>
+              createNumLiteral(if (isNegative) (-v.toByte).toByte else v.toByte, b)
+            case s: ShortType =>
+              createNumLiteral(if (isNegative) (-v.toShort).toShort else v.toShort, s)
+            case i: IntegerType => createNumLiteral(if (isNegative) -v.toInt else v.toInt, i)
+            case l: LongType => createNumLiteral(if (isNegative) -v.toLong else v.toLong, l)
+            case f: FloatType => createNumLiteral(if (isNegative) -v.toFloat else v.toFloat, f)
+            case d: DoubleType => createNumLiteral(if (isNegative) -v.toDouble else v.toDouble, d)
+            case d: DateType if !isNegative =>
+              stringToLiteral(stringToDate(_, getZoneId(SQLConf.get.sessionLocalTimeZone)), d)
+            case t: TimestampType if !isNegative =>
+              val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
+              stringToLiteral(stringToTimestamp(_, zoneId), t)
+            case _: HiveStringType | StringType if !isNegative => Literal(vUTF8Str, StringType)
+            case b: BinaryType if !isNegative => Literal(vUTF8Str.getBytes, b)
+            case d: DecimalType =>
+              val block = {
+                val bd = new java.math.BigDecimal(v)
+                val sd = Decimal(bd, d.precision, d.scale)
+                if (isNegative) -sd else sd
+              }
+              createNumLiteral(block, d)
+            case i: CalendarIntervalType =>
+              val interval = IntervalUtils.fromString(v)
+              val signedInterval = if (isNegative) IntervalUtils.negate(interval) else interval
+              Literal(signedInterval, i)
+            case _ => throwParseException()
           }
-          Literal(if (isNegative) -i else i, IntegerType)
-        case other =>
-          val negativeSign: String = if (isNegative) "-" else ""
-          throw new ParseException(s"Literals of type '$negativeSign$other' are currently not" +
-            " supported.", ctx)
       }
     } catch {
-      case e: IllegalArgumentException =>
-        val message = Option(e.getMessage).getOrElse(s"Exception parsing $valueType")
-        throw new ParseException(message, ctx)
+      case e: IllegalArgumentException => throwParseException(e)
     }
   }
 

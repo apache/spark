@@ -767,7 +767,7 @@ primaryExpression
 constant
     : NULL                                                                                     #nullLiteral
     | interval                                                                                 #intervalLiteral
-    | negativeSign=MINUS? identifier STRING                                                    #typeConstructor
+    | negativeSign=MINUS? dataType STRING                                                      #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | STRING+                                                                                  #stringLiteral

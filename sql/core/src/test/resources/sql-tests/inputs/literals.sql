@@ -162,3 +162,52 @@ select -timestamp '1999-01-01';
 select -x'2379ACFe';
 select +integer '7';
 select +interval '1 second';
+
+-- typed literals
+-- boolean
+select boolean 'true';
+select boolean 'false';
+select boolean 't';
+select boolean 'f';
+select boolean 'yes';
+select boolean 'no';
+select -boolean 'true';
+
+-- byte
+select tinyint '1';
+select tinyint '-1';
+select tinyint '128';
+select byte '1';
+select -tinyint '1';
+
+-- short
+select smallint '1';
+select smallint '-1';
+select smallint '32768';
+select short '1';
+select -smallint '1';
+
+-- long
+select long '1';
+select bigint '-1';
+select -bigint '1';
+
+-- float/double
+select float '1';
+select -float '-1';
+select double '1';
+select -double '1';
+
+-- hive string type
+select char(10) 'SPARK-29896';
+select varchar(10) 'SPARK-29896';
+
+-- binary
+select binary 'SPARK-29896';
+
+-- decimal
+select decimal '1.000001';
+select decimal(10, 2) '11.1';
+select decimal(2, 0) '11.1';
+select decimal(2, 1) '11.1';
+select decimal(39, 1) '11.1';
