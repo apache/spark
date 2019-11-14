@@ -612,7 +612,7 @@ class StructType(DataType):
         else:
             if isinstance(obj, dict):
                 return tuple(obj.get(n) for n in self.names)
-            elif isinstance(obj, LegacyRow) and getattr(obj, "__from_dict__", False):
+            elif isinstance(obj, _LegacyRow) and getattr(obj, "__from_dict__", False):
                 return tuple(obj[n] for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
@@ -1377,7 +1377,7 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             if isinstance(obj, dict):
                 for f, verifier in verifiers:
                     verifier(obj.get(f))
-            elif isinstance(obj, LegacyRow) and getattr(obj, "__from_dict__", False):
+            elif isinstance(obj, _LegacyRow) and getattr(obj, "__from_dict__", False):
                 # the order in obj could be different than dataType.fields
                 for f, verifier in verifiers:
                     verifier(obj[f])
@@ -1440,8 +1440,13 @@ class Row(tuple):
     It is not allowed to omit a named argument to represent the value is
     None or missing. This should be explicitly set to None in this case.
 
-    NOTE: For Python version < 3.6, named arguments can not be used due
-    to *** TODO ***
+    NOTE: For Python versions < 3.6, named arguments can no longer be used
+    since the order is not guaranteed to be the same as entered, see
+    https://www.python.org/dev/peps/pep-0468. Instead, an OrderedDict can
+    be passed as the first argument. To create a Row that is compatible
+    with Spark 2.x (with fields sorted alphabetically) set the environment
+    variable "PYSPARK_LEGACY_ROW_ENABLED" to "true". This option is
+    deprecated and will be removed in future versions of Spark.
 
     >>> row = Row(name="Alice", age=11)
     >>> row
@@ -1483,7 +1488,7 @@ class Row(tuple):
 
     def __new__(cls, *args, **kwargs):
         if _legacy_row_enabled:
-            return LegacyRow(args, kwargs)
+            return _LegacyRow(args, kwargs)
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
@@ -1599,10 +1604,13 @@ class Row(tuple):
             return "<Row(%s)>" % ", ".join("%r" % field for field in self)
 
 
-class LegacyRow(Row):
+class _LegacyRow(Row):
     """
+    Creates a Row that is compatible with with Spark 2.x, such that when
+    made with kwargs, the fields are sorted alphabetically.
 
-    .. note:: Deprecated in 3.0. See SPARK-29748
+    .. note:: Deprecated in 3.0.0, will be removed in future versions of Spark.
+    See SPARK-29748
     """
 
     def __new__(cls, *args, **kwargs):
