@@ -62,8 +62,11 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     }
 
     // If KUBERNETES_EXECUTOR_POD_NAME_PREFIX is not set, initialize it so that all executors have
-    // the same prefix. This is needed for client mode, where the feature code that sets this
+    // the same prefix. This is needed for client mode, where the feature steps code that sets this
     // configuration is not used.
+    //
+    // If/when feature steps are executed in client mode, they should instead take care of this,
+    // and this code should be removed.
     if (!sc.conf.contains(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)) {
       sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX,
         KubernetesConf.getResourceNamePrefix(sc.conf.get("spark.app.name")))
