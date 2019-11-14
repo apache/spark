@@ -1013,14 +1013,6 @@ class Analyzer(
       attr.withExprId(exprId)
     }
 
-    private def dedupAlias(alias: Alias, attrMap: AttributeMap[Attribute]): Alias = {
-      attrMap.get(alias.toAttribute) match {
-        case Some(attr) =>
-          Alias(alias.child, alias.name)(exprId = attr.exprId)
-        case None => alias
-      }
-    }
-
     /**
      * The outer plan may have been de-duplicated and the function below updates the
      * outer references to refer to the de-duplicated attributes.
