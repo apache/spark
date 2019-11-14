@@ -49,33 +49,20 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val unpersistRDDEventsForJob1 = (1 to 2).map(SparkListenerUnpersistRDD)
 
     // job events for finished job should be filtered out
-    assert(filter.filterJobStart(jobStartEventForJob1) === Some(false))
-    assert(filter.filterJobEnd(jobEndEventForJob1) === Some(false))
+    assertFilterJobEvents(filter, jobStartEventForJob1, jobEndEventForJob1, Some(false))
 
     // stage events for finished job should be filtered out
     // NOTE: it doesn't filter out stage events which are also related to the executor
-    assert(filter.filterStageSubmitted(stageSubmittedEventsForJob1) === Some(false))
-    assert(filter.filterStageCompleted(stageCompletedEventsForJob1) === Some(false))
-    unpersistRDDEventsForJob1.foreach { event =>
-      assert(filter.filterUnpersistRDD(event) === Some(false))
-    }
-
-    val taskSpeculativeTaskSubmittedEvent = SparkListenerSpeculativeTaskSubmitted(stage1.stageId,
-      stageAttemptId = 1)
-    assert(filter.filterSpeculativeTaskSubmitted(taskSpeculativeTaskSubmittedEvent) === Some(false))
+    assertFilterStageEvents(
+      filter,
+      stageSubmittedEventsForJob1,
+      stageCompletedEventsForJob1,
+      unpersistRDDEventsForJob1,
+      SparkListenerSpeculativeTaskSubmitted(stage1.stageId, stageAttemptId = 1),
+      Some(false))
 
     // task events for finished job should be filtered out
-    tasksForStage1.foreach { task =>
-      val taskStartEvent = SparkListenerTaskStart(stage1.stageId, 0, task)
-      assert(filter.filterTaskStart(taskStartEvent) === Some(false))
-
-      val taskGettingResultEvent = SparkListenerTaskGettingResult(task)
-      assert(filter.filterTaskGettingResult(taskGettingResultEvent) === Some(false))
-
-      val taskEndEvent = SparkListenerTaskEnd(stage1.stageId, 0, "taskType",
-        Success, task, new ExecutorMetrics, null)
-      assert(filter.filterTaskEnd(taskEndEvent) === Some(false))
-    }
+    assertFilterTaskEvents(filter, tasksForStage1, stage1, Some(false))
 
     // Verifying with live job 2
     val rddsForStage2 = createRddsWithId(3 to 4)
@@ -92,28 +79,16 @@ class BasicEventFilterSuite extends SparkFunSuite {
     assert(filter.filterJobStart(jobStartEventForJob2) === Some(true))
 
     // stage events for live job should be filtered in
-    assert(filter.filterStageSubmitted(stageSubmittedEventsForJob2) === Some(true))
-    assert(filter.filterStageCompleted(stageCompletedEventsForJob2) === Some(true))
-    unpersistRDDEventsForJob2.foreach { event =>
-      assert(filter.filterUnpersistRDD(event) === Some(true))
-    }
-
-    val taskSpeculativeTaskSubmittedEvent2 = SparkListenerSpeculativeTaskSubmitted(stage2.stageId,
-      stageAttemptId = 1)
-    assert(filter.filterSpeculativeTaskSubmitted(taskSpeculativeTaskSubmittedEvent2) === Some(true))
+    assertFilterStageEvents(
+      filter,
+      stageSubmittedEventsForJob2,
+      stageCompletedEventsForJob2,
+      unpersistRDDEventsForJob2,
+      SparkListenerSpeculativeTaskSubmitted(stage2.stageId, stageAttemptId = 1),
+      Some(true))
 
     // task events for live job should be filtered in
-    tasksForStage2.foreach { task =>
-      val taskStartEvent = SparkListenerTaskStart(stage2.stageId, 0, task)
-      assert(filter.filterTaskStart(taskStartEvent) === Some(true))
-
-      val taskGettingResultEvent = SparkListenerTaskGettingResult(task)
-      assert(filter.filterTaskGettingResult(taskGettingResultEvent) === Some(true))
-
-      val taskEndEvent = SparkListenerTaskEnd(stage1.stageId, 0, "taskType",
-        Success, task, new ExecutorMetrics, null)
-      assert(filter.filterTaskEnd(taskEndEvent) === Some(true))
-    }
+    assertFilterTaskEvents(filter, tasksForStage2, stage2, Some(true))
   }
 
   test("filter out events for dead executors") {
@@ -166,5 +141,47 @@ class BasicEventFilterSuite extends SparkFunSuite {
     assertNone(filter.filterNodeBlacklisted(SparkListenerNodeBlacklisted(0, "host1", 1)))
     assertNone(filter.filterNodeUnblacklisted(SparkListenerNodeUnblacklisted(0, "host1")))
     assertNone(filter.filterOtherEvent(SparkListenerLogStart("testVersion")))
+  }
+
+  private def assertFilterJobEvents(
+      filter: BasicEventFilter,
+      jobStart: SparkListenerJobStart,
+      jobEnd: SparkListenerJobEnd,
+      expectedVal: Option[Boolean]): Unit = {
+    assert(filter.filterJobStart(jobStart) === expectedVal)
+    assert(filter.filterJobEnd(jobEnd) === expectedVal)
+  }
+
+  private def assertFilterStageEvents(
+      filter: BasicEventFilter,
+      stageSubmitted: SparkListenerStageSubmitted,
+      stageCompleted: SparkListenerStageCompleted,
+      unpersistRDDs: Seq[SparkListenerUnpersistRDD],
+      taskSpeculativeSubmitted: SparkListenerSpeculativeTaskSubmitted,
+      expectedVal: Option[Boolean]): Unit = {
+    assert(filter.filterStageSubmitted(stageSubmitted) === expectedVal)
+    assert(filter.filterStageCompleted(stageCompleted) === expectedVal)
+    unpersistRDDs.foreach { event =>
+      assert(filter.filterUnpersistRDD(event) === expectedVal)
+    }
+    assert(filter.filterSpeculativeTaskSubmitted(taskSpeculativeSubmitted) === expectedVal)
+  }
+
+  private def assertFilterTaskEvents(
+      filter: BasicEventFilter,
+      taskInfos: Seq[TaskInfo],
+      stageInfo: StageInfo,
+      expectedVal: Option[Boolean]): Unit = {
+    taskInfos.foreach { task =>
+      val taskStartEvent = SparkListenerTaskStart(stageInfo.stageId, 0, task)
+      assert(filter.filterTaskStart(taskStartEvent) === expectedVal)
+
+      val taskGettingResultEvent = SparkListenerTaskGettingResult(task)
+      assert(filter.filterTaskGettingResult(taskGettingResultEvent) === expectedVal)
+
+      val taskEndEvent = SparkListenerTaskEnd(stageInfo.stageId, 0, "taskType",
+        Success, task, new ExecutorMetrics, null)
+      assert(filter.filterTaskEnd(taskEndEvent) === expectedVal)
+    }
   }
 }

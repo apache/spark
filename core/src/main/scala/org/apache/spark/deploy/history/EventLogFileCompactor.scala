@@ -112,11 +112,7 @@ class EventLogFileCompactor(
 
   private def findFilesToCompact(
       eventLogFiles: Seq[FileStatus]): (Seq[FileStatus], Seq[FileStatus]) = {
-    val lastCompactedFileIdx = eventLogFiles.lastIndexWhere { fs =>
-      EventLogFileWriter.isCompacted(fs.getPath)
-    }
-    val files = eventLogFiles.drop(lastCompactedFileIdx)
-
+    val files = RollingEventLogFilesFileReader.dropBeforeLastCompactFile(eventLogFiles)
     if (files.length > maxFilesToRetain) {
       (files.dropRight(maxFilesToRetain), files.takeRight(maxFilesToRetain))
     } else {
@@ -161,7 +157,6 @@ class FilteredEventLogFileRewriter(
 
       try {
         val lineEntries = lines.zipWithIndex
-
         while (lineEntries.hasNext) {
           try {
             val entry = lineEntries.next()

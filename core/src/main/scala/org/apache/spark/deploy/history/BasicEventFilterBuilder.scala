@@ -72,15 +72,15 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
 }
 
 /**
- * This class filters out events which are related to the finished jobs or dead executors,
- * based on the given information. The events which are not related to the job and executor
- * will be considered as "Don't mind".
+ * This class provides the functionality to filter out events which are related to the finished
+ * jobs based on the given information. This class only deals with job related events, and returns
+ * either Some(true) or Some(false) - successors should override the methods if they don't want to
+ * return Some(false) for finished jobs and related events.
  */
-private[spark] class BasicEventFilter(
-    liveJobToStages: Map[Int, Seq[Int]],
+private[spark] abstract class JobEventFilter(
+    jobToStages: Map[Int, Seq[Int]],
     stageToTasks: Map[Int, Set[Long]],
-    stageToRDDs: Map[Int, Seq[Int]],
-    liveExecutors: Set[String]) extends EventFilter with Logging {
+    stageToRDDs: Map[Int, Seq[Int]]) extends EventFilter with Logging {
 
   private val liveTasks: Set[Long] = stageToTasks.values match {
     case xs if xs.isEmpty => Set.empty[Long]
@@ -93,8 +93,8 @@ private[spark] class BasicEventFilter(
   }
 
   if (log.isDebugEnabled) {
-    logDebug(s"live jobs : ${liveJobToStages.keySet}")
-    logDebug(s"stages in jobs : ${liveJobToStages.values.flatten}")
+    logDebug(s"jobs : ${jobToStages.keySet}")
+    logDebug(s"stages in jobs : ${jobToStages.values.flatten}")
     logDebug(s"stages : ${stageToTasks.keySet}")
     logDebug(s"tasks in stages : ${stageToTasks.values.flatten}")
     logDebug(s"RDDs in stages : ${stageToRDDs.values.flatten}")
@@ -121,20 +121,44 @@ private[spark] class BasicEventFilter(
   }
 
   override def filterJobStart(event: SparkListenerJobStart): Option[Boolean] = {
-    Some(liveJobToStages.contains(event.jobId))
+    Some(jobToStages.contains(event.jobId))
   }
 
   override def filterJobEnd(event: SparkListenerJobEnd): Option[Boolean] = {
-    Some(liveJobToStages.contains(event.jobId))
+    Some(jobToStages.contains(event.jobId))
   }
 
   override def filterUnpersistRDD(event: SparkListenerUnpersistRDD): Option[Boolean] = {
     Some(liveRDDs.contains(event.rddId))
   }
 
-  override def filterStageExecutorMetrics(
-      event: SparkListenerStageExecutorMetrics): Option[Boolean] = {
-    Some(liveExecutors.contains(event.execId))
+  override def filterExecutorMetricsUpdate(
+      event: SparkListenerExecutorMetricsUpdate): Option[Boolean] = {
+    Some(event.accumUpdates.exists { case (_, stageId, _, _) =>
+      stageToTasks.contains(stageId)
+    })
+  }
+
+  override def filterSpeculativeTaskSubmitted(
+      event: SparkListenerSpeculativeTaskSubmitted): Option[Boolean] = {
+    Some(stageToTasks.contains(event.stageId))
+  }
+}
+
+/**
+ * This class filters out events which are related to the finished jobs or dead executors,
+ * based on the given information. The events which are not related to the job and executor
+ * will be considered as "Don't mind".
+ */
+private[spark] class BasicEventFilter(
+    _liveJobToStages: Map[Int, Seq[Int]],
+    _stageToTasks: Map[Int, Set[Long]],
+    _stageToRDDs: Map[Int, Seq[Int]],
+    liveExecutors: Set[String])
+  extends JobEventFilter(_liveJobToStages, _stageToTasks, _stageToRDDs) with Logging {
+
+  if (log.isDebugEnabled) {
+    logDebug(s"live executors : $liveExecutors")
   }
 
   override def filterExecutorAdded(event: SparkListenerExecutorAdded): Option[Boolean] = {
@@ -155,9 +179,9 @@ private[spark] class BasicEventFilter(
     Some(liveExecutors.contains(event.executorId))
   }
 
-  override def filterSpeculativeTaskSubmitted(
-      event: SparkListenerSpeculativeTaskSubmitted): Option[Boolean] = {
-    Some(stageToTasks.contains(event.stageId))
+  override def filterStageExecutorMetrics(
+      event: SparkListenerStageExecutorMetrics): Option[Boolean] = {
+    Some(liveExecutors.contains(event.execId))
   }
 }
 

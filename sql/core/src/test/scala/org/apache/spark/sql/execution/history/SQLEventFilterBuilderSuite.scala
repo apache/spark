@@ -32,56 +32,6 @@ class SQLEventFilterBuilderSuite extends SparkFunSuite {
   }
 
   test("track live SQL executions") {
-    case class JobInfo(
-        stageIds: Seq[Int],
-        stageToTaskIds: Map[Int, Seq[Long]],
-        stageToRddIds: Map[Int, Seq[Int]])
-
-    def pushJobEventsWithoutJobEnd(
-        listener: SQLEventFilterBuilder,
-        jobId: Int,
-        execIds: Array[String],
-        sqlExecId: Option[String],
-        time: Long): JobInfo = {
-      // Start a job with 1 stages / 4 tasks each
-      val rddsForStage = createRdds(2)
-      val stage = createStage(rddsForStage, Nil)
-
-      val jobProps = createJobProps()
-      sqlExecId.foreach { id => jobProps.setProperty(SQLExecution.EXECUTION_ID_KEY, id) }
-
-      listener.onJobStart(SparkListenerJobStart(jobId, time, Seq(stage), jobProps))
-
-      // Submit stage
-      stage.submissionTime = Some(time)
-      listener.onStageSubmitted(SparkListenerStageSubmitted(stage, jobProps))
-
-      // Start tasks from stage
-      val s1Tasks = ListenerEventsTestHelper.createTasks(4, execIds, time)
-      s1Tasks.foreach { task =>
-        listener.onTaskStart(SparkListenerTaskStart(stage.stageId,
-          stage.attemptNumber(), task))
-      }
-
-      // Succeed all tasks in stage.
-      val s1Metrics = TaskMetrics.empty
-      s1Metrics.setExecutorCpuTime(2L)
-      s1Metrics.setExecutorRunTime(4L)
-
-      s1Tasks.foreach { task =>
-        task.markFinished(TaskState.FINISHED, time)
-        listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber,
-          "taskType", Success, task, new ExecutorMetrics, s1Metrics))
-      }
-
-      // End stage.
-      stage.completionTime = Some(time)
-      listener.onStageCompleted(SparkListenerStageCompleted(stage))
-
-      JobInfo(Seq(stage.stageId), Map(stage.stageId -> s1Tasks.map(_.taskId)),
-        Map(stage.stageId -> rddsForStage.map(_.id)))
-    }
-
     var time = 0L
 
     val listener = new SQLEventFilterBuilder
@@ -157,5 +107,55 @@ class SQLEventFilterBuilderSuite extends SparkFunSuite {
     assert(listener.jobToStages.isEmpty)
     assert(listener.stageToTasks.isEmpty)
     assert(listener.stageToRDDs.isEmpty)
+  }
+
+  case class JobInfo(
+      stageIds: Seq[Int],
+      stageToTaskIds: Map[Int, Seq[Long]],
+      stageToRddIds: Map[Int, Seq[Int]])
+
+  private def pushJobEventsWithoutJobEnd(
+      listener: SQLEventFilterBuilder,
+      jobId: Int,
+      execIds: Array[String],
+      sqlExecId: Option[String],
+      time: Long): JobInfo = {
+    // Start a job with 1 stages / 4 tasks each
+    val rddsForStage = createRdds(2)
+    val stage = createStage(rddsForStage, Nil)
+
+    val jobProps = createJobProps()
+    sqlExecId.foreach { id => jobProps.setProperty(SQLExecution.EXECUTION_ID_KEY, id) }
+
+    listener.onJobStart(SparkListenerJobStart(jobId, time, Seq(stage), jobProps))
+
+    // Submit stage
+    stage.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage, jobProps))
+
+    // Start tasks from stage
+    val s1Tasks = ListenerEventsTestHelper.createTasks(4, execIds, time)
+    s1Tasks.foreach { task =>
+      listener.onTaskStart(SparkListenerTaskStart(stage.stageId,
+        stage.attemptNumber(), task))
+    }
+
+    // Succeed all tasks in stage.
+    val s1Metrics = TaskMetrics.empty
+    s1Metrics.setExecutorCpuTime(2L)
+    s1Metrics.setExecutorRunTime(4L)
+
+    s1Tasks.foreach { task =>
+      task.markFinished(TaskState.FINISHED, time)
+      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber,
+        "taskType", Success, task, new ExecutorMetrics, s1Metrics))
+    }
+
+    // End stage.
+    stage.completionTime = Some(time)
+    listener.onStageCompleted(SparkListenerStageCompleted(stage))
+
+    JobInfo(Seq(stage.stageId), Map(stage.stageId -> s1Tasks.map(_.taskId)),
+      Map(stage.stageId -> rddsForStage.map(_.id)))
   }
 }

@@ -21,7 +21,7 @@ import java.io.File
 
 import scala.io.{Codec, Source}
 
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -66,20 +66,10 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
 
       val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs)
       val fileStatuses = logPaths.map { p => fs.getFileStatus(new Path(p))  }
-      val filesToRead = compactor.compact(fileStatuses)
-
-      // 3 (max file to retain) + 1 (compacted file)
-      assert(filesToRead.length === 4)
-      val originalFilesToRead = filesToRead.takeRight(3)
-      val originFileToCompact = fileStatuses.takeRight(4).head.getPath
-      val compactFilePath = filesToRead.head.getPath
-
-      assert(compactFilePath.getName === originFileToCompact.getName + EventLogFileWriter.COMPACTED)
-      assert(originalFilesToRead.map(_.getPath) === fileStatuses.takeRight(3).map(_.getPath))
+      assertCompaction(fs, fileStatuses, compactor.compact(fileStatuses))
 
       // compacted files will be removed
       fileStatuses.take(2).foreach { status => assert(!fs.exists(status.getPath)) }
-      filesToRead.foreach { status => assert(fs.exists(status.getPath)) }
     }
   }
 
@@ -120,20 +110,10 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
 
       val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs)
       val fileStatuses = newLogPaths.map { p => fs.getFileStatus(new Path(p))  }
-      val filesToRead = compactor.compact(fileStatuses)
-
-      // 3 (max file to retain) + 1 (compacted file)
-      assert(filesToRead.length === 4)
-      val originalFilesToRead = filesToRead.takeRight(3)
-      val originFileToCompact = fileStatuses.takeRight(4).head.getPath
-      val compactFilePath = filesToRead.head.getPath
-
-      assert(compactFilePath.getName === originFileToCompact.getName + EventLogFileWriter.COMPACTED)
-      assert(originalFilesToRead.map(_.getPath) === fileStatuses.takeRight(3).map(_.getPath))
+      assertCompaction(fs, fileStatuses, compactor.compact(fileStatuses))
 
       // compacted files will be removed - we don't check files "before" the rightmost compact file
       fileStatuses.drop(2).dropRight(3).foreach { status => assert(!fs.exists(status.getPath)) }
-      filesToRead.foreach { status => assert(fs.exists(status.getPath)) }
     }
   }
 
@@ -161,17 +141,31 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
       val compactFilePath = filesToRead.head.getPath
 
       Utils.tryWithResource(EventLogFileReader.openEventLog(compactFilePath, fs)) { is =>
-        val lines = Source.fromInputStream(is)(Codec.UTF8).getLines()
-        var linesLength = 0
+        val lines = Source.fromInputStream(is)(Codec.UTF8).getLines().toList
+        assert(lines.length === 2, "Compacted file should have only two events being filtered in")
         lines.foreach { line =>
-          linesLength += 1
           val event = JsonProtocol.sparkEventFromJson(parse(line))
           assert(!event.isInstanceOf[SparkListenerJobStart] &&
             !event.isInstanceOf[SparkListenerJobEnd])
         }
-        assert(linesLength === 2, "Compacted file should have only two events being filtered in")
       }
     }
+  }
+
+  private def assertCompaction(
+      fs: FileSystem,
+      originalFiles: Seq[FileStatus],
+      retValue: Seq[FileStatus]): Unit = {
+    // 3 (max file to retain) + 1 (compacted file)
+    assert(retValue.length === 4)
+    val originalFilesToRead = retValue.takeRight(3)
+    val originFileToCompact = originalFiles.takeRight(4).head.getPath
+    val compactFilePath = retValue.head.getPath
+
+    assert(compactFilePath.getName === originFileToCompact.getName + EventLogFileWriter.COMPACTED)
+    assert(originalFilesToRead.map(_.getPath) === originalFiles.takeRight(3).map(_.getPath))
+
+    retValue.foreach { status => assert(fs.exists(status.getPath)) }
   }
 
   private def writeDummyEventLogFile(dir: File, idx: Int): String = {

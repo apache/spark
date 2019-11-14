@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.history
 
 import scala.collection.mutable
 
-import org.apache.spark.deploy.history.{EventFilter, EventFilterBuilder}
+import org.apache.spark.deploy.history.{EventFilter, EventFilterBuilder, JobEventFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.SQLExecution
@@ -118,72 +118,56 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
  */
 private[spark] class SQLLiveEntitiesEventFilter(
     liveExecutionToJobs: Map[Long, Set[Int]],
-    jobToStages: Map[Int, Seq[Int]],
-    stageToTasks: Map[Int, Set[Long]],
-    stageToRDDs: Map[Int, Seq[Int]]) extends EventFilter with Logging {
-
-  private val liveTasks: Set[Long] = stageToTasks.values match {
-    case xs if xs.isEmpty => Set.empty[Long]
-    case xs => xs.reduce(_ ++ _).toSet
-  }
-
-  private val liveRDDs: Set[Int] = stageToRDDs.values match {
-    case xs if xs.isEmpty => Set.empty[Int]
-    case xs => xs.reduce(_ ++ _).toSet
-  }
+    _jobToStages: Map[Int, Seq[Int]],
+    _stageToTasks: Map[Int, Set[Long]],
+    _stageToRDDs: Map[Int, Seq[Int]])
+  extends JobEventFilter(_jobToStages, _stageToTasks, _stageToRDDs) with Logging {
 
   if (log.isDebugEnabled) {
     logDebug(s"live executions : ${liveExecutionToJobs.keySet}")
     logDebug(s"jobs in live executions : ${liveExecutionToJobs.values.flatten}")
-    logDebug(s"jobs : ${jobToStages.keySet}")
-    logDebug(s"stages in jobs : ${jobToStages.values.flatten}")
-    logDebug(s"stages : ${stageToTasks.keySet}")
-    logDebug(s"tasks in stages : ${stageToTasks.values.flatten}")
-    logDebug(s"RDDs in stages : ${stageToRDDs.values.flatten}")
   }
 
   override def filterStageCompleted(event: SparkListenerStageCompleted): Option[Boolean] = {
-    trueOrNone(stageToTasks.contains(event.stageInfo.stageId))
+    trueOrNone(super.filterStageCompleted(event))
   }
 
   override def filterStageSubmitted(event: SparkListenerStageSubmitted): Option[Boolean] = {
-    trueOrNone(stageToTasks.contains(event.stageInfo.stageId))
+    trueOrNone(super.filterStageSubmitted(event))
   }
 
   override def filterTaskStart(event: SparkListenerTaskStart): Option[Boolean] = {
-    trueOrNone(liveTasks.contains(event.taskInfo.taskId))
+    trueOrNone(super.filterTaskStart(event))
   }
 
   override def filterTaskGettingResult(event: SparkListenerTaskGettingResult): Option[Boolean] = {
-    trueOrNone(liveTasks.contains(event.taskInfo.taskId))
+    trueOrNone(super.filterTaskGettingResult(event))
   }
 
   override def filterTaskEnd(event: SparkListenerTaskEnd): Option[Boolean] = {
-    trueOrNone(liveTasks.contains(event.taskInfo.taskId))
+    trueOrNone(super.filterTaskEnd(event))
   }
 
   override def filterJobStart(event: SparkListenerJobStart): Option[Boolean] = {
-    trueOrNone(jobToStages.contains(event.jobId))
+    trueOrNone(super.filterJobStart(event))
   }
 
   override def filterJobEnd(event: SparkListenerJobEnd): Option[Boolean] = {
-    trueOrNone(jobToStages.contains(event.jobId))
+    trueOrNone(super.filterJobEnd(event))
   }
 
   override def filterUnpersistRDD(event: SparkListenerUnpersistRDD): Option[Boolean] = {
-    trueOrNone(liveRDDs.contains(event.rddId))
+    trueOrNone(super.filterUnpersistRDD(event))
   }
 
   override def filterExecutorMetricsUpdate(
       event: SparkListenerExecutorMetricsUpdate): Option[Boolean] = {
-    trueOrNone(event.accumUpdates.exists { case (_, stageId, _, _) =>
-      stageToTasks.contains(stageId)
-    })
+    trueOrNone(super.filterExecutorMetricsUpdate(event))
   }
 
   override def filterSpeculativeTaskSubmitted(
       event: SparkListenerSpeculativeTaskSubmitted): Option[Boolean] = {
-    trueOrNone(stageToTasks.contains(event.stageId))
+    trueOrNone(super.filterSpeculativeTaskSubmitted(event))
   }
 
   override def filterOtherEvent(event: SparkListenerEvent): Option[Boolean] = event match {
@@ -214,11 +198,11 @@ private[spark] class SQLLiveEntitiesEventFilter(
     Some(liveExecutionToJobs.contains(event.executionId))
   }
 
-  private def trueOrNone(booleanValue: Boolean): Option[Boolean] = {
-    if (booleanValue) {
-      Some(booleanValue)
-    } else {
-      None
+  private def trueOrNone(booleanValue: Option[Boolean]): Option[Boolean] = {
+    booleanValue match {
+      case Some(true) => Some(true)
+      case Some(false) => None
+      case None => None
     }
   }
 }
