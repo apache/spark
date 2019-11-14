@@ -21,9 +21,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.datasources.FileScanRDD
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
-class SubquerySuite extends QueryTest with SharedSQLContext {
+class SubquerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   setupTestData()
@@ -1077,9 +1080,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
            |                    HAVING max(c2) > 0
            |                    ORDER  BY c1)
         """.stripMargin
-      // The rule to remove redundant sorts is not able to remove the inner sort under
-      // an Aggregate operator. We only remove the top level sort.
-      assert(getNumSortsInQuery(query6) == 1)
+
+      assert(getNumSortsInQuery(query6) == 0)
 
       // Cases when sort is not removed from the plan
       // Limit on top of sort
@@ -1186,7 +1188,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-23957 Remove redundant sort from subquery plan(scalar subquery)") {
+  ignore("SPARK-23957 Remove redundant sort from subquery plan(scalar subquery)") {
     withTempView("t1", "t2", "t3") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
@@ -1267,5 +1269,361 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         """.stripMargin
       assert(getNumSortsInQuery(query5) == 1)
     }
+  }
+
+  test("SPARK-25482: Forbid pushdown to datasources of filters containing subqueries") {
+    withTempView("t1", "t2") {
+      sql("create temporary view t1(a int) using parquet")
+      sql("create temporary view t2(b int) using parquet")
+      val plan = sql("select * from t2 where b > (select max(a) from t1)")
+      val subqueries = plan.queryExecution.executedPlan.collect {
+        case p => p.subqueries
+      }.flatten
+      assert(subqueries.length == 1)
+    }
+  }
+
+  test("SPARK-26893: Allow pushdown of partition pruning subquery filters to file source") {
+    withTable("a", "b") {
+      spark.range(4).selectExpr("id", "id % 2 AS p").write.partitionBy("p").saveAsTable("a")
+      spark.range(2).write.saveAsTable("b")
+
+      val df = sql("SELECT * FROM a WHERE p <= (SELECT MIN(id) FROM b)")
+      checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
+      // need to execute the query before we can examine fs.inputRDDs()
+      assert(df.queryExecution.executedPlan match {
+        case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
+            fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _)))) =>
+          partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
+            fs.inputRDDs().forall(
+              _.asInstanceOf[FileScanRDD].filePartitions.forall(
+                _.files.forall(_.filePath.contains("p=0"))))
+        case _ => false
+      })
+    }
+  }
+
+  test("SPARK-26078: deduplicate fake self joins for IN subqueries") {
+    withTempView("a", "b") {
+      Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("a")
+      Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("b")
+
+      val df1 = spark.sql(
+        """
+          |SELECT id,num,source FROM (
+          |  SELECT id, num, 'a' as source FROM a
+          |  UNION ALL
+          |  SELECT id, num, 'b' as source FROM b
+          |) AS c WHERE c.id IN (SELECT id FROM b WHERE num = 2)
+        """.stripMargin)
+      checkAnswer(df1, Seq(Row("a", 2, "a"), Row("a", 2, "b")))
+      val df2 = spark.sql(
+        """
+          |SELECT id,num,source FROM (
+          |  SELECT id, num, 'a' as source FROM a
+          |  UNION ALL
+          |  SELECT id, num, 'b' as source FROM b
+          |) AS c WHERE c.id NOT IN (SELECT id FROM b WHERE num = 2)
+        """.stripMargin)
+      checkAnswer(df2, Seq(Row("b", 1, "a"), Row("b", 1, "b")))
+      val df3 = spark.sql(
+        """
+          |SELECT id,num,source FROM (
+          |  SELECT id, num, 'a' as source FROM a
+          |  UNION ALL
+          |  SELECT id, num, 'b' as source FROM b
+          |) AS c WHERE c.id IN (SELECT id FROM b WHERE num = 2) OR
+          |c.id IN (SELECT id FROM b WHERE num = 3)
+        """.stripMargin)
+      checkAnswer(df3, Seq(Row("a", 2, "a"), Row("a", 2, "b")))
+    }
+  }
+
+  test("SPARK-27279: Reuse Subquery") {
+    Seq(true, false).foreach { reuse =>
+      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
+        val df = sql(
+          """
+            |SELECT (SELECT avg(key) FROM testData) + (SELECT avg(key) FROM testData)
+            |FROM testData
+            |LIMIT 1
+          """.stripMargin)
+
+        var countSubqueryExec = 0
+        var countReuseSubqueryExec = 0
+        df.queryExecution.executedPlan.transformAllExpressions {
+          case s @ ScalarSubquery(_: SubqueryExec, _) =>
+            countSubqueryExec = countSubqueryExec + 1
+            s
+          case s @ ScalarSubquery(_: ReusedSubqueryExec, _) =>
+            countReuseSubqueryExec = countReuseSubqueryExec + 1
+            s
+        }
+
+        if (reuse) {
+          assert(countSubqueryExec == 1, "Subquery reusing not working correctly")
+          assert(countReuseSubqueryExec == 1, "Subquery reusing not working correctly")
+        } else {
+          assert(countSubqueryExec == 2, "expect 2 SubqueryExec when not reusing")
+          assert(countReuseSubqueryExec == 0,
+            "expect 0 ReusedSubqueryExec when not reusing")
+        }
+      }
+    }
+  }
+
+  test("Scalar subquery name should start with scalar-subquery#") {
+    val df = sql("SELECT a FROM l WHERE a = (SELECT max(c) FROM r WHERE c = 1)".stripMargin)
+    var subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty
+    df.queryExecution.executedPlan.transformAllExpressions {
+      case s @ ScalarSubquery(p: SubqueryExec, _) =>
+        subqueryExecs += p
+        s
+    }
+    assert(subqueryExecs.forall(_.name.startsWith("scalar-subquery#")),
+          "SubqueryExec name should start with scalar-subquery#")
+  }
+
+  test("SPARK-28441: COUNT bug in WHERE clause (Filter) with PythonUDF") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    // Case 1: Canonical example of the COUNT bug
+    checkAnswer(
+      sql("SELECT l.a FROM l WHERE (SELECT udf(count(*)) FROM r WHERE l.a = r.c) < l.a"),
+      Row(1) :: Row(1) :: Row(3) :: Row(6) :: Nil)
+    // Case 2: count(*) = 0; could be rewritten to NOT EXISTS but currently uses
+    // a rewrite that is vulnerable to the COUNT bug
+    checkAnswer(
+      sql("SELECT l.a FROM l WHERE (SELECT udf(count(*)) FROM r WHERE l.a = r.c) = 0"),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+    // Case 3: COUNT bug without a COUNT aggregate
+    checkAnswer(
+      sql("SELECT l.a FROM l WHERE (SELECT udf(sum(r.d)) is null FROM r WHERE l.a = r.c)"),
+      Row(1) :: Row(1) ::Row(null) :: Row(null) :: Row(6) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug in SELECT clause (Project) with PythonUDF") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    checkAnswer(
+      sql("SELECT a, (SELECT udf(count(*)) FROM r WHERE l.a = r.c) AS cnt FROM l"),
+      Row(1, 0) :: Row(1, 0) :: Row(2, 2) :: Row(2, 2) :: Row(3, 1) :: Row(null, 0)
+        :: Row(null, 0) :: Row(6, 1) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug in HAVING clause (Filter) with PythonUDF") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    checkAnswer(
+      sql("""
+            |SELECT
+            |  l.a AS grp_a
+            |FROM l GROUP BY l.a
+            |HAVING
+            |  (
+            |    SELECT udf(count(*)) FROM r WHERE grp_a = r.c
+            |  ) = 0
+            |ORDER BY grp_a""".stripMargin),
+      Row(null) :: Row(1) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug in Aggregate with PythonUDF") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    checkAnswer(
+      sql("""
+            |SELECT
+            |  l.a AS aval,
+            |  sum(
+            |    (
+            |      SELECT udf(count(*)) FROM r WHERE l.a = r.c
+            |    )
+            |  ) AS cnt
+            |FROM l GROUP BY l.a ORDER BY aval""".stripMargin),
+      Row(null, 0) :: Row(1, 0) :: Row(2, 4) :: Row(3, 1) :: Row(6, 1)  :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug negative examples with PythonUDF") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    // Case 1: Potential COUNT bug case that was working correctly prior to the fix
+    checkAnswer(
+      sql("SELECT l.a FROM l WHERE (SELECT udf(sum(r.d)) FROM r WHERE l.a = r.c) is null"),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Row(6) :: Nil)
+    // Case 2: COUNT aggregate but no COUNT bug due to > 0 test.
+    checkAnswer(
+      sql("SELECT l.a FROM l WHERE (SELECT udf(count(*)) FROM r WHERE l.a = r.c) > 0"),
+      Row(2) :: Row(2) :: Row(3) :: Row(6) :: Nil)
+    // Case 3: COUNT inside aggregate expression but no COUNT bug.
+    checkAnswer(
+      sql("""
+            |SELECT
+            |  l.a
+            |FROM l
+            |WHERE
+            |  (
+            |    SELECT udf(count(*)) + udf(sum(r.d))
+            |    FROM r WHERE l.a = r.c
+            |  ) = 0""".stripMargin),
+      Nil)
+  }
+
+  test("SPARK-28441: COUNT bug in nested subquery with PythonUDF") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    checkAnswer(
+      sql("""
+            |SELECT l.a FROM l
+            |WHERE (
+            |    SELECT cntPlusOne + 1 AS cntPlusTwo FROM (
+            |        SELECT cnt + 1 AS cntPlusOne FROM (
+            |            SELECT udf(sum(r.c)) s, udf(count(*)) cnt FROM r WHERE l.a = r.c
+            |                   HAVING cnt = 0
+            |        )
+            |    )
+            |) = 2""".stripMargin),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug with nasty predicate expr with PythonUDF") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    checkAnswer(
+      sql("""
+            |SELECT
+            |  l.a
+            |FROM l WHERE
+            |  (
+            |    SELECT CASE WHEN udf(count(*)) = 1 THEN null ELSE udf(count(*)) END AS cnt
+            |    FROM r WHERE l.a = r.c
+            |  ) = 0""".stripMargin),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug with attribute ref in subquery input and output with PythonUDF") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT
+          |  l.b,
+          |  (
+          |    SELECT (r.c + udf(count(*))) is null
+          |    FROM r
+          |    WHERE l.a = r.c GROUP BY r.c
+          |  )
+          |FROM l
+        """.stripMargin),
+      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
+        Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug with non-foldable expression") {
+    // Case 1: Canonical example of the COUNT bug
+    checkAnswer(
+      sql("SELECT l.a FROM l WHERE (SELECT count(*) + cast(rand() as int) FROM r " +
+        "WHERE l.a = r.c) < l.a"),
+      Row(1) :: Row(1) :: Row(3) :: Row(6) :: Nil)
+    // Case 2: count(*) = 0; could be rewritten to NOT EXISTS but currently uses
+    // a rewrite that is vulnerable to the COUNT bug
+    checkAnswer(
+      sql("SELECT l.a FROM l WHERE (SELECT count(*) + cast(rand() as int) FROM r " +
+        "WHERE l.a = r.c) = 0"),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+    // Case 3: COUNT bug without a COUNT aggregate
+    checkAnswer(
+      sql("SELECT l.a FROM l WHERE (SELECT sum(r.d) is null from r " +
+        "WHERE l.a = r.c)"),
+      Row(1) :: Row(1) ::Row(null) :: Row(null) :: Row(6) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug in nested subquery with non-foldable expr") {
+    checkAnswer(
+      sql("""
+            |SELECT l.a FROM l
+            |WHERE (
+            |  SELECT cntPlusOne + 1 AS cntPlusTwo FROM (
+            |    SELECT cnt + 1 AS cntPlusOne FROM (
+            |      SELECT sum(r.c) s, (count(*) + cast(rand() as int)) cnt FROM r
+            |        WHERE l.a = r.c HAVING cnt = 0
+            |      )
+            |  )
+            |) = 2""".stripMargin),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug with non-foldable expression in Filter condition") {
+    val df = sql("""
+                   |SELECT
+                   |  l.a
+                   |FROM l WHERE
+                   |  (
+                   |    SELECT cntPlusOne + 1 as cntPlusTwo FROM
+                   |    (
+                   |      SELECT cnt + 1 as cntPlusOne FROM
+                   |      (
+                   |        SELECT sum(r.c) s, count(*) cnt FROM r WHERE l.a = r.c HAVING cnt > 0
+                   |      )
+                   |    )
+                   |  ) = 2""".stripMargin)
+    val df2 = sql("""
+                    |SELECT
+                    |  l.a
+                    |FROM l WHERE
+                    |  (
+                    |    SELECT cntPlusOne + 1 AS cntPlusTwo
+                    |    FROM
+                    |      (
+                    |        SELECT cnt + 1 AS cntPlusOne
+                    |        FROM
+                    |          (
+                    |            SELECT sum(r.c) s, count(*) cnt FROM r
+                    |            WHERE l.a = r.c HAVING (cnt + cast(rand() as int)) > 0
+                    |          )
+                    |       )
+                    |   ) = 2""".stripMargin)
+    checkAnswer(df, df2)
+    checkAnswer(df, Nil)
   }
 }

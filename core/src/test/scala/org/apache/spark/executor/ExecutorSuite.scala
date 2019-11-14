@@ -21,34 +21,46 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.nio.ByteBuffer
 import java.util.Properties
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.mutable.Map
+import scala.collection.immutable
+import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.memory.MemoryManager
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.memory.TestMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.scheduler.{FakeTask, ResultTask, TaskDescription}
-import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcTimeout}
+import org.apache.spark.scheduler.{DirectTaskResult, FakeTask, ResultTask, Task, TaskDescription}
+import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.UninterruptibleThread
+import org.apache.spark.storage.{BlockManager, BlockManagerId}
+import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
 
-class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar with Eventually {
+class ExecutorSuite extends SparkFunSuite
+    with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
+
+  override def afterEach(): Unit = {
+    // Unset any latches after each test; each test that needs them initializes new ones.
+    ExecutorSuiteHelper.latches = null
+    super.afterEach()
+  }
 
   test("SPARK-15963: Catch `TaskKilledException` correctly in Executor.TaskRunner") {
     // mock some objects to make Executor.launchTask() happy
@@ -120,7 +132,8 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       }
 
       // `testFailedReason` should be `TaskKilled`; `taskState` should be `KILLED`
-      assert(executorSuiteHelper.testFailedReason === TaskKilled("test"))
+      assert(executorSuiteHelper.testFailedReason.isInstanceOf[TaskKilled])
+      assert(executorSuiteHelper.testFailedReason.toErrorString === "TaskKilled (test)")
       assert(executorSuiteHelper.taskState === TaskState.KILLED)
     }
     finally {
@@ -142,20 +155,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val inputRDD = new FetchFailureThrowingRDD(sc)
     val secondRDD = new FetchFailureHidingRDD(sc, inputRDD, throwOOM = false, interrupt = false)
     val taskBinary = sc.broadcast(serializer.serialize((secondRDD, resultFunc)).array())
-    val serializedTaskMetrics = serializer.serialize(TaskMetrics.registered).array()
-    val task = new ResultTask(
-      stageId = 1,
-      stageAttemptId = 0,
-      taskBinary = taskBinary,
-      partition = secondRDD.partitions(0),
-      locs = Seq(),
-      outputId = 0,
-      localProperties = new Properties(),
-      serializedTaskMetrics = serializedTaskMetrics
-    )
-
-    val serTask = serializer.serialize(task)
-    val taskDescription = createFakeTaskDescription(serTask)
+    val taskDescription = createResultTaskDescription(serializer, taskBinary, secondRDD, 1)
 
     val failReason = runTaskAndGetFailReason(taskDescription)
     assert(failReason.isInstanceOf[FetchFailed])
@@ -165,7 +165,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("executor thread test")
-      .set("spark.ui.enabled", "false")
+      .set(UI_ENABLED.key, "false")
     sc = new SparkContext(conf)
     val executorThread = sc.parallelize(Seq(1), 1).map { _ =>
       Thread.currentThread.getClass.getName
@@ -190,13 +190,15 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
   }
 
   /**
-   * Helper for testing some cases where a FetchFailure should *not* get sent back, because its
-   * superceded by another error, either an OOM or intentionally killing a task.
+   * Helper for testing some cases where a FetchFailure should *not* get sent back, because it's
+   * superseded by another error, either an OOM or intentionally killing a task.
    * @param oom if true, throw an OOM after the FetchFailure; else, interrupt the task after the
-    *            FetchFailure
+   *            FetchFailure
+   * @param poll if true, poll executor metrics after launching task
    */
   private def testFetchFailureHandling(
-      oom: Boolean): (TaskFailedReason, UncaughtExceptionHandler) = {
+      oom: Boolean,
+      poll: Boolean = false): (TaskFailedReason, UncaughtExceptionHandler) = {
     // when there is a fatal error like an OOM, we don't do normal fetch failure handling, since it
     // may be a false positive.  And we should call the uncaught exception handler.
     // SPARK-23816 also handle interrupts the same way, as killing an obsolete speculative task
@@ -209,30 +211,14 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     // Submit a job where a fetch failure is thrown, but then there is an OOM or interrupt.  We
     // should treat the fetch failure as a false positive, and do normal OOM or interrupt handling.
     val inputRDD = new FetchFailureThrowingRDD(sc)
-    if (!oom) {
-      // we are trying to setup a case where a task is killed after a fetch failure -- this
-      // is just a helper to coordinate between the task thread and this thread that will
-      // kill the task
-      ExecutorSuiteHelper.latches = new ExecutorSuiteHelper()
-    }
+    // helper to coordinate between the task thread and this thread that will kill the task
+    // (and to poll executor metrics if necessary)
+    ExecutorSuiteHelper.latches = new ExecutorSuiteHelper
     val secondRDD = new FetchFailureHidingRDD(sc, inputRDD, throwOOM = oom, interrupt = !oom)
     val taskBinary = sc.broadcast(serializer.serialize((secondRDD, resultFunc)).array())
-    val serializedTaskMetrics = serializer.serialize(TaskMetrics.registered).array()
-    val task = new ResultTask(
-      stageId = 1,
-      stageAttemptId = 0,
-      taskBinary = taskBinary,
-      partition = secondRDD.partitions(0),
-      locs = Seq(),
-      outputId = 0,
-      localProperties = new Properties(),
-      serializedTaskMetrics = serializedTaskMetrics
-    )
+    val taskDescription = createResultTaskDescription(serializer, taskBinary, secondRDD, 1)
 
-    val serTask = serializer.serialize(task)
-    val taskDescription = createFakeTaskDescription(serTask)
-
-    runTaskGetFailReasonAndExceptionHandler(taskDescription, killTask = !oom)
+    runTaskGetFailReasonAndExceptionHandler(taskDescription, killTask = !oom, poll)
  }
 
   test("Gracefully handle error in task deserialization") {
@@ -252,20 +238,202 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     }
   }
 
+  test("Heartbeat should drop zero accumulator updates") {
+    heartbeatZeroAccumulatorUpdateTest(true)
+  }
+
+  test("Heartbeat should not drop zero accumulator updates when the conf is disabled") {
+    heartbeatZeroAccumulatorUpdateTest(false)
+  }
+
+  private def withHeartbeatExecutor(confs: (String, String)*)
+      (f: (Executor, ArrayBuffer[Heartbeat]) => Unit): Unit = {
+    val conf = new SparkConf
+    confs.foreach { case (k, v) => conf.set(k, v) }
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    val executor =
+      new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
+    val executorClass = classOf[Executor]
+
+    // Save all heartbeats sent into an ArrayBuffer for verification
+    val heartbeats = ArrayBuffer[Heartbeat]()
+    val mockReceiver = mock[RpcEndpointRef]
+    when(mockReceiver.askSync(any[Heartbeat], any[RpcTimeout])(any))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val args = invocation.getArguments()
+        heartbeats += args(0).asInstanceOf[Heartbeat]
+        HeartbeatResponse(false)
+      })
+    val receiverRef = executorClass.getDeclaredField("heartbeatReceiverRef")
+    receiverRef.setAccessible(true)
+    receiverRef.set(executor, mockReceiver)
+
+    f(executor, heartbeats)
+  }
+
+  private def heartbeatZeroAccumulatorUpdateTest(dropZeroMetrics: Boolean): Unit = {
+    val c = EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key -> dropZeroMetrics.toString
+    withHeartbeatExecutor(c) { (executor, heartbeats) =>
+      val reportHeartbeat = PrivateMethod[Unit](Symbol("reportHeartBeat"))
+
+      // When no tasks are running, there should be no accumulators sent in heartbeat
+      executor.invokePrivate(reportHeartbeat())
+      // invokeReportHeartbeat(executor)
+      assert(heartbeats.length == 1)
+      assert(heartbeats(0).accumUpdates.length == 0,
+        "No updates should be sent when no tasks are running")
+
+      // When we start a task with a nonzero accumulator, that should end up in the heartbeat
+      val metrics = new TaskMetrics()
+      val nonZeroAccumulator = new LongAccumulator()
+      nonZeroAccumulator.add(1)
+      metrics.registerAccumulator(nonZeroAccumulator)
+
+      val executorClass = classOf[Executor]
+      val tasksMap = {
+        val field =
+          executorClass.getDeclaredField("org$apache$spark$executor$Executor$$runningTasks")
+        field.setAccessible(true)
+        field.get(executor).asInstanceOf[ConcurrentHashMap[Long, executor.TaskRunner]]
+      }
+      val mockTaskRunner = mock[executor.TaskRunner]
+      val mockTask = mock[Task[Any]]
+      when(mockTask.metrics).thenReturn(metrics)
+      when(mockTaskRunner.taskId).thenReturn(6)
+      when(mockTaskRunner.task).thenReturn(mockTask)
+      when(mockTaskRunner.startGCTime).thenReturn(1)
+      tasksMap.put(6, mockTaskRunner)
+
+      executor.invokePrivate(reportHeartbeat())
+      assert(heartbeats.length == 2)
+      val updates = heartbeats(1).accumUpdates
+      assert(updates.length == 1 && updates(0)._1 == 6,
+        "Heartbeat should only send update for the one task running")
+      val accumsSent = updates(0)._2.length
+      assert(accumsSent > 0, "The nonzero accumulator we added should be sent")
+      if (dropZeroMetrics) {
+        assert(accumsSent == metrics.accumulators().count(!_.isZero),
+          "The number of accumulators sent should match the number of nonzero accumulators")
+      } else {
+        assert(accumsSent == metrics.accumulators().length,
+          "The number of accumulators sent should match the number of total accumulators")
+      }
+    }
+  }
+
+  test("Send task executor metrics in DirectTaskResult") {
+    // Run a successful, trivial result task
+    // We need to ensure, however, that executor metrics are polled after the task is started
+    // so this requires some coordination using ExecutorSuiteHelper.
+    val conf = new SparkConf().setMaster("local").setAppName("executor suite test")
+    sc = new SparkContext(conf)
+    val serializer = SparkEnv.get.closureSerializer.newInstance()
+    ExecutorSuiteHelper.latches = new ExecutorSuiteHelper
+    val resultFunc =
+      (context: TaskContext, itr: Iterator[Int]) => {
+        // latch1 tells the test that the task is running, so it can ask the metricsPoller
+        // to poll; latch2 waits for the polling to be done
+        ExecutorSuiteHelper.latches.latch1.countDown()
+        ExecutorSuiteHelper.latches.latch2.await(5, TimeUnit.SECONDS)
+        itr.size
+      }
+    val rdd = new RDD[Int](sc, Nil) {
+      override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
+        Iterator(1)
+      }
+      override protected def getPartitions: Array[Partition] = {
+        Array(new SimplePartition)
+      }
+    }
+    val taskBinary = sc.broadcast(serializer.serialize((rdd, resultFunc)).array())
+    val taskDescription = createResultTaskDescription(serializer, taskBinary, rdd, 0)
+
+    val mockBackend = mock[ExecutorBackend]
+    var executor: Executor = null
+    try {
+      executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
+      executor.launchTask(mockBackend, taskDescription)
+
+      // Ensure that the executor's metricsPoller is polled so that values are recorded for
+      // the task metrics
+      ExecutorSuiteHelper.latches.latch1.await(5, TimeUnit.SECONDS)
+      executor.metricsPoller.poll()
+      ExecutorSuiteHelper.latches.latch2.countDown()
+      eventually(timeout(5.seconds), interval(10.milliseconds)) {
+        assert(executor.numRunningTasks === 0)
+      }
+    } finally {
+      if (executor != null) {
+        executor.stop()
+      }
+    }
+
+    // Verify that peak values for task metrics get sent in the TaskResult
+    val orderedMock = inOrder(mockBackend)
+    val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
+    orderedMock.verify(mockBackend)
+      .statusUpdate(meq(0L), meq(TaskState.RUNNING), statusCaptor.capture())
+    orderedMock.verify(mockBackend)
+      .statusUpdate(meq(0L), meq(TaskState.FINISHED), statusCaptor.capture())
+    val resultData = statusCaptor.getAllValues.get(1)
+    val result = serializer.deserialize[DirectTaskResult[Int]](resultData)
+    val taskMetrics = new ExecutorMetrics(result.metricPeaks)
+    assert(taskMetrics.getMetricValue("JVMHeapMemory") > 0)
+  }
+
+  test("Send task executor metrics in TaskKilled") {
+    val (taskFailedReason, _) = testFetchFailureHandling(false, true)
+    assert(taskFailedReason.isInstanceOf[TaskKilled])
+    val metrics = taskFailedReason.asInstanceOf[TaskKilled].metricPeaks.toArray
+    val taskMetrics = new ExecutorMetrics(metrics)
+    assert(taskMetrics.getMetricValue("JVMHeapMemory") > 0)
+  }
+
+  test("Send task executor metrics in ExceptionFailure") {
+    val (taskFailedReason, _) = testFetchFailureHandling(true, true)
+    assert(taskFailedReason.isInstanceOf[ExceptionFailure])
+    val metrics = taskFailedReason.asInstanceOf[ExceptionFailure].metricPeaks.toArray
+    val taskMetrics = new ExecutorMetrics(metrics)
+    assert(taskMetrics.getMetricValue("JVMHeapMemory") > 0)
+  }
+
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
     val mockEnv = mock[SparkEnv]
     val mockRpcEnv = mock[RpcEnv]
     val mockMetricsSystem = mock[MetricsSystem]
-    val mockMemoryManager = mock[MemoryManager]
+    val mockBlockManager = mock[BlockManager]
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.serializer).thenReturn(serializer)
     when(mockEnv.serializerManager).thenReturn(mock[SerializerManager])
     when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
     when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
-    when(mockEnv.memoryManager).thenReturn(mockMemoryManager)
+    when(mockEnv.memoryManager).thenReturn(new TestMemoryManager(conf))
     when(mockEnv.closureSerializer).thenReturn(serializer)
+    when(mockBlockManager.blockManagerId).thenReturn(BlockManagerId("1", "hostA", 1234))
+    when(mockEnv.blockManager).thenReturn(mockBlockManager)
     SparkEnv.set(mockEnv)
     mockEnv
+  }
+
+  private def createResultTaskDescription(
+      serializer: SerializerInstance,
+      taskBinary: Broadcast[Array[Byte]],
+      rdd: RDD[Int],
+      stageId: Int): TaskDescription = {
+    val serializedTaskMetrics = serializer.serialize(TaskMetrics.registered).array()
+    val task = new ResultTask(
+      stageId = stageId,
+      stageAttemptId = 0,
+      taskBinary = taskBinary,
+      partition = rdd.partitions(0),
+      locs = Seq(),
+      outputId = 0,
+      localProperties = new Properties(),
+      serializedTaskMetrics = serializedTaskMetrics
+    )
+    val serTask = serializer.serialize(task)
+    createFakeTaskDescription(serTask)
   }
 
   private def createFakeTaskDescription(serializedTask: ByteBuffer): TaskDescription = {
@@ -279,6 +447,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       addedFiles = Map[String, Long](),
       addedJars = Map[String, Long](),
       properties = new Properties,
+      resources = immutable.Map[String, ResourceInformation](),
       serializedTask)
   }
 
@@ -288,7 +457,8 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
 
   private def runTaskGetFailReasonAndExceptionHandler(
       taskDescription: TaskDescription,
-      killTask: Boolean): (TaskFailedReason, UncaughtExceptionHandler) = {
+      killTask: Boolean,
+      poll: Boolean = false): (TaskFailedReason, UncaughtExceptionHandler) = {
     val mockBackend = mock[ExecutorBackend]
     val mockUncaughtExceptionHandler = mock[UncaughtExceptionHandler]
     var executor: Executor = null
@@ -304,6 +474,10 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
             // wait to kill the task until it has thrown a fetch failure
             if (ExecutorSuiteHelper.latches.latch1.await(10, TimeUnit.SECONDS)) {
               // now we can kill the task
+              // but before that, ensure that the executor's metricsPoller is polled
+              if (poll) {
+                executor.metricsPoller.poll()
+              }
               executor.killAllTasks(true, "Killed task, eg. because of speculative execution")
             } else {
               timedOut.set(true)
@@ -311,6 +485,14 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
           }
         }
         killingThread.start()
+      } else {
+        if (ExecutorSuiteHelper.latches != null) {
+          ExecutorSuiteHelper.latches.latch1.await(5, TimeUnit.SECONDS)
+          if (poll) {
+            executor.metricsPoller.poll()
+          }
+          ExecutorSuiteHelper.latches.latch2.countDown()
+        }
       }
       eventually(timeout(5.seconds), interval(10.milliseconds)) {
         assert(executor.numRunningTasks === 0)
@@ -346,7 +528,8 @@ class FetchFailureThrowingRDD(sc: SparkContext) extends RDD[Int](sc, Nil) {
         throw new FetchFailedException(
           bmAddress = BlockManagerId("1", "hostA", 1234),
           shuffleId = 0,
-          mapId = 0,
+          mapId = 0L,
+          mapIndex = 0,
           reduceId = 0,
           message = "fake fetch failure"
         )
@@ -362,6 +545,8 @@ class SimplePartition extends Partition {
   override def index: Int = 0
 }
 
+// NOTE: When instantiating this class, except with throwOOM = false and interrupt = false,
+// ExecutorSuiteHelper.latches need to be set (not null).
 class FetchFailureHidingRDD(
     sc: SparkContext,
     val input: FetchFailureThrowingRDD,
@@ -374,11 +559,17 @@ class FetchFailureHidingRDD(
     } catch {
       case t: Throwable =>
         if (throwOOM) {
+          // Allow executor metrics to be polled (if necessary) before throwing the OOMError
+          ExecutorSuiteHelper.latches.latch1.countDown()
+          ExecutorSuiteHelper.latches.latch2.await(5, TimeUnit.SECONDS)
+          // scalastyle:off throwerror
           throw new OutOfMemoryError("OOM while handling another exception")
+          // scalastyle:on throwerror
         } else if (interrupt) {
           // make sure our test is setup correctly
           assert(TaskContext.get().asInstanceOf[TaskContextImpl].fetchFailed.isDefined)
-          // signal our test is ready for the task to get killed
+          // signal we are ready for executor metrics to be polled (if necessary) and for
+          // the task to get killed
           ExecutorSuiteHelper.latches.latch1.countDown()
           // then wait for another thread in the test to kill the task -- this latch
           // is never actually decremented, we just wait to get killed.
@@ -406,7 +597,7 @@ private class ExecutorSuiteHelper {
   @volatile var testFailedReason: TaskFailedReason = _
 }
 
-// helper for coordinating killing tasks
+// Helper for coordinating killing tasks as well as polling executor metrics
 private object ExecutorSuiteHelper {
   var latches: ExecutorSuiteHelper = null
 }

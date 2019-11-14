@@ -140,8 +140,24 @@ class MessageWithHeader extends AbstractFileRegion {
     // SPARK-24578: cap the sub-region's size of returned nio buffer to improve the performance
     // for the case that the passed-in buffer has too many components.
     int length = Math.min(buf.readableBytes(), NIO_BUFFER_LIMIT);
-    ByteBuffer buffer = buf.nioBuffer(buf.readerIndex(), length);
-    int written = target.write(buffer);
+    // If the ByteBuf holds more then one ByteBuffer we should better call nioBuffers(...)
+    // to eliminate extra memory copies.
+    int written = 0;
+    if (buf.nioBufferCount() == 1) {
+      ByteBuffer buffer = buf.nioBuffer(buf.readerIndex(), length);
+      written = target.write(buffer);
+    } else {
+      ByteBuffer[] buffers = buf.nioBuffers(buf.readerIndex(), length);
+      for (ByteBuffer buffer: buffers) {
+        int remaining = buffer.remaining();
+        int w = target.write(buffer);
+        written += w;
+        if (w < remaining) {
+          // Could not write all, we need to break now.
+          break;
+        }
+      }
+    }
     buf.skipBytes(written);
     return written;
   }

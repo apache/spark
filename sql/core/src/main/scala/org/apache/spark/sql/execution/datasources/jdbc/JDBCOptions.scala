@@ -87,7 +87,7 @@ class JDBCOptions(
       if (subquery.isEmpty) {
         throw new IllegalArgumentException(s"Option `$JDBC_QUERY_STRING` can not be empty.")
       } else {
-        s"(${subquery}) __SPARK_GEN_JDBC_SUBQUERY_NAME_${curId.getAndIncrement()}"
+        s"(${subquery}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
       }
   }
 
@@ -137,20 +137,17 @@ class JDBCOptions(
        |the partition columns using the supplied subquery alias to resolve any ambiguity.
        |Example :
        |spark.read.format("jdbc")
-       |        .option("dbtable", "(select c1, c2 from t1) as subq")
-       |        .option("partitionColumn", "subq.c1"
-       |        .load()
+       |  .option("url", jdbcUrl)
+       |  .option("dbtable", "(select c1, c2 from t1) as subq")
+       |  .option("partitionColumn", "c1")
+       |  .option("lowerBound", "1")
+       |  .option("upperBound", "100")
+       |  .option("numPartitions", "3")
+       |  .load()
      """.stripMargin
   )
 
-  val fetchSize = {
-    val size = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
-    require(size >= 0,
-      s"Invalid value `${size.toString}` for parameter " +
-        s"`$JDBC_BATCH_FETCH_SIZE`. The minimum value is 0. When the value is 0, " +
-        "the JDBC driver ignores the value and does the estimates.")
-    size
-  }
+  val fetchSize = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
 
   // ------------------------------------------------------------
   // Optional parameters only for writing
@@ -180,6 +177,10 @@ class JDBCOptions(
       case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
+      case other => throw new IllegalArgumentException(
+        s"Invalid value `$other` for parameter `$JDBC_TXN_ISOLATION_LEVEL`. This can be " +
+          "`NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`."
+      )
     }
   // An option to execute custom SQL before fetching data from the remote DB
   val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)

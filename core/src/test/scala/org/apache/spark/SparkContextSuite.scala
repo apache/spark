@@ -26,14 +26,22 @@ import scala.concurrent.duration._
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.json4s.{DefaultFormats, Extraction}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.TestUtils._
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.ResourceAllocation
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 
@@ -42,7 +50,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180
     val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set("spark.driver.allowMultipleContexts", "false")
     sc = new SparkContext(conf)
     val envBefore = SparkEnv.get
     // A SparkContext is already running, so we shouldn't be able to create a second one
@@ -56,25 +63,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("Can still construct a new SparkContext after failing to construct a previous one") {
-    val conf = new SparkConf().set("spark.driver.allowMultipleContexts", "false")
+    val conf = new SparkConf()
     // This is an invalid configuration (no app name or master URL)
     intercept[SparkException] {
       new SparkContext(conf)
     }
     // Even though those earlier calls failed, we should still be able to create a new context
     sc = new SparkContext(conf.setMaster("local").setAppName("test"))
-  }
-
-  test("Check for multiple SparkContexts can be disabled via undocumented debug option") {
-    var secondSparkContext: SparkContext = null
-    try {
-      val conf = new SparkConf().setAppName("test").setMaster("local")
-        .set("spark.driver.allowMultipleContexts", "true")
-      sc = new SparkContext(conf)
-      secondSparkContext = new SparkContext(conf)
-    } finally {
-      Option(secondSparkContext).foreach(_.stop())
-    }
   }
 
   test("Test getOrCreate") {
@@ -89,10 +84,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc2.getConf.get("spark.app.name").equals("test"))
     assert(sc === sc2)
     assert(sc eq sc2)
-
-    // Try creating second context to confirm that it's still possible, if desired
-    sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local")
-        .set("spark.driver.allowMultipleContexts", "true"))
 
     sc2.stop()
   }
@@ -114,56 +105,57 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("basic case for addFile and listFiles") {
-    val dir = Utils.createTempDir()
+    withTempDir { dir =>
+      val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
+      val absolutePath1 = file1.getAbsolutePath
 
-    val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
-    val absolutePath1 = file1.getAbsolutePath
+      val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
+      val relativePath = file2.getParent + "/../" + file2.getParentFile.getName +
+        "/" + file2.getName
+      val absolutePath2 = file2.getAbsolutePath
 
-    val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
-    val relativePath = file2.getParent + "/../" + file2.getParentFile.getName + "/" + file2.getName
-    val absolutePath2 = file2.getAbsolutePath
+      try {
+        Files.write("somewords1", file1, StandardCharsets.UTF_8)
+        Files.write("somewords2", file2, StandardCharsets.UTF_8)
+        val length1 = file1.length()
+        val length2 = file2.length()
 
-    try {
-      Files.write("somewords1", file1, StandardCharsets.UTF_8)
-      Files.write("somewords2", file2, StandardCharsets.UTF_8)
-      val length1 = file1.length()
-      val length2 = file2.length()
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc.addFile(file1.getAbsolutePath)
+        sc.addFile(relativePath)
+        sc.parallelize(Array(1), 1).map(x => {
+          val gotten1 = new File(SparkFiles.get(file1.getName))
+          val gotten2 = new File(SparkFiles.get(file2.getName))
+          if (!gotten1.exists()) {
+            throw new SparkException("file doesn't exist : " + absolutePath1)
+          }
+          if (!gotten2.exists()) {
+            throw new SparkException("file doesn't exist : " + absolutePath2)
+          }
 
-      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      sc.addFile(file1.getAbsolutePath)
-      sc.addFile(relativePath)
-      sc.parallelize(Array(1), 1).map(x => {
-        val gotten1 = new File(SparkFiles.get(file1.getName))
-        val gotten2 = new File(SparkFiles.get(file2.getName))
-        if (!gotten1.exists()) {
-          throw new SparkException("file doesn't exist : " + absolutePath1)
-        }
-        if (!gotten2.exists()) {
-          throw new SparkException("file doesn't exist : " + absolutePath2)
-        }
+          if (length1 != gotten1.length()) {
+            throw new SparkException(
+              s"file has different length $length1 than added file ${gotten1.length()} : " +
+                absolutePath1)
+          }
+          if (length2 != gotten2.length()) {
+            throw new SparkException(
+              s"file has different length $length2 than added file ${gotten2.length()} : " +
+                absolutePath2)
+          }
 
-        if (length1 != gotten1.length()) {
-          throw new SparkException(
-            s"file has different length $length1 than added file ${gotten1.length()} : " +
-              absolutePath1)
-        }
-        if (length2 != gotten2.length()) {
-          throw new SparkException(
-            s"file has different length $length2 than added file ${gotten2.length()} : " +
-              absolutePath2)
-        }
-
-        if (absolutePath1 == gotten1.getAbsolutePath) {
-          throw new SparkException("file should have been copied :" + absolutePath1)
-        }
-        if (absolutePath2 == gotten2.getAbsolutePath) {
-          throw new SparkException("file should have been copied : " + absolutePath2)
-        }
-        x
-      }).count()
-      assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 1)
-    } finally {
-      sc.stop()
+          if (absolutePath1 == gotten1.getAbsolutePath) {
+            throw new SparkException("file should have been copied :" + absolutePath1)
+          }
+          if (absolutePath2 == gotten2.getAbsolutePath) {
+            throw new SparkException("file should have been copied : " + absolutePath2)
+          }
+          x
+        }).count()
+        assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 1)
+      } finally {
+        sc.stop()
+      }
     }
   }
 
@@ -173,6 +165,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath.toString)
       assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 1)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("add FS jar files not exists") {
+    try {
+      val jarPath = "hdfs:///no/path/to/TestUDTF.jar"
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(jarPath)
+      assert(sc.listJars().forall(!_.contains("TestUDTF.jar")))
     } finally {
       sc.stop()
     }
@@ -200,51 +203,51 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("addFile recursive works") {
-    val pluto = Utils.createTempDir()
-    val neptune = Utils.createTempDir(pluto.getAbsolutePath)
-    val saturn = Utils.createTempDir(neptune.getAbsolutePath)
-    val alien1 = File.createTempFile("alien", "1", neptune)
-    val alien2 = File.createTempFile("alien", "2", saturn)
+    withTempDir { pluto =>
+      val neptune = Utils.createTempDir(pluto.getAbsolutePath)
+      val saturn = Utils.createTempDir(neptune.getAbsolutePath)
+      val alien1 = File.createTempFile("alien", "1", neptune)
+      val alien2 = File.createTempFile("alien", "2", saturn)
 
-    try {
-      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      sc.addFile(neptune.getAbsolutePath, true)
-      sc.parallelize(Array(1), 1).map(x => {
-        val sep = File.separator
-        if (!new File(SparkFiles.get(neptune.getName + sep + alien1.getName)).exists()) {
-          throw new SparkException("can't access file under root added directory")
-        }
-        if (!new File(SparkFiles.get(neptune.getName + sep + saturn.getName + sep + alien2.getName))
-            .exists()) {
-          throw new SparkException("can't access file in nested directory")
-        }
-        if (new File(SparkFiles.get(pluto.getName + sep + neptune.getName + sep + alien1.getName))
-            .exists()) {
-          throw new SparkException("file exists that shouldn't")
-        }
-        x
-      }).count()
-    } finally {
-      sc.stop()
+      try {
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc.addFile(neptune.getAbsolutePath, true)
+        sc.parallelize(Array(1), 1).map(x => {
+          val sep = File.separator
+          if (!new File(SparkFiles.get(neptune.getName + sep + alien1.getName)).exists()) {
+            throw new SparkException("can't access file under root added directory")
+          }
+          if (!new File(SparkFiles.get(
+            neptune.getName + sep + saturn.getName + sep + alien2.getName)).exists()) {
+            throw new SparkException("can't access file in nested directory")
+          }
+          if (new File(SparkFiles.get(
+            pluto.getName + sep + neptune.getName + sep + alien1.getName)).exists()) {
+            throw new SparkException("file exists that shouldn't")
+          }
+          x
+        }).count()
+      } finally {
+        sc.stop()
+      }
     }
   }
 
   test("addFile recursive can't add directories by default") {
-    val dir = Utils.createTempDir()
-
-    try {
-      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      intercept[SparkException] {
-        sc.addFile(dir.getAbsolutePath)
+    withTempDir { dir =>
+      try {
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        intercept[SparkException] {
+          sc.addFile(dir.getAbsolutePath)
+        }
+      } finally {
+        sc.stop()
       }
-    } finally {
-      sc.stop()
     }
   }
 
   test("cannot call addFile with different paths that have the same filename") {
-    val dir = Utils.createTempDir()
-    try {
+    withTempDir { dir =>
       val subdir1 = new File(dir, "subdir1")
       val subdir2 = new File(dir, "subdir2")
       assert(subdir1.mkdir())
@@ -265,8 +268,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         sc.addFile(file2.getAbsolutePath)
       }
       assert(getAddedFileContents() === "old")
-    } finally {
-      Utils.deleteRecursively(dir)
     }
   }
 
@@ -294,30 +295,33 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("add jar with invalid path") {
-    val tmpDir = Utils.createTempDir()
-    val tmpJar = File.createTempFile("test", ".jar", tmpDir)
+    withTempDir { tmpDir =>
+      val tmpJar = File.createTempFile("test", ".jar", tmpDir)
 
-    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-    sc.addJar(tmpJar.getAbsolutePath)
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(tmpJar.getAbsolutePath)
 
-    // Invalid jar path will only print the error log, will not add to file server.
-    sc.addJar("dummy.jar")
-    sc.addJar("")
-    sc.addJar(tmpDir.getAbsolutePath)
+      // Invalid jar path will only print the error log, will not add to file server.
+      sc.addJar("dummy.jar")
+      sc.addJar("")
+      sc.addJar(tmpDir.getAbsolutePath)
 
-    assert(sc.listJars().size == 1)
-    assert(sc.listJars().head.contains(tmpJar.getName))
+      assert(sc.listJars().size == 1)
+      assert(sc.listJars().head.contains(tmpJar.getName))
+    }
   }
 
   test("SPARK-22585 addJar argument without scheme is interpreted literally without url decoding") {
-    val tmpDir = new File(Utils.createTempDir(), "host%3A443")
-    tmpDir.mkdirs()
-    val tmpJar = File.createTempFile("t%2F", ".jar", tmpDir)
+    withTempDir { dir =>
+      val tmpDir = new File(dir, "host%3A443")
+      tmpDir.mkdirs()
+      val tmpJar = File.createTempFile("t%2F", ".jar", tmpDir)
 
-    sc = new SparkContext("local", "test")
+      sc = new SparkContext("local", "test")
 
-    sc.addJar(tmpJar.getAbsolutePath)
-    assert(sc.listJars().size === 1)
+      sc.addJar(tmpJar.getAbsolutePath)
+      assert(sc.listJars().size === 1)
+    }
   }
 
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
@@ -338,60 +342,61 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("Comma separated paths for newAPIHadoopFile/wholeTextFiles/binaryFiles (SPARK-7155)") {
     // Regression test for SPARK-7155
     // dir1 and dir2 are used for wholeTextFiles and binaryFiles
-    val dir1 = Utils.createTempDir()
-    val dir2 = Utils.createTempDir()
+    withTempDir { dir1 =>
+      withTempDir { dir2 =>
+        val dirpath1 = dir1.getAbsolutePath
+        val dirpath2 = dir2.getAbsolutePath
 
-    val dirpath1 = dir1.getAbsolutePath
-    val dirpath2 = dir2.getAbsolutePath
+        // file1 and file2 are placed inside dir1, they are also used for
+        // textFile, hadoopFile, and newAPIHadoopFile
+        // file3, file4 and file5 are placed inside dir2, they are used for
+        // textFile, hadoopFile, and newAPIHadoopFile as well
+        val file1 = new File(dir1, "part-00000")
+        val file2 = new File(dir1, "part-00001")
+        val file3 = new File(dir2, "part-00000")
+        val file4 = new File(dir2, "part-00001")
+        val file5 = new File(dir2, "part-00002")
 
-    // file1 and file2 are placed inside dir1, they are also used for
-    // textFile, hadoopFile, and newAPIHadoopFile
-    // file3, file4 and file5 are placed inside dir2, they are used for
-    // textFile, hadoopFile, and newAPIHadoopFile as well
-    val file1 = new File(dir1, "part-00000")
-    val file2 = new File(dir1, "part-00001")
-    val file3 = new File(dir2, "part-00000")
-    val file4 = new File(dir2, "part-00001")
-    val file5 = new File(dir2, "part-00002")
-
-    val filepath1 = file1.getAbsolutePath
-    val filepath2 = file2.getAbsolutePath
-    val filepath3 = file3.getAbsolutePath
-    val filepath4 = file4.getAbsolutePath
-    val filepath5 = file5.getAbsolutePath
+        val filepath1 = file1.getAbsolutePath
+        val filepath2 = file2.getAbsolutePath
+        val filepath3 = file3.getAbsolutePath
+        val filepath4 = file4.getAbsolutePath
+        val filepath5 = file5.getAbsolutePath
 
 
-    try {
-      // Create 5 text files.
-      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1,
-        StandardCharsets.UTF_8)
-      Files.write("someline1 in file2\nsomeline2 in file2", file2, StandardCharsets.UTF_8)
-      Files.write("someline1 in file3", file3, StandardCharsets.UTF_8)
-      Files.write("someline1 in file4\nsomeline2 in file4", file4, StandardCharsets.UTF_8)
-      Files.write("someline1 in file2\nsomeline2 in file5", file5, StandardCharsets.UTF_8)
+        try {
+          // Create 5 text files.
+          Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1,
+            StandardCharsets.UTF_8)
+          Files.write("someline1 in file2\nsomeline2 in file2", file2, StandardCharsets.UTF_8)
+          Files.write("someline1 in file3", file3, StandardCharsets.UTF_8)
+          Files.write("someline1 in file4\nsomeline2 in file4", file4, StandardCharsets.UTF_8)
+          Files.write("someline1 in file2\nsomeline2 in file5", file5, StandardCharsets.UTF_8)
 
-      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+          sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
-      // Test textFile, hadoopFile, and newAPIHadoopFile for file1 and file2
-      assert(sc.textFile(filepath1 + "," + filepath2).count() == 5L)
-      assert(sc.hadoopFile(filepath1 + "," + filepath2,
-        classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
-      assert(sc.newAPIHadoopFile(filepath1 + "," + filepath2,
-        classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+          // Test textFile, hadoopFile, and newAPIHadoopFile for file1 and file2
+          assert(sc.textFile(filepath1 + "," + filepath2).count() == 5L)
+          assert(sc.hadoopFile(filepath1 + "," + filepath2,
+            classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+          assert(sc.newAPIHadoopFile(filepath1 + "," + filepath2,
+            classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
 
-      // Test textFile, hadoopFile, and newAPIHadoopFile for file3, file4, and file5
-      assert(sc.textFile(filepath3 + "," + filepath4 + "," + filepath5).count() == 5L)
-      assert(sc.hadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
-               classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
-      assert(sc.newAPIHadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
-               classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+          // Test textFile, hadoopFile, and newAPIHadoopFile for file3, file4, and file5
+          assert(sc.textFile(filepath3 + "," + filepath4 + "," + filepath5).count() == 5L)
+          assert(sc.hadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
+            classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+          assert(sc.newAPIHadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
+            classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
 
-      // Test wholeTextFiles, and binaryFiles for dir1 and dir2
-      assert(sc.wholeTextFiles(dirpath1 + "," + dirpath2).count() == 5L)
-      assert(sc.binaryFiles(dirpath1 + "," + dirpath2).count() == 5L)
+          // Test wholeTextFiles, and binaryFiles for dir1 and dir2
+          assert(sc.wholeTextFiles(dirpath1 + "," + dirpath2).count() == 5L)
+          assert(sc.binaryFiles(dirpath1 + "," + dirpath2).count() == 5L)
 
-    } finally {
-      sc.stop()
+        } finally {
+          sc.stop()
+        }
+      }
     }
   }
 
@@ -434,7 +439,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("No exception when both num-executors and dynamic allocation set.") {
     noException should be thrownBy {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
-        .set("spark.dynamicAllocation.enabled", "true").set("spark.executor.instances", "6"))
+        .set(DYN_ALLOCATION_ENABLED, true).set("spark.executor.instances", "6"))
       assert(sc.executorAllocationManager.isEmpty)
       assert(sc.getConf.getInt("spark.executor.instances", 0) === 6)
     }
@@ -445,7 +450,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     sc.setLocalProperty("testProperty", "testValue")
     var result = "unset";
-    val thread = new Thread() { override def run() = {result = sc.getLocalProperty("testProperty")}}
+    val thread = new Thread() {
+      override def run(): Unit = {result = sc.getLocalProperty("testProperty")}
+    }
     thread.start()
     thread.join()
     sc.stop()
@@ -456,10 +463,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     var result = "unset";
     val thread1 = new Thread() {
-      override def run() = {sc.setLocalProperty("testProperty", "testValue")}}
+      override def run(): Unit = {sc.setLocalProperty("testProperty", "testValue")}}
     // testProperty should be unset and thus return null
     val thread2 = new Thread() {
-      override def run() = {result = sc.getLocalProperty("testProperty")}}
+      override def run(): Unit = {result = sc.getLocalProperty("testProperty")}}
     thread1.start()
     thread1.join()
     thread2.start()
@@ -654,6 +661,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .setMaster("local-cluster[3, 1, 1024]")
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
+
     val rdd = sc.makeRDD(Seq(1, 2, 3, 4), 2)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -669,6 +677,209 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
     eventually(timeout(10.seconds)) {
       assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  test("cancel zombie tasks in a result stage when the job finishes") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1,2,1024]")
+      .setAppName("test-cluster")
+      .set(UI_ENABLED.key, "false")
+      // Disable this so that if a task is running, we can make sure the executor will always send
+      // task metrics via heartbeat to driver.
+      .set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key, "false")
+      // Set a short heartbeat interval to send SparkListenerExecutorMetricsUpdate fast
+      .set(EXECUTOR_HEARTBEAT_INTERVAL.key, "1s")
+    sc = new SparkContext(conf)
+    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
+    @volatile var runningTaskIds: Seq[Long] = null
+    val listener = new SparkListener {
+      override def onExecutorMetricsUpdate(
+          executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
+        if (executorMetricsUpdate.execId != SparkContext.DRIVER_IDENTIFIER) {
+          runningTaskIds = executorMetricsUpdate.accumUpdates.map(_._1)
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+    sc.range(0, 2).groupBy((x: Long) => x % 2, 2).map { case (x, _) =>
+      val context = org.apache.spark.TaskContext.get()
+      if (context.stageAttemptNumber == 0) {
+        if (context.partitionId == 0) {
+          // Make the first task in the first stage attempt fail.
+          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 0, 0L, 0, 0,
+            new java.io.IOException("fake"))
+        } else {
+          // Make the second task in the first stage attempt sleep to generate a zombie task
+          Thread.sleep(60000)
+        }
+      } else {
+        // Make the second stage attempt successful.
+      }
+      x
+    }.collect()
+    sc.listenerBus.waitUntilEmpty()
+    // As executors will send the metrics of running tasks via heartbeat, we can use this to check
+    // whether there is any running task.
+    eventually(timeout(10.seconds)) {
+      // Make sure runningTaskIds has been set
+      assert(runningTaskIds != null)
+      // Verify there is no running task.
+      assert(runningTaskIds.isEmpty)
+    }
+  }
+
+  test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192)") {
+    val FAIL_REASON = s"has to be >= the task config: ${CPUS_PER_TASK.key}"
+    Seq(
+      ("local", 2, None),
+      ("local[2]", 3, None),
+      ("local[2, 1]", 3, None),
+      ("spark://test-spark-cluster", 2, Option(1)),
+      ("local-cluster[1, 1, 1000]", 2, Option(1)),
+      ("yarn", 2, Option(1))
+    ).foreach { case (master, cpusPerTask, executorCores) =>
+      val conf = new SparkConf()
+      conf.set(CPUS_PER_TASK, cpusPerTask)
+      executorCores.map(executorCores => conf.set(EXECUTOR_CORES, executorCores))
+      val ex = intercept[SparkException] {
+        sc = new SparkContext(master, "test", conf)
+      }
+      assert(ex.getMessage.contains(FAIL_REASON))
+      resetSparkContext()
+    }
+  }
+
+  test("test driver discovery under local-cluster mode") {
+    withTempDir { dir =>
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "gpu","addresses":["5", "6"]}""")
+
+      val conf = new SparkConf()
+        .setMaster("local-cluster[1, 1, 1024]")
+        .setAppName("test-cluster")
+      conf.set(DRIVER_GPU_ID.amountConf, "2")
+      conf.set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get(GPU).get.addresses === Array("5", "6"))
+      assert(sc.resources.get(GPU).get.name === "gpu")
+    }
+  }
+
+  test("test gpu driver resource files and discovery under local-cluster mode") {
+    withTempDir { dir =>
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "gpu","addresses":["5", "6"]}""")
+
+      implicit val formats = DefaultFormats
+      val gpusAllocated =
+        ResourceAllocation(DRIVER_GPU_ID, Seq("0", "1", "8"))
+      val ja = Extraction.decompose(Seq(gpusAllocated))
+      val resourcesFile = createTempJsonFile(dir, "resources", ja)
+
+      val conf = new SparkConf()
+        .set(DRIVER_RESOURCES_FILE, resourcesFile)
+        .setMaster("local-cluster[1, 1, 1024]")
+        .setAppName("test-cluster")
+        .set(DRIVER_GPU_ID.amountConf, "3")
+        .set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+        .set(SPARK_RESOURCES_DIR, dir.getName())
+
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+      // driver gpu resources file should take precedence over the script
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get(GPU).get.addresses === Array("0", "1", "8"))
+      assert(sc.resources.get(GPU).get.name === "gpu")
+    }
+  }
+
+  test("Test parsing resources task configs with missing executor config") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+    conf.set(TASK_GPU_ID.amountConf, "1")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount " +
+      "needs to be specified since a task requirement config: spark.task.resource.gpu.amount " +
+      "was specified"))
+  }
+
+  test("Test parsing resources executor config < task requirements") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+    conf.set(TASK_GPU_ID.amountConf, "2")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "1")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount = 1 " +
+      "has to be >= the requested amount in task resource config: " +
+      "spark.task.resource.gpu.amount = 2"))
+  }
+
+  test("Parse resources executor config not the same multiple numbers of the task requirements") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+    conf.set(TASK_GPU_ID.amountConf, "2")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "4")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains(
+      "The configuration of resource: gpu (exec = 4, task = 2, runnable tasks = 2) will result " +
+      "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
+      "executor to: 1. Please adjust your configuration."))
+  }
+
+  test("test resource scheduling under local-cluster mode") {
+    import org.apache.spark.TestUtils._
+
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val discoveryScript = createTempScriptWithExpectedOutput(dir, "resourceDiscoveryScript",
+        """{"name": "gpu","addresses":["0", "1", "2", "3", "4", "5", "6", "7", "8"]}""")
+
+      val conf = new SparkConf()
+        .setMaster("local-cluster[3, 3, 1024]")
+        .setAppName("test-cluster")
+        .set(WORKER_GPU_ID.amountConf, "3")
+        .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
+        .set(TASK_GPU_ID.amountConf, "3")
+        .set(EXECUTOR_GPU_ID.amountConf, "3")
+        .set(SPARK_RESOURCES_DIR, dir.getName())
+
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
+
+      val rdd = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
+        val context = TaskContext.get()
+        context.resources().get(GPU).get.addresses.iterator
+      }
+      val gpus = rdd.collect()
+      assert(gpus.sorted === Seq("0", "1", "2", "3", "4", "5", "6", "7", "8"))
+
+      eventually(timeout(10.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+      }
     }
   }
 }

@@ -17,53 +17,55 @@
 
 package org.apache.spark.mllib.linalg
 
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.util.Benchmark
 
 /**
  * Serialization benchmark for VectorUDT.
+ * To run this benchmark:
+ * {{{
+ * 1. without sbt: bin/spark-submit --class <this class> <spark mllib test jar>
+ * 2. build/sbt "mllib/test:runMain <this class>"
+ * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/test:runMain <this class>"
+ *    Results will be written to "benchmarks/UDTSerializationBenchmark-results.txt".
+ * }}}
  */
-object UDTSerializationBenchmark {
+object UDTSerializationBenchmark extends BenchmarkBase {
 
-  def main(args: Array[String]): Unit = {
-    val iters = 1e2.toInt
-    val numRows = 1e3.toInt
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
-    val encoder = ExpressionEncoder[Vector].resolveAndBind()
+    runBenchmark("VectorUDT de/serialization") {
+      val iters = 1e2.toInt
+      val numRows = 1e3.toInt
 
-    val vectors = (1 to numRows).map { i =>
-      Vectors.dense(Array.fill(1e5.toInt)(1.0 * i))
-    }.toArray
-    val rows = vectors.map(encoder.toRow)
+      val encoder = ExpressionEncoder[Vector].resolveAndBind()
 
-    val benchmark = new Benchmark("VectorUDT de/serialization", numRows, iters)
+      val vectors = (1 to numRows).map { i =>
+        Vectors.dense(Array.fill(1e5.toInt)(1.0 * i))
+      }.toArray
+      val rows = vectors.map(encoder.toRow)
 
-    benchmark.addCase("serialize") { _ =>
-      var sum = 0
-      var i = 0
-      while (i < numRows) {
-        sum += encoder.toRow(vectors(i)).numFields
-        i += 1
+      val benchmark = new Benchmark("VectorUDT de/serialization", numRows, iters, output = output)
+
+      benchmark.addCase("serialize") { _ =>
+        var sum = 0
+        var i = 0
+        while (i < numRows) {
+          sum += encoder.toRow(vectors(i)).numFields
+          i += 1
+        }
       }
-    }
 
-    benchmark.addCase("deserialize") { _ =>
-      var sum = 0
-      var i = 0
-      while (i < numRows) {
-        sum += encoder.fromRow(rows(i)).numActives
-        i += 1
+      benchmark.addCase("deserialize") { _ =>
+        var sum = 0
+        var i = 0
+        while (i < numRows) {
+          sum += encoder.fromRow(rows(i)).numActives
+          i += 1
+        }
       }
-    }
 
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    VectorUDT de/serialization:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    serialize                                      265 /  318          0.0      265138.5       1.0X
-    deserialize                                    155 /  197          0.0      154611.4       1.7X
-    */
-    benchmark.run()
+      benchmark.run()
+    }
   }
 }

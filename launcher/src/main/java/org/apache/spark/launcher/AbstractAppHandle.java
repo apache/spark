@@ -31,8 +31,8 @@ abstract class AbstractAppHandle implements SparkAppHandle {
   private final LauncherServer server;
 
   private LauncherServer.ServerConnection connection;
-  private List<Listener> listeners;
-  private AtomicReference<State> state;
+  private List<SparkAppHandle.Listener> listeners;
+  private AtomicReference<SparkAppHandle.State> state;
   private volatile String appId;
   private volatile boolean disposed;
 
@@ -42,7 +42,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
   }
 
   @Override
-  public synchronized void addListener(Listener l) {
+  public synchronized void addListener(SparkAppHandle.Listener l) {
     if (listeners == null) {
       listeners = new CopyOnWriteArrayList<>();
     }
@@ -50,7 +50,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
   }
 
   @Override
-  public State getState() {
+  public SparkAppHandle.State getState() {
     return state.get();
   }
 
@@ -120,11 +120,11 @@ abstract class AbstractAppHandle implements SparkAppHandle {
     }
   }
 
-  void setState(State s) {
+  void setState(SparkAppHandle.State s) {
     setState(s, false);
   }
 
-  void setState(State s, boolean force) {
+  void setState(SparkAppHandle.State s, boolean force) {
     if (force) {
       state.set(s);
       fireEvent(false);

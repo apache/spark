@@ -29,6 +29,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
 import org.apache.spark.tags.ExtendedYarnTest
@@ -44,7 +45,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
-    yarnConfig.set("spark.shuffle.service.port", "0")
+    yarnConfig.set(SHUFFLE_SERVICE_PORT.key, "0")
     yarnConfig
   }
 
@@ -54,8 +55,8 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     logInfo("Shuffle service port = " + shuffleServicePort)
 
     Map(
-      "spark.shuffle.service.enabled" -> "true",
-      "spark.shuffle.service.port" -> shuffleServicePort.toString,
+      SHUFFLE_SERVICE_ENABLED.key -> "true",
+      SHUFFLE_SERVICE_PORT.key -> shuffleServicePort.toString,
       MAX_EXECUTOR_FAILURES.key -> "1"
     )
   }
@@ -94,14 +95,14 @@ class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
   override def newYarnConfig(): YarnConfiguration = {
     val yarnConfig = super.newYarnConfig()
     yarnConfig.set(NETWORK_AUTH_ENABLED.key, "true")
-    yarnConfig.set(NETWORK_ENCRYPTION_ENABLED.key, "true")
+    yarnConfig.set(NETWORK_CRYPTO_ENABLED.key, "true")
     yarnConfig
   }
 
   override protected def extraSparkConf(): Map[String, String] = {
     super.extraSparkConf() ++ Map(
       NETWORK_AUTH_ENABLED.key -> "true",
-      NETWORK_ENCRYPTION_ENABLED.key -> "true"
+      NETWORK_CRYPTO_ENABLED.key -> "true"
     )
   }
 

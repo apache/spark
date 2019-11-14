@@ -74,16 +74,6 @@ public abstract class BufferedRowIterator {
   }
 
   /**
-   * Returns whether this iterator should stop fetching next row from [[CodegenSupport#inputRDDs]].
-   *
-   * If it returns true, the caller should exit the loop that [[InputAdapter]] generates.
-   * This interface is mainly used to limit the number of input rows.
-   */
-  public boolean stopEarly() {
-    return false;
-  }
-
-  /**
    * Returns whether `processNext()` should stop processing next row from `input` or not.
    *
    * If it returns true, the caller should exit the loop (return from processNext()).

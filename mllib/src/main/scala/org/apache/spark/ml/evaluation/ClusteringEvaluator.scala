@@ -18,7 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
@@ -30,8 +30,6 @@ import org.apache.spark.sql.functions.{avg, col, udf}
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: Experimental ::
- *
  * Evaluator for clustering results.
  * The metric computes the Silhouette measure using the specified distance measure.
  *
@@ -39,7 +37,6 @@ import org.apache.spark.sql.types.DoubleType
  * between 1 and -1, where a value close to 1 means that the points in a cluster are close to the
  * other points in the same cluster and far from the points of the other clusters.
  */
-@Experimental
 @Since("2.3.0")
 class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   extends Evaluator with HasPredictionCol with HasFeaturesCol with DefaultParamsWritable {
@@ -119,7 +116,15 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
           df, $(predictionCol), $(featuresCol))
       case ("silhouette", "cosine") =>
         CosineSilhouette.computeSilhouetteScore(df, $(predictionCol), $(featuresCol))
+      case (mn, dm) =>
+        throw new IllegalArgumentException(s"No support for metric $mn, distance $dm")
     }
+  }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ClusteringEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"distanceMeasure=${$(distanceMeasure)}"
   }
 }
 
@@ -144,27 +149,27 @@ private[evaluation] abstract class Silhouette {
       pointClusterId: Double,
       pointClusterNumOfPoints: Long,
       averageDistanceToCluster: (Double) => Double): Double = {
-    // Here we compute the average dissimilarity of the current point to any cluster of which the
-    // point is not a member.
-    // The cluster with the lowest average dissimilarity - i.e. the nearest cluster to the current
-    // point - is said to be the "neighboring cluster".
-    val otherClusterIds = clusterIds.filter(_ != pointClusterId)
-    val neighboringClusterDissimilarity = otherClusterIds.map(averageDistanceToCluster).min
-
-    // adjustment for excluding the node itself from the computation of the average dissimilarity
-    val currentClusterDissimilarity = if (pointClusterNumOfPoints == 1) {
+    if (pointClusterNumOfPoints == 1) {
+      // Single-element clusters have silhouette 0
       0.0
     } else {
-      averageDistanceToCluster(pointClusterId) * pointClusterNumOfPoints /
-        (pointClusterNumOfPoints - 1)
-    }
-
-    if (currentClusterDissimilarity < neighboringClusterDissimilarity) {
-      1 - (currentClusterDissimilarity / neighboringClusterDissimilarity)
-    } else if (currentClusterDissimilarity > neighboringClusterDissimilarity) {
-      (neighboringClusterDissimilarity / currentClusterDissimilarity) - 1
-    } else {
-      0.0
+      // Here we compute the average dissimilarity of the current point to any cluster of which the
+      // point is not a member.
+      // The cluster with the lowest average dissimilarity - i.e. the nearest cluster to the current
+      // point - is said to be the "neighboring cluster".
+      val otherClusterIds = clusterIds.filter(_ != pointClusterId)
+      val neighboringClusterDissimilarity = otherClusterIds.map(averageDistanceToCluster).min
+      // adjustment for excluding the node itself from the computation of the average dissimilarity
+      val currentClusterDissimilarity =
+        averageDistanceToCluster(pointClusterId) * pointClusterNumOfPoints /
+          (pointClusterNumOfPoints - 1)
+      if (currentClusterDissimilarity < neighboringClusterDissimilarity) {
+        1 - (currentClusterDissimilarity / neighboringClusterDissimilarity)
+      } else if (currentClusterDissimilarity > neighboringClusterDissimilarity) {
+        (neighboringClusterDissimilarity / currentClusterDissimilarity) - 1
+      } else {
+        0.0
+      }
     }
   }
 

@@ -37,10 +37,10 @@ import org.apache.spark.streaming.kafka010._
  *    consumer-group topic1,topic2
  */
 object DirectKafkaWordCount {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 3) {
       System.err.println(s"""
-        |Usage: DirectKafkaWordCount <brokers> <topics>
+        |Usage: DirectKafkaWordCount <brokers> <groupId> <topics>
         |  <brokers> is a list of one or more Kafka brokers
         |  <groupId> is a consumer group name to consume from topics
         |  <topics> is a list of one or more kafka topics to consume from

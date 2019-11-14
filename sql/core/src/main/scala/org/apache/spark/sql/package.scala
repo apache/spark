@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.annotation.{DeveloperApi, InterfaceStability}
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
 import org.apache.spark.sql.execution.SparkStrategy
 
 /**
@@ -40,8 +40,17 @@ package object sql {
    * [[org.apache.spark.sql.sources]]
    */
   @DeveloperApi
-  @InterfaceStability.Unstable
+  @Unstable
   type Strategy = SparkStrategy
 
   type DataFrame = Dataset[Row]
+
+  /**
+   * Metadata key which is used to write Spark version in the followings:
+   * - Parquet file metadata
+   * - ORC file metadata
+   *
+   * Note that Hive table property `spark.sql.create.version` also has Spark version.
+   */
+  private[sql] val SPARK_VERSION_METADATA_KEY = "org.apache.spark.version"
 }

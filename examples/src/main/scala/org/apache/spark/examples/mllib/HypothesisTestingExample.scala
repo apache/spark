@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
 
 object HypothesisTestingExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("HypothesisTestingExample")
     val sc = new SparkContext(conf)
@@ -61,9 +61,9 @@ object HypothesisTestingExample {
           LabeledPoint(-1.0, Vectors.dense(-1.0, 0.0, -0.5)
           )
         )
-      ) // (feature, label) pairs.
+      ) // (label, feature) pairs.
 
-    // The contingency table is constructed from the raw (feature, label) pairs and used to conduct
+    // The contingency table is constructed from the raw (label, feature) pairs and used to conduct
     // the independence test. Returns an array containing the ChiSquaredTestResult for every feature
     // against the label.
     val featureTestResults: Array[ChiSqTestResult] = Statistics.chiSqTest(obs)

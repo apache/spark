@@ -28,4 +28,4 @@ import org.apache.spark.annotation.{Experimental, Since}
  */
 @Experimental
 @Since("2.4.0")
-class BarrierTaskInfo(val address: String)
+class BarrierTaskInfo private[spark] (val address: String)

@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, UserDefinedType}
 
 /*
  * This file defines optimization rules related to object manipulation (for the Dataset API).
@@ -106,6 +110,172 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-     case MapObjects(_, _, _, LambdaVariable(_, _, _, false), inputData, None) => inputData
+     case MapObjects(_, LambdaVariable(_, _, false, _), inputData, None) => inputData
+  }
+}
+
+/**
+ * Prunes unnecessary object serializers from query plan. This rule prunes both individual
+ * serializer and nested fields in serializers.
+ */
+object ObjectSerializerPruning extends Rule[LogicalPlan] {
+
+  /**
+   * Visible for testing.
+   * Collects all struct types from given data type object, recursively.
+   */
+  def collectStructType(dt: DataType, structs: ArrayBuffer[StructType]): ArrayBuffer[StructType] = {
+    dt match {
+      case s @ StructType(fields) =>
+        structs += s
+        fields.map(f => collectStructType(f.dataType, structs))
+      case ArrayType(elementType, _) =>
+        collectStructType(elementType, structs)
+      case MapType(keyType, valueType, _) =>
+        collectStructType(keyType, structs)
+        collectStructType(valueType, structs)
+      // We don't use UserDefinedType in those serializers.
+      case _: UserDefinedType[_] =>
+      case _ =>
+    }
+    structs
+  }
+
+  /**
+   * This method returns pruned `CreateNamedStruct` expression given an original `CreateNamedStruct`
+   * and a pruned `StructType`.
+   */
+  private def pruneNamedStruct(struct: CreateNamedStruct, prunedType: StructType) = {
+    // Filters out the pruned fields.
+    val resolver = SQLConf.get.resolver
+    val prunedFields = struct.nameExprs.zip(struct.valExprs).filter { case (nameExpr, _) =>
+      val name = nameExpr.eval(EmptyRow).toString
+      prunedType.fieldNames.exists(resolver(_, name))
+    }.flatMap(pair => Seq(pair._1, pair._2))
+
+    CreateNamedStruct(prunedFields)
+  }
+
+  /**
+   * When we change nested serializer data type, `If` expression will be unresolved because
+   * literal null's data type doesn't match now. We need to align it with new data type.
+   * Note: we should do `transformUp` explicitly to change data types.
+   */
+  private def alignNullTypeInIf(expr: Expression) = expr.transformUp {
+    case i @ If(_: IsNull, Literal(null, dt), ser) if !dt.sameType(ser.dataType) =>
+      i.copy(trueValue = Literal(null, ser.dataType))
+  }
+
+  /**
+   * This method prunes given serializer expression by given pruned data type. For example,
+   * given a serializer creating struct(a int, b int) and pruned data type struct(a int),
+   * this method returns pruned serializer creating struct(a int).
+   */
+  def pruneSerializer(
+      serializer: NamedExpression,
+      prunedDataType: DataType): NamedExpression = {
+    val prunedStructTypes = collectStructType(prunedDataType, ArrayBuffer.empty[StructType])
+      .toIterator
+
+    def transformer: PartialFunction[Expression, Expression] = {
+      case m: ExternalMapToCatalyst =>
+        val prunedKeyConverter = m.keyConverter.transformDown(transformer)
+        val prunedValueConverter = m.valueConverter.transformDown(transformer)
+
+        m.copy(keyConverter = alignNullTypeInIf(prunedKeyConverter),
+          valueConverter = alignNullTypeInIf(prunedValueConverter))
+
+      case s: CreateNamedStruct if prunedStructTypes.hasNext =>
+        val prunedType = prunedStructTypes.next()
+        pruneNamedStruct(s, prunedType)
+    }
+
+    val transformedSerializer = serializer.transformDown(transformer)
+    val prunedSerializer = alignNullTypeInIf(transformedSerializer).asInstanceOf[NamedExpression]
+
+    if (prunedSerializer.dataType.sameType(prunedDataType)) {
+      prunedSerializer
+    } else {
+      serializer
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p @ Project(_, s: SerializeFromObject) =>
+      // Prunes individual serializer if it is not used at all by above projection.
+      val usedRefs = p.references
+      val prunedSerializer = s.serializer.filter(usedRefs.contains)
+
+      val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
+
+      if (SQLConf.get.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
+        // Prunes nested fields in serializers.
+        val prunedSchema = SchemaPruning.pruneDataSchema(
+          StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
+        val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
+          pruneSerializer(serializer, prunedSchema(idx).dataType)
+        }
+
+        // Builds new projection.
+        val projectionOverSchema = ProjectionOverSchema(prunedSchema)
+        val newProjects = p.projectList.map(_.transformDown {
+          case projectionOverSchema(expr) => expr
+        }).map { case expr: NamedExpression => expr }
+        p.copy(projectList = newProjects,
+          child = SerializeFromObject(nestedPrunedSerializer, s.child))
+      } else {
+        p.copy(child = SerializeFromObject(prunedSerializer, s.child))
+      }
+  }
+}
+
+/**
+ * Reassigns per-query unique IDs to `LambdaVariable`s, whose original IDs are globally unique. This
+ * can help Spark to hit codegen cache more often and improve performance.
+ */
+object ReassignLambdaVariableID extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!SQLConf.get.getConf(SQLConf.OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID)) return plan
+
+    // The original LambdaVariable IDs are all positive. To avoid conflicts, the new IDs are all
+    // negative and starts from -1.
+    var newId = 0L
+    val oldIdToNewId = scala.collection.mutable.Map.empty[Long, Long]
+
+    // The `LambdaVariable` IDs in a query should be all positive or negative. Otherwise it's a bug
+    // and we should fail earlier.
+    var hasNegativeIds = false
+    var hasPositiveIds = false
+
+    plan.transformAllExpressions {
+      case lr: LambdaVariable if lr.id == 0 =>
+        throw new IllegalStateException("LambdaVariable should never has 0 as its ID.")
+
+      case lr: LambdaVariable if lr.id < 0 =>
+        hasNegativeIds = true
+        if (hasPositiveIds) {
+          throw new IllegalStateException(
+            "LambdaVariable IDs in a query should be all positive or negative.")
+
+        }
+        lr
+
+      case lr: LambdaVariable if lr.id > 0 =>
+        hasPositiveIds = true
+        if (hasNegativeIds) {
+          throw new IllegalStateException(
+            "LambdaVariable IDs in a query should be all positive or negative.")
+        }
+
+        if (oldIdToNewId.contains(lr.id)) {
+          // This `LambdaVariable` has appeared before, reuse the newly generated ID.
+          lr.copy(id = oldIdToNewId(lr.id))
+        } else {
+          // This is the first appearance of this `LambdaVariable`, generate a new ID.
+          newId -= 1
+          oldIdToNewId(lr.id) = newId
+          lr.copy(id = newId)
+        }
+    }
   }
 }

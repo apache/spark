@@ -20,15 +20,17 @@ package org.apache.spark.rdd
 import java.io.{FileNotFoundException, IOException}
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CHECKPOINT_COMPRESS
+import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_COMPRESS}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -82,14 +84,38 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     Array.tabulate(inputFiles.length)(i => new CheckpointRDDPartition(i))
   }
 
-  /**
-   * Return the locations of the checkpoint file associated with the given partition.
-   */
-  protected override def getPreferredLocations(split: Partition): Seq[String] = {
+  // Cache of preferred locations of checkpointed files.
+  @transient private[spark] lazy val cachedPreferredLocations = CacheBuilder.newBuilder()
+    .expireAfterWrite(
+      SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME).get,
+      TimeUnit.MINUTES)
+    .build(
+      new CacheLoader[Partition, Seq[String]]() {
+        override def load(split: Partition): Seq[String] = {
+          getPartitionBlockLocations(split)
+        }
+      })
+
+  // Returns the block locations of given partition on file system.
+  private def getPartitionBlockLocations(split: Partition): Seq[String] = {
     val status = fs.getFileStatus(
       new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index)))
     val locations = fs.getFileBlockLocations(status, 0, status.getLen)
     locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
+  }
+
+  private lazy val cachedExpireTime =
+    SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME)
+
+  /**
+   * Return the locations of the checkpoint file associated with the given partition.
+   */
+  protected override def getPreferredLocations(split: Partition): Seq[String] = {
+    if (cachedExpireTime.isDefined && cachedExpireTime.get > 0) {
+      cachedPreferredLocations.get(split)
+    } else {
+      getPartitionBlockLocations(split)
+    }
   }
 
   /**
@@ -166,7 +192,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   def writePartitionToCheckpointFile[T: ClassTag](
       path: String,
       broadcastedConf: Broadcast[SerializableConfiguration],
-      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
+      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]): Unit = {
     val env = SparkEnv.get
     val outputDir = new Path(path)
     val fs = outputDir.getFileSystem(broadcastedConf.value.value)
@@ -176,7 +202,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val tempOutputPath =
       new Path(outputDir, s".$finalOutputName-attempt-${ctx.attemptNumber()}")
 
-    val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
+    val bufferSize = env.conf.get(BUFFER_SIZE)
 
     val fileOutputStream = if (blockSize < 0) {
       val fileStream = fs.create(tempOutputPath, false, bufferSize)
@@ -222,7 +248,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     sc: SparkContext, partitioner: Partitioner, checkpointDirPath: Path): Unit = {
     try {
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
-      val bufferSize = sc.conf.getInt("spark.buffer.size", 65536)
+      val bufferSize = sc.conf.get(BUFFER_SIZE)
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
       val fileOutputStream = fs.create(partitionerFilePath, false, bufferSize)
       val serializer = SparkEnv.get.serializer.newInstance()
@@ -249,7 +275,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       sc: SparkContext,
       checkpointDirPath: String): Option[Partitioner] = {
     try {
-      val bufferSize = sc.conf.getInt("spark.buffer.size", 65536)
+      val bufferSize = sc.conf.get(BUFFER_SIZE)
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
       val fileInputStream = fs.open(partitionerFilePath, bufferSize)
@@ -287,7 +313,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       context: TaskContext): Iterator[T] = {
     val env = SparkEnv.get
     val fs = path.getFileSystem(broadcastedConf.value.value)
-    val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
+    val bufferSize = env.conf.get(BUFFER_SIZE)
     val fileInputStream = {
       val fileStream = fs.open(path, bufferSize)
       if (env.conf.get(CHECKPOINT_COMPRESS)) {

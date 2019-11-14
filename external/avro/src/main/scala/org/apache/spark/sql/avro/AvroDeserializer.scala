@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.avro
 
+import java.math.BigDecimal
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
+import org.apache.avro.Conversions.DecimalConversion
 import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
@@ -30,14 +32,16 @@ import org.apache.avro.util.Utf8
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
 class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
+  private lazy val decimalConversions = new DecimalConversion()
+
   private val converter: Any => Any = rootCatalystType match {
     // A shortcut for empty schema.
     case st: StructType if st.isEmpty =>
@@ -106,7 +110,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
       // For backward compatibility, we still keep this conversion.
       case (LONG, DateType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, (value.asInstanceOf[Long] / DateTimeUtils.MILLIS_PER_DAY).toInt)
+        updater.setInt(ordinal, (value.asInstanceOf[Long] / MILLIS_PER_DAY).toInt)
 
       case (FLOAT, FloatType) => (updater, ordinal, value) =>
         updater.setFloat(ordinal, value.asInstanceOf[Float])
@@ -138,9 +142,20 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
             bytes
           case b: Array[Byte] => b
           case other => throw new RuntimeException(s"$other is not a valid avro binary.")
-
         }
         updater.set(ordinal, bytes)
+
+      case (FIXED, d: DecimalType) => (updater, ordinal, value) =>
+        val bigDecimal = decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType,
+          LogicalTypes.decimal(d.precision, d.scale))
+        val decimal = createDecimal(bigDecimal, d.precision, d.scale)
+        updater.setDecimal(ordinal, decimal)
+
+      case (BYTES, d: DecimalType) => (updater, ordinal, value) =>
+        val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType,
+          LogicalTypes.decimal(d.precision, d.scale))
+        val decimal = createDecimal(bigDecimal, d.precision, d.scale)
+        updater.setDecimal(ordinal, decimal)
 
       case (RECORD, st: StructType) =>
         val writeRecord = getRecordWriter(avroType, st, path)
@@ -203,11 +218,14 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
             i += 1
           }
 
+          // The Avro map will never have null or duplicated map keys, it's safe to create a
+          // ArrayBasedMapData directly here.
           updater.set(ordinal, new ArrayBasedMapData(keyArray, valueArray))
 
       case (UNION, _) =>
         val allTypes = avroType.getTypes.asScala
         val nonNullTypes = allTypes.filter(_.getType != NULL)
+        val nonNullAvroType = Schema.createUnion(nonNullTypes.asJava)
         if (nonNullTypes.nonEmpty) {
           if (nonNullTypes.length == 1) {
             newWriter(nonNullTypes.head, catalystType, path)
@@ -236,7 +254,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
                     (updater, ordinal, value) => {
                       val row = new SpecificInternalRow(st)
                       val fieldUpdater = new RowUpdater(row)
-                      val i = GenericData.get().resolveUnion(avroType, value)
+                      val i = GenericData.get().resolveUnion(nonNullAvroType, value)
                       fieldWriters(i)(fieldUpdater, i, value)
                       updater.set(ordinal, row)
                     }
@@ -262,6 +280,17 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
             s"Source Avro schema: $rootAvroType.\n" +
             s"Target Catalyst type: $rootCatalystType")
     }
+
+  // TODO: move the following method in Decimal object on creating Decimal from BigDecimal?
+  private def createDecimal(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
+    if (precision <= Decimal.MAX_LONG_DIGITS) {
+      // Constructs a `Decimal` with an unscaled `Long` value if possible.
+      Decimal(decimal.unscaledValue().longValue(), precision, scale)
+    } else {
+      // Otherwise, resorts to an unscaled `BigInteger` instead.
+      Decimal(decimal, precision, scale)
+    }
+  }
 
   private def getRecordWriter(
       avroType: Schema,
@@ -334,6 +363,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
     def setLong(ordinal: Int, value: Long): Unit = set(ordinal, value)
     def setDouble(ordinal: Int, value: Double): Unit = set(ordinal, value)
     def setFloat(ordinal: Int, value: Float): Unit = set(ordinal, value)
+    def setDecimal(ordinal: Int, value: Decimal): Unit = set(ordinal, value)
   }
 
   final class RowUpdater(row: InternalRow) extends CatalystDataUpdater {
@@ -347,6 +377,8 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
     override def setLong(ordinal: Int, value: Long): Unit = row.setLong(ordinal, value)
     override def setDouble(ordinal: Int, value: Double): Unit = row.setDouble(ordinal, value)
     override def setFloat(ordinal: Int, value: Float): Unit = row.setFloat(ordinal, value)
+    override def setDecimal(ordinal: Int, value: Decimal): Unit =
+      row.setDecimal(ordinal, value, value.precision)
   }
 
   final class ArrayDataUpdater(array: ArrayData) extends CatalystDataUpdater {
@@ -360,5 +392,6 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
     override def setLong(ordinal: Int, value: Long): Unit = array.setLong(ordinal, value)
     override def setDouble(ordinal: Int, value: Double): Unit = array.setDouble(ordinal, value)
     override def setFloat(ordinal: Int, value: Float): Unit = array.setFloat(ordinal, value)
+    override def setDecimal(ordinal: Int, value: Decimal): Unit = array.update(ordinal, value)
   }
 }

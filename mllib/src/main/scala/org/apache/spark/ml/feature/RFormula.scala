@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -30,6 +30,7 @@ import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasHandleInvalid, HasLabelCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 
 /**
@@ -124,10 +125,10 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
 }
 
 /**
- * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'. Also see
- * the R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ * we support a limited subset of the R operators, including '~', '.', ':', '+', '-', '*' and '^'.
+ * Also see the R formula docs here:
+ * http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  *
  * The basic operators are:
  *  - `~` separate target and terms
@@ -135,6 +136,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  *  - `-` remove a term, "- 1" means removing intercept
  *  - `:` interaction (multiplication for numeric values, or binarized categorical values)
  *  - `.` all columns except target
+ *  - `*` factor crossing, includes the terms and interactions between them
+ *  - `^` factor crossing to a specified degree
  *
  * Suppose `a` and `b` are double columns, we use the following simple examples
  * to illustrate the effect of `RFormula`:
@@ -142,6 +145,10 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  * are coefficients.
  *  - `y ~ a + b + a:b - 1` means model `y ~ w1 * a + w2 * b + w3 * a * b` where `w1, w2, w3`
  * are coefficients.
+ *  - `y ~ a * b` means model `y ~ w0 + w1 * a + w2 * b + w3 * a * b` where `w0` is the
+ *  intercept and `w1, w2, w3` are coefficients
+ *  - `y ~ (a + b)^2` means model `y ~ w0 + w1 * a + w2 * b + w3 * a * b` where `w0` is the
+ *  intercept and `w1, w2, w3` are coefficients
  *
  * RFormula produces a vector column of features and a double or string column of label.
  * Like when formulas are used in R for linear regression, string input columns will be one-hot
@@ -150,7 +157,6 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  * `StringIndexer`. If the label column does not exist in the DataFrame, the output label column
  * will be created from the specified response variable in the formula.
  */
-@Experimental
 @Since("1.5.0")
 class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[RFormulaModel] with RFormulaBase with DefaultParamsWritable {
@@ -209,8 +215,11 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       col
     }
 
+    val terms = resolvedFormula.terms.flatten.distinct.sorted
+    lazy val firstRow = dataset.select(terms.map(col): _*).first()
+
     // First we index each string column referenced by the input terms.
-    val indexed: Map[String, String] = resolvedFormula.terms.flatten.distinct.map { term =>
+    val indexed = terms.zipWithIndex.map { case (term, i) =>
       dataset.schema(term).dataType match {
         case _: StringType =>
           val indexCol = tmpColumn("stridx")
@@ -224,7 +233,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(dataset.schema(term))
           val size = if (group.size < 0) {
-            dataset.select(term).first().getAs[Vector](0).size
+            firstRow.getAs[Vector](i).size
           } else {
             group.size
           }
@@ -246,7 +255,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
         // Formula w/o intercept, one of the categories in the first category feature is
         // being used as reference category, we will not drop any category for that feature.
         if (!hasIntercept && !keepReferenceCategory) {
-          encoderStages += new OneHotEncoderEstimator(uid)
+          encoderStages += new OneHotEncoder(uid)
             .setInputCols(Array(indexed(term)))
             .setOutputCols(Array(encodedCol))
             .setDropLast(false)
@@ -269,7 +278,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
     if (oneHotEncodeColumns.nonEmpty) {
       val (inputCols, outputCols) = oneHotEncodeColumns.toArray.unzip
-      encoderStages += new OneHotEncoderEstimator(uid)
+      encoderStages += new OneHotEncoder(uid)
         .setInputCols(inputCols)
         .setOutputCols(outputCols)
         .setDropLast(true)
@@ -311,7 +320,10 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
 
   @Since("2.0.0")
-  override def toString: String = s"RFormula(${get(formula).getOrElse("")}) (uid=$uid)"
+  override def toString: String = {
+    s"RFormula: uid=$uid" +
+      get(formula).map(f => s", formula = $f").getOrElse("")
+  }
 }
 
 @Since("2.0.0")
@@ -322,14 +334,12 @@ object RFormula extends DefaultParamsReadable[RFormula] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[RFormula]]. Fitting is required to determine the factor levels of
  * formula terms.
  *
  * @param resolvedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
-@Experimental
 @Since("1.5.0")
 class RFormulaModel private[feature](
     @Since("1.5.0") override val uid: String,
@@ -369,7 +379,9 @@ class RFormulaModel private[feature](
   }
 
   @Since("2.0.0")
-  override def toString: String = s"RFormulaModel($resolvedFormula) (uid=$uid)"
+  override def toString: String = {
+    s"RFormulaModel: uid=$uid, resolvedFormula=$resolvedFormula"
+  }
 
   private def transformLabel(dataset: Dataset[_]): DataFrame = {
     val labelName = resolvedFormula.label
@@ -389,7 +401,7 @@ class RFormulaModel private[feature](
     }
   }
 
-  private def checkCanTransform(schema: StructType) {
+  private def checkCanTransform(schema: StructType): Unit = {
     val columnNames = schema.map(_.name)
     require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(

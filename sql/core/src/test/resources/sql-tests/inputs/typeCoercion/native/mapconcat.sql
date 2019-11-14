@@ -13,7 +13,6 @@ CREATE TEMPORARY VIEW various_maps AS SELECT * FROM VALUES (
   map('a', 'b'), map('c', 'd'),
   map(array('a', 'b'), array('c', 'd')), map(array('e'), array('f')),
   map(struct('a', 1), struct('b', 2)), map(struct('c', 3), struct('d', 4)),
-  map(map('a', 1), map('b', 2)), map(map('c', 3), map('d', 4)),
   map('a', 1), map('c', 2),
   map(1, 'a'), map(2, 'c')
 ) AS various_maps (
@@ -31,7 +30,6 @@ CREATE TEMPORARY VIEW various_maps AS SELECT * FROM VALUES (
   string_map1, string_map2,
   array_map1, array_map2,
   struct_map1, struct_map2,
-  map_map1, map_map2,
   string_int_map1, string_int_map2,
   int_string_map1, int_string_map2
 );
@@ -51,7 +49,6 @@ SELECT
     map_concat(string_map1, string_map2) string_map,
     map_concat(array_map1, array_map2) array_map,
     map_concat(struct_map1, struct_map2) struct_map,
-    map_concat(map_map1, map_map2) map_map,
     map_concat(string_int_map1, string_int_map2) string_int_map,
     map_concat(int_string_map1, int_string_map2) int_string_map
 FROM various_maps;
@@ -61,6 +58,7 @@ SELECT
     map_concat(tinyint_map1, smallint_map2) ts_map,
     map_concat(smallint_map1, int_map2) si_map,
     map_concat(int_map1, bigint_map2) ib_map,
+    map_concat(bigint_map1, decimal_map2) bd_map,
     map_concat(decimal_map1, float_map2) df_map,
     map_concat(string_map1, date_map2) std_map,
     map_concat(timestamp_map1, string_map2) tst_map,
@@ -70,7 +68,7 @@ FROM various_maps;
 
 -- Concatenate map of incompatible types 1
 SELECT
-    map_concat(tinyint_map1, map_map2) tm_map
+    map_concat(tinyint_map1, array_map1) tm_map
 FROM various_maps;
 
 -- Concatenate map of incompatible types 2
@@ -85,10 +83,10 @@ FROM various_maps;
 
 -- Concatenate map of incompatible types 4
 SELECT
-    map_concat(map_map1, array_map2) ma_map
+    map_concat(struct_map1, array_map2) ma_map
 FROM various_maps;
 
 -- Concatenate map of incompatible types 5
 SELECT
-    map_concat(map_map1, struct_map2) ms_map
+    map_concat(int_map1, array_map2) ms_map
 FROM various_maps;

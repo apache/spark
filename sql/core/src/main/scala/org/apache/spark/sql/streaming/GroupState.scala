@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
-import org.apache.spark.sql.KeyValueGroupedDataset
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
 
 /**
@@ -192,7 +191,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  * @since 2.2.0
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 trait GroupState[S] extends LogicalGroupState[S] {
 
   /** Whether state exists or not. */

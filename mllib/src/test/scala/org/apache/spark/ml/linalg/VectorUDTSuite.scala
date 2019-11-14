@@ -31,7 +31,7 @@ class VectorUDTSuite extends SparkFunSuite {
     val sv2 = Vectors.sparse(2, Array(1), Array(2.0))
 
     for (v <- Seq(dv1, dv2, sv1, sv2)) {
-      val udt = UDTRegistration.getUDTFor(v.getClass.getName).get.newInstance()
+      val udt = UDTRegistration.getUDTFor(v.getClass.getName).get.getConstructor().newInstance()
         .asInstanceOf[VectorUDT]
       assert(v === udt.deserialize(udt.serialize(v)))
       assert(udt.typeName == "vector")

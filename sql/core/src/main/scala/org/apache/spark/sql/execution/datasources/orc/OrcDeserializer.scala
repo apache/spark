@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.hadoop.io._
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
-import org.apache.orc.storage.serde2.io.{DateWritable, HiveDecimalWritable}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
@@ -37,28 +36,34 @@ class OrcDeserializer(
 
   private val resultRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
+  // `fieldWriters(index)` is
+  // - null if the respective source column is missing, since the output value
+  //   is always null in this case
+  // - a function that updates target column `index` otherwise.
   private val fieldWriters: Array[WritableComparable[_] => Unit] = {
     requiredSchema.zipWithIndex
-      // The value of missing columns are always null, do not need writers.
-      .filterNot { case (_, index) => requestedColIds(index) == -1 }
       .map { case (f, index) =>
-        val writer = newWriter(f.dataType, new RowUpdater(resultRow))
-        (value: WritableComparable[_]) => writer(index, value)
+        if (requestedColIds(index) == -1) {
+          null
+        } else {
+          val writer = newWriter(f.dataType, new RowUpdater(resultRow))
+          (value: WritableComparable[_]) => writer(index, value)
+        }
       }.toArray
   }
 
-  private val validColIds = requestedColIds.filterNot(_ == -1)
-
   def deserialize(orcStruct: OrcStruct): InternalRow = {
-    var i = 0
-    while (i < validColIds.length) {
-      val value = orcStruct.getFieldValue(validColIds(i))
-      if (value == null) {
-        resultRow.setNullAt(i)
-      } else {
-        fieldWriters(i)(value)
+    var targetColumnIndex = 0
+    while (targetColumnIndex < fieldWriters.length) {
+      if (fieldWriters(targetColumnIndex) != null) {
+        val value = orcStruct.getFieldValue(requestedColIds(targetColumnIndex))
+        if (value == null) {
+          resultRow.setNullAt(targetColumnIndex)
+        } else {
+          fieldWriters(targetColumnIndex)(value)
+        }
       }
-      i += 1
+      targetColumnIndex += 1
     }
     resultRow
   }
@@ -103,14 +108,13 @@ class OrcDeserializer(
         updater.set(ordinal, bytes)
 
       case DateType => (ordinal, value) =>
-        updater.setInt(ordinal, DateTimeUtils.fromJavaDate(value.asInstanceOf[DateWritable].get))
+        updater.setInt(ordinal, DateTimeUtils.fromJavaDate(OrcShimUtils.getSqlDate(value)))
 
       case TimestampType => (ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
 
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
-        val decimal = value.asInstanceOf[HiveDecimalWritable].getHiveDecimal()
-        val v = Decimal(decimal.bigDecimalValue, decimal.precision(), decimal.scale())
+        val v = OrcShimUtils.getDecimal(value)
         v.changePrecision(precision, scale)
         updater.set(ordinal, v)
 
@@ -179,6 +183,8 @@ class OrcDeserializer(
           i += 1
         }
 
+        // The ORC map will never have null or duplicated map keys, it's safe to create a
+        // ArrayBasedMapData directly here.
         updater.set(ordinal, new ArrayBasedMapData(keyArray, valueArray))
 
       case udt: UserDefinedType[_] => newWriter(udt.sqlType, updater)

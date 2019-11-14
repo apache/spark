@@ -17,13 +17,22 @@
 
 package org.apache.spark.sql.avro
 
+import java.io.ByteArrayOutputStream
+
+import scala.collection.JavaConverters._
+
 import org.apache.avro.Schema
+import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, GenericRecordBuilder}
+import org.apache.avro.io.EncoderFactory
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.functions.struct
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.LocalTableScanExec
+import org.apache.spark.sql.functions.{col, struct}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
-class AvroFunctionsSuite extends QueryTest with SharedSQLContext {
+class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("roundtrip in to_avro and from_avro - int and string") {
@@ -61,6 +70,36 @@ class AvroFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(avroStructDF.select(from_avro('avro, avroTypeStruct)), df)
   }
 
+  test("handle invalid input in from_avro") {
+    val count = 10
+    val df = spark.range(count).select(struct('id, 'id.as("id2")).as("struct"))
+    val avroStructDF = df.select(to_avro('struct).as("avro"))
+    val avroTypeStruct = s"""
+      |{
+      |  "type": "record",
+      |  "name": "struct",
+      |  "fields": [
+      |    {"name": "col1", "type": "long"},
+      |    {"name": "col2", "type": "double"}
+      |  ]
+      |}
+    """.stripMargin
+
+    intercept[SparkException] {
+      avroStructDF.select(
+        org.apache.spark.sql.avro.functions.from_avro(
+          'avro, avroTypeStruct, Map("mode" -> "FAILFAST").asJava)).collect()
+    }
+
+    // For PERMISSIVE mode, the result should be row of null columns.
+    val expected = (0 until count).map(_ => Row(Row(null, null)))
+    checkAnswer(
+      avroStructDF.select(
+        org.apache.spark.sql.avro.functions.from_avro(
+          'avro, avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
+      expected)
+  }
+
   test("roundtrip in to_avro and from_avro - array with null") {
     val dfOne = Seq(Tuple1(Tuple1(1) :: Nil), Tuple1(null :: Nil)).toDF("array")
     val avroTypeArrStruct = s"""
@@ -79,5 +118,39 @@ class AvroFunctionsSuite extends QueryTest with SharedSQLContext {
     val readBackOne = dfOne.select(to_avro($"array").as("avro"))
       .select(from_avro($"avro", avroTypeArrStruct).as("array"))
     checkAnswer(dfOne, readBackOne)
+  }
+
+  test("SPARK-27798: from_avro produces same value when converted to local relation") {
+    val simpleSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name" : "Payload",
+        |  "fields" : [ {"name" : "message", "type" : "string" } ]
+        |}
+      """.stripMargin
+
+    def generateBinary(message: String, avroSchema: String): Array[Byte] = {
+      val schema = new Schema.Parser().parse(avroSchema)
+      val out = new ByteArrayOutputStream()
+      val writer = new GenericDatumWriter[GenericRecord](schema)
+      val encoder = EncoderFactory.get().binaryEncoder(out, null)
+      val rootRecord = new GenericRecordBuilder(schema).set("message", message).build()
+      writer.write(rootRecord, encoder)
+      encoder.flush()
+      out.toByteArray
+    }
+
+    // This bug is hit when the rule `ConvertToLocalRelation` is run. But the rule was excluded
+    // in `SharedSparkSession`.
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      val df = Seq("one", "two", "three", "four").map(generateBinary(_, simpleSchema))
+        .toDF()
+        .withColumn("value",
+          functions.from_avro(col("value"), simpleSchema))
+
+      assert(df.queryExecution.executedPlan.isInstanceOf[LocalTableScanExec])
+      assert(df.collect().map(_.get(0)) === Seq(Row("one"), Row("two"), Row("three"), Row("four")))
+    }
   }
 }

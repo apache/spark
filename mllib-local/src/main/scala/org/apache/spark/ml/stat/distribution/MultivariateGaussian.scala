@@ -48,14 +48,14 @@ class MultivariateGaussian @Since("2.0.0") (
     this(Vectors.fromBreeze(mean), Matrices.fromBreeze(cov))
   }
 
-  private val breezeMu = mean.asBreeze.toDenseVector
+  @transient private lazy val breezeMu = mean.asBreeze.toDenseVector
 
   /**
    * Compute distribution dependent constants:
    *    rootSigmaInv = D^(-1/2)^ * U.t, where sigma = U * D * U.t
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    */
-  private val (rootSigmaInv: BDM[Double], u: Double) = calculateCovarianceConstants
+  @transient private lazy val (rootSigmaInv: BDM[Double], u: Double) = calculateCovarianceConstants
 
   /**
    * Returns density of this multivariate Gaussian at given point, x

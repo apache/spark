@@ -99,11 +99,12 @@ class ForeachBatchSinkSuite extends StreamTest {
     }
     assert(ex1.getMessage.contains("foreachBatch function cannot be null"))
     val ex2 = intercept[AnalysisException] {
-      ds.writeStream.foreachBatch((_, _) => {}).trigger(Trigger.Continuous("1 second")).start()
+      ds.writeStream.foreachBatch((_: Dataset[Int], _: Long) => {})
+        .trigger(Trigger.Continuous("1 second")).start()
     }
     assert(ex2.getMessage.contains("'foreachBatch' is not supported with continuous trigger"))
     val ex3 = intercept[AnalysisException] {
-      ds.writeStream.foreachBatch((_, _) => {}).partitionBy("value").start()
+      ds.writeStream.foreachBatch((_: Dataset[Int], _: Long) => {}).partitionBy("value").start()
     }
     assert(ex3.getMessage.contains("'foreachBatch' does not support partitioning"))
   }

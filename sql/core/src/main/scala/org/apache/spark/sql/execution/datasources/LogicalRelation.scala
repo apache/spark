@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.util.Utils
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
@@ -36,7 +36,7 @@ case class LogicalRelation(
 
   // Only care about relation when canonicalizing.
   override def doCanonicalize(): LogicalPlan = copy(
-    output = output.map(QueryPlan.normalizeExprId(_, output)),
+    output = output.map(QueryPlan.normalizeExpressions(_, output)),
     catalogTable = None)
 
   override def computeStats(): Statistics = {
@@ -63,7 +63,9 @@ case class LogicalRelation(
     case _ =>  // Do nothing.
   }
 
-  override def simpleString: String = s"Relation[${Utils.truncatedString(output, ",")}] $relation"
+  override def simpleString(maxFields: Int): String = {
+    s"Relation[${truncatedString(output, ",", maxFields)}] $relation"
+  }
 }
 
 object LogicalRelation {

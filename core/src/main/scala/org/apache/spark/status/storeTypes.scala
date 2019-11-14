@@ -68,7 +68,8 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
  */
 private[spark] class JobDataWrapper(
     val info: JobData,
-    val skippedStages: Set[Int]) {
+    val skippedStages: Set[Int],
+    val sqlExecutionId: Option[Long]) {
 
   @JsonIgnore @KVIndex
   private def id: Int = info.jobId
@@ -283,7 +284,10 @@ private[spark] class TaskDataWrapper(
       speculative,
       accumulatorUpdates,
       errorMessage,
-      metrics)
+      metrics,
+      executorLogs = null,
+      schedulerDelay = 0L,
+      gettingResultTime = 0L)
   }
 
   @JsonIgnore @KVIndex(TaskIndexNames.STAGE)
@@ -398,7 +402,9 @@ private[spark] class RDDOperationClusterWrapper(
     val childClusters: Seq[RDDOperationClusterWrapper]) {
 
   def toRDDOperationCluster(): RDDOperationCluster = {
-    val cluster = new RDDOperationCluster(id, name)
+    val isBarrier = childNodes.exists(_.barrier)
+    val name = if (isBarrier) this.name + "\n(barrier mode)" else this.name
+    val cluster = new RDDOperationCluster(id, isBarrier, name)
     childNodes.foreach(cluster.attachChildNode)
     childClusters.foreach { child =>
       cluster.attachChildCluster(child.toRDDOperationCluster())

@@ -23,8 +23,5 @@ package org.apache.spark.sql
  *  - Using HiveQL to express queries.
  *  - Reading metadata from the Hive Metastore using HiveSerDes.
  *  - Hive UDFs, UDAs, UDTs
- *
- * Users that would like access to this functionality should create a
- * [[hive.HiveContext HiveContext]] instead of a [[SQLContext]].
  */
 package object hive

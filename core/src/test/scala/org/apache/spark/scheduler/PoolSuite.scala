@@ -21,6 +21,7 @@ import java.io.FileNotFoundException
 import java.util.Properties
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.config.SCHEDULER_ALLOCATION_FILE
 import org.apache.spark.scheduler.SchedulingMode._
 
 /**
@@ -31,7 +32,6 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
 
   val LOCAL = "local"
   val APP_NAME = "PoolSuite"
-  val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
   val TEST_POOL = "testPool"
 
   def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
@@ -80,7 +80,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
    */
   test("Fair Scheduler Test") {
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, xmlPath)
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, xmlPath)
     sc = new SparkContext(LOCAL, APP_NAME, conf)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
@@ -182,7 +182,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-17663: FairSchedulableBuilder sets default values for blank or invalid datas") {
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler-with-invalid-data.xml")
       .getFile()
-    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, xmlPath)
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, xmlPath)
 
     val rootPool = new Pool("", FAIR, 0, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, conf)
@@ -218,7 +218,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val taskSetManager1 = createTaskSetManager(stageId = 1, numTasks = 1, taskScheduler)
 
     val properties = new Properties()
-    properties.setProperty("spark.scheduler.pool", TEST_POOL)
+    properties.setProperty(SparkContext.SPARK_SCHEDULER_POOL, TEST_POOL)
 
     // When FIFO Scheduler is used and task sets are submitted, they should be added to
     // the root pool, and no additional pools should be created
@@ -296,7 +296,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   test("Fair Scheduler should build fair scheduler when " +
     "valid spark.scheduler.allocation.file property is set") {
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler-with-valid-data.xml").getFile()
-    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, xmlPath)
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, xmlPath)
     sc = new SparkContext(LOCAL, APP_NAME, conf)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
@@ -326,7 +326,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Fair Scheduler should throw FileNotFoundException " +
     "when invalid spark.scheduler.allocation.file property is set") {
-    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, "INVALID_FILE_PATH")
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, "INVALID_FILE_PATH")
     sc = new SparkContext(LOCAL, APP_NAME, conf)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)

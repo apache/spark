@@ -18,6 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config
+import org.apache.spark.sql.internal.SQLConf.CHECKPOINT_LOCATION
+import org.apache.spark.sql.internal.StaticSQLConf.SCHEMA_STRING_LENGTH_THRESHOLD
 
 class RuntimeConfigSuite extends SparkFunSuite {
 
@@ -59,13 +62,22 @@ class RuntimeConfigSuite extends SparkFunSuite {
     val conf = newConf()
 
     // SQL configs
-    assert(!conf.isModifiable("spark.sql.sources.schemaStringLengthThreshold"))
-    assert(conf.isModifiable("spark.sql.streaming.checkpointLocation"))
+    assert(!conf.isModifiable(SCHEMA_STRING_LENGTH_THRESHOLD.key))
+    assert(conf.isModifiable(CHECKPOINT_LOCATION.key))
     // Core configs
-    assert(!conf.isModifiable("spark.task.cpus"))
+    assert(!conf.isModifiable(config.CPUS_PER_TASK.key))
     assert(!conf.isModifiable("spark.executor.cores"))
     // Invalid config parameters
     assert(!conf.isModifiable(""))
     assert(!conf.isModifiable("invalid config parameter"))
+  }
+
+  test("reject SparkConf entries") {
+    val conf = newConf()
+
+    val ex = intercept[AnalysisException] {
+      conf.set(config.CPUS_PER_TASK.key, 4)
+    }
+    assert(ex.getMessage.contains("Spark config"))
   }
 }

@@ -23,20 +23,41 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
+       2.0
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
+       1.5
+      > SELECT _FUNC_(cast(v as interval)) FROM VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
+       -3 days -11 hours -59 minutes -59 seconds
+  """,
+  since = "1.0.0")
+case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
+
+  override def prettyName: String = "avg"
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   override def nullable: Boolean = true
+
   // Return data type.
   override def dataType: DataType = resultType
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
+    case interval: CalendarIntervalType => interval
     case _ => DoubleType
   }
 
   private lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
+    case interval: CalendarIntervalType => interval
     case _ => DoubleType
   }
 
@@ -46,7 +67,7 @@ abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
   override lazy val aggBufferAttributes = sum :: count :: Nil
 
   override lazy val initialValues = Seq(
-    /* sum = */ Literal(0).cast(sumDataType),
+    /* sum = */ Literal.default(sumDataType),
     /* count = */ Literal(0L)
   )
 
@@ -59,32 +80,17 @@ abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
+    case CalendarIntervalType =>
+      DivideInterval(sum.cast(resultType), count.cast(DoubleType))
     case _ =>
       sum.cast(resultType) / count.cast(resultType)
   }
 
-  protected def updateExpressionsDef: Seq[Expression] = Seq(
+  override lazy val updateExpressions: Seq[Expression] = Seq(
     /* sum = */
     Add(
       sum,
-      coalesce(child.cast(sumDataType), Literal(0).cast(sumDataType))),
+      coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
     /* count = */ If(child.isNull, count, count + 1L)
   )
-
-  override lazy val updateExpressions = updateExpressionsDef
-}
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.")
-case class Average(child: Expression)
-  extends AverageLike(child) with ImplicitCastInputTypes {
-
-  override def prettyName: String = "avg"
-
-  override def children: Seq[Expression] = child :: Nil
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function average")
 }

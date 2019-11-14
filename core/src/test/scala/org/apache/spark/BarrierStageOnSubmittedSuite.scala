@@ -18,10 +18,10 @@
 package org.apache.spark
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
-import org.apache.spark.scheduler.DAGScheduler
+import org.apache.spark.scheduler.BarrierJobAllocationFailed._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -51,7 +51,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     )
 
     val error = intercept[SparkException] {
-      ThreadUtils.awaitResult(futureAction, 5 seconds)
+      ThreadUtils.awaitResult(futureAction, 5.seconds)
     }.getCause.getMessage
     assert(error.contains(message))
   }
@@ -63,7 +63,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .barrier()
       .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier ShuffleMapStage that contains PartitionPruningRDD") {
@@ -75,7 +75,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage that doesn't contain PartitionPruningRDD") {
@@ -96,7 +96,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .barrier()
       .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd, Some(Seq(1, 3)),
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage with union()") {
@@ -110,7 +110,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .map(x => x * 2)
     // Fail the job on submit because the barrier RDD (rdd1) may be not assigned Task 0.
     testSubmitJob(sc, rdd3,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage with coalesce()") {
@@ -122,7 +122,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     // Fail the job on submit because the barrier RDD requires to run on 4 tasks, but the stage
     // only launches 1 task.
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage that contains an RDD that depends on multiple barrier RDDs") {
@@ -137,7 +137,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .zip(rdd2)
       .map(x => x._1 + x._2)
     testSubmitJob(sc, rdd3,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage with zip()") {
@@ -156,8 +156,8 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
 
   test("submit a barrier ResultStage with dynamic resource allocation enabled") {
     val conf = new SparkConf()
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -166,13 +166,13 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .barrier()
       .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
   }
 
   test("submit a barrier ShuffleMapStage with dynamic resource allocation enabled") {
     val conf = new SparkConf()
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -183,6 +183,80 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
+  }
+
+  test("submit a barrier ResultStage that requires more slots than current total under local " +
+      "mode") {
+    val conf = new SparkConf()
+      // Shorten the time interval between two failed checks to make the test fail faster.
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
+      // Reduce max check failures allowed to make the test fail faster.
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
+      .setMaster("local[4]")
+      .setAppName("test")
+    sc = createSparkContext(Some(conf))
+    val rdd = sc.parallelize(1 to 10, 5)
+      .barrier()
+      .mapPartitions(iter => iter)
+    testSubmitJob(sc, rdd,
+      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+  }
+
+  test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
+    "local mode") {
+    val conf = new SparkConf()
+      // Shorten the time interval between two failed checks to make the test fail faster.
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
+      // Reduce max check failures allowed to make the test fail faster.
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
+      .setMaster("local[4]")
+      .setAppName("test")
+    sc = createSparkContext(Some(conf))
+    val rdd = sc.parallelize(1 to 10, 5)
+      .barrier()
+      .mapPartitions(iter => iter)
+      .repartition(2)
+      .map(x => x + 1)
+    testSubmitJob(sc, rdd,
+      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+  }
+
+  test("submit a barrier ResultStage that requires more slots than current total under " +
+    "local-cluster mode") {
+    val conf = new SparkConf()
+      .set(CPUS_PER_TASK, 2)
+      // Shorten the time interval between two failed checks to make the test fail faster.
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
+      // Reduce max check failures allowed to make the test fail faster.
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
+      .setMaster("local-cluster[4, 3, 1024]")
+      .setAppName("test")
+    sc = createSparkContext(Some(conf))
+    val rdd = sc.parallelize(1 to 10, 5)
+      .barrier()
+      .mapPartitions(iter => iter)
+    testSubmitJob(sc, rdd,
+      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+  }
+
+  test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
+    "local-cluster mode") {
+    val conf = new SparkConf()
+      .set(CPUS_PER_TASK, 2)
+      // Shorten the time interval between two failed checks to make the test fail faster.
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
+      // Reduce max check failures allowed to make the test fail faster.
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
+      .setMaster("local-cluster[4, 3, 1024]")
+      .setAppName("test")
+    sc = createSparkContext(Some(conf))
+    val rdd = sc.parallelize(1 to 10, 5)
+      .barrier()
+      .mapPartitions(iter => iter)
+      .repartition(2)
+      .map(x => x + 1)
+    testSubmitJob(sc, rdd,
+      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.status
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.status.api.v1.RDDPartitionInfo
+import org.apache.spark.storage.StorageLevel
 
 class LiveEntitySuite extends SparkFunSuite {
 
@@ -60,8 +60,8 @@ class LiveEntitySuite extends SparkFunSuite {
   }
 
   private def newPartition(i: Int): LiveRDDPartition = {
-    val part = new LiveRDDPartition(i.toString)
-    part.update(Seq(i.toString), i.toString, i, i)
+    val part = new LiveRDDPartition(i.toString, StorageLevel.MEMORY_AND_DISK)
+    part.update(Seq(i.toString), i, i)
     part
   }
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
 
@@ -69,6 +69,18 @@ object EstimationUtils {
   def getOutputMap(inputMap: AttributeMap[ColumnStat], output: Seq[Attribute])
     : AttributeMap[ColumnStat] = {
     AttributeMap(output.flatMap(a => inputMap.get(a).map(a -> _)))
+  }
+
+  /**
+   * Returns the stats for aliases of child's attributes
+   */
+  def getAliasStats(
+      expressions: Seq[Expression],
+      attributeStats: AttributeMap[ColumnStat]): Seq[(Attribute, ColumnStat)] = {
+    expressions.collect {
+      case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
+        alias.toAttribute -> attributeStats(attr)
+    }
   }
 
   def getSizePerRow(

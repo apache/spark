@@ -103,7 +103,7 @@ test_that("cleanClosure on R functions", {
   expect_true("l" %in% ls(env))
   expect_true("f" %in% ls(env))
   expect_equal(get("l", envir = env, inherits = FALSE), l)
-  # "y" should be in the environemnt of g.
+  # "y" should be in the environment of g.
   newG <- get("g", envir = env, inherits = FALSE)
   env <- environment(newG)
   expect_equal(length(ls(env)), 1)

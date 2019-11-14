@@ -18,14 +18,17 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.net.URI
+import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.types.StructType
 
@@ -50,8 +53,11 @@ class FileStreamSource(
   @transient private val fs = new Path(path).getFileSystem(hadoopConf)
 
   private val qualifiedBasePath: Path = {
-    fs.makeQualified(new Path(path))  // can contains glob patterns
+    fs.makeQualified(new Path(path))  // can contain glob patterns
   }
+
+  private val sourceCleaner: Option[FileStreamSourceCleaner] = FileStreamSourceCleaner(
+    fs, qualifiedBasePath, sourceOptions, hadoopConf)
 
   private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {
     if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path")) {
@@ -196,7 +202,8 @@ class FileStreamSource(
   private def allFilesUsingMetadataLogFileIndex() = {
     // Note if `sourceHasMetadata` holds, then `qualifiedBasePath` is guaranteed to be a
     // non-glob path
-    new MetadataLogFileIndex(sparkSession, qualifiedBasePath, None).allFiles()
+    new MetadataLogFileIndex(sparkSession, qualifiedBasePath,
+      CaseInsensitiveMap(options), None).allFiles()
   }
 
   /**
@@ -208,7 +215,7 @@ class FileStreamSource(
     var allFiles: Seq[FileStatus] = null
     sourceHasMetadata match {
       case None =>
-        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
           sourceHasMetadata = Some(true)
           allFiles = allFilesUsingMetadataLogFileIndex()
         } else {
@@ -220,7 +227,7 @@ class FileStreamSource(
             // double check whether source has metadata, preventing the extreme corner case that
             // metadata log and data files are only generated after the previous
             // `FileStreamSink.hasMetadata` check
-            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
               sourceHasMetadata = Some(true)
               allFiles = allFilesUsingMetadataLogFileIndex()
             } else {
@@ -237,7 +244,7 @@ class FileStreamSource(
       (status.getPath.toUri.toString, status.getModificationTime)
     }
     val endTime = System.nanoTime
-    val listingTimeMs = (endTime.toDouble - startTime) / 1000000
+    val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
     if (listingTimeMs > 2000) {
       // Output a warning when listing files uses more than 2 seconds.
       logWarning(s"Listed ${files.size} file(s) in $listingTimeMs ms")
@@ -257,16 +264,21 @@ class FileStreamSource(
    * equal to `end` and will only request offsets greater than `end` in the future.
    */
   override def commit(end: Offset): Unit = {
-    // No-op for now; FileStreamSource currently garbage-collects files based on timestamp
-    // and the value of the maxFileAge parameter.
+    val logOffset = FileStreamSourceOffset(end).logOffset
+
+    sourceCleaner.foreach { cleaner =>
+      val files = metadataLog.get(Some(logOffset), Some(logOffset)).flatMap(_._2)
+      val validFileEntities = files.filter(_.batchId == logOffset)
+      logDebug(s"completed file entries: ${validFileEntities.mkString(",")}")
+      validFileEntities.foreach(cleaner.clean)
+    }
   }
 
-  override def stop() {}
+  override def stop(): Unit = {}
 }
 
 
 object FileStreamSource {
-
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
 
@@ -328,5 +340,97 @@ object FileStreamSource {
     }
 
     def size: Int = map.size()
+  }
+
+  private[sql] trait FileStreamSourceCleaner {
+    def clean(entry: FileEntry): Unit
+  }
+
+  private[sql] object FileStreamSourceCleaner {
+    def apply(
+        fileSystem: FileSystem,
+        sourcePath: Path,
+        option: FileStreamOptions,
+        hadoopConf: Configuration): Option[FileStreamSourceCleaner] = option.cleanSource match {
+      case CleanSourceMode.ARCHIVE =>
+        require(option.sourceArchiveDir.isDefined)
+        val path = new Path(option.sourceArchiveDir.get)
+        val archiveFs = path.getFileSystem(hadoopConf)
+        val qualifiedArchivePath = archiveFs.makeQualified(path)
+        Some(new SourceFileArchiver(fileSystem, sourcePath, archiveFs, qualifiedArchivePath))
+
+      case CleanSourceMode.DELETE =>
+        Some(new SourceFileRemover(fileSystem))
+
+      case _ => None
+    }
+  }
+
+  private[sql] class SourceFileArchiver(
+      fileSystem: FileSystem,
+      sourcePath: Path,
+      baseArchiveFileSystem: FileSystem,
+      baseArchivePath: Path) extends FileStreamSourceCleaner with Logging {
+    assertParameters()
+
+    private def assertParameters(): Unit = {
+      require(fileSystem.getUri == baseArchiveFileSystem.getUri, "Base archive path is located " +
+        s"on a different file system than the source files. source path: $sourcePath" +
+        s" / base archive path: $baseArchivePath")
+
+      /**
+       * FileStreamSource reads the files which one of below conditions is met:
+       * 1) file itself is matched with source path
+       * 2) parent directory is matched with source path
+       *
+       * Checking with glob pattern is costly, so set this requirement to eliminate the cases
+       * where the archive path can be matched with source path. For example, when file is moved
+       * to archive directory, destination path will retain input file's path as suffix, so
+       * destination path can't be matched with source path if archive directory's depth is longer
+       * than 2, as neither file nor parent directory of destination path can be matched with
+       * source path.
+       */
+      require(baseArchivePath.depth() > 2, "Base archive path must have at least 2 " +
+        "subdirectories from root directory. e.g. '/data/archive'")
+    }
+
+    override def clean(entry: FileEntry): Unit = {
+      val curPath = new Path(new URI(entry.path))
+      val newPath = new Path(baseArchivePath.toString.stripSuffix("/") + curPath.toUri.getPath)
+
+      try {
+        logDebug(s"Creating directory if it doesn't exist ${newPath.getParent}")
+        if (!fileSystem.exists(newPath.getParent)) {
+          fileSystem.mkdirs(newPath.getParent)
+        }
+
+        logDebug(s"Archiving completed file $curPath to $newPath")
+        if (!fileSystem.rename(curPath, newPath)) {
+          logWarning(s"Fail to move $curPath to $newPath / skip moving file.")
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Fail to move $curPath to $newPath / skip moving file.", e)
+      }
+    }
+  }
+
+  private[sql] class SourceFileRemover(fileSystem: FileSystem)
+    extends FileStreamSourceCleaner with Logging {
+
+    override def clean(entry: FileEntry): Unit = {
+      val curPath = new Path(new URI(entry.path))
+      try {
+        logDebug(s"Removing completed file $curPath")
+
+        if (!fileSystem.delete(curPath, false)) {
+          logWarning(s"Failed to remove $curPath / skip removing file.")
+        }
+      } catch {
+        case NonFatal(e) =>
+          // Log to error but swallow exception to avoid process being stopped
+          logWarning(s"Fail to remove $curPath / skip removing file.", e)
+      }
+    }
   }
 }

@@ -28,7 +28,7 @@ import org.apache.spark.sql.hive.HiveUtils
 class HiveCliSessionStateSuite extends SparkFunSuite {
 
   def withSessionClear(f: () => Unit): Unit = {
-    try f finally SessionState.detachSession()
+    try f() finally SessionState.detachSession()
   }
 
   test("CliSessionState will be reused") {

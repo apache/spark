@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  * Input streams that can generate RDDs from new data by running a service/thread only on
  * the driver node (that is, without running a receiver on worker nodes), can be
  * implemented by directly inheriting this InputDStream. For example,
- * FileInputDStream, a subclass of InputDStream, monitors a HDFS directory from the driver for
+ * FileInputDStream, a subclass of InputDStream, monitors an HDFS directory from the driver for
  * new files and generates RDDs with the new files. For implementing input streams
  * that requires running a receiver on the worker nodes, use
  * [[org.apache.spark.streaming.dstream.ReceiverInputDStream]] as the parent class.
@@ -48,7 +48,7 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
 
   ssc.graph.addInputStream(this)
 
-  /** This is an unique identifier for the input stream. */
+  /** This is a unique identifier for the input stream. */
   val id = ssc.getNewInputStreamId()
 
   // Keep track of the freshest rate for this stream using the rateEstimator
@@ -56,7 +56,6 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
 
   /** A human-readable name of this InputDStream */
   private[streaming] def name: String = {
-    // e.g. FlumePollingDStream -> "Flume polling stream"
     val newName = Utils.getFormattedClassName(this)
       .replaceAll("InputDStream", "Stream")
       .split("(?=[A-Z])")

@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.UUID
-
+import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -40,7 +40,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
     input
   }
 
-  private val outputPrefix = s"Result of ${child.simpleString} is "
+  private val outputPrefix = s"Result of ${child.simpleString(SQLConf.get.maxToStringFields)} is "
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val outputPrefixField = ctx.addReferenceObj("outputPrefix", outputPrefix)
@@ -72,7 +72,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def prettyName: String = "assert_true"
 
-  private val errMsg = s"'${child.simpleString}' is not true!"
+  private val errMsg = s"'${child.simpleString(SQLConf.get.maxToStringFields)}' is not true!"
 
   override def eval(input: InternalRow) : Any = {
     val v = child.eval(input)
@@ -124,7 +124,9 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
       > SELECT _FUNC_();
        46707d92-02f4-4817-8116-a4c3b23e6266
   """,
-  note = "The function is non-deterministic.")
+  note = """
+    The function is non-deterministic.
+  """)
 // scalastyle:on line.size.limit
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
     with ExpressionWithRandomSeed {
@@ -160,4 +162,18 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
   }
 
   override def freshCopy(): Uuid = Uuid(randomSeed)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
+  since = "3.0.0")
+// scalastyle:on line.size.limit
+case class Version() extends LeafExpression with CodegenFallback {
+  override def nullable: Boolean = false
+  override def foldable: Boolean = true
+  override def dataType: DataType = StringType
+  override def eval(input: InternalRow): Any = {
+    UTF8String.fromString(SPARK_VERSION_SHORT + " " + SPARK_REVISION)
+  }
 }

@@ -50,7 +50,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    *
    * See [[Canonicalize]] for more details.
    */
-  protected def validConstraints: Set[Expression] = Set.empty
+  protected lazy val validConstraints: Set[Expression] = Set.empty
 }
 
 trait ConstraintHelper {

@@ -21,11 +21,14 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -38,26 +41,51 @@ import org.apache.spark.util.Utils
  * "name(arguments...)", the concrete implementation must be a case class whose constructor
  * arguments are all Expressions types. See [[Substring]] for an example.
  *
- * There are a few important traits:
+ * There are a few important traits or abstract classes:
  *
  * - [[Nondeterministic]]: an expression that is not deterministic.
+ * - [[Stateful]]: an expression that contains mutable state. For example, MonotonicallyIncreasingID
+ *                 and Rand. A stateful expression is always non-deterministic.
  * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
  * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
  *                        interpreted mode.
+ * - [[NullIntolerant]]: an expression that is null intolerant (i.e. any null input will result in
+ *                       null output).
+ * - [[NonSQLExpression]]: a common base trait for the expressions that do not have SQL
+ *                         expressions like representation. For example, `ScalaUDF`, `ScalaUDAF`,
+ *                         and object `MapObjects` and `Invoke`.
+ * - [[UserDefinedExpression]]: a common base trait for user-defined functions, including
+ *                              UDF/UDAF/UDTF.
+ * - [[HigherOrderFunction]]: a common base trait for higher order functions that take one or more
+ *                            (lambda) functions and applies these to some objects. The function
+ *                            produces a number of variables which can be consumed by some lambda
+ *                            functions.
+ * - [[NamedExpression]]: An [[Expression]] that is named.
+ * - [[TimeZoneAwareExpression]]: A common base trait for time zone aware expressions.
+ * - [[SubqueryExpression]]: A base interface for expressions that contain a [[LogicalPlan]].
  *
  * - [[LeafExpression]]: an expression that has no child.
  * - [[UnaryExpression]]: an expression that has one child.
  * - [[BinaryExpression]]: an expression that has two children.
  * - [[TernaryExpression]]: an expression that has three children.
+ * - [[QuaternaryExpression]]: an expression that has four children.
  * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
  *                       the same output data type.
  *
+ * A few important traits used for type coercion rules:
+ * - [[ExpectsInputTypes]]: an expression that has the expected input types. This trait is typically
+ *                          used by operator expressions (e.g. [[Add]], [[Subtract]]) to define
+ *                          expected input types without any implicit casting.
+ * - [[ImplicitCastInputTypes]]: an expression that has the expected input types, which can be
+ *                               implicitly castable using [[TypeCoercion.ImplicitTypeCasts]].
+ * - [[ComplexTypeMergingExpression]]: to resolve output types of the complex expressions
+ *                                     (e.g., [[CaseWhen]]).
  */
 abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
-   * executed.
+   * executed. A typical use case: [[org.apache.spark.sql.catalyst.optimizer.ConstantFolding]]
    *
    * The following conditions are used to determine suitability for constant folding:
    *  - A [[Coalesce]] is foldable if all of its children are foldable
@@ -70,7 +98,8 @@ abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Returns true when the current expression always return the same result for fixed inputs from
-   * children.
+   * children. The non-deterministic expressions should not change in number and order. They should
+   * not be evaluated during the query planning.
    *
    * Note that this means that an expression should be considered as non-deterministic if:
    * - it relies on some mutable internal state, or
@@ -85,7 +114,14 @@ abstract class Expression extends TreeNode[Expression] {
 
   def nullable: Boolean
 
-  def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
+  /**
+   * Workaround scala compiler so that we can call super on lazy vals
+   */
+  @transient
+  private lazy val _references: AttributeSet =
+    AttributeSet.fromAttributeSets(children.map(_.references))
+
+  def references: AttributeSet = _references
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: InternalRow = null): Any
@@ -120,7 +156,8 @@ abstract class Expression extends TreeNode[Expression] {
 
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
-    if (eval.code.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+    val splitThreshold = SQLConf.get.methodSplitThreshold
+    if (eval.code.length > splitThreshold && ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
@@ -224,18 +261,18 @@ abstract class Expression extends TreeNode[Expression] {
   def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
 
   protected def flatArguments: Iterator[Any] = productIterator.flatMap {
-    case t: Traversable[_] => t
+    case t: Iterable[_] => t
     case single => single :: Nil
   }
 
   // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
   // overridden by concrete classes.
-  final override def verboseString: String = simpleString
+  final override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
-  override def simpleString: String = toString
+  override def simpleString(maxFields: Int): String = toString
 
-  override def toString: String = prettyName + Utils.truncatedString(
-    flatArguments.toSeq, "(", ", ", ")")
+  override def toString: String = prettyName + truncatedString(
+    flatArguments.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
 
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],
@@ -245,12 +282,17 @@ abstract class Expression extends TreeNode[Expression] {
     val childrenSQL = children.map(_.sql).mkString(", ")
     s"$prettyName($childrenSQL)"
   }
+
+  override def simpleStringWithNodeId(): String = {
+    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+  }
 }
 
 
 /**
- * An expression that cannot be evaluated. Some expressions don't live past analysis or optimization
- * time (e.g. Star). This trait is used by those expressions.
+ * An expression that cannot be evaluated. These expressions don't live past analysis or
+ * optimization time (e.g. Star) and should not be evaluated during query planning and
+ * execution.
  */
 trait Unevaluable extends Expression {
 
@@ -258,7 +300,7 @@ trait Unevaluable extends Expression {
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
 }
 
 
@@ -282,6 +324,31 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override lazy val canonicalized: Expression = child.canonicalized
 }
 
+/**
+ * An aggregate expression that gets rewritten (currently by the optimizer) into a
+ * different aggregate expression for evaluation. This is mainly used to provide compatibility
+ * with other databases. For example, we use this to support every, any/some aggregates by rewriting
+ * them with Min and Max respectively.
+ */
+trait UnevaluableAggregate extends DeclarativeAggregate {
+
+  override def nullable: Boolean = true
+
+  override lazy val aggBufferAttributes =
+    throw new UnsupportedOperationException(s"Cannot evaluate aggBufferAttributes: $this")
+
+  override lazy val initialValues: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate initialValues: $this")
+
+  override lazy val updateExpressions: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate updateExpressions: $this")
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate mergeExpressions: $this")
+
+  override lazy val evaluateExpression: Expression =
+    throw new UnsupportedOperationException(s"Cannot evaluate evaluateExpression: $this")
+}
 
 /**
  * Expressions that don't have SQL representation should extend this trait.  Examples are
@@ -572,7 +639,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
   def sqlOperator: String = symbol
 
-  override def toString: String = s"($left $symbol $right)"
+  override def toString: String = s"($left $sqlOperator $right)"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 
@@ -696,9 +763,266 @@ abstract class TernaryExpression extends Expression {
 }
 
 /**
- * A trait resolving nullable, containsNull, valueContainsNull flags of the output date type.
- * This logic is usually utilized by expressions combining data from multiple child expressions
- * of non-primitive types (e.g. [[CaseWhen]]).
+ * An expression with four inputs and one output. The output is by default evaluated to null
+ * if any input is evaluated to null.
+ */
+abstract class QuaternaryExpression extends Expression {
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  /**
+   * Default behavior of evaluation according to the default nullability of QuaternaryExpression.
+   * If subclass of QuaternaryExpression override nullable, probably should also override this.
+   */
+  override def eval(input: InternalRow): Any = {
+    val exprs = children
+    val value1 = exprs(0).eval(input)
+    if (value1 != null) {
+      val value2 = exprs(1).eval(input)
+      if (value2 != null) {
+        val value3 = exprs(2).eval(input)
+        if (value3 != null) {
+          val value4 = exprs(3).eval(input)
+          if (value4 != null) {
+            return nullSafeEval(value1, value2, value3, value4)
+          }
+        }
+      }
+    }
+    null
+  }
+
+  /**
+   * Called by default [[eval]] implementation.  If subclass of QuaternaryExpression keep the
+   *  default nullability, they can override this method to save null-check code.  If we need
+   *  full control of evaluation process, we should override [[eval]].
+   */
+  protected def nullSafeEval(input1: Any, input2: Any, input3: Any, input4: Any): Any =
+    sys.error(s"QuaternaryExpressions must override either eval or nullSafeEval")
+
+  /**
+   * Short hand for generating quaternary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   *
+   * @param f accepts four variable names and returns Java code to compute the output.
+   */
+  protected def defineCodeGen(
+    ctx: CodegenContext,
+    ev: ExprCode,
+    f: (String, String, String, String) => String): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3, eval4) => {
+      s"${ev.value} = ${f(eval1, eval2, eval3, eval4)};"
+    })
+  }
+
+  /**
+   * Short hand for generating quaternary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   *
+   * @param f function that accepts the 4 non-null evaluation result names of children
+   *          and returns Java code to compute the output.
+   */
+  protected def nullSafeCodeGen(
+    ctx: CodegenContext,
+    ev: ExprCode,
+    f: (String, String, String, String) => String): ExprCode = {
+    val firstGen = children(0).genCode(ctx)
+    val secondGen = children(1).genCode(ctx)
+    val thridGen = children(2).genCode(ctx)
+    val fourthGen = children(3).genCode(ctx)
+    val resultCode = f(firstGen.value, secondGen.value, thridGen.value, fourthGen.value)
+
+    if (nullable) {
+      val nullSafeEval =
+        firstGen.code + ctx.nullSafeExec(children(0).nullable, firstGen.isNull) {
+          secondGen.code + ctx.nullSafeExec(children(1).nullable, secondGen.isNull) {
+            thridGen.code + ctx.nullSafeExec(children(2).nullable, thridGen.isNull) {
+              fourthGen.code + ctx.nullSafeExec(children(3).nullable, fourthGen.isNull) {
+                s"""
+                  ${ev.isNull} = false; // resultCode could change nullability.
+                  $resultCode
+                """
+              }
+            }
+          }
+      }
+
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      ev.copy(code = code"""
+        ${firstGen.code}
+        ${secondGen.code}
+        ${thridGen.code}
+        ${fourthGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
+}
+
+/**
+ * An expression with six inputs + 7th optional input and one output.
+ * The output is by default evaluated to null if any input is evaluated to null.
+ */
+abstract class SeptenaryExpression extends Expression {
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  /**
+   * Default behavior of evaluation according to the default nullability of SeptenaryExpression.
+   * If subclass of SeptenaryExpression override nullable, probably should also override this.
+   */
+  override def eval(input: InternalRow): Any = {
+    val exprs = children
+    val v1 = exprs(0).eval(input)
+    if (v1 != null) {
+      val v2 = exprs(1).eval(input)
+      if (v2 != null) {
+        val v3 = exprs(2).eval(input)
+        if (v3 != null) {
+          val v4 = exprs(3).eval(input)
+          if (v4 != null) {
+            val v5 = exprs(4).eval(input)
+            if (v5 != null) {
+              val v6 = exprs(5).eval(input)
+              if (v6 != null) {
+                if (exprs.length > 6) {
+                  val v7 = exprs(6).eval(input)
+                  if (v7 != null) {
+                    return nullSafeEval(v1, v2, v3, v4, v5, v6, Some(v7))
+                  }
+                } else {
+                  return nullSafeEval(v1, v2, v3, v4, v5, v6, None)
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    null
+  }
+
+  /**
+   * Called by default [[eval]] implementation.  If subclass of SeptenaryExpression keep the
+   * default nullability, they can override this method to save null-check code.  If we need
+   * full control of evaluation process, we should override [[eval]].
+   */
+  protected def nullSafeEval(
+      input1: Any,
+      input2: Any,
+      input3: Any,
+      input4: Any,
+      input5: Any,
+      input6: Any,
+      input7: Option[Any]): Any = {
+    sys.error("SeptenaryExpression must override either eval or nullSafeEval")
+  }
+
+  /**
+   * Short hand for generating septenary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   *
+   * @param f accepts seven variable names and returns Java code to compute the output.
+   */
+  protected def defineCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: (String, String, String, String, String, String, Option[String]) => String
+    ): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3, eval4, eval5, eval6, eval7) => {
+      s"${ev.value} = ${f(eval1, eval2, eval3, eval4, eval5, eval6, eval7)};"
+    })
+  }
+
+  /**
+   * Short hand for generating septenary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   *
+   * @param f function that accepts the 7 non-null evaluation result names of children
+   *          and returns Java code to compute the output.
+   */
+  protected def nullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: (String, String, String, String, String, String, Option[String]) => String
+    ): ExprCode = {
+    val firstGen = children(0).genCode(ctx)
+    val secondGen = children(1).genCode(ctx)
+    val thirdGen = children(2).genCode(ctx)
+    val fourthGen = children(3).genCode(ctx)
+    val fifthGen = children(4).genCode(ctx)
+    val sixthGen = children(5).genCode(ctx)
+    val seventhGen = if (children.length > 6) Some(children(6).genCode(ctx)) else None
+    val resultCode = f(
+      firstGen.value,
+      secondGen.value,
+      thirdGen.value,
+      fourthGen.value,
+      fifthGen.value,
+      sixthGen.value,
+      seventhGen.map(_.value))
+
+    if (nullable) {
+      val nullSafeEval =
+        firstGen.code + ctx.nullSafeExec(children(0).nullable, firstGen.isNull) {
+          secondGen.code + ctx.nullSafeExec(children(1).nullable, secondGen.isNull) {
+            thirdGen.code + ctx.nullSafeExec(children(2).nullable, thirdGen.isNull) {
+              fourthGen.code + ctx.nullSafeExec(children(3).nullable, fourthGen.isNull) {
+                fifthGen.code + ctx.nullSafeExec(children(4).nullable, fifthGen.isNull) {
+                  sixthGen.code + ctx.nullSafeExec(children(5).nullable, sixthGen.isNull) {
+                    val nullSafeResultCode =
+                      s"""
+                      ${ev.isNull} = false; // resultCode could change nullability.
+                      $resultCode
+                      """
+                    seventhGen.map { gen =>
+                      gen.code + ctx.nullSafeExec(children(6).nullable, gen.isNull) {
+                        nullSafeResultCode
+                      }
+                    }.getOrElse(nullSafeResultCode)
+                  }
+                }
+              }
+            }
+          }
+        }
+
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      ev.copy(code = code"""
+        ${firstGen.code}
+        ${secondGen.code}
+        ${thirdGen.code}
+        ${fourthGen.code}
+        ${fifthGen.code}
+        ${sixthGen.code}
+        ${seventhGen.map(_.code).getOrElse("")}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
+}
+
+/**
+ * A trait used for resolving nullable flags, including `nullable`, `containsNull` of [[ArrayType]]
+ * and `valueContainsNull` of [[MapType]], containsNull, valueContainsNull flags of the output date
+ * type. This is usually utilized by the expressions (e.g. [[CaseWhen]]) that combine data from
+ * multiple child expressions of non-primitive types.
  */
 trait ComplexTypeMergingExpression extends Expression {
 

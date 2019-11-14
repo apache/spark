@@ -18,18 +18,18 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, StringArrayParam}
-import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
+import org.apache.spark.ml.param.{ParamMap, StringArrayParam}
+import org.apache.spark.ml.param.shared.{HasInputCols, HasNumFeatures, HasOutputCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.hash.Murmur3_x86_32.{hashInt, hashLong, hashUnsafeBytes2Block}
+import org.apache.spark.unsafe.hash.Murmur3_x86_32.{hashInt, hashLong, hashUnsafeBytes2}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashMap
@@ -81,10 +81,9 @@ import org.apache.spark.util.collection.OpenHashMap
  *   +----+-----+---------+------+------------------------------------------------------+
  * }}}
  */
-@Experimental
 @Since("2.3.0")
 class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transformer
-  with HasInputCols with HasOutputCol with DefaultParamsWritable {
+  with HasInputCols with HasOutputCol with HasNumFeatures with DefaultParamsWritable {
 
   @Since("2.3.0")
   def this() = this(Identifiable.randomUID("featureHasher"))
@@ -99,21 +98,6 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
   @Since("2.3.0")
   val categoricalCols = new StringArrayParam(this, "categoricalCols",
     "numeric columns to treat as categorical")
-
-  /**
-   * Number of features. Should be greater than 0.
-   * (default = 2^18^)
-   * @group param
-   */
-  @Since("2.3.0")
-  val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
-    ParamValidators.gt(0))
-
-  setDefault(numFeatures -> (1 << 18))
-
-  /** @group getParam */
-  @Since("2.3.0")
-  def getNumFeatures: Int = $(numFeatures)
 
   /** @group setParam */
   @Since("2.3.0")
@@ -215,6 +199,13 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
     val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"FeatureHasher: uid=$uid, numFeatures=${$(numFeatures)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(categoricalCols).map(c => s", numCategoricalCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("2.3.0")
@@ -244,7 +235,8 @@ object FeatureHasher extends DefaultParamsReadable[FeatureHasher] {
       case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case s: String =>
-        hashUnsafeBytes2Block(UTF8String.fromString(s).getMemoryBlock, seed)
+        val utf8 = UTF8String.fromString(s)
+        hashUnsafeBytes2(utf8.getBaseObject, utf8.getBaseOffset, utf8.numBytes(), seed)
       case _ => throw new SparkException("FeatureHasher with murmur3 algorithm does not " +
         s"support type ${term.getClass.getCanonicalName} of input data.")
     }

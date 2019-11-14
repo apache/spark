@@ -111,7 +111,7 @@ public class JavaALSExample {
       .setMetricName("rmse")
       .setLabelCol("rating")
       .setPredictionCol("prediction");
-    Double rmse = evaluator.evaluate(predictions);
+    double rmse = evaluator.evaluate(predictions);
     System.out.println("Root-mean-square error = " + rmse);
 
     // Generate top 10 movie recommendations for each user

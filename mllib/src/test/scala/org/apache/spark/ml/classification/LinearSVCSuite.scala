@@ -181,8 +181,8 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     }
     assert(thrown.getMessage.contains("coefficients only supports dense"))
 
-    bcCoefficients.destroy(blocking = false)
-    bcFeaturesStd.destroy(blocking = false)
+    bcCoefficients.destroy()
+    bcFeaturesStd.destroy()
   }
 
   test("linearSVC with sample weights") {

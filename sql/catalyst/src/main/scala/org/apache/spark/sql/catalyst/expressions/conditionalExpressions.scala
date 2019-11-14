@@ -148,8 +148,12 @@ case class CaseWhen(
             s"but the ${index + 1}th when expression's type is ${branches(index)._1}")
       }
     } else {
+      val branchesStr = branches.map(_._2.dataType).map(dt => s"WHEN ... THEN ${dt.catalogString}")
+        .mkString(" ")
+      val elseStr = elseValue.map(expr => s" ELSE ${expr.dataType.catalogString}").getOrElse("")
       TypeCheckResult.TypeCheckFailure(
-        "THEN and ELSE expressions should all be same type or coercible to a common type")
+        "THEN and ELSE expressions should all be same type or coercible to a common type," +
+          s" got CASE $branchesStr$elseStr END")
     }
   }
 
@@ -181,7 +185,7 @@ case class CaseWhen(
     "CASE" + cases + elseCase + " END"
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  private def multiBranchesCodegen(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // This variable holds the state of the result:
     // -1 means the condition is not met yet and the result is unknown.
     val NOT_MATCHED = -1
@@ -274,6 +278,18 @@ case class CaseWhen(
          |// TRUE if any condition is met and the result is null, or no any condition is met.
          |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
        """.stripMargin)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (branches.length == 1) {
+      // If we have only single branch we can use If expression and its codeGen
+      If(
+        branches(0)._1,
+        branches(0)._2,
+        elseValue.getOrElse(Literal.create(null, branches(0)._2.dataType))).doGenCode(ctx, ev)
+    } else {
+      multiBranchesCodegen(ctx, ev)
+    }
   }
 }
 

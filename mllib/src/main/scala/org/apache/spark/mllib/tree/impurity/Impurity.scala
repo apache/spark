@@ -81,7 +81,12 @@ private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Ser
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit
+  def update(
+      allStats: Array[Double],
+      offset: Int,
+      label: Double,
+      numSamples: Int,
+      sampleWeight: Double): Unit
 
   /**
    * Get an [[ImpurityCalculator]] for a (node, feature, bin).
@@ -122,6 +127,7 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
       stats(i) += other.stats(i)
       i += 1
     }
+    rawCount += other.rawCount
     this
   }
 
@@ -139,13 +145,19 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
       stats(i) -= other.stats(i)
       i += 1
     }
+    rawCount -= other.rawCount
     this
   }
 
   /**
-   * Number of data points accounted for in the sufficient statistics.
+   * Weighted number of data points accounted for in the sufficient statistics.
    */
-  def count: Long
+  def count: Double
+
+  /**
+   * Raw number of data points accounted for in the sufficient statistics.
+   */
+  var rawCount: Long
 
   /**
    * Prediction which should be made based on the sufficient statistics.
@@ -185,11 +197,14 @@ private[spark] object ImpurityCalculator {
    * Create an [[ImpurityCalculator]] instance of the given impurity type and with
    * the given stats.
    */
-  def getCalculator(impurity: String, stats: Array[Double]): ImpurityCalculator = {
+  def getCalculator(
+      impurity: String,
+      stats: Array[Double],
+      rawCount: Long): ImpurityCalculator = {
     impurity.toLowerCase(Locale.ROOT) match {
-      case "gini" => new GiniCalculator(stats)
-      case "entropy" => new EntropyCalculator(stats)
-      case "variance" => new VarianceCalculator(stats)
+      case "gini" => new GiniCalculator(stats, rawCount)
+      case "entropy" => new EntropyCalculator(stats, rawCount)
+      case "variance" => new VarianceCalculator(stats, rawCount)
       case _ =>
         throw new IllegalArgumentException(
           s"ImpurityCalculator builder did not recognize impurity type: $impurity")

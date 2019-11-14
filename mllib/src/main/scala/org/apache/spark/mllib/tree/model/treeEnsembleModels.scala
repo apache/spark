@@ -66,14 +66,10 @@ class RandomForestModel @Since("1.2.0") (
     TreeEnsembleModel.SaveLoadV1_0.save(sc, path, this,
       RandomForestModel.SaveLoadV1_0.thisClassName)
   }
-
-  override protected def formatVersion: String = RandomForestModel.formatVersion
 }
 
 @Since("1.3.0")
 object RandomForestModel extends Loader[RandomForestModel] {
-
-  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   /**
    *
@@ -167,11 +163,9 @@ class GradientBoostedTreesModel @Since("1.2.0") (
       (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
     .map(_ / dataCount)
 
-    broadcastTrees.destroy(blocking = false)
+    broadcastTrees.destroy()
     evaluation.toArray
   }
-
-  override protected def formatVersion: String = GradientBoostedTreesModel.formatVersion
 }
 
 /**
@@ -234,8 +228,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
     }
     newPredError
   }
-
-  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   /**
    * @param sc  Spark context used for loading model files.

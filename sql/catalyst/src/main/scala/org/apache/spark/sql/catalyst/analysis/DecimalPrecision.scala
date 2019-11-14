@@ -82,6 +82,8 @@ object DecimalPrecision extends TypeCoercionRule {
     PromotePrecision(Cast(e, dataType))
   }
 
+  private def nullOnOverflow: Boolean = !SQLConf.get.ansiEnabled
+
   override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // fix decimal precision for expressions
     case q => q.transformExpressionsUp(
@@ -105,7 +107,7 @@ object DecimalPrecision extends TypeCoercionRule {
         DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
       }
       CheckOverflow(Add(promotePrecision(e1, resultType), promotePrecision(e2, resultType)),
-        resultType)
+        resultType, nullOnOverflow)
 
     case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
       val resultScale = max(s1, s2)
@@ -116,7 +118,7 @@ object DecimalPrecision extends TypeCoercionRule {
         DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
       }
       CheckOverflow(Subtract(promotePrecision(e1, resultType), promotePrecision(e2, resultType)),
-        resultType)
+        resultType, nullOnOverflow)
 
     case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
@@ -126,7 +128,7 @@ object DecimalPrecision extends TypeCoercionRule {
       }
       val widerType = widerDecimalType(p1, s1, p2, s2)
       CheckOverflow(Multiply(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
-        resultType)
+        resultType, nullOnOverflow)
 
     case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
@@ -148,7 +150,7 @@ object DecimalPrecision extends TypeCoercionRule {
       }
       val widerType = widerDecimalType(p1, s1, p2, s2)
       CheckOverflow(Divide(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
-        resultType)
+        resultType, nullOnOverflow)
 
     case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
@@ -159,7 +161,7 @@ object DecimalPrecision extends TypeCoercionRule {
       // resultType may have lower precision, so we cast them into wider type first.
       val widerType = widerDecimalType(p1, s1, p2, s2)
       CheckOverflow(Remainder(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
-        resultType)
+        resultType, nullOnOverflow)
 
     case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
@@ -170,7 +172,24 @@ object DecimalPrecision extends TypeCoercionRule {
       // resultType may have lower precision, so we cast them into wider type first.
       val widerType = widerDecimalType(p1, s1, p2, s2)
       CheckOverflow(Pmod(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
-        resultType)
+        resultType, nullOnOverflow)
+
+    case expr @ IntegralDivide(
+        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+      val widerType = widerDecimalType(p1, s1, p2, s2)
+      val promotedExpr =
+        IntegralDivide(promotePrecision(e1, widerType), promotePrecision(e2, widerType))
+      if (expr.dataType.isInstanceOf[DecimalType]) {
+        // This follows division rule
+        val intDig = p1 - s1 + s2
+        // No precision loss can happen as the result scale is 0.
+        // Overflow can happen only in the promote precision of the operands, but if none of them
+        // overflows in that phase, no overflow can happen, but CheckOverflow is needed in order
+        // to return a decimal with the proper scale and precision
+        CheckOverflow(promotedExpr, DecimalType.bounded(intDig, 0), nullOnOverflow)
+      } else {
+        promotedExpr
+      }
 
     case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
     e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
@@ -286,15 +305,17 @@ object DecimalPrecision extends TypeCoercionRule {
         // Consider the following example: multiplying a column which is DECIMAL(38, 18) by 2.
         // If we use the default precision and scale for the integer type, 2 is considered a
         // DECIMAL(10, 0). According to the rules, the result would be DECIMAL(38 + 10 + 1, 18),
-        // which is out of range and therefore it will becomes DECIMAL(38, 7), leading to
+        // which is out of range and therefore it will become DECIMAL(38, 7), leading to
         // potentially loosing 11 digits of the fractional part. Using only the precision needed
         // by the Literal, instead, the result would be DECIMAL(38 + 1 + 1, 18), which would
         // become DECIMAL(38, 16), safely having a much lower precision loss.
-        case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType]
-          && l.dataType.isInstanceOf[IntegralType] =>
+        case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType] &&
+            l.dataType.isInstanceOf[IntegralType] &&
+            SQLConf.get.literalPickMinimumPrecision =>
           b.makeCopy(Array(Cast(l, DecimalType.fromLiteral(l)), r))
-        case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType]
-          && r.dataType.isInstanceOf[IntegralType] =>
+        case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType] &&
+            r.dataType.isInstanceOf[IntegralType] &&
+            SQLConf.get.literalPickMinimumPrecision =>
           b.makeCopy(Array(l, Cast(r, DecimalType.fromLiteral(r))))
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles

@@ -28,7 +28,7 @@ class OptimizerRuleExclusionSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  private def verifyExcludedRules(optimizer: Optimizer, rulesToExclude: Seq[String]) {
+  private def verifyExcludedRules(optimizer: Optimizer, rulesToExclude: Seq[String]): Unit = {
     val nonExcludableRules = optimizer.nonExcludableRules
 
     val excludedRuleNames = rulesToExclude.filter(!nonExcludableRules.contains(_))
@@ -80,33 +80,37 @@ class OptimizerRuleExclusionSuite extends PlanTest {
         "DummyRuleName"))
   }
 
-  test("Try to exclude a non-excludable rule") {
+  test("Try to exclude some non-excludable rules") {
     verifyExcludedRules(
       new SimpleTestOptimizer(),
       Seq(
         ReplaceIntersectWithSemiJoin.ruleName,
-        PullupCorrelatedPredicates.ruleName))
+        PullupCorrelatedPredicates.ruleName,
+        RewriteCorrelatedScalarSubquery.ruleName,
+        RewritePredicateSubquery.ruleName,
+        RewriteExceptAll.ruleName,
+        RewriteIntersectAll.ruleName))
   }
 
   test("Custom optimizer") {
     val optimizer = new SimpleTestOptimizer() {
       override def defaultBatches: Seq[Batch] =
         Batch("push", Once,
-          PushDownPredicate,
+          PushPredicateThroughNonJoin,
           PushPredicateThroughJoin,
           PushProjectionThroughUnion) ::
         Batch("pull", Once,
           PullupCorrelatedPredicates) :: Nil
 
       override def nonExcludableRules: Seq[String] =
-        PushDownPredicate.ruleName ::
+        PushPredicateThroughNonJoin.ruleName ::
           PullupCorrelatedPredicates.ruleName :: Nil
     }
 
     verifyExcludedRules(
       optimizer,
       Seq(
-        PushDownPredicate.ruleName,
+        PushPredicateThroughNonJoin.ruleName,
         PushProjectionThroughUnion.ruleName,
         PullupCorrelatedPredicates.ruleName))
   }
@@ -117,10 +121,14 @@ class OptimizerRuleExclusionSuite extends PlanTest {
       PropagateEmptyRelation.ruleName,
       CombineUnions.ruleName)
 
+    val testRelation1 = LocalRelation('a.int, 'b.int, 'c.int)
+    val testRelation2 = LocalRelation('a.int, 'b.int, 'c.int)
+    val testRelation3 = LocalRelation('a.int, 'b.int, 'c.int)
+
     withSQLConf(
       OPTIMIZER_EXCLUDED_RULES.key -> excludedRules.foldLeft("")((l, r) => l + "," + r)) {
       val optimizer = new SimpleTestOptimizer()
-      val originalQuery = testRelation.union(testRelation.union(testRelation)).analyze
+      val originalQuery = testRelation1.union(testRelation2.union(testRelation3)).analyze
       val optimized = optimizer.execute(originalQuery)
       comparePlans(originalQuery, optimized)
     }

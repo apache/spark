@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.util.Locale
 
 import scala.util.Random
 
@@ -56,7 +57,7 @@ class HiveSchemaInferenceSuite
 
   // Return a copy of the given schema with all field names converted to lower case.
   private def lowerCaseSchema(schema: StructType): StructType = {
-    StructType(schema.map(f => f.copy(name = f.name.toLowerCase)))
+    StructType(schema.map(f => f.copy(name = f.name.toLowerCase(Locale.ROOT))))
   }
 
   // Create a Hive external test table containing the given field and partition column names.
@@ -78,7 +79,7 @@ class HiveSchemaInferenceSuite
     val partitionStructFields = partitionCols.map { field =>
       StructField(
         // Partition column case isn't preserved
-        name = field.toLowerCase,
+        name = field.toLowerCase(Locale.ROOT),
         dataType = IntegerType,
         nullable = true,
         metadata = Metadata.empty)
@@ -113,7 +114,7 @@ class HiveSchemaInferenceSuite
           properties = Map("serialization.format" -> "1")),
         schema = schema,
         provider = Option("hive"),
-        partitionColumnNames = partitionCols.map(_.toLowerCase),
+        partitionColumnNames = partitionCols.map(_.toLowerCase(Locale.ROOT)),
         properties = Map.empty),
       true)
 
@@ -180,7 +181,7 @@ class HiveSchemaInferenceSuite
           val catalogTable = externalCatalog.getTable(DATABASE, TEST_TABLE_NAME)
           assert(catalogTable.schemaPreservesCase)
           assert(catalogTable.schema == schema)
-          assert(catalogTable.partitionColumnNames == partCols.map(_.toLowerCase))
+          assert(catalogTable.partitionColumnNames == partCols.map(_.toLowerCase(Locale.ROOT)))
         }
       }
     }
@@ -262,6 +263,32 @@ class HiveSchemaInferenceSuite
         StructType(Seq(StructField("lower", StringType, nullable = false))),
         StructType(Seq(StructField("lowerCase", BinaryType))))
     }
+
+    // Parquet schema is subset of metaStore schema and has uppercase field name
+    assertResult(
+      StructType(Seq(
+        StructField("UPPERCase", DoubleType, nullable = true),
+        StructField("lowerCase", BinaryType, nullable = true)))) {
+
+      HiveMetastoreCatalog.mergeWithMetastoreSchema(
+        StructType(Seq(
+          StructField("UPPERCase", DoubleType, nullable = true),
+          StructField("lowerCase", BinaryType, nullable = true))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType, nullable = true))))
+    }
+
+    // Metastore schema contains additional nullable fields.
+    assert(intercept[Throwable] {
+      HiveMetastoreCatalog.mergeWithMetastoreSchema(
+        StructType(Seq(
+          StructField("UPPERCase", DoubleType, nullable = false),
+          StructField("lowerCase", BinaryType, nullable = true))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType, nullable = true))))
+    }.getMessage.contains("Detected conflicting schemas"))
 
     // Check that merging missing nullable fields works as expected.
     assertResult(

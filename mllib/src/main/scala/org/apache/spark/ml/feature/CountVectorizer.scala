@@ -21,14 +21,15 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -182,11 +183,18 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CountVectorizerModel = {
     transformSchema(dataset.schema, logging = true)
+    if (($(minDF) >= 1.0 && $(maxDF) >= 1.0) || ($(minDF) < 1.0 && $(maxDF) < 1.0)) {
+      require($(maxDF) >= $(minDF), "maxDF must be >= minDF.")
+    }
+
     val vocSize = $(vocabSize)
-    val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
+    val input = dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
     val countingRequired = $(minDF) < 1.0 || $(maxDF) < 1.0
     val maybeInputSize = if (countingRequired) {
-      Some(input.cache().count())
+      if (dataset.storageLevel == StorageLevel.NONE) {
+        input.persist(StorageLevel.MEMORY_AND_DISK)
+      }
+      Some(input.count)
     } else {
       None
     }
@@ -201,7 +209,7 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       $(maxDF) * maybeInputSize.get
     }
     require(maxDf >= minDf, "maxDF must be >= minDF.")
-    val allWordCounts = input.flatMap { case (tokens) =>
+    val allWordCounts = input.flatMap { tokens =>
       val wc = new OpenHashMap[String, Long]
       tokens.foreach { w =>
         wc.changeValue(w, 1L, _ + 1L)
@@ -220,17 +228,18 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
     val wordCounts = maybeFilteredWordCounts
       .map { case (word, (count, _)) => (word, count) }
-      .cache()
-
-    if (countingRequired) {
-      input.unpersist()
-    }
+      .persist(StorageLevel.MEMORY_AND_DISK)
 
     val fullVocabSize = wordCounts.count()
 
     val vocab = wordCounts
       .top(math.min(fullVocabSize, vocSize).toInt)(Ordering.by(_._2))
       .map(_._1)
+
+    if (input.getStorageLevel != StorageLevel.NONE) {
+      input.unpersist()
+    }
+    wordCounts.unpersist()
 
     require(vocab.length > 0, "The vocabulary size should be > 0. Lower minDF as necessary.")
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
@@ -298,7 +307,7 @@ class CountVectorizerModel(
     }
     val dictBr = broadcastDict.get
     val minTf = $(minTF)
-    val vectorizer = udf { (document: Seq[String]) =>
+    val vectorizer = udf { document: Seq[String] =>
       val termCounts = new OpenHashMap[Int, Double]
       var tokenCount = 0L
       document.foreach { term =>
@@ -317,7 +326,9 @@ class CountVectorizerModel(
 
       Vectors.sparse(dictBr.value.size, effectiveCounts)
     }
-    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
+    val attrs = vocabulary.map(_ => new NumericAttribute).asInstanceOf[Array[Attribute]]
+    val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
+    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))), metadata)
   }
 
   @Since("1.5.0")
@@ -333,6 +344,11 @@ class CountVectorizerModel(
 
   @Since("1.6.0")
   override def write: MLWriter = new CountVectorizerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"CountVectorizerModel: uid=$uid, vocabularySize=${vocabulary.length}"
+  }
 }
 
 @Since("1.6.0")

@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
@@ -316,7 +317,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Kryo class register") {
     val conf = new SparkConf(false)
-    conf.set("spark.kryo.registrationRequired", "true")
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
 
@@ -349,7 +350,7 @@ object KMeansSuite extends SparkFunSuite {
       case (ca: DenseVector, cb: DenseVector) =>
         assert(ca === cb)
       case _ =>
-        throw new AssertionError("checkEqual failed since the two clusters were not identical.\n")
+        fail("checkEqual failed since the two clusters were not identical.\n")
     }
   }
 }
@@ -366,7 +367,7 @@ class KMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     for (initMode <- Seq(KMeans.RANDOM, KMeans.K_MEANS_PARALLEL)) {
       // If we serialize data directly in the task closure, the size of the serialized task would be
       // greater than 1MB and hence Spark would throw an error.
-      val model = KMeans.train(points, 2, 2, 1, initMode)
+      val model = KMeans.train(points, 2, 2, initMode)
       val predictions = model.predict(points).collect()
       val cost = model.computeCost(points)
     }

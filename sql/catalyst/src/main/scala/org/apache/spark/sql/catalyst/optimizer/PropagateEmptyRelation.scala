@@ -56,7 +56,7 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
     // Joins on empty LocalRelations generated from streaming sources are not eliminated
     // as stateful streaming joins need to perform other state management operations other than
     // just processing the input data.
-    case p @ Join(_, _, joinType, _)
+    case p @ Join(_, _, joinType, _, _)
         if !p.children.exists(_.isStreaming) =>
       val isLeftEmpty = isEmptyLocalRelation(p.left)
       val isRightEmpty = isEmptyLocalRelation(p.right)

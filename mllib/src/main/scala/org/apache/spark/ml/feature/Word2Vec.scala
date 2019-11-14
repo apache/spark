@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
@@ -323,6 +324,12 @@ class Word2VecModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new Word2VecModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"Word2VecModel: uid=$uid, numWords=${wordVectors.wordIndex.size}, " +
+      s"vectorSize=${$(vectorSize)}"
+  }
 }
 
 @Since("1.6.0")
@@ -339,7 +346,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       val wordVectors = instance.wordVectors.getVectors
       val dataPath = new Path(path, "data").toString
       val bufferSizeInBytes = Utils.byteStringAsBytes(
-        sc.conf.get("spark.kryoserializer.buffer.max", "64m"))
+        sc.conf.get(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, "64m"))
       val numPartitions = Word2VecModelWriter.calculateNumberOfPartitions(
         bufferSizeInBytes, instance.wordVectors.wordIndex.size, instance.getVectorSize)
       val spark = sparkSession

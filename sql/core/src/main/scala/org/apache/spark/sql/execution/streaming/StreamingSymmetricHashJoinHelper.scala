@@ -144,7 +144,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
 
 
     // Join keys of both sides generate rows of the same fields, that is, same sequence of data
-    // types. If one side (say left side) has a column (say timestmap) that has a watermark on it,
+    // types. If one side (say left side) has a column (say timestamp) that has a watermark on it,
     // then it will never consider joining keys that are < state key watermark (i.e. event time
     // watermark). On the other side (i.e. right side), even if there is no watermark defined,
     // there has to be an equivalent column (i.e., timestamp). And any right side data that has the

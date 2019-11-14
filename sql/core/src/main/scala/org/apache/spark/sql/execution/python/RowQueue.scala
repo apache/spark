@@ -21,9 +21,10 @@ import java.io._
 
 import com.google.common.io.Closeables
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.io.NioBufferedFileInputStream
-import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
+import org.apache.spark.memory.{MemoryConsumer, SparkOutOfMemoryError, TaskMemoryManager}
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryBlock
@@ -108,9 +109,13 @@ private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields
  * A RowQueue that is backed by a file on disk. This queue will stop accepting new rows once any
  * reader has begun reading from the queue.
  */
-private[python] case class DiskRowQueue(file: File, fields: Int) extends RowQueue {
-  private var out = new DataOutputStream(
-    new BufferedOutputStream(new FileOutputStream(file.toString)))
+private[python] case class DiskRowQueue(
+    file: File,
+    fields: Int,
+    serMgr: SerializerManager) extends RowQueue {
+
+  private var out = new DataOutputStream(serMgr.wrapForEncryption(
+    new BufferedOutputStream(new FileOutputStream(file.toString))))
   private var unreadBytes = 0L
 
   private var in: DataInputStream = _
@@ -131,7 +136,8 @@ private[python] case class DiskRowQueue(file: File, fields: Int) extends RowQueu
     if (out != null) {
       out.close()
       out = null
-      in = new DataInputStream(new NioBufferedFileInputStream(file))
+      in = new DataInputStream(serMgr.wrapForEncryption(
+        new NioBufferedFileInputStream(file)))
     }
 
     if (unreadBytes > 0) {
@@ -166,7 +172,8 @@ private[python] case class DiskRowQueue(file: File, fields: Int) extends RowQueu
 private[python] case class HybridRowQueue(
     memManager: TaskMemoryManager,
     tempDir: File,
-    numFields: Int)
+    numFields: Int,
+    serMgr: SerializerManager)
   extends MemoryConsumer(memManager) with RowQueue {
 
   // Each buffer should have at least one row
@@ -212,14 +219,14 @@ private[python] case class HybridRowQueue(
   }
 
   private def createDiskQueue(): RowQueue = {
-    DiskRowQueue(File.createTempFile("buffer", "", tempDir), numFields)
+    DiskRowQueue(File.createTempFile("buffer", "", tempDir), numFields, serMgr)
   }
 
   private def createNewQueue(required: Long): RowQueue = {
     val page = try {
       allocatePage(required)
     } catch {
-      case _: OutOfMemoryError =>
+      case _: SparkOutOfMemoryError =>
         null
     }
     val buffer = if (page != null) {
@@ -277,5 +284,11 @@ private[python] case class HybridRowQueue(
         queues.remove().close()
       }
     }
+  }
+}
+
+private[python] object HybridRowQueue {
+  def apply(taskMemoryMgr: TaskMemoryManager, file: File, fields: Int): HybridRowQueue = {
+    HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager)
   }
 }

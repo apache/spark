@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.nio.charset.{Charset, StandardCharsets}
-import java.util.{Locale, TimeZone}
+import java.time.ZoneId
+import java.util.Locale
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
-import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -76,16 +77,20 @@ private[sql] class JSONOptions(
   // Whether to ignore column of all null values or empty array/struct during schema inference
   val dropFieldIfAllNull = parameters.get("dropFieldIfAllNull").map(_.toBoolean).getOrElse(false)
 
-  val timeZone: TimeZone = DateTimeUtils.getTimeZone(
+  // Whether to ignore null fields during json generating
+  val ignoreNullFields = parameters.get("ignoreNullFields").map(_.toBoolean)
+    .getOrElse(SQLConf.get.jsonGeneratorIgnoreNullFields)
+
+  // A language tag in IETF BCP 47 format
+  val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
+
+  val zoneId: ZoneId = DateTimeUtils.getZoneId(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
-  // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
-  val dateFormat: FastDateFormat =
-    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"), Locale.US)
+  val dateFormat: String = parameters.getOrElse("dateFormat", "uuuu-MM-dd")
 
-  val timestampFormat: FastDateFormat =
-    FastDateFormat.getInstance(
-      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, Locale.US)
+  val timestampFormat: String =
+    parameters.getOrElse("timestampFormat", "uuuu-MM-dd'T'HH:mm:ss.SSSXXX")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -109,9 +114,20 @@ private[sql] class JSONOptions(
     .orElse(parameters.get("charset")).map(checkedEncoding)
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes(encoding.getOrElse("UTF-8"))
+    lineSep.getBytes(encoding.getOrElse(StandardCharsets.UTF_8.name()))
   }
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
+
+  /**
+   * Generating JSON strings in pretty representation if the parameter is enabled.
+   */
+  val pretty: Boolean = parameters.get("pretty").map(_.toBoolean).getOrElse(false)
+
+  /**
+   * Enables inferring of TimestampType from strings matched to the timestamp pattern
+   * defined by the timestampFormat option.
+   */
+  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(true)
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {

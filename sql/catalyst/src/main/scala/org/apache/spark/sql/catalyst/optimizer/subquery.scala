@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.CleanupAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -43,31 +44,53 @@ import org.apache.spark.sql.types._
  *    condition.
  */
 object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
-  private def dedupJoin(joinPlan: LogicalPlan): LogicalPlan = joinPlan match {
+
+  private def buildJoin(
+      outerPlan: LogicalPlan,
+      subplan: LogicalPlan,
+      joinType: JoinType,
+      condition: Option[Expression]): Join = {
+    // Deduplicate conflicting attributes if any.
+    val dedupSubplan = dedupSubqueryOnSelfJoin(outerPlan, subplan, None, condition)
+    Join(outerPlan, dedupSubplan, joinType, condition, JoinHint.NONE)
+  }
+
+  private def dedupSubqueryOnSelfJoin(
+      outerPlan: LogicalPlan,
+      subplan: LogicalPlan,
+      valuesOpt: Option[Seq[Expression]],
+      condition: Option[Expression] = None): LogicalPlan = {
     // SPARK-21835: It is possibly that the two sides of the join have conflicting attributes,
     // the produced join then becomes unresolved and break structural integrity. We should
-    // de-duplicate conflicting attributes. We don't use transformation here because we only
-    // care about the most top join converted from correlated predicate subquery.
-    case j @ Join(left, right, joinType @ (LeftSemi | LeftAnti | ExistenceJoin(_)), joinCond) =>
-      val duplicates = right.outputSet.intersect(left.outputSet)
-      if (duplicates.nonEmpty) {
-        val aliasMap = AttributeMap(duplicates.map { dup =>
-          dup -> Alias(dup, dup.toString)()
-        }.toSeq)
-        val aliasedExpressions = right.output.map { ref =>
-          aliasMap.getOrElse(ref, ref)
-        }
-        val newRight = Project(aliasedExpressions, right)
-        val newJoinCond = joinCond.map { condExpr =>
-          condExpr transform {
-            case a: Attribute => aliasMap.getOrElse(a, a).toAttribute
+    // de-duplicate conflicting attributes.
+    // SPARK-26078: it may also happen that the subquery has conflicting attributes with the outer
+    // values. In this case, the resulting join would contain trivially true conditions (eg.
+    // id#3 = id#3) which cannot be de-duplicated after. In this method, if there are conflicting
+    // attributes in the join condition, the subquery's conflicting attributes are changed using
+    // a projection which aliases them and resolves the problem.
+    val outerReferences = valuesOpt.map(values =>
+      AttributeSet.fromAttributeSets(values.map(_.references))).getOrElse(AttributeSet.empty)
+    val outerRefs = outerPlan.outputSet ++ outerReferences
+    val duplicates = outerRefs.intersect(subplan.outputSet)
+    if (duplicates.nonEmpty) {
+      condition.foreach { e =>
+          val conflictingAttrs = e.references.intersect(duplicates)
+          if (conflictingAttrs.nonEmpty) {
+            throw new AnalysisException("Found conflicting attributes " +
+              s"${conflictingAttrs.mkString(",")} in the condition joining outer plan:\n  " +
+              s"$outerPlan\nand subplan:\n  $subplan")
           }
-        }
-        Join(left, newRight, joinType, newJoinCond)
-      } else {
-        j
       }
-    case _ => joinPlan
+      val rewrites = AttributeMap(duplicates.map { dup =>
+        dup -> Alias(dup, dup.toString)()
+      }.toSeq)
+      val aliasedExpressions = subplan.output.map { ref =>
+        rewrites.getOrElse(ref, ref)
+      }
+      Project(aliasedExpressions, subplan)
+    } else {
+      subplan
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -85,17 +108,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, conditions, _)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftSemi, joinCond))
+          buildJoin(outerPlan, sub, LeftSemi, joinCond)
         case (p, Not(Exists(sub, conditions, _))) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftAnti, joinCond))
+          buildJoin(outerPlan, sub, LeftAnti, joinCond)
         case (p, InSubquery(values, ListQuery(sub, conditions, _, _))) =>
-          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
-          val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
           // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftSemi, joinCond))
+          val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
+          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
+          val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
+          Join(outerPlan, newSub, LeftSemi, joinCond, JoinHint.NONE)
         case (p, Not(InSubquery(values, ListQuery(sub, conditions, _, _)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
@@ -103,7 +125,10 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
           // Note that will almost certainly be planned as a Broadcast Nested Loop join.
           // Use EXISTS if performance matters to you.
-          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
+
+          // Deduplicate conflicting attributes if any.
+          val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
+          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions, p)
           // Expand the NOT IN expression with the NULL-aware semantic
           // to its full form. That is from:
@@ -118,8 +143,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // will have the final conditions in the LEFT ANTI as
           // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
           val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
-          // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftAnti, Option(finalJoinCond)))
+          Join(outerPlan, newSub, LeftAnti, Option(finalJoinCond), JoinHint.NONE)
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
@@ -140,16 +164,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       e transformUp {
         case Exists(sub, conditions, _) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          // Deduplicate conflicting attributes if any.
-          newPlan = dedupJoin(
-            Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And)))
+          newPlan =
+            buildJoin(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
           exists
         case InSubquery(values, ListQuery(sub, conditions, _, _)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
-          val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
           // Deduplicate conflicting attributes if any.
-          newPlan = dedupJoin(Join(newPlan, sub, ExistenceJoin(exists), newConditions))
+          val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
+          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
+          val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
+          newPlan = Join(newPlan, newSub, ExistenceJoin(exists), newConditions, JoinHint.NONE)
           exists
       }
     }
@@ -249,16 +273,28 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   }
 
   private def rewriteSubQueries(plan: LogicalPlan, outerPlans: Seq[LogicalPlan]): LogicalPlan = {
+    /**
+     * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
+     * In the first call to rewriteSubqueries, all the outer references from the subplan are
+     * pulled up and join predicates are recorded as children of the enclosing subquery expression.
+     * The subsequent call to rewriteSubqueries would simply re-records the `children` which would
+     * contains the pulled up correlated predicates (from the previous call) in the enclosing
+     * subquery expression.
+     */
+    def getJoinCondition(newCond: Seq[Expression], oldCond: Seq[Expression]): Seq[Expression] = {
+      if (newCond.isEmpty) oldCond else newCond
+    }
+
     plan transformExpressions {
       case ScalarSubquery(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        ScalarSubquery(newPlan, newCond, exprId)
+        ScalarSubquery(newPlan, getJoinCondition(newCond, children), exprId)
       case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        Exists(newPlan, newCond, exprId)
-      case ListQuery(sub, _, exprId, childOutputs) =>
+        Exists(newPlan, getJoinCondition(newCond, children), exprId)
+      case ListQuery(sub, children, exprId, childOutputs) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        ListQuery(newPlan, newCond, exprId, childOutputs)
+        ListQuery(newPlan, getJoinCondition(newCond, children), exprId, childOutputs)
     }
   }
 
@@ -294,24 +330,40 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   }
 
   /**
-   * Statically evaluate an expression containing zero or more placeholders, given a set
-   * of bindings for placeholder values.
+   * Checks if given expression is foldable. Evaluates it and returns it as literal, if yes.
+   * If not, returns the original expression without evaluation.
    */
-  private def evalExpr(expr: Expression, bindings: Map[ExprId, Option[Any]]) : Option[Any] = {
+  private def tryEvalExpr(expr: Expression): Expression = {
+    // Removes Alias over given expression, because Alias is not foldable.
+    if (!CleanupAliases.trimAliases(expr).foldable) {
+      // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
+      // Needs to evaluate them on query runtime.
+      expr
+    } else {
+      Literal.create(expr.eval(), expr.dataType)
+    }
+  }
+
+  /**
+   * Statically evaluate an expression containing zero or more placeholders, given a set
+   * of bindings for placeholder values, if the expression is evaluable. If it is not,
+   * bind statically evaluated expression results to an expression.
+   */
+  private def bindingExpr(
+      expr: Expression,
+      bindings: Map[ExprId, Expression]): Expression = {
     val rewrittenExpr = expr transform {
       case r: AttributeReference =>
-        bindings(r.exprId) match {
-          case Some(v) => Literal.create(v, r.dataType)
-          case None => Literal.default(NullType)
-        }
+        bindings.getOrElse(r.exprId, Literal.default(NullType))
     }
-    Option(rewrittenExpr.eval())
+
+    tryEvalExpr(rewrittenExpr)
   }
 
   /**
    * Statically evaluate an expression containing one or more aggregates on an empty input.
    */
-  private def evalAggOnZeroTups(expr: Expression) : Option[Any] = {
+  private def evalAggOnZeroTups(expr: Expression) : Expression = {
     // AggregateExpressions are Unevaluable, so we need to replace all aggregates
     // in the expression with the value they would return for zero input tuples.
     // Also replace attribute refs (for example, for grouping columns) with NULL.
@@ -321,7 +373,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 
       case _: AttributeReference => Literal.default(NullType)
     }
-    Option(rewrittenExpr.eval())
+
+    tryEvalExpr(rewrittenExpr)
   }
 
   /**
@@ -331,19 +384,33 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]. If the checks in
    * CheckAnalysis become less restrictive, this method will need to change.
    */
-  private def evalSubqueryOnZeroTups(plan: LogicalPlan) : Option[Any] = {
+  private def evalSubqueryOnZeroTups(plan: LogicalPlan) : Option[Expression] = {
     // Inputs to this method will start with a chain of zero or more SubqueryAlias
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
-    def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
+    def evalPlan(lp : LogicalPlan) : Map[ExprId, Expression] = lp match {
       case SubqueryAlias(_, child) => evalPlan(child)
       case Filter(condition, child) =>
         val bindings = evalPlan(child)
-        if (bindings.isEmpty) bindings
-        else {
-          val exprResult = evalExpr(condition, bindings).getOrElse(false)
-            .asInstanceOf[Boolean]
-          if (exprResult) bindings else Map.empty
+        if (bindings.isEmpty) {
+          bindings
+        } else {
+          val bindCondition = bindingExpr(condition, bindings)
+
+          if (!bindCondition.foldable) {
+            // We can't evaluate the condition. Evaluate it in query runtime.
+            bindings.map { case (id, expr) =>
+              val newExpr = If(bindCondition, expr, Literal.create(null, expr.dataType))
+              (id, newExpr)
+            }
+          } else {
+            // The bound condition can be evaluated.
+            bindCondition.eval() match {
+              // For filter condition, null is the same as false.
+              case null | false => Map.empty
+              case true => bindings
+            }
+          }
         }
 
       case Project(projectList, child) =>
@@ -351,7 +418,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         if (bindings.isEmpty) {
           bindings
         } else {
-          projectList.map(ne => (ne.exprId, evalExpr(ne, bindings))).toMap
+          projectList.map(ne => (ne.exprId, bindingExpr(ne, bindings))).toMap
         }
 
       case Aggregate(_, aggExprs, _) =>
@@ -359,8 +426,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         // for joining with the outer query block. Fill those expressions in with
         // nulls and statically evaluate the remainder.
         aggExprs.map {
-          case ref: AttributeReference => (ref.exprId, None)
-          case alias @ Alias(_: AttributeReference, _) => (alias.exprId, None)
+          case ref: AttributeReference => (ref.exprId, Literal.create(null, ref.dataType))
+          case alias @ Alias(_: AttributeReference, _) =>
+            (alias.exprId, Literal.create(null, alias.dataType))
           case ne => (ne.exprId, evalAggOnZeroTups(ne))
         }.toMap
 
@@ -371,7 +439,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     val resultMap = evalPlan(plan)
 
     // By convention, the scalar subquery result is the leftmost field.
-    resultMap.getOrElse(plan.output.head.exprId, None)
+    resultMap.get(plan.output.head.exprId) match {
+      case Some(Literal(null, _)) | None => None
+      case o => o
+    }
   }
 
   /**
@@ -427,7 +498,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           // CASE 1: Subquery guaranteed not to have the COUNT bug
           Project(
             currentChild.output :+ origOutput,
-            Join(currentChild, query, LeftOuter, conditions.reduceOption(And)))
+            Join(currentChild, query, LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
         } else {
           // Subquery might have the COUNT bug. Add appropriate corrections.
           val (topPart, havingNode, aggNode) = splitSubquery(query)
@@ -450,11 +521,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               currentChild.output :+
                 Alias(
                   If(IsNull(alwaysTrueRef),
-                    Literal.create(resultWithZeroTups.get, origOutput.dataType),
+                    resultWithZeroTups.get,
                     aggValRef), origOutput.name)(exprId = origOutput.exprId),
               Join(currentChild,
                 Project(query.output :+ alwaysTrueExpr, query),
-                LeftOuter, conditions.reduceOption(And)))
+                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
 
           } else {
             // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
@@ -471,11 +542,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 
-            // CASE WHEN alwayTrue IS NULL THEN resultOnZeroTups
+            // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
             //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
             //      ELSE (aggregate value) END AS (original column name)
             val caseExpr = Alias(CaseWhen(Seq(
-              (IsNull(alwaysTrueRef), Literal.create(resultWithZeroTups.get, origOutput.dataType)),
+              (IsNull(alwaysTrueRef), resultWithZeroTups.get),
               (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
               aggValRef),
               origOutput.name)(exprId = origOutput.exprId)
@@ -484,7 +555,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               currentChild.output :+ caseExpr,
               Join(currentChild,
                 Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
-                LeftOuter, conditions.reduceOption(And)))
+                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
 
           }
         }

@@ -18,22 +18,30 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark to measure TPCDS query performance.
  * To run this:
- *  spark-submit --class <this class> <spark sql test jar> --data-location <TPCDS data location>
+ * {{{
+ *   1. without sbt:
+ *        bin/spark-submit --class <this class> <spark sql test jar> --data-location <location>
+ *   2. build/sbt "sql/test:runMain <this class> --data-location <TPCDS data location>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt
+ *        "sql/test:runMain <this class> --data-location <location>"
+ *      Results will be written to "benchmarks/TPCDSQueryBenchmark-results.txt".
+ * }}}
  */
-object TPCDSQueryBenchmark extends Logging {
-  val conf =
-    new SparkConf()
+object TPCDSQueryBenchmark extends SqlBasedBenchmark {
+
+  override def getSparkSession: SparkSession = {
+    val conf = new SparkConf()
       .setMaster("local[1]")
       .setAppName("test-sql-context")
       .set("spark.sql.parquet.compression.codec", "snappy")
@@ -43,7 +51,8 @@ object TPCDSQueryBenchmark extends Logging {
       .set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
       .set("spark.sql.crossJoin.enabled", "true")
 
-  val spark = SparkSession.builder.config(conf).getOrCreate()
+    SparkSession.builder.config(conf).getOrCreate()
+  }
 
   val tables = Seq("catalog_page", "catalog_returns", "customer", "customer_address",
     "customer_demographics", "date_dim", "household_demographics", "inventory", "item",
@@ -75,18 +84,16 @@ object TPCDSQueryBenchmark extends Logging {
           queryRelations.add(alias.identifier)
         case LogicalRelation(_, _, Some(catalogTable), _) =>
           queryRelations.add(catalogTable.identifier.table)
-        case HiveTableRelation(tableMeta, _, _) =>
+        case HiveTableRelation(tableMeta, _, _, _) =>
           queryRelations.add(tableMeta.identifier.table)
         case _ =>
       }
       val numRows = queryRelations.map(tableSizes.getOrElse(_, 0L)).sum
-      val benchmark = new Benchmark(s"TPCDS Snappy", numRows, 5)
+      val benchmark = new Benchmark(s"TPCDS Snappy", numRows, 2, output = output)
       benchmark.addCase(s"$name$nameSuffix") { _ =>
         spark.sql(queryString).collect()
       }
-      logInfo(s"\n\n===== TPCDS QUERY BENCHMARK OUTPUT FOR $name =====\n")
       benchmark.run()
-      logInfo(s"\n\n===== FINISHED $name =====\n")
     }
   }
 
@@ -100,8 +107,8 @@ object TPCDSQueryBenchmark extends Logging {
     }
   }
 
-  def main(args: Array[String]): Unit = {
-    val benchmarkArgs = new TPCDSQueryBenchmarkArguments(args)
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    val benchmarkArgs = new TPCDSQueryBenchmarkArguments(mainArgs)
 
     // List of all TPC-DS v1.4 queries
     val tpcdsQueries = Seq(

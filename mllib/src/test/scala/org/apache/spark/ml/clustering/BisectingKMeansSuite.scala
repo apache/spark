@@ -17,15 +17,13 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.language.existentials
-
 import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.DistanceMeasure
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.DataFrame
 
 
 class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
@@ -33,9 +31,8 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   import testImplicits._
 
   final val k = 5
-  @transient var dataset: Dataset[_] = _
-
-  @transient var sparseDataset: Dataset[_] = _
+  @transient var dataset: DataFrame = _
+  @transient var sparseDataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -74,7 +71,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       rows =>
         val numClusters = rows.distinct.length
         // Verify we hit the edge case
-        assert(numClusters < k && numClusters > 1)
+        assert(numClusters > 1)
     }
   }
 
@@ -134,6 +131,8 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
     assert(summary.numIter == 20)
+    assert(summary.trainingCost < 0.1)
+    assert(model.computeCost(dataset) == summary.trainingCost)
 
     model.setSummary(None)
     assert(!model.hasSummary)
@@ -189,7 +188,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("BisectingKMeans with Array input") {
-    def trainAndComputeCost(dataset: Dataset[_]): Double = {
+    def trainAndComputeCost(dataset: DataFrame): Double = {
       val model = new BisectingKMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
       model.computeCost(dataset)
     }
@@ -202,6 +201,13 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     // checking the cost is fine enough as a sanity check
     assert(trueCost ~== doubleArrayCost absTol 1e-6)
     assert(trueCost ~== floatArrayCost absTol 1e-6)
+  }
+
+  test("prediction on single instance") {
+    val bikm = new BisectingKMeans().setSeed(123L)
+    val model = bikm.fit(dataset)
+    testClusteringModelSinglePrediction(model, model.predict, dataset,
+      model.getFeaturesCol, model.getPredictionCol)
   }
 }
 

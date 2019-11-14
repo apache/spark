@@ -19,12 +19,12 @@ package org.apache.spark.ml.stat
 
 import java.io._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, TypedImperativeAggregate}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
@@ -35,7 +35,6 @@ import org.apache.spark.sql.types._
  * Users should not directly create such builders, but instead use one of the methods in
  * [[Summarizer]].
  */
-@Experimental
 @Since("2.3.0")
 sealed abstract class SummaryBuilder {
   /**
@@ -66,7 +65,7 @@ sealed abstract class SummaryBuilder {
  *   val dataframe = ... // Some dataframe containing a feature column and a weight column
  *   val multiStatsDF = dataframe.select(
  *       Summarizer.metrics("min", "max", "count").summary($"features", $"weight")
- *   val Row(Row(minVec, maxVec, count)) = multiStatsDF.first()
+ *   val Row(minVec, maxVec, count) = multiStatsDF.first()
  * }}}
  *
  * If one wants to get a single metric, shortcuts are also available:
@@ -78,7 +77,6 @@ sealed abstract class SummaryBuilder {
  * Note: Currently, the performance of this interface is about 2x~3x slower than using the RDD
  * interface.
  */
-@Experimental
 @Since("2.3.0")
 object Summarizer extends Logging {
 
@@ -96,7 +94,7 @@ object Summarizer extends Logging {
    *  - numNonzeros: a vector with the number of non-zeros for each coefficients
    *  - max: the maximum for each coefficient.
    *  - min: the minimum for each coefficient.
-   *  - normL2: the Euclidian norm for each coefficient.
+   *  - normL2: the Euclidean norm for each coefficient.
    *  - normL1: the L1 norm of each coefficient (sum of the absolute values).
    * @param metrics metrics that can be provided.
    * @return a builder.
@@ -232,6 +230,11 @@ private[ml] object SummaryBuilderImpl extends Logging {
     StructType(fields)
   }
 
+  private[ml] def createSummarizerBuffer(requested: String*): SummarizerBuffer = {
+    val (metrics, computeMetrics) = getRelevantMetrics(requested)
+    new SummarizerBuffer(metrics, computeMetrics)
+  }
+
   private val vectorUDT = new VectorUDT
 
   /**
@@ -279,7 +282,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
   private[stat] case object ComputeMax extends ComputeMetric
   private[stat] case object ComputeMin extends ComputeMetric
 
-  private[stat] class SummarizerBuffer(
+  private[ml] class SummarizerBuffer(
       requestedMetrics: Seq[Metric],
       requestedCompMetrics: Seq[ComputeMetric]
   ) extends Serializable {
@@ -536,7 +539,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
     }
 
     /**
-     * L2 (Euclidian) norm of each dimension.
+     * L2 (Euclidean) norm of each dimension.
      */
     def normL2: Vector = {
       require(requestedMetrics.contains(NormL2))

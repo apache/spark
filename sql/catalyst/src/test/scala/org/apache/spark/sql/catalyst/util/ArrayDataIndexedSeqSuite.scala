@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{FromUnsafeProjection, UnsafeArrayData, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeArrayData, UnsafeProjection}
 import org.apache.spark.sql.types._
 
 class ArrayDataIndexedSeqSuite extends SparkFunSuite {
@@ -77,7 +77,7 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
       val internalRow = rowConverter.toRow(row)
 
       val unsafeRowConverter = UnsafeProjection.create(schema)
-      val safeRowConverter = FromUnsafeProjection(schema)
+      val safeRowConverter = SafeProjection.create(schema)
 
       val unsafeRow = unsafeRowConverter(internalRow)
       val safeRow = safeRowConverter(unsafeRow)

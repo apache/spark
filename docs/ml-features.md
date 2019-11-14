@@ -2,6 +2,21 @@
 layout: global
 title: Extracting, transforming and selecting features
 displayTitle: Extracting, transforming and selecting features
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 This section covers algorithms for working with features, roughly divided into these groups:
@@ -359,7 +374,7 @@ Assume that we have the following DataFrame with columns `id` and `raw`:
 ~~~~
  id | raw
 ----|----------
- 0  | [I, saw, the, red, baloon]
+ 0  | [I, saw, the, red, balloon]
  1  | [Mary, had, a, little, lamb]
 ~~~~
 
@@ -369,7 +384,7 @@ column, we should get the following:
 ~~~~
  id | raw                         | filtered
 ----|-----------------------------|--------------------
- 0  | [I, saw, the, red, baloon]  |  [saw, red, baloon]
+ 0  | [I, saw, the, red, balloon]  |  [saw, red, balloon]
  1  | [Mary, had, a, little, lamb]|[Mary, little, lamb]
 ~~~~
 
@@ -585,11 +600,13 @@ for more details on the API.
 ## StringIndexer
 
 `StringIndexer` encodes a string column of labels to a column of label indices.
-The indices are in `[0, numLabels)`, and four ordering options are supported:
+`StringIndexer` can encode multiple columns. The indices are in `[0, numLabels)`, and four ordering options are supported:
 "frequencyDesc": descending order by label frequency (most frequent label assigned 0),
 "frequencyAsc": ascending order by label frequency (least frequent label assigned 0),
 "alphabetDesc": descending alphabetical order, and "alphabetAsc": ascending alphabetical order 
-(default = "frequencyDesc").
+(default = "frequencyDesc"). Note that in case of equal frequency when under
+"frequencyDesc"/"frequencyAsc", the strings are further sorted by alphabet.
+
 The unseen labels will be put at index numLabels if user chooses to keep them.
 If the input column is numeric, we cast it to string and index the string
 values. When downstream pipeline components such as `Estimator` or
@@ -779,43 +796,37 @@ for more details on the API.
 </div>
 </div>
 
-## OneHotEncoder (Deprecated since 2.3.0)
-
-Because this existing `OneHotEncoder` is a stateless transformer, it is not usable on new data where the number of categories may differ from the training data. In order to fix this, a new `OneHotEncoderEstimator` was created that produces an `OneHotEncoderModel` when fitting. For more detail, please see [SPARK-13030](https://issues.apache.org/jira/browse/SPARK-13030).
-
-`OneHotEncoder` has been deprecated in 2.3.0 and will be removed in 3.0.0. Please use [OneHotEncoderEstimator](ml-features.html#onehotencoderestimator) instead.
-
-## OneHotEncoderEstimator
+## OneHotEncoder
 
 [One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a categorical feature, represented as a label index, to a binary vector with at most a single one-value indicating the presence of a specific feature value from among the set of all feature values. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
 
-`OneHotEncoderEstimator` can transform multiple columns, returning an one-hot-encoded output vector column for each input column. It is common to merge these vectors into a single feature vector using [VectorAssembler](ml-features.html#vectorassembler).
+`OneHotEncoder` can transform multiple columns, returning an one-hot-encoded output vector column for each input column. It is common to merge these vectors into a single feature vector using [VectorAssembler](ml-features.html#vectorassembler).
 
-`OneHotEncoderEstimator` supports the `handleInvalid` parameter to choose how to handle invalid input during transforming data. Available options include 'keep' (any invalid inputs are assigned to an extra categorical index) and 'error' (throw an error).
+`OneHotEncoder` supports the `handleInvalid` parameter to choose how to handle invalid input during transforming data. Available options include 'keep' (any invalid inputs are assigned to an extra categorical index) and 'error' (throw an error).
 
 **Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [OneHotEncoderEstimator Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoderEstimator) for more details on the API.
+Refer to the [OneHotEncoder Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoder) for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/OneHotEncoderEstimatorExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/OneHotEncoderExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-Refer to the [OneHotEncoderEstimator Java docs](api/java/org/apache/spark/ml/feature/OneHotEncoderEstimator.html)
+Refer to the [OneHotEncoder Java docs](api/java/org/apache/spark/ml/feature/OneHotEncoder.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaOneHotEncoderEstimatorExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaOneHotEncoderExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-Refer to the [OneHotEncoderEstimator Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoderEstimator) for more details on the API.
+Refer to the [OneHotEncoder Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoder) for more details on the API.
 
-{% include_example python/ml/onehot_encoder_estimator_example.py %}
+{% include_example python/ml/onehot_encoder_example.py %}
 </div>
 </div>
 
@@ -912,6 +923,14 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaInteractionExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Interaction Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Interaction)
+for more details on the API.
+
+{% include_example python/ml/interaction_example.py %}
+</div>
 </div>
 
 ## Normalizer
@@ -989,6 +1008,51 @@ for more details on the API.
 {% include_example python/ml/standard_scaler_example.py %}
 </div>
 </div>
+
+
+## RobustScaler
+
+`RobustScaler` transforms a dataset of `Vector` rows, removing the median and scaling the data according to a specific quantile range (by default the IQR: Interquartile Range, quantile range between the 1st quartile and the 3rd quartile). Its behavior is quite similar to `StandardScaler`, however the median and the quantile range are used instead of mean and standard deviation, which make it robust to outliers. It takes parameters:
+
+* `lower`: 0.25 by default. Lower quantile to calculate quantile range, shared by all features.
+* `upper`: 0.75 by default. Upper quantile to calculate quantile range, shared by all features.
+* `withScaling`: True by default. Scales the data to quantile range.
+* `withCentering`: False by default. Centers the data with median before scaling. It will build a dense output, so take care when applying to sparse input.
+
+`RobustScaler` is an `Estimator` which can be `fit` on a dataset to produce a `RobustScalerModel`; this amounts to computing quantile statistics.  The model can then transform a `Vector` column in a dataset to have unit quantile range and/or zero median features.
+
+Note that if the quantile range of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
+
+**Examples**
+
+The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit quantile range.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [RobustScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RobustScaler)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/RobustScalerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [RobustScaler Java docs](api/java/org/apache/spark/ml/feature/RobustScaler.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaRobustScalerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [RobustScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RobustScaler)
+for more details on the API.
+
+{% include_example python/ml/robust_scaler_example.py %}
+</div>
+</div>
+
 
 ## MinMaxScaler
 
@@ -1308,7 +1372,7 @@ need to know vector size, can use that column as an input.
 To use `VectorSizeHint` a user must set the `inputCol` and `size` parameters. Applying this
 transformer to a dataframe produces a new dataframe with updated metadata for `inputCol` specifying
 the vector size. Downstream operations on the resulting dataframe can get this size using the
-meatadata.
+metadata.
 
 `VectorSizeHint` can also take an optional `handleInvalid` parameter which controls its
 behaviour when the vector column contains nulls or vectors of the wrong size. By default
@@ -1316,7 +1380,7 @@ behaviour when the vector column contains nulls or vectors of the wrong size. By
 also be set to "skip", indicating that rows containing invalid values should be filtered out from
 the resulting dataframe, or "optimistic", indicating that the column should not be checked for
 invalid values and all rows should be kept. Note that the use of "optimistic" can cause the
-resulting dataframe to be in an inconsistent state, me:aning the metadata for the column
+resulting dataframe to be in an inconsistent state, meaning the metadata for the column
 `VectorSizeHint` was applied to does not match the contents of that column. Users should take care
 to avoid this kind of inconsistent state.
 

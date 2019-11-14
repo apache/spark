@@ -40,10 +40,11 @@ fi
 CLASS="org.apache.spark.deploy.worker.Worker"
 
 if [[ $# -lt 1 ]] || [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  echo "Usage: ./sbin/start-slave.sh [options] <master>"
+  echo "Usage: ./sbin/start-slave.sh <master> [options]"
   pattern="Usage:"
   pattern+="\|Using Spark's default log4j profile:"
-  pattern+="\|Registered signal handlers for"
+  pattern+="\|Started daemon with process name"
+  pattern+="\|Registered signal handler for"
 
   "${SPARK_HOME}"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
   exit 1

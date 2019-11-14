@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
@@ -85,8 +85,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     val compactibleBatchIds = fileManager.list(metadataPath, batchFilesFilter)
       .filter(f => f.getPath.toString.endsWith(CompactibleFileStreamLog.COMPACT_FILE_SUFFIX))
       .map(f => pathToBatchId(f.getPath))
-      .sorted
-      .reverse
+      .sorted(Ordering.Long.reverse)
 
     // Case 1
     var interval = defaultCompactInterval
@@ -146,7 +145,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = parseVersion(lines.next(), metadataLogVersion)
+    validateVersion(lines.next(), metadataLogVersion)
     lines.map(Serialization.read[T]).toArray
   }
 
@@ -164,18 +163,28 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   /**
+   * CompactibleFileStreamLog maintains logs by itself, and manual purging might break internal
+   * state, specifically which latest compaction batch is purged.
+   *
+   * To simplify the situation, this method just throws UnsupportedOperationException regardless
+   * of given parameter, and let CompactibleFileStreamLog handles purging by itself.
+   */
+  override def purge(thresholdBatchId: Long): Unit = throw new UnsupportedOperationException(
+    s"Cannot purge as it might break internal state.")
+
+  /**
    * Compacts all logs before `batchId` plus the provided `logs`, and writes them into the
    * corresponding `batchId` file. It will delete expired files as well if enabled.
    */
   private def compact(batchId: Long, logs: Array[T]): Boolean = {
     val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
-    val allLogs = validBatches.map { id =>
+    val allLogs = validBatches.flatMap { id =>
       super.get(id).getOrElse {
         throw new IllegalStateException(
           s"${batchIdToPath(id)} doesn't exist when compacting batch $batchId " +
             s"(compactInterval: $compactInterval)")
       }
-    }.flatten ++ logs
+    } ++ logs
     // Return false as there is another writer.
     super.add(batchId, compactLogs(allLogs).toArray)
   }
@@ -192,13 +201,13 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
       if (latestId >= 0) {
         try {
           val logs =
-            getAllValidBatches(latestId, compactInterval).map { id =>
+            getAllValidBatches(latestId, compactInterval).flatMap { id =>
               super.get(id).getOrElse {
                 throw new IllegalStateException(
                   s"${batchIdToPath(id)} doesn't exist " +
                     s"(latestId: $latestId, compactInterval: $compactInterval)")
               }
-            }.flatten
+            }
           return compactLogs(logs).toArray
         } catch {
           case e: IOException =>
@@ -240,15 +249,13 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
         s"min compaction batch id to delete = $minCompactionBatchId")
 
       val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
-      fileManager.list(metadataPath, new PathFilter {
-        override def accept(path: Path): Boolean = {
-          try {
-            val batchId = getBatchIdFromFileName(path.getName)
-            batchId < minCompactionBatchId
-          } catch {
-            case _: NumberFormatException =>
-              false
-          }
+      fileManager.list(metadataPath, (path: Path) => {
+        try {
+          val batchId = getBatchIdFromFileName(path.getName)
+          batchId < minCompactionBatchId
+        } catch {
+          case _: NumberFormatException =>
+            false
         }
       }).foreach { f =>
         if (f.getModificationTime <= expiredTime) {

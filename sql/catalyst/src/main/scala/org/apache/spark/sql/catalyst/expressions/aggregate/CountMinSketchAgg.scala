@@ -43,7 +43,8 @@ import org.apache.spark.util.sketch.CountMinSketch
       confidence and seed. The result is an array of bytes, which can be deserialized to a
       `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
       cardinality estimation using sub-linear space.
-  """)
+  """,
+  since = "2.2.0")
 case class CountMinSketchAgg(
     child: Expression,
     epsExpression: Expression,

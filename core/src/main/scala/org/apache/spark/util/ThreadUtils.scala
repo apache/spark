@@ -19,17 +19,16 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
-import scala.collection.TraversableLike
 import scala.collection.generic.CanBuildFrom
 import scala.language.higherKinds
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
-import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
+import org.apache.spark.rpc.RpcAbortException
 
 private[spark] object ThreadUtils {
 
@@ -181,17 +180,17 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Construct a new Scala ForkJoinPool with a specified max parallelism and name prefix.
+   * Construct a new ForkJoinPool with a specified max parallelism and name prefix.
    */
-  def newForkJoinPool(prefix: String, maxThreadNumber: Int): SForkJoinPool = {
+  def newForkJoinPool(prefix: String, maxThreadNumber: Int): ForkJoinPool = {
     // Custom factory to set thread names
-    val factory = new SForkJoinPool.ForkJoinWorkerThreadFactory {
-      override def newThread(pool: SForkJoinPool) =
-        new SForkJoinWorkerThread(pool) {
+    val factory = new ForkJoinPool.ForkJoinWorkerThreadFactory {
+      override def newThread(pool: ForkJoinPool) =
+        new ForkJoinWorkerThread(pool) {
           setName(prefix + "-" + super.getName)
         }
     }
-    new SForkJoinPool(maxThreadNumber, factory,
+    new ForkJoinPool(maxThreadNumber, factory,
       null, // handler
       false // asyncMode
     )
@@ -221,8 +220,10 @@ private[spark] object ThreadUtils {
     } catch {
       case e: SparkFatalException =>
         throw e.throwable
-      // TimeoutException is thrown in the current thread, so not need to warp the exception.
-      case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
+      // TimeoutException and RpcAbortException is thrown in the current thread, so not need to warp
+      // the exception.
+      case NonFatal(t)
+          if !t.isInstanceOf[TimeoutException] && !t.isInstanceOf[RpcAbortException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }
@@ -273,47 +274,17 @@ private[spark] object ThreadUtils {
    * @return new collection in which each element was given from the input collection `in` by
    *         applying the lambda function `f`.
    */
-  def parmap[I, O, Col[X] <: TraversableLike[X, Col[X]]]
-      (in: Col[I], prefix: String, maxThreads: Int)
-      (f: I => O)
-      (implicit
-        cbf: CanBuildFrom[Col[I], Future[O], Col[Future[O]]], // For in.map
-        cbf2: CanBuildFrom[Col[Future[O]], O, Col[O]] // for Future.sequence
-      ): Col[O] = {
+  def parmap[I, O](in: Seq[I], prefix: String, maxThreads: Int)(f: I => O): Seq[O] = {
     val pool = newForkJoinPool(prefix, maxThreads)
     try {
       implicit val ec = ExecutionContext.fromExecutor(pool)
 
-      parmap(in)(f)
+      val futures = in.map(x => Future(f(x)))
+      val futureSeq = Future.sequence(futures)
+
+      awaitResult(futureSeq, Duration.Inf)
     } finally {
       pool.shutdownNow()
     }
-  }
-
-  /**
-   * Transforms input collection by applying the given function to each element in parallel fashion.
-   * Comparing to the map() method of Scala parallel collections, this method can be interrupted
-   * at any time. This is useful on canceling of task execution, for example.
-   *
-   * @param in - the input collection which should be transformed in parallel.
-   * @param f - the lambda function will be applied to each element of `in`.
-   * @param ec - an execution context for parallel applying of the given function `f`.
-   * @tparam I - the type of elements in the input collection.
-   * @tparam O - the type of elements in resulted collection.
-   * @return new collection in which each element was given from the input collection `in` by
-   *         applying the lambda function `f`.
-   */
-  def parmap[I, O, Col[X] <: TraversableLike[X, Col[X]]]
-      (in: Col[I])
-      (f: I => O)
-      (implicit
-        cbf: CanBuildFrom[Col[I], Future[O], Col[Future[O]]], // For in.map
-        cbf2: CanBuildFrom[Col[Future[O]], O, Col[O]], // for Future.sequence
-        ec: ExecutionContext
-      ): Col[O] = {
-    val futures = in.map(x => Future(f(x)))
-    val futureSeq = Future.sequence(futures)
-
-    awaitResult(futureSeq, Duration.Inf)
   }
 }

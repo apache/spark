@@ -17,7 +17,9 @@
 
 package org.apache.spark.streaming.kafka010.mocks
 
+import java.lang
 import java.util.concurrent._
+import java.util.function.Supplier
 
 import org.apache.kafka.common.utils.Time
 
@@ -43,10 +45,13 @@ private[kafka010] class MockTime(@volatile private var currentMs: Long) extends 
   override def nanoseconds: Long =
     TimeUnit.NANOSECONDS.convert(currentMs, TimeUnit.MILLISECONDS)
 
-  override def sleep(ms: Long) {
+  override def sleep(ms: Long): Unit = {
     this.currentMs += ms
     scheduler.tick()
   }
+
+  override def waitObject(obj: Any, condition: Supplier[lang.Boolean], timeoutMs: Long): Unit =
+    throw new UnsupportedOperationException
 
   override def toString(): String = s"MockTime($milliseconds)"
 
