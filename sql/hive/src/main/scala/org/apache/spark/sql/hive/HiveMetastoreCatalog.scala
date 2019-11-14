@@ -125,18 +125,23 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   private def isParquetProperty(key: String) =
     key.startsWith("parquet.") || key.contains(".parquet.")
 
+  private def isRecursiveFileLookupProperty(key: String) =
+    key.equalsIgnoreCase("recursiveFileLookup")
+
   def convert(relation: HiveTableRelation): LogicalRelation = {
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
 
     // Consider table and storage properties. For properties existing in both sides, storage
     // properties will supersede table properties.
     if (serde.contains("parquet")) {
-      val options = relation.tableMeta.properties.filterKeys(isParquetProperty) ++
+      val options = relation.tableMeta.properties.filterKeys(p =>
+        isParquetProperty(p) || isRecursiveFileLookupProperty(p)) ++
         relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
         convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
     } else {
-      val options = relation.tableMeta.properties.filterKeys(isOrcProperty) ++
+      val options = relation.tableMeta.properties.filterKeys(p =>
+        isOrcProperty(p) || isRecursiveFileLookupProperty(p)) ++
         relation.tableMeta.storage.properties
       if (SQLConf.get.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
         convertToLogicalRelation(

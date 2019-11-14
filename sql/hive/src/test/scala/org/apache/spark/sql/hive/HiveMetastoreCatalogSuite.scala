@@ -358,4 +358,30 @@ class DataSourceWithHiveMetastoreCatalogSuite
         Seq(table("src").count().toString))
     }
   }
+
+  test("SPARK-29899: Recursively load data in table via TBLPROPERTIES") {
+    withTempPath(dir => {
+      val baseDir = s"${dir.getCanonicalFile.toURI.toString}/path1"
+      val innerDir = s"$baseDir/path2/path3"
+      spark.range(3).selectExpr("id").write.parquet(innerDir)
+      withTable("test1", "test2") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
+          spark.sql(
+            s"""
+               |CREATE TABLE test1 (id bigint)
+               |STORED AS PARQUET LOCATION '$baseDir'
+               |TBLPROPERTIES (
+               | 'recursiveFileLookup'='true')
+               |""".stripMargin)
+          checkAnswer(spark.table("test1"), Seq(Row(0), Row(1), Row(2)))
+          spark.sql(
+            s"""
+               |CREATE TABLE test2 (id bigint)
+               |STORED AS PARQUET LOCATION '$baseDir'
+               |""".stripMargin)
+          checkAnswer(spark.table("test2"), Seq())
+        }
+      }
+    })
+  }
 }
