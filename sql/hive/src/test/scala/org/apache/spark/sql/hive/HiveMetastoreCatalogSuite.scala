@@ -383,7 +383,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
                |  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
                |LOCATION '$baseDir'
                |""".stripMargin)
-          spark.sql("select * from test")
+          val e = intercept[AssertionError](spark.sql("select * from test")).getMessage
+          assert(e.contains("assertion failed"))
         }
       }
     })
