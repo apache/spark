@@ -298,7 +298,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             if t is not None and pa.types.is_timestamp(t):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
             try:
-                array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
+                if str(s.dtype) == 'category':
+                    array = pa.array(s.get_values())
+                else:
+                    array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
             except pa.ArrowException as e:
                 error_msg = "Exception thrown when converting pandas.Series (%s) to Arrow " + \
                             "Array (%s). It can be caused by overflows or other unsafe " + \
@@ -307,7 +310,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                             "`spark.sql.execution.pandas.arrowSafeTypeConversion`."
                 raise RuntimeError(error_msg % (s.dtype, t), e)
             return array
-
         arrs = []
         for s, t in series:
             if t is not None and pa.types.is_struct(t):

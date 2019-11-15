@@ -1699,6 +1699,8 @@ def from_arrow_type(at):
         return StructType(
             [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
              for field in at])
+    elif types.is_dictionary(at):
+        spark_type = from_arrow_type(at.value_type)
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type
