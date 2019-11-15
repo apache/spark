@@ -92,13 +92,11 @@ private[spark] abstract class JobEventFilter(
     case xs => xs.reduce(_ ++ _).toSet
   }
 
-  if (log.isDebugEnabled) {
-    logDebug(s"jobs : ${jobToStages.keySet}")
-    logDebug(s"stages in jobs : ${jobToStages.values.flatten}")
-    logDebug(s"stages : ${stageToTasks.keySet}")
-    logDebug(s"tasks in stages : ${stageToTasks.values.flatten}")
-    logDebug(s"RDDs in stages : ${stageToRDDs.values.flatten}")
-  }
+  logDebug(s"jobs : ${jobToStages.keySet}")
+  logDebug(s"stages in jobs : ${jobToStages.values.flatten}")
+  logDebug(s"stages : ${stageToTasks.keySet}")
+  logDebug(s"tasks in stages : ${stageToTasks.values.flatten}")
+  logDebug(s"RDDs in stages : ${stageToRDDs.values.flatten}")
 
   override def filterStageCompleted(event: SparkListenerStageCompleted): Option[Boolean] = {
     Some(stageToTasks.contains(event.stageInfo.stageId))
@@ -157,9 +155,7 @@ private[spark] class BasicEventFilter(
     liveExecutors: Set[String])
   extends JobEventFilter(_liveJobToStages, _stageToTasks, _stageToRDDs) with Logging {
 
-  if (log.isDebugEnabled) {
-    logDebug(s"live executors : $liveExecutors")
-  }
+  logDebug(s"live executors : $liveExecutors")
 
   override def filterExecutorAdded(event: SparkListenerExecutorAdded): Option[Boolean] = {
     Some(liveExecutors.contains(event.executorId))

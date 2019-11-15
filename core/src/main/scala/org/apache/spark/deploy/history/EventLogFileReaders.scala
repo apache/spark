@@ -220,7 +220,7 @@ class RollingEventLogFilesFileReader(
   private lazy val eventLogFiles: Seq[FileStatus] = {
     val eventLogFiles = files.filter(isEventLogFile).sortBy { status =>
       val filePath = status.getPath
-      var idx = getIndex(filePath.getName).toDouble
+      var idx = getEventLogFileIndex(filePath.getName).toDouble
       // trick to place compacted file later than normal file if index is same.
       if (EventLogFileWriter.isCompacted(filePath)) {
         idx += 0.1
@@ -229,13 +229,14 @@ class RollingEventLogFilesFileReader(
     }
 
     val filesToRead = RollingEventLogFilesFileReader.dropBeforeLastCompactFile(eventLogFiles)
-    val indices = filesToRead.map { file => getIndex(file.getPath.getName) }
+    val indices = filesToRead.map { file => getEventLogFileIndex(file.getPath.getName) }
     require((indices.head to indices.last) == indices, "Found missing event log file, expected" +
-      s" indices: ${(indices.head to indices.last)}, actual: ${indices}")
+      s" indices: ${indices.head to indices.last}, actual: ${indices}")
     filesToRead
   }
 
-  override def lastIndex: Option[Long] = Some(getIndex(lastEventLogFile.getPath.getName))
+  override def lastIndex: Option[Long] = Some(
+    getEventLogFileIndex(lastEventLogFile.getPath.getName))
 
   override def fileSizeForLastIndex: Long = lastEventLogFile.getLen
 

@@ -23,8 +23,8 @@ import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
 import scala.io.{Codec, Source}
+import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.jackson.JsonMethods.parse
@@ -158,24 +158,27 @@ class FilteredEventLogFileRewriter(
       try {
         val lineEntries = lines.zipWithIndex
         while (lineEntries.hasNext) {
-          try {
-            val entry = lineEntries.next()
+          val entry = lineEntries.next()
 
-            currentLine = entry._1
-            lineNumber = entry._2 + 1
+          currentLine = entry._1
+          lineNumber = entry._2 + 1
 
-            val event = JsonProtocol.sparkEventFromJson(parse(currentLine))
-            if (checkFilters(event)) {
-              logWriter.writeLine(currentLine)
-            }
+          val event = try {
+            Some(JsonProtocol.sparkEventFromJson(parse(currentLine)))
           } catch {
             // ignore any exception occurred from unidentified json
             // just skip handling and write the line
-            case _: ClassNotFoundException => logWriter.writeLine(currentLine)
-            case _: UnrecognizedPropertyException => logWriter.writeLine(currentLine)
+            case NonFatal(_) =>
+              logWriter.writeLine(currentLine)
+              None
+          }
+
+          event.foreach { e =>
+            if (checkFilters(e)) {
+              logWriter.writeLine(currentLine)
+            }
           }
         }
-        true
       } catch {
         case e: Exception =>
           logError(s"Exception parsing Spark event log: ${fileStatus.getPath.getName}", e)

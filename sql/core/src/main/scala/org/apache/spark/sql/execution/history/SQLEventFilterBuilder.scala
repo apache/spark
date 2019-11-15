@@ -123,10 +123,8 @@ private[spark] class SQLLiveEntitiesEventFilter(
     _stageToRDDs: Map[Int, Seq[Int]])
   extends JobEventFilter(_jobToStages, _stageToTasks, _stageToRDDs) with Logging {
 
-  if (log.isDebugEnabled) {
-    logDebug(s"live executions : ${liveExecutionToJobs.keySet}")
-    logDebug(s"jobs in live executions : ${liveExecutionToJobs.values.flatten}")
-  }
+  logDebug(s"live executions : ${liveExecutionToJobs.keySet}")
+  logDebug(s"jobs in live executions : ${liveExecutionToJobs.values.flatten}")
 
   override def filterStageCompleted(event: SparkListenerStageCompleted): Option[Boolean] = {
     trueOrNone(super.filterStageCompleted(event))
@@ -176,7 +174,7 @@ private[spark] class SQLLiveEntitiesEventFilter(
     case e: SparkListenerSQLExecutionEnd => filterExecutionEnd(e)
     case e: SparkListenerDriverAccumUpdates => filterDriverAccumUpdates(e)
 
-      // these events are for finished batches so safer to ignore
+    // these events are for finished batches so safer to ignore
     case _: StreamingQueryListener.QueryProgressEvent => Some(false)
     case _ => None
   }
