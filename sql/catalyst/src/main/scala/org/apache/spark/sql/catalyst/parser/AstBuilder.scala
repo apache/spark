@@ -2542,6 +2542,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[DescribeNamespaceStatement]].
+   *
+   * For example:
+   * {{{
+   *   DESCRIBE (DATABASE|SCHEMA|NAMESPACE) [EXTENDED] database;
+   * }}}
+   */
+  override def visitDescribeNamespace(ctx: DescribeNamespaceContext): LogicalPlan =
+    withOrigin(ctx) {
+      DescribeNamespaceStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
+        ctx.EXTENDED != null)
+    }
+
+  /**
    * Create a table, returning a [[CreateTableStatement]] logical plan.
    *
    * Expected format:
@@ -2897,21 +2912,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         partitionSpec,
         isExtended)
     }
-  }
-
-  /**
-   * Create a [[DescribeNamespaceStatement]].
-   *
-   * For example:
-   * {{{
-   *   DESCRIBE DATABASE [EXTENDED] database;
-   * }}}
-   */
-  override def visitDescribeNamespace(ctx: DescribeNamespaceContext): LogicalPlan =
-    withOrigin(ctx) {
-    DescribeNamespaceStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier()),
-      ctx.EXTENDED != null)
   }
 
   /**
