@@ -695,7 +695,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     }
   }
 
-  test("fast parse to micros") {
+  test("parsing timestamp strings up to microsecond precision") {
     DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
       def check(pattern: String, input: String, reference: String): Unit = {
         val parser = new TimestampParser(FastDateFormat.getInstance(pattern, timeZone, Locale.US))
