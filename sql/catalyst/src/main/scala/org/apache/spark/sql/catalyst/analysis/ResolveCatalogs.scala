@@ -92,6 +92,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       throw new AnalysisException(
         s"Can not specify catalog `${catalog.name}` for view ${tableName.quoted} " +
           s"because view support in catalog has not been implemented yet")
+
     case RenameTableStatement(NonSessionCatalog(catalog, oldName), newNameParts, isView) =>
       if (isView) {
         throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
