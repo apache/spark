@@ -364,8 +364,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
   test("SPARK-29869: fix HiveMetastoreCatalog#convertToLogicalRelation throws AssertionError") {
     withTempPath(dir => {
-      val baseDir = s"${dir.getCanonicalFile.toURI.toString}/test"
-      val partitionLikeDir = s"${dir.getCanonicalFile.toURI.toString}/test/dt=20191113"
+      val baseDir = s"${dir.getCanonicalFile.toURI.toString}/non_partition_table"
+      val partitionLikeDir = s"$baseDir/dt=20191113"
       spark.range(3).selectExpr("id").write.parquet(partitionLikeDir)
       withTable("non_partition_table") {
         withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
@@ -374,8 +374,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
                |CREATE TABLE non_partition_table (id bigint)
                |STORED AS PARQUET LOCATION '$baseDir'
                |""".stripMargin)
-          assert(spark.sql("select * from non_partition_table").collect() ===
-            Array(Row(0), Row(1), Row(2)))
+          // TODO without SPARK-29899, it cannot load data in a recursive way.
+          // But no assertion error throws.
+          checkAnswer(spark.table("non_partition_table"), Seq())
         }
       }
     })
