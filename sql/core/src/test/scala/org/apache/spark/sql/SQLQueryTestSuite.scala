@@ -384,7 +384,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     // This is a temporary workaround for SPARK-28894. The test names are truncated after
     // the last dot due to a bug in SBT. This makes easier to debug via Jenkins test result
     // report. See SPARK-28894.
-    // See also SPARK-29127. it is difficult to see the version information in the failed test
+    // See also SPARK-29127. It is difficult to see the version information in the failed test
     // cases so the version information related to Python was also added.
     val clue = testCase match {
       case udfTestCase: UDFTest
