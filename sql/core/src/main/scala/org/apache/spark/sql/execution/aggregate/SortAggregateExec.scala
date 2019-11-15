@@ -86,7 +86,7 @@ case class SortAggregateExec(
         // so return an empty iterator.
         Iterator[UnsafeRow]()
       } else {
-        val filterPredicates = new mutable.Map[Int, Predicate]
+        val filterPredicates = new mutable.HashMap[Int, Predicate]
         aggregateExpressions.zipWithIndex.foreach{
           case (ae: AggregateExpression, i) =>
             ae.mode match {

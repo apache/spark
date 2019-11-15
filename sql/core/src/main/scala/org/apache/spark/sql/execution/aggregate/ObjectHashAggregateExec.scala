@@ -115,7 +115,7 @@ case class ObjectHashAggregateExec(
         // so return an empty kvIterator.
         Iterator.empty
       } else {
-        val filterPredicates = new mutable.Map[Int, Predicate]
+        val filterPredicates = new mutable.HashMap[Int, Predicate]
         aggregateExpressions.zipWithIndex.foreach{
           case (ae: AggregateExpression, i) =>
             ae.mode match {
