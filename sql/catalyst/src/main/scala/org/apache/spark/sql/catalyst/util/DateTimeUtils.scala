@@ -1179,7 +1179,7 @@ object DateTimeUtils {
     // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
     // if the `MILLISECOND` field was parsed to `1234`.
     def getMicros(digitsInFraction: Int): SQLTimestamp = {
-      // Append `digitsInFraction` zeros to the field: 1234 -> 1234000000
+      // Append 6 zeros to the field: 1234 -> 1234000000
       val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
       // Take the first 6 digits from `d`: 1234000000 -> 123400
       // The rest contains exactly `digitsInFraction`: `0000` = 10 ^ digitsInFraction
