@@ -111,7 +111,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromInvalidString("1 Mour", "invalid unit 'mour'")
     checkFromInvalidString("1 aour", "invalid unit 'aour'")
     checkFromInvalidString("1a1 hour", "invalid value 'a1'")
-    checkFromInvalidString("1.1a1 seconds", "invalid value fractional part 'a1'")
+    checkFromInvalidString("1.1a1 seconds", "invalid value 'a1' in fractional part")
     checkFromInvalidString("2234567890 days", "integer overflow")
 
   }

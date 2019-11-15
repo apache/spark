@@ -378,19 +378,19 @@ object IntervalUtils {
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
     var state = PREFIX
-    def exceptionWithState(msg: String, e: Exception = null) = {
-      throw new IllegalArgumentException(s"Error parsing interval in state '$state', $msg", e)
+    def throwIAE(msg: String, e: Exception = null) = {
+      throw new IllegalArgumentException(s"Error parsing interval, $msg", e)
     }
 
     if (input == null) {
-      exceptionWithState("interval string cannot be null")
+      throwIAE("interval string cannot be null")
     }
     // scalastyle:off caselocale .toLowerCase
     val s = input.trim.toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
     if (bytes.isEmpty) {
-      exceptionWithState("interval string cannot be empty")
+      throwIAE("interval string cannot be empty")
     }
 
     var i = 0
@@ -419,7 +419,7 @@ object IntervalUtils {
         case PREFIX =>
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
-              exceptionWithState("interval string cannot be empty")
+              throwIAE("interval string cannot be empty")
             } else {
               i += intervalStr.numBytes()
             }
@@ -452,7 +452,7 @@ object IntervalUtils {
               i += 1
               fractionScale = (NANOS_PER_SECOND / 10).toInt
               state = VALUE_FRACTIONAL_PART
-            case _ => exceptionWithState( s"unrecognized sign '$nextWord'")
+            case _ => throwIAE( s"unrecognized sign '$nextWord'")
           }
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
@@ -461,13 +461,13 @@ object IntervalUtils {
               try {
                 currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
               } catch {
-                case e: ArithmeticException => exceptionWithState(e.getMessage, e)
+                case e: ArithmeticException => throwIAE(e.getMessage, e)
               }
             case ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = (NANOS_PER_SECOND / 10).toInt
               state = VALUE_FRACTIONAL_PART
-            case _ => exceptionWithState(s"invalid value '$nextWord'")
+            case _ => throwIAE(s"invalid value '$nextWord'")
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
@@ -479,15 +479,15 @@ object IntervalUtils {
               fraction /= NANOS_PER_MICROS.toInt
               state = TRIM_BEFORE_UNIT
             case _ if '0' <= b && b <= '9' =>
-              exceptionWithState(s"invalid value fractional part '$fraction$nextWord' out of range")
-            case _ => exceptionWithState(s"invalid value fractional part '$nextWord'")
+              throwIAE(s"invalid value fractional part '$fraction$nextWord' out of range")
+            case _ => throwIAE(s"invalid value '$nextWord' in fractional part")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
         case UNIT_BEGIN =>
           // Checks that only seconds can have the fractional part
           if (b != 's' && fractionScale >= 0) {
-            exceptionWithState(s"'$nextWord' with fractional part is unsupported")
+            throwIAE(s"'$nextWord' with fractional part is unsupported")
           }
           if (isNegative) {
             currentValue = -currentValue
@@ -531,18 +531,18 @@ object IntervalUtils {
                 } else if (s.matchAt(microsStr, i)) {
                   microseconds = Math.addExact(microseconds, currentValue)
                   i += microsStr.numBytes()
-                } else exceptionWithState(s"invalid unit '$nextWord'")
-              case _ => exceptionWithState(s"invalid unit '$nextWord'")
+                } else throwIAE(s"invalid unit '$nextWord'")
+              case _ => throwIAE(s"invalid unit '$nextWord'")
             }
           } catch {
-            case e: ArithmeticException => exceptionWithState(e.getMessage, e)
+            case e: ArithmeticException => throwIAE(e.getMessage, e)
           }
           state = UNIT_SUFFIX
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
             case ' ' => state = TRIM_BEFORE_SIGN
-            case _ => exceptionWithState(s"invalid unit suffix '$nextWord'")
+            case _ => throwIAE(s"invalid unit suffix '$nextWord'")
           }
           i += 1
         case UNIT_END =>
@@ -550,7 +550,7 @@ object IntervalUtils {
             case ' ' =>
               i += 1
               state = TRIM_BEFORE_SIGN
-            case _ => exceptionWithState(s"invalid unit suffix '$nextWord'")
+            case _ => throwIAE(s"invalid unit suffix '$nextWord'")
           }
       }
     }
