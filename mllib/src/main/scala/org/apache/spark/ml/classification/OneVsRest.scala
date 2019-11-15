@@ -163,6 +163,17 @@ final class OneVsRestModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false,
       getClassifier.featuresDataType)
+    if ($(predictionCol).nonEmpty) {
+      val attr = if (numClasses == 2) {
+        BinaryAttribute.defaultAttr
+          .withName($(predictionCol))
+      } else {
+        NominalAttribute.defaultAttr
+          .withName($(predictionCol))
+          .withNumValues(numClasses)
+      }
+      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+    }
     if ($(rawPredictionCol).nonEmpty) {
       outputSchema = SchemaUtils.updateAttributeGroupSize(schema,
         $(rawPredictionCol), numClasses)
