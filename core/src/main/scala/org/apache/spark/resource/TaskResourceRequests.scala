@@ -54,7 +54,9 @@ private[spark] class TaskResourceRequests() extends Serializable {
    *
    * @param resourceName Name of the resource.
    * @param amount Amount requesting as a Double to support fractional resource requests.
-   *               Valid values are less than or equal to 0.5 or whole numbers.
+   *               Valid values are less than or equal to 0.5 or whole numbers. This essentially
+   *               lets you configure X number of tasks to run on a single resource,
+   *               ie amount equals 0.5 translates into 2 tasks per resource address.
    */
   def resource(rName: String, amount: Double): this.type = {
     val t = new TaskResourceRequest(rName, amount)

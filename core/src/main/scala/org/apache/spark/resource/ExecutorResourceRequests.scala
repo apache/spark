@@ -63,7 +63,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
   }
 
   /**
-   * Specify overhead memory. The value specified will be converted to MiB.
+   * Specify pyspark memory. The value specified will be converted to MiB.
    *
    * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
    *               Default unit is MiB if not specified.

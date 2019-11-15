@@ -63,6 +63,8 @@ private[spark] class ExecutorResourceRequest(
     val discoveryScript: String = "",
     val vendor: String = "") extends Serializable {
 
+  // A list of allowed Spark internal resources. Custom resources (spark.executor.resource.*)
+  // like GPUs/FPGAs are also allowed, see the check below.
   private val allowedExecutorResources = mutable.HashSet[String](
     ResourceProfile.MEMORY,
     ResourceProfile.OVERHEAD_MEM,
