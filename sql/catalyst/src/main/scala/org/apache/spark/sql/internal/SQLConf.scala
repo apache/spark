@@ -2072,6 +2072,7 @@ object SQLConf {
 
   val LEGACY_FROM_DAYTIME_STRING =
     buildConf("spark.sql.legacy.fromDayTimeString.enabled")
+      .internal()
       .doc("When true, the `from` bound is not taken into account in conversion of " +
         "a day-time string to an interval, and the `to` bound is used to skip" +
         "all interval units out of the specified range. If it is set to `false`, " +
