@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.connector.write.{BatchWrite, WriteBuilder, WriteInfo}
+import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
@@ -393,7 +393,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       () => new KafkaScan(options)
 
     override def newWriteBuilder(options: CaseInsensitiveStringMap,
-                                 writeInfo: WriteInfo): WriteBuilder = {
+                                 writeInfo: LogicalWriteInfo): WriteBuilder = {
       new WriteBuilder {
         private val inputSchema: StructType = writeInfo.schema()
         private val topic = Option(options.get(TOPIC_OPTION_KEY)).map(_.trim)

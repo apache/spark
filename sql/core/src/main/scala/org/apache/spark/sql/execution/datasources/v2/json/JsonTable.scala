@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.json.JSONOptionsInRead
-import org.apache.spark.sql.connector.write.{WriteBuilder, WriteInfo}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.FileTable
@@ -51,7 +51,7 @@ case class JsonTable(
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: WriteInfo): WriteBuilder =
+      writeInfo: LogicalWriteInfo): WriteBuilder =
     new JsonWriteBuilder(options, paths, formatName, supportsDataType, writeInfo)
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {

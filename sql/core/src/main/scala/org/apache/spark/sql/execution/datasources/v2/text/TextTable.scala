@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.text
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.write.{WriteBuilder, WriteInfo}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileTable
 import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
@@ -41,7 +41,7 @@ case class TextTable(
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: WriteInfo): WriteBuilder =
+      writeInfo: LogicalWriteInfo): WriteBuilder =
     new TextWriteBuilder(options, paths, formatName, supportsDataType, writeInfo)
 
   override def supportsDataType(dataType: DataType): Boolean = dataType == StringType

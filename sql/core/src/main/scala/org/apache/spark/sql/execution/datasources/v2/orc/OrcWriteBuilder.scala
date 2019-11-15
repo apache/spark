@@ -21,7 +21,7 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.orc.OrcConf.{COMPRESS, MAPRED_OUTPUT_SCHEMA}
 import org.apache.orc.mapred.OrcStruct
 
-import org.apache.spark.sql.connector.write.WriteInfo
+import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.orc.{OrcFileFormat, OrcOptions, OrcOutputWriter, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
@@ -34,7 +34,7 @@ class OrcWriteBuilder(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    writeInfo: WriteInfo)
+    writeInfo: LogicalWriteInfo)
   extends FileWriteBuilder(options, paths, formatName, supportsDataType, writeInfo) {
 
   override def prepareWrite(

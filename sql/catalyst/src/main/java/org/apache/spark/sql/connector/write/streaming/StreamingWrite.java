@@ -50,9 +50,9 @@ public interface StreamingWrite {
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    *
-   * @param writeInfo Information about the RDD that will be written to this data writer
+   * @param info Information about the RDD that will be written to this data writer
    */
-  StreamingDataWriterFactory createStreamingWriterFactory(PhysicalWriteInfo writeInfo);
+  StreamingDataWriterFactory createStreamingWriterFactory(PhysicalWriteInfo info);
 
   /**
    * Commits this writing job for the specified epoch with a list of commit messages. The commit

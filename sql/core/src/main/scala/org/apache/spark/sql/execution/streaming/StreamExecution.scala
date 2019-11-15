@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
-import org.apache.spark.sql.connector.write.{SupportsTruncate, WriteInfoImpl}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
@@ -588,7 +588,7 @@ abstract class StreamExecution(
       table: SupportsWrite,
       options: Map[String, String],
       inputPlan: LogicalPlan): StreamingWrite = {
-    val writeInfo = WriteInfoImpl(
+    val writeInfo = LogicalWriteInfoImpl(
       queryId = id.toString,
       inputPlan.schema)
     val writeBuilder = table.newWriteBuilder(

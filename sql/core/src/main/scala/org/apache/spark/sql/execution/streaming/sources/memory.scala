@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriteInfo, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.types.StructType
@@ -55,7 +55,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: WriteInfo): WriteBuilder = {
+      writeInfo: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private var needTruncate: Boolean = false
       private val inputSchema: StructType = writeInfo.schema()
@@ -137,7 +137,7 @@ class MemoryStreamingWrite(
     val sink: MemorySink, schema: StructType, needTruncate: Boolean)
   extends StreamingWrite {
 
-  override def createStreamingWriterFactory(writeInfo: PhysicalWriteInfo): MemoryWriterFactory = {
+  override def createStreamingWriterFactory(info: PhysicalWriteInfo): MemoryWriterFactory = {
     MemoryWriterFactory(schema)
   }
 

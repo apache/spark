@@ -24,7 +24,7 @@ import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.write.WriteInfo
+import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
@@ -37,7 +37,7 @@ class ParquetWriteBuilder(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    writeInfo: WriteInfo)
+    writeInfo: LogicalWriteInfo)
   extends FileWriteBuilder(options, paths, formatName, supportsDataType, writeInfo) with Logging {
 
   override def prepareWrite(

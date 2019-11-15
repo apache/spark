@@ -70,7 +70,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     override def readSchema(): StructType = tableSchema
   }
 
-  class MyWriteBuilder(path: String, writeInfo: WriteInfo)
+  class MyWriteBuilder(path: String, writeInfo: LogicalWriteInfo)
       extends WriteBuilder with SupportsTruncate {
     private val queryId: String = writeInfo.queryId()
     private var needTruncate = false
@@ -95,7 +95,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
   }
 
   class MyBatchWrite(queryId: String, path: String, conf: Configuration) extends BatchWrite {
-    override def createBatchWriterFactory(writeInfo: PhysicalWriteInfo): DataWriterFactory = {
+    override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       SimpleCounter.resetCounter
       new CSVDataWriterFactory(path, queryId, new SerializableConfiguration(conf))
     }
@@ -141,7 +141,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
 
     override def newWriteBuilder(
         options: CaseInsensitiveStringMap,
-        writeInfo: WriteInfo): WriteBuilder = {
+        writeInfo: LogicalWriteInfo): WriteBuilder = {
       new MyWriteBuilder(path, writeInfo)
     }
 

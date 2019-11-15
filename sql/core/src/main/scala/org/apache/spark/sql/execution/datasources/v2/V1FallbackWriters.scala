@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.SupportsWrite
-import org.apache.spark.sql.connector.write.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriteInfo, WriteInfoImpl}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter, InsertableRelation}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -96,7 +96,7 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
   }
 
   protected def newWriteBuilder(): V1WriteBuilder = {
-    val writeInfo: WriteInfo = WriteInfoImpl(
+    val writeInfo = LogicalWriteInfoImpl(
       queryId = UUID.randomUUID().toString,
       schema = query.schema)
     val writeBuilder = table.newWriteBuilder(writeOptions, writeInfo)

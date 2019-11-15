@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.write.{SupportsTruncate, WriteBuilder, WriteInfo}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
@@ -73,7 +73,7 @@ object ConsoleTable extends Table with SupportsWrite {
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: WriteInfo): WriteBuilder = {
+      writeInfo: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private val inputSchema: StructType = writeInfo.schema()
 

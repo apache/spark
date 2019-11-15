@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriteInfo, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
@@ -41,7 +41,7 @@ class NoopDataSource extends TableProvider with DataSourceRegister {
 private[noop] object NoopTable extends Table with SupportsWrite {
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: WriteInfo): WriteBuilder = NoopWriteBuilder
+      writeInfo: LogicalWriteInfo): WriteBuilder = NoopWriteBuilder
   override def name(): String = "noop-table"
   override def schema(): StructType = new StructType()
   override def capabilities(): util.Set[TableCapability] = {
@@ -60,7 +60,7 @@ private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsTruncate
 }
 
 private[noop] object NoopBatchWrite extends BatchWrite {
-  override def createBatchWriterFactory(writeInfo: PhysicalWriteInfo): DataWriterFactory =
+  override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory =
     NoopWriterFactory
   override def commit(messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
@@ -78,7 +78,7 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
 
 private[noop] object NoopStreamingWrite extends StreamingWrite {
   override def createStreamingWriterFactory(
-      writeInfo: PhysicalWriteInfo): StreamingDataWriterFactory = NoopStreamingDataWriterFactory
+      info: PhysicalWriteInfo): StreamingDataWriterFactory = NoopStreamingDataWriterFactory
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 }

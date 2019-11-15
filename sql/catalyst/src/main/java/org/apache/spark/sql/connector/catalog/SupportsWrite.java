@@ -19,14 +19,14 @@ package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.write.BatchWrite;
+import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.WriteBuilder;
-import org.apache.spark.sql.connector.write.WriteInfo;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * A mix-in interface of {@link Table}, to indicate that it's writable. This adds
- * {@link #newWriteBuilder(CaseInsensitiveStringMap, WriteInfo)} that is used to create a write
- * for batch or streaming.
+ * {@link #newWriteBuilder(CaseInsensitiveStringMap, LogicalWriteInfo)} that is used to create a
+ * write for batch or streaming.
  */
 @Experimental
 public interface SupportsWrite extends Table {
@@ -35,5 +35,5 @@ public interface SupportsWrite extends Table {
    * Returns a {@link WriteBuilder} which can be used to create {@link BatchWrite}. Spark will call
    * this method to configure each data source write.
    */
-  WriteBuilder newWriteBuilder(CaseInsensitiveStringMap options, WriteInfo info);
+  WriteBuilder newWriteBuilder(CaseInsensitiveStringMap options, LogicalWriteInfo info);
 }

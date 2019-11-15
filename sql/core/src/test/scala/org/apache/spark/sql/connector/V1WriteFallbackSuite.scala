@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.connector.write.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriteInfo, WriteInfoImpl}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -235,7 +235,7 @@ class InMemoryV1Provider
     }
     val writer = table.newWriteBuilder(
       new CaseInsensitiveStringMap(parameters.asJava),
-      WriteInfoImpl("", StructType(Seq.empty)))
+      LogicalWriteInfoImpl("", StructType(Seq.empty)))
     if (mode == SaveMode.Overwrite) {
       writer.asInstanceOf[SupportsTruncate].truncate()
     }
@@ -271,7 +271,7 @@ class InMemoryTableWithV1Fallback(
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: WriteInfo): WriteBuilder = {
+      writeInfo: LogicalWriteInfo): WriteBuilder = {
     new FallbackWriteBuilder(options)
   }
 

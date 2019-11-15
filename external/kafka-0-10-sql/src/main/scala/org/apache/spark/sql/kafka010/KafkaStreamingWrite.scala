@@ -42,7 +42,7 @@ private[kafka010] class KafkaStreamingWrite(
   validateQuery(schema.toAttributes, producerParams, topic)
 
   override def createStreamingWriterFactory(
-      writeInfo: PhysicalWriteInfo): KafkaStreamWriterFactory =
+      info: PhysicalWriteInfo): KafkaStreamWriterFactory =
     KafkaStreamWriterFactory(topic, producerParams, schema)
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}

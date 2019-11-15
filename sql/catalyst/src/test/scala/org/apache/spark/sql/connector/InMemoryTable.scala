@@ -93,7 +93,9 @@ class InMemoryTable(
     override def createReaderFactory(): PartitionReaderFactory = BufferedRowsReaderFactory
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap, info: WriteInfo): WriteBuilder = {
+  override def newWriteBuilder(
+      options: CaseInsensitiveStringMap,
+      info: LogicalWriteInfo): WriteBuilder = {
     InMemoryTable.maybeSimulateFailedTableWrite(options)
 
     new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
@@ -122,7 +124,7 @@ class InMemoryTable(
   }
 
   private abstract class TestBatchWrite extends BatchWrite {
-    override def createBatchWriterFactory(writeInfo: PhysicalWriteInfo): DataWriterFactory = {
+    override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory
     }
 

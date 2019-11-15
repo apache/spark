@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.write.{DataWriter, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriteInfo, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{DataWriter, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.python.PythonForeachWriter
 import org.apache.spark.sql.types.StructType
@@ -56,7 +56,7 @@ case class ForeachWriterTable[T](
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: WriteInfo): WriteBuilder = {
+      writeInfo: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private var inputSchema: StructType = writeInfo.schema()
 
@@ -70,7 +70,7 @@ case class ForeachWriterTable[T](
           override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
           override def createStreamingWriterFactory(
-              writeInfo: PhysicalWriteInfo): StreamingDataWriterFactory = {
+              info: PhysicalWriteInfo): StreamingDataWriterFactory = {
             val rowConverter: InternalRow => T = converter match {
               case Left(enc) =>
                 val boundEnc = enc.resolveAndBind(

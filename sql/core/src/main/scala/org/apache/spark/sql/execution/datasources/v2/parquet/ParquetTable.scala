@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.write.{WriteBuilder, WriteInfo}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetUtils
 import org.apache.spark.sql.execution.datasources.v2.FileTable
@@ -45,7 +45,7 @@ case class ParquetTable(
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: WriteInfo): WriteBuilder =
+      writeInfo: LogicalWriteInfo): WriteBuilder =
     new ParquetWriteBuilder(options, paths, formatName, supportsDataType, writeInfo)
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {

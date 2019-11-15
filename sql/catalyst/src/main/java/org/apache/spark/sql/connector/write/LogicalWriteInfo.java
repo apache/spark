@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * :: Experimental ::
  * This interface contains write information that data sources can use when generating a
  * {@link WriteBuilder}.
  */
-@Experimental
-public interface WriteInfo {
+@Evolving
+public interface LogicalWriteInfo {
   /**
    * @return `queryId` is a unique string of the query. It's possible that there are many queries
    * running at the same time, or a query is restarted and resumed. {@link BatchWrite} can use

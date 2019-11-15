@@ -21,7 +21,7 @@ import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.Transform;
-import org.apache.spark.sql.connector.write.WriteInfo;
+import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
@@ -40,7 +40,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * TABLE AS SELECT operation, if the catalog does not implement this trait, the planner will first
  * drop the table via {@link TableCatalog#dropTable(Identifier)}, then create the table via
  * {@link TableCatalog#createTable(Identifier, StructType, Transform[], Map)}, and then perform
- * the write via {@link SupportsWrite#newWriteBuilder(CaseInsensitiveStringMap, WriteInfo)}.
+ * the write via {@link SupportsWrite#newWriteBuilder(CaseInsensitiveStringMap, LogicalWriteInfo)}.
  * However, if the write operation fails, the catalog will have already dropped the table, and the
  * planner cannot roll back the dropping of the table.
  * <p>

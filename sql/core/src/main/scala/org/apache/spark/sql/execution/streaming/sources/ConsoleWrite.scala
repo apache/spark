@@ -38,7 +38,7 @@ class ConsoleWrite(schema: StructType, options: CaseInsensitiveStringMap)
   assert(SparkSession.getActiveSession.isDefined)
   protected val spark = SparkSession.getActiveSession.get
 
-  def createStreamingWriterFactory(writeInfo: PhysicalWriteInfo): StreamingDataWriterFactory =
+  def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
     PackedRowWriterFactory
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {

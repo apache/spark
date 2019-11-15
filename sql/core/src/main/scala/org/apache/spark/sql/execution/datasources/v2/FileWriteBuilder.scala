@@ -30,7 +30,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.connector.write.{BatchWrite, WriteBuilder, WriteInfo}
+import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
@@ -44,7 +44,7 @@ abstract class FileWriteBuilder(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    writeInfo: WriteInfo) extends WriteBuilder {
+    writeInfo: LogicalWriteInfo) extends WriteBuilder {
   private val schema = writeInfo.schema()
   private val queryId = writeInfo.queryId()
   private var mode: SaveMode = _
