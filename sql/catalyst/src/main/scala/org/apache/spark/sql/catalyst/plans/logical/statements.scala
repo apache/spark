@@ -278,24 +278,6 @@ case class DescribeColumnStatement(
     isExtended: Boolean) extends ParsedStatement
 
 /**
- * A DELETE FROM statement, as parsed from SQL.
- */
-case class DeleteFromStatement(
-    tableName: Seq[String],
-    tableAlias: Option[String],
-    condition: Option[Expression]) extends ParsedStatement
-
-/**
- * A UPDATE tbl_name statement, as parsed from SQL.
- */
-case class UpdateTableStatement(
-    tableName: Seq[String],
-    tableAlias: Option[String],
-    columns: Seq[Seq[String]],
-    values: Seq[Expression],
-    condition: Option[Expression]) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.

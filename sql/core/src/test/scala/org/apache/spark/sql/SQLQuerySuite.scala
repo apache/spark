@@ -3304,6 +3304,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         """.stripMargin).collect()
     }
   }
+
+  test("SPARK-29682: Conflicting attributes in Expand are resolved") {
+    val numsDF = Seq(1, 2, 3).toDF("nums")
+    val cubeDF = numsDF.cube("nums").agg(max(lit(0)).as("agcol"))
+
+    checkAnswer(
+      cubeDF.join(cubeDF, "nums"),
+      Row(1, 0, 0) :: Row(2, 0, 0) :: Row(3, 0, 0) :: Nil)
+  }
 }
 
 case class Foo(bar: Option[String])

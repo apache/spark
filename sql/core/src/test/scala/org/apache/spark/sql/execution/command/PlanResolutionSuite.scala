@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunc
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, IntegerLiteral, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DescribeTable, DropTable, InsertAction, LogicalPlan, MergeIntoTable, Project, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeTable, DropTable, InsertAction, LogicalPlan, MergeIntoTable, Project, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.connector.InMemoryTableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.CreateTable
@@ -854,8 +854,41 @@ class PlanResolutionSuite extends AnalysisTest {
     assert(parsed4.isInstanceOf[DescribeTableCommand])
   }
 
+  test("DELETE FROM") {
+    Seq("v2Table", "testcat.tab").foreach { tblName =>
+      val sql1 = s"DELETE FROM $tblName"
+      val sql2 = s"DELETE FROM $tblName where name='Robert'"
+      val sql3 = s"DELETE FROM $tblName AS t where t.name='Robert'"
+
+      val parsed1 = parseAndResolve(sql1)
+      val parsed2 = parseAndResolve(sql2)
+      val parsed3 = parseAndResolve(sql3)
+
+      parsed1 match {
+        case DeleteFromTable(_: DataSourceV2Relation, None) =>
+        case _ => fail("Expect DeleteFromTable, bug got:\n" + parsed1.treeString)
+      }
+
+      parsed2 match {
+        case DeleteFromTable(
+          _: DataSourceV2Relation,
+          Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
+          assert(name.name == "name")
+        case _ => fail("Expect DeleteFromTable, bug got:\n" + parsed1.treeString)
+      }
+
+      parsed3 match {
+        case DeleteFromTable(
+          SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
+          Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
+          assert(name.name == "t.name")
+        case _ => fail("Expect DeleteFromTable, bug got:\n" + parsed1.treeString)
+      }
+    }
+  }
+
   test("UPDATE TABLE") {
-    Seq("v1Table", "v2Table", "testcat.tab").foreach { tblName =>
+    Seq("v2Table", "testcat.tab").foreach { tblName =>
       val sql1 = s"UPDATE $tblName SET name='Robert', age=32"
       val sql2 = s"UPDATE $tblName AS t SET name='Robert', age=32"
       val sql3 = s"UPDATE $tblName AS t SET name='Robert', age=32 WHERE p=1"
@@ -865,10 +898,10 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed3 = parseAndResolve(sql3)
 
       parsed1 match {
-        case u @ UpdateTable(
+        case UpdateTable(
             _: DataSourceV2Relation,
-            Seq(name: UnresolvedAttribute, age: UnresolvedAttribute),
-            Seq(StringLiteral("Robert"), IntegerLiteral(32)),
+            Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
+              Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
             None) =>
           assert(name.name == "name")
           assert(age.name == "age")
@@ -879,8 +912,8 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed2 match {
         case UpdateTable(
             SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
-            Seq(name: UnresolvedAttribute, age: UnresolvedAttribute),
-            Seq(StringLiteral("Robert"), IntegerLiteral(32)),
+            Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
+              Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
             None) =>
           assert(name.name == "name")
           assert(age.name == "age")
@@ -891,8 +924,8 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed3 match {
         case UpdateTable(
             SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
-            Seq(name: UnresolvedAttribute, age: UnresolvedAttribute),
-            Seq(StringLiteral("Robert"), IntegerLiteral(32)),
+            Seq(Assignment(name: UnresolvedAttribute, StringLiteral("Robert")),
+              Assignment(age: UnresolvedAttribute, IntegerLiteral(32))),
             Some(EqualTo(p: UnresolvedAttribute, IntegerLiteral(1)))) =>
           assert(name.name == "name")
           assert(age.name == "age")
@@ -906,7 +939,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val parsed = parseAndResolve(sql)
     parsed match {
       case u: UpdateTable =>
-        assert(u.table.isInstanceOf[UnresolvedV2Relation])
+        assert(u.table.isInstanceOf[UnresolvedRelation])
       case _ => fail("Expect UpdateTable, but got:\n" + parsed.treeString)
     }
   }
@@ -1193,8 +1226,6 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(u.sourceTable.isInstanceOf[UnresolvedRelation])
       case _ => fail("Expect MergeIntoTable, but got:\n" + parsed.treeString)
     }
-
-    // TODO: v1 table is not supported.
   }
 
   // TODO: add tests for more commands.
