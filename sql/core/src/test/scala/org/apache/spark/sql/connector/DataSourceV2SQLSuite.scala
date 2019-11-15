@@ -767,10 +767,17 @@ class DataSourceV2SQLSuite
   }
 
   test("SHOW TABLE EXTENDED not valid v1 database") {
+    def testV1CommandNamespace(sqlCommand: String, namespace: String): Unit = {
+      val e = intercept[AnalysisException] {
+        sql(sqlCommand)
+      }
+      assert(e.message.contains(s"The database name is not valid: ${namespace}"))
+    }
+
     val namespace = "testcat.ns1.ns2"
     val table = "tbl"
     withTable(s"$namespace.$table") {
-      spark.sql(s"CREATE TABLE $namespace.$table (id bigint, data string) " +
+      sql(s"CREATE TABLE $namespace.$table (id bigint, data string) " +
         s"USING foo PARTITIONED BY (id)")
 
       testV1CommandNamespace(s"SHOW TABLE EXTENDED FROM $namespace LIKE 'tb*'",
@@ -794,13 +801,13 @@ class DataSourceV2SQLSuite
       .add("isTemporary", BooleanType, nullable = false)
       .add("information", StringType, nullable = false)
 
-    val df = spark.sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
+    val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
     val result = df.collect()
     val resultWithoutInfo = result.map{ case Row(db, table, temp, _) => Row(db, table, temp)}
 
     assert(df.schema === schema)
     assert(resultWithoutInfo === expected)
-    result.foreach{ case Row(_, _, _, info: String) => assert(info.length > 0)}
+    result.foreach{ case Row(_, _, _, info: String) => assert(info.nonEmpty)}
   }
 
   test("CreateNameSpace: basic tests") {
@@ -1661,13 +1668,6 @@ class DataSourceV2SQLSuite
       sql(s"$sqlCommand $sqlParams")
     }
     assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
-  }
-
-  private def testV1CommandNamespace(sqlCommand: String, namespace: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(sqlCommand)
-    }
-    assert(e.message.contains(s"The database name is not valid: ${namespace}"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
