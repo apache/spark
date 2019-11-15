@@ -303,7 +303,7 @@ object IntervalUtils {
    * - [+|-]H[H]:m[m] for HOUR TO MINUTE
    * - [+|-]m[m]:s[s][.SSSSSSSSS] for MINUTE TO SECOND
    *
-   * Note: the seconds fraction is truncation to microseconds.
+   * Note: the seconds fraction is truncated to microseconds.
    *
    * @param input The input string to parse.
    * @param from The interval unit from which the input string begins.
