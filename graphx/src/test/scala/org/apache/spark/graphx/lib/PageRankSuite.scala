@@ -84,11 +84,11 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
     // Compute how many iterations it takes to converge when a checkPoint is provided
     var iterWithCheckPoint = 1
     var staticGraphRankWithCheckPoint = graph.ops.staticPageRank(iterWithCheckPoint,
-      resetProb, Some(staticGraphRankPartial)).vertices.cache()
+      resetProb, staticGraphRankPartial).vertices.cache()
     while (compareRanks(staticGraphRankWithCheckPoint, dynamicRanks) >= errorTol) {
       iterWithCheckPoint += 1
       staticGraphRankWithCheckPoint = graph.ops.staticPageRank(iterWithCheckPoint,
-        resetProb, Some(staticGraphRankPartial)).vertices.cache()
+        resetProb, staticGraphRankPartial).vertices.cache()
     }
 
     val convergenceIterWithCheckPoint = iterWithCheckPoint
@@ -321,35 +321,19 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val numIter = 50
       val errorTol = 1.0e-5
 
-      val dynamicRanks = g.pageRank(tol, resetProb).vertices.cache()
+      val staticRanks = g.staticPageRank(numIter, resetProb).vertices
+      val dynamicRanks = g.pageRank(tol, resetProb).vertices
+      assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
 
-      // Compute how many iterations it takes to converge
-      var iter = 1
-      var staticGraphRank = g.staticPageRank(iter, resetProb).vertices.cache()
-      while (!(compareRanks(staticGraphRank, dynamicRanks) < errorTol)) {
-        iter += 1
-        staticGraphRank = g.staticPageRank(iter, resetProb).vertices.cache()
-      }
-      val convergenceIter = iter
-      val checkPointIter = convergenceIter / 2
-      assert(checkPointIter != 0)
-
-      // CheckPoint the graph computed at half of these iterations
-      val staticGraphRankPartial = g.staticPageRank(checkPointIter, resetProb)
-
-      // Compute how many iterations it takes to converge when a checkPoint is provided
-      var iterWithCheckPoint = 1
-      var staticGraphRankWithCheckPoint = g.staticPageRank(iterWithCheckPoint,
-        resetProb, Some(staticGraphRankPartial)).vertices.cache()
-      while (!(compareRanks(staticGraphRankWithCheckPoint, dynamicRanks) < errorTol)) {
-        iterWithCheckPoint += 1
-        staticGraphRankWithCheckPoint = g.staticPageRank(iterWithCheckPoint,
-          resetProb, Some(staticGraphRankPartial)).vertices.cache()
-      }
-
-      val convergenceIterWithCheckPoint = iterWithCheckPoint
-
-      assert(convergenceIterWithCheckPoint < convergenceIter)
+      // Computed in igraph 1.0 w/ R bindings:
+      // > page_rank(graph_from_literal( A -+ B -+ C -+ D -+ B))
+      // Alternatively in NetworkX 1.11:
+      // > nx.pagerank(nx.DiGraph([(1,2),(2,3),(3,4),(4,2)]))
+      // We multiply by the number of vertices to account for difference in normalization
+      val igraphPR = Seq(0.0375000, 0.3326045, 0.3202138, 0.3096817).map(_ * 4)
+      val ranks = VertexRDD(sc.parallelize(1L to 4L zip igraphPR))
+      assert(compareRanks(staticRanks, ranks) < errorTol)
+      assert(compareRanks(dynamicRanks, ranks) < errorTol)
 
     }
   }
