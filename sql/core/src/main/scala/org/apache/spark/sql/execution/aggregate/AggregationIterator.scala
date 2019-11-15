@@ -209,15 +209,15 @@ abstract class AggregationIterator(
         // In the list of aggregate expressions, if a filter predicate is specified for at least one
         // aggregate expression and aggregate expressions are in partial or complete mode,
         // then the filter will be used.
-        // Suppose there is a list of aggregate expressions, such as exprA with filterA, exprB, exprC with filterC,
-        // then the specific implementation process is as follows:
+        // Suppose there is a list of aggregate expressions, such as exprA with filterA, exprB,
+        // exprC with filterC, then the specific implementation process is as follows:
         // 1. Accept data row.
         // 2. Execute multiple aggregate expressions in sequence.
-        // 2-1. Filter the data row using filter predicate filterA. If the filter predicate filterA is met,
-        //      then calculate using aggregate expression exprA.
+        // 2-1. Filter the data row using filter predicate filterA. If the filter predicate
+        //      filterA is met, then calculate using aggregate expression exprA.
         // 2-2. Calculate using aggregate expression exprB.
-        // 2-3. Filter the data row using filter predicate filterC. If the filter predicate filterC is met,
-        //      then calculate using aggregate expression exprC.
+        // 2-3. Filter the data row using filter predicate filterC. If the filter predicate
+        //      filterC is met, then calculate using aggregate expression exprC.
         (currentBuffer: InternalRow, row: InternalRow) => {
           val dynamicMergeExpressions = new mutable.ArrayBuffer[Expression]
           for (i <- 0 until expressions.length) {
@@ -234,8 +234,8 @@ abstract class AggregationIterator(
             }
           }
           if (!dynamicMergeExpressions.isEmpty) {
-            val dynamicUpdateProjection =
-              newMutableProjection(dynamicMergeExpressions, aggregationBufferSchema ++ inputAttributes)
+            val dynamicUpdateProjection = newMutableProjection(
+              dynamicMergeExpressions, aggregationBufferSchema ++ inputAttributes)
             dynamicUpdateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
           }
 
