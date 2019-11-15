@@ -91,12 +91,12 @@ abstract class ProbabilisticClassificationModel[
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    val outputSchema = super.transformSchema(schema)
+    var outputSchema = super.transformSchema(schema)
     if ($(probabilityCol).nonEmpty) {
-      SchemaUtils.updateAttributeGroupSize(outputSchema, $(probabilityCol), numClasses)
-    } else {
-      outputSchema
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(probabilityCol), numClasses)
     }
+    outputSchema
   }
 
   /**

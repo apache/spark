@@ -121,11 +121,11 @@ private[spark] object SchemaUtils {
     require(size > 0)
     val attrGroup = new AttributeGroup(colName, size)
     if (schema.fieldNames.contains(colName)) {
-      val newFields = schema.fields.map { field =>
-        if (field.name == colName) {
-          attrGroup.toStructField(field.metadata)
+      val newFields = schema.fields.map { f =>
+        if (f.name == colName) {
+          attrGroup.toStructField(f.metadata)
         } else {
-          field
+          f
         }
       }
       StructType(newFields)
@@ -135,29 +135,30 @@ private[spark] object SchemaUtils {
   }
 
   /**
-   * Update the metadata of an existing column.
+   * Update the metadata of an existing column. If this column do not exist, append it.
    * @param schema input schema
-   * @param colName column name
-   * @param metadata meta data
+   * @param field struct field
    * @return new schema
    */
   def updateMeta(
       schema: StructType,
-      colName: String,
-      metadata: Metadata): StructType = {
-    require(schema.fieldNames.contains(colName))
-    val newFields = schema.fields.map { field =>
-      if (field.name == colName) {
-        val newMeta = new MetadataBuilder()
-          .withMetadata(field.metadata)
-          .withMetadata(metadata)
-          .build()
-        StructField(colName, field.dataType, field.nullable, newMeta)
-      } else {
-        field
+      field: StructField): StructType = {
+    if (schema.fieldNames.contains(field.name)) {
+      val newFields = schema.fields.map { f =>
+        if (f.name == field.name) {
+          val newMeta = new MetadataBuilder()
+            .withMetadata(field.metadata)
+            .withMetadata(f.metadata)
+            .build()
+          StructField(field.name, field.dataType, field.nullable, newMeta)
+        } else {
+          f
+        }
       }
+      StructType(newFields)
+    } else {
+      appendColumn(schema, field)
     }
-    StructType(newFields)
   }
 
   /**

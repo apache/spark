@@ -90,7 +90,20 @@ private[spark] trait DecisionTreeModel {
     }
   }
 
-  private[ml] def numLeave: Int = leafIterator(rootNode).size
+  @transient private[ml] lazy val numLeave: Int =
+    leafIterator(rootNode).size
+
+  @transient private[ml] lazy val leafAttr = {
+    if (numLeave == 2) {
+      new BinaryAttribute()
+    } else {
+      new NominalAttribute(numValues = Some(numLeave))
+    }
+  }
+
+  private[ml] def getLeafField(leafCol: String) = {
+    leafAttr.withName(leafCol).toStructField()
+  }
 
   @transient private lazy val leafIndices: Map[LeafNode, Int] = {
     leafIterator(rootNode).zipWithIndex.toMap
@@ -151,10 +164,7 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   }
 
   private[ml] def getLeafField(leafCol: String) = {
-    val attrs: Array[Attribute] = trees.map{ tree =>
-      new NominalAttribute(numValues = Some(tree.numLeave))
-    }
-    new AttributeGroup(leafCol, attrs).toStructField()
+    new AttributeGroup(leafCol, trees.map(_.leafAttr)).toStructField()
   }
 }
 

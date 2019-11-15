@@ -195,12 +195,11 @@ class RandomForestRegressionModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    val outputSchema = super.transformSchema(schema)
+    var outputSchema = super.transformSchema(schema)
     if ($(leafCol).nonEmpty) {
-      SchemaUtils.appendColumn(schema, getLeafField($(leafCol)))
-    } else {
-      outputSchema
+      outputSchema = SchemaUtils.updateMeta(outputSchema, getLeafField($(leafCol)))
     }
+    outputSchema
   }
 
   override def transform(dataset: Dataset[_]): DataFrame = {

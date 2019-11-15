@@ -245,10 +245,12 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   }
 
   protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val predictUDF = udf { (features: Any) =>
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+    val predictUDF = udf { features: Any =>
       predict(features.asInstanceOf[FeaturesType])
     }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))),
+      outputSchema($(predictionCol)).metadata)
   }
 
   /**
