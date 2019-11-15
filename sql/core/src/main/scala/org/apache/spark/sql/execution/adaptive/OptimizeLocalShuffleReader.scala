@@ -66,23 +66,17 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     // Add local reader in probe side.
     val withProbeSideLocalReader = plan.transformDown {
       case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildRight) =>
-        val localReader = if (shuffleStage.isInstanceOf[CoalescedShuffleReaderExec]) {
-          val left = shuffleStage.asInstanceOf[CoalescedShuffleReaderExec]
-          LocalShuffleReaderExec(
-            left.child, partitionStartIndices = Some(left.partitionStartIndices))
-        } else {
-          shuffleStage.asInstanceOf[QueryStageExec]
-          LocalShuffleReaderExec(shuffleStage)
+        val localReader = shuffleStage match {
+          case c: CoalescedShuffleReaderExec => LocalShuffleReaderExec(
+            c.child, partitionStartIndices = Some(c.partitionStartIndices))
+          case q: QueryStageExec => LocalShuffleReaderExec(shuffleStage)
         }
         join.asInstanceOf[BroadcastHashJoinExec].copy(left = localReader)
       case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildLeft) =>
-        val localReader = if (shuffleStage.isInstanceOf[CoalescedShuffleReaderExec]) {
-          val right = shuffleStage.asInstanceOf[CoalescedShuffleReaderExec]
-          LocalShuffleReaderExec(
-            right.child, partitionStartIndices = Some(right.partitionStartIndices))
-        } else {
-          shuffleStage.asInstanceOf[QueryStageExec]
-          LocalShuffleReaderExec(shuffleStage)
+        val localReader = shuffleStage match {
+          case c: CoalescedShuffleReaderExec => LocalShuffleReaderExec(
+            c.child, partitionStartIndices = Some(c.partitionStartIndices))
+          case q: QueryStageExec => LocalShuffleReaderExec(shuffleStage)
         }
         join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
     }
@@ -102,40 +96,56 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     } else {
       withProbeSideLocalReader
     }
+
+    def collectBroadcastStage(stage: QueryStageExec): BroadcastQueryStageExec = stage match {
+      case b: BroadcastQueryStageExec => b
+      case ReusedQueryStageExec(_, b: BroadcastQueryStageExec, _) => b
+    }
+
+    def createLocalReader(child: SparkPlan): LocalShuffleReaderExec = child match {
+      case c: CoalescedShuffleReaderExec =>
+        LocalShuffleReaderExec(
+          child.asInstanceOf[CoalescedShuffleReaderExec].child,
+          partitionStartIndices = Some(child.asInstanceOf[CoalescedShuffleReaderExec].
+            partitionStartIndices))
+      case s: QueryStageExec => LocalShuffleReaderExec(child)
+      case _ => null
+    }
+
+    def insertLocalReaderToBroadcastStage(
+        localReader: LocalShuffleReaderExec,
+        broadcastStage: BroadcastQueryStageExec): BroadcastQueryStageExec = {
+      val newBroadExchange = broadcastStage.plan.copy(child = localReader)
+      broadcastStage.copy(plan = newBroadExchange)
+    }
+
+    def updateBroadcastStage(
+        stage: QueryStageExec,
+        child: BroadcastQueryStageExec): QueryStageExec = stage match {
+      case b: BroadcastQueryStageExec => child
+      case ReusedQueryStageExec(_, b: BroadcastQueryStageExec, _) =>
+          b.copy(id = child.id, plan = child.plan)
+    }
     // Add the local reader in build side and and do not need to check whether
     // additional shuffle introduced.
     optimizedPlan.transformDown {
       case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildLeft) =>
-        val left = shuffleStage match {
-        case b: BroadcastQueryStageExec => b.plan.child
-        case ReusedQueryStageExec(_, b: BroadcastQueryStageExec, _) => b.plan.child
-        }
-        if (left.isInstanceOf[CoalescedShuffleReaderExec]) {
-          val localReader = LocalShuffleReaderExec(
-            left.asInstanceOf[CoalescedShuffleReaderExec].child,
-            partitionStartIndices = Some(left.asInstanceOf[CoalescedShuffleReaderExec].
-              partitionStartIndices))
-          val newBroadExchange = shuffleStage.asInstanceOf[BroadcastQueryStageExec].
-            plan.copy(child = localReader)
-          val newBroadStage = shuffleStage.asInstanceOf[BroadcastQueryStageExec].
-            copy(plan = newBroadExchange)
-          join.asInstanceOf[BroadcastHashJoinExec].copy(left = newBroadStage)
+        val broadcastStage = collectBroadcastStage(shuffleStage.asInstanceOf[QueryStageExec])
+        val child = broadcastStage.plan.child
+        val localReader = createLocalReader(child)
+        if (localReader != null) {
+          val newBroadcastStage = insertLocalReaderToBroadcastStage(localReader, broadcastStage)
+          join.asInstanceOf[BroadcastHashJoinExec].copy(
+            left = updateBroadcastStage(broadcastStage, newBroadcastStage))
         } else join
       case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildRight) =>
-        val right = shuffleStage match {
-          case b: BroadcastQueryStageExec => b.plan.child
-          case ReusedQueryStageExec(_, b: BroadcastQueryStageExec, _) => b.plan.child
-        }
-        if (right.isInstanceOf[CoalescedShuffleReaderExec]) {
-          val localReader = LocalShuffleReaderExec(
-            right.asInstanceOf[CoalescedShuffleReaderExec].child,
-            partitionStartIndices = Some(right.asInstanceOf[CoalescedShuffleReaderExec].
-              partitionStartIndices))
-          val newBroadExchange = shuffleStage.asInstanceOf[BroadcastQueryStageExec].
-            plan.copy(child = localReader)
-          val newBroadStage = shuffleStage.asInstanceOf[BroadcastQueryStageExec].
-            copy(plan = newBroadExchange)
-          join.asInstanceOf[BroadcastHashJoinExec].copy(right = newBroadStage)
+        val broadcastStage = collectBroadcastStage(shuffleStage.asInstanceOf[QueryStageExec])
+        val child = broadcastStage.plan.child
+        val localReader = createLocalReader(child)
+        if (localReader != null) {
+          val newBroadcastStage = insertLocalReaderToBroadcastStage(localReader, broadcastStage)
+          join.asInstanceOf[BroadcastHashJoinExec].copy(
+            right = updateBroadcastStage(broadcastStage, newBroadcastStage))
         } else join
     }
   }
