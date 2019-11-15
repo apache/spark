@@ -196,6 +196,8 @@ object IntervalUtils {
   def fromDayTimeString(input: String, from: IntervalUnit, to: IntervalUnit): CalendarInterval = {
     if (SQLConf.get.getConf(SQLConf.LEGACY_FROM_DAYTIME_STRING)) {
       parseDayTimeLegacy(input, from, to)
+    } else if (SQLConf.get.usePostgreSQLDialect) {
+      parseDayTimeLegacy(input, from, to)
     } else {
       parseDayTime(input, from, to)
     }
