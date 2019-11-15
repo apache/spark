@@ -471,4 +471,20 @@ class VectorsSuite extends SparkMLFunSuite {
     assert((sv2 - sv3).toArray === Array(1, 0, -1))
   }
 
+  test("vector addition/subtraction only supports vectors of same size") {
+    val dv4 = Vectors.dense(arr)
+    val dv3 = Vectors.dense(arr.tail)
+    val sv4 = Vectors.sparse(n, indices, values)
+    val sv5 = Vectors.sparse(n + 1, indices, values)
+
+    intercept[IllegalArgumentException]{dv3 + dv4}
+    intercept[IllegalArgumentException]{dv3 - dv4}
+    intercept[IllegalArgumentException]{dv3 + sv4}
+    intercept[IllegalArgumentException]{dv3 - sv4}
+    intercept[IllegalArgumentException]{sv5 + dv4}
+    intercept[IllegalArgumentException]{sv5 - dv4}
+    intercept[IllegalArgumentException]{sv4 + sv5}
+    intercept[IllegalArgumentException]{sv4 - sv5}
+  }
+
 }
