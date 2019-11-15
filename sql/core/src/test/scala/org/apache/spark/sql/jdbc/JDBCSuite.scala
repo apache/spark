@@ -578,8 +578,8 @@ class JDBCSuite extends QueryTest
     assert(rows.length === 1)
     assert(rows(0).getInt(0) === 1)
     assert(rows(0).getBoolean(1) === false)
-    assert(rows(0).getInt(2) === 3)
-    assert(rows(0).getInt(3) === 4)
+    assert(rows(0).getByte(2) === 3.toByte)
+    assert(rows(0).getShort(3) === 4.toShort)
     assert(rows(0).getLong(4) === 1234567890123L)
   }
 
