@@ -214,6 +214,12 @@ sealed trait Vector extends Serializable {
   @Since("3.0.0")
   def unary_- : Vector = this * -1
 
+  /**
+   * Vector addition.
+   */
+  @Since("3.0.0")
+  def +(v: Vector): Vector
+
 }
 
 /**
@@ -576,6 +582,12 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
       maxIdx
     }
   }
+
+  override def +(v: Vector): Vector = {
+    val that = copy
+    BLAS.axpy(1, v, that)
+    that
+  }
 }
 
 @Since("2.0.0")
@@ -780,6 +792,24 @@ class SparseVector @Since("2.0.0") (
       i_v
     }.unzip
     new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
+  }
+
+  def +(v: Vector): Vector = {
+    require(this.size == v.size)
+    v match {
+      case dv: DenseVector =>
+        val arr = dv.values.clone
+        for (i <- this.indices) arr(i) += this(i)
+        Vectors.dense(arr)
+      case sv: SparseVector =>
+        val indices = (this.indices ++ sv.indices).distinct.sorted
+        val nonZeroPairs = for {
+          i <- indices
+          sum = this(i) + sv(i)
+          if sum != 0
+        } yield (i, sum)
+        Vectors.sparse(this.size, nonZeroPairs.map(_._1), nonZeroPairs.map(_._2))
+    }
   }
 }
 

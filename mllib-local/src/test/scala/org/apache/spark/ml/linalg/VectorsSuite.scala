@@ -441,4 +441,22 @@ class VectorsSuite extends SparkMLFunSuite {
     assert((-sv).toArray === Array(-0.1, 0.0, -0.3, -0.4))
   }
 
+  test("vector addition") {
+    val dv = Vectors.dense(arr)
+    val sv = Vectors.sparse(n, indices, values)
+
+    assert((dv + dv).toArray === Array(0.2, 0.0, 0.6, 0.8))
+    assert((dv + sv).toArray === Array(0.2, 0.0, 0.6, 0.8))
+    assert((sv + dv).toArray === Array(0.2, 0.0, 0.6, 0.8))
+    assert((sv + sv).toArray === Array(0.2, 0.0, 0.6, 0.8))
+
+    val sv2 = Vectors.sparse(3, Array(0), Array(1))
+    val sv3 = Vectors.sparse(3, Array(2), Array(1))
+
+    assert((sv2 + sv3).toArray === Array(1, 0, 1))
+
+    // pure sparse vector addition may introduce new zero values
+    assert((sv + (-sv)).numNonzeros === 0)
+  }
+
 }
