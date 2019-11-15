@@ -245,7 +245,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
                 bucketSpec = None,
                 options = options,
-                className = fileType).resolveRelation(needPartitionInferring = false),
+                className = fileType).resolveRelation(),
               table = updatedTable)
 
           catalogProxy.cacheTable(tableIdentifier, created)
@@ -256,17 +256,19 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
     // The inferred schema may have different field names as the table schema, we should respect
     // it, but also respect the exprId in table relation output.
-    assert(result.output.length == relation.output.length,
-      s"Target table has ${result.output.length} columns, " +
-        s"but source table has ${relation.output.length} columns. " +
-        s"It may need to recreate the table ${relation.tableMeta.identifier} " +
-        s"or set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false to workaround.")
-    result.output.zip(relation.output).foreach { case (a1, a2) =>
-      assert(a1.dataType.sameType(a2.dataType),
-        s"Data type of column ${a1.name} in target table is ${a1.dataType.typeName}, " +
-          s"but column ${a2.name} in source table is ${a2.dataType.typeName}. " +
-          s"It may need to recreate the table ${relation.tableMeta.identifier} " +
-          s"or set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false to workaround.")
+    if (result.output.length != relation.output.length) {
+      throw new HiveTableConvertException(
+        s"Converted table has ${result.output.length} columns, " +
+        s"but source Hive table has ${relation.output.length} columns. " +
+        s"Set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false, " +
+        s"or recreate table ${relation.tableMeta.identifier} to workaround.")
+    }
+    if (!result.output.zip(relation.output).forall {
+          case (a1, a2) => a1.dataType.sameType(a2.dataType) }) {
+      throw new HiveTableConvertException(
+        s"Column in converted table has different data type with source Hive table's. " +
+          s"Set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false, " +
+          s"or recreate table ${relation.tableMeta.identifier} to workaround.")
     }
     val newOutput = result.output.zip(relation.output).map {
       case (a1, a2) => a1.withExprId(a2.exprId)

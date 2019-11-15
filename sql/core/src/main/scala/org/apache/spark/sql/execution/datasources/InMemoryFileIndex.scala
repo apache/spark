@@ -50,8 +50,7 @@ class InMemoryFileIndex(
     rootPathsSpecified: Seq[Path],
     parameters: Map[String, String],
     userSpecifiedSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = NoopCache,
-    needPartitionInferring: Boolean = true)
+    fileStatusCache: FileStatusCache = NoopCache)
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
 
@@ -70,11 +69,7 @@ class InMemoryFileIndex(
 
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
-      cachedPartitionSpec = if (needPartitionInferring) {
-        inferPartitioning()
-      } else {
-        PartitionSpec.emptySpec
-      }
+      cachedPartitionSpec = inferPartitioning()
     }
     logTrace(s"Partition spec: $cachedPartitionSpec")
     cachedPartitionSpec
