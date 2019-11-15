@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.getDateTimeParser
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimestampParser
 import org.apache.spark.sql.execution.datasources.FailureSafeParser
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -79,7 +79,7 @@ class UnivocityParser(
   private val row = new GenericInternalRow(requiredSchema.length)
 
   @transient private lazy val timestampParser =
-    getDateTimeParser(options.timestampFormat, options.timeZone)
+    getTimestampParser(options.timestampFormat, options.timeZone)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {

@@ -1208,7 +1208,7 @@ object DateTimeUtils {
     }
   }
 
-  def getDateTimeParser(format: FastDateFormat, tz: TimeZone): DateTimeParser = {
+  def getTimestampParser(format: FastDateFormat, tz: TimeZone): DateTimeParser = {
     new DateTimeParser(format, format.getPattern.count(_ == 'S'), new MicrosCalendar(tz))
   }
 }
