@@ -96,7 +96,7 @@ case class ShuffleExchangeExec(
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
       cachedShuffleRDD =
-        if (cachedShuffleRDD.getNumPartitions == 1 &&
+        if (inputRDD.getNumPartitions == 1 &&
           outputPartitioning.numPartitions == 1) {
           inputRDD
         } else {
