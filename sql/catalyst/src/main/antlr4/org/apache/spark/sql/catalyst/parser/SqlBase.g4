@@ -144,8 +144,8 @@ statement
         '(' columns=multipartIdentifierList ')'                        #dropTableColumns
     | ALTER TABLE multipartIdentifier
         DROP (COLUMN | COLUMNS) columns=multipartIdentifierList        #dropTableColumns
-    | ALTER (TABLE | VIEW) from=tableIdentifier
-        RENAME TO to=tableIdentifier                                   #renameTable
+    | ALTER (TABLE | VIEW) from=multipartIdentifier
+        RENAME TO to=multipartIdentifier                               #renameTable
     | ALTER (TABLE | VIEW) multipartIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
     | ALTER (TABLE | VIEW) multipartIdentifier

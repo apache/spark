@@ -3194,6 +3194,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[AlterTableRenameCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name1 RENAME TO multi_part_name2;
+   *   ALTER VIEW multi_part_name1 RENAME TO multi_part_name2;
+   * }}}
+   */
+  override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRenameStatement(
+      visitMultipartIdentifier(ctx.from),
+      visitMultipartIdentifier(ctx.to),
+      ctx.VIEW != null)
+  }
+
+  /**
    * A command for users to list the properties for a table. If propertyKey is specified, the value
    * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
    * corresponding values are returned.
