@@ -409,9 +409,9 @@ object IntervalUtils {
       }
     }
 
-    def currentWord: String = {
-      val strings = s.toString.split("\\s+")
-      val lenLeft = s.substring(i, s.numBytes()).toString.split("\\s+").length
+    def currentWord: UTF8String = {
+      val strings = s.split(UTF8String.blankString(1), -1)
+      val lenLeft = s.substring(i, s.numBytes()).split(UTF8String.blankString(1), -1).length
       strings(strings.length - lenLeft)
     }
 
