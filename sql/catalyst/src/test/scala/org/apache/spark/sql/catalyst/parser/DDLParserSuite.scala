@@ -623,6 +623,15 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("alter table/view: rename table/view") {
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = false))
+    comparePlans(
+      parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = true))
+  }
+
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumnStatement(

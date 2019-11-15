@@ -158,6 +158,14 @@ class ResolveSessionCatalog(
     case AlterViewUnsetPropertiesStatement(SessionCatalog(catalog, tableName), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(tableName.asTableIdentifier, keys, ifExists, isView = true)
 
+    case RenameTableStatement(SessionCatalog(_, oldName), newNameParts, isView) =>
+      newNameParts match {
+        case SessionCatalog(_, newName) =>
+          AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
+        case _ => throw new AnalysisException(
+          "Renaming table cannot be performed across the session and non-session catalogs.")
+      }
+
     case DescribeTableStatement(
          nameParts @ SessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       loadTable(catalog, tableName.asIdentifier).collect {

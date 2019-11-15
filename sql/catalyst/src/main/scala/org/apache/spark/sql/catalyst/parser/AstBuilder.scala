@@ -3194,7 +3194,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[AlterTableRenameCommand]] command.
+   * Create a [[RenameTableStatement]] command.
    *
    * For example:
    * {{{
@@ -3203,7 +3203,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenameStatement(
+    RenameTableStatement(
       visitMultipartIdentifier(ctx.from),
       visitMultipartIdentifier(ctx.to),
       ctx.VIEW != null)

@@ -224,14 +224,6 @@ case class AlterTableSerDePropertiesStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
- * ALTER TABLE ... RENAME TO command, as parsed from SQL.
- */
-case class AlterTableRenameStatement(
-    oldName: Seq[String],
-    newName: Seq[String],
-    isView: Boolean) extends ParsedStatement
-
-/**
  * ALTER VIEW ... SET TBLPROPERTIES command, as parsed from SQL.
  */
 case class AlterViewSetPropertiesStatement(
@@ -253,6 +245,14 @@ case class AlterViewAsStatement(
     viewName: Seq[String],
     originalText: String,
     query: LogicalPlan) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... RENAME TO command, as parsed from SQL.
+ */
+case class RenameTableStatement(
+    oldName: Seq[String],
+    newName: Seq[String],
+    isView: Boolean) extends ParsedStatement
 
 /**
  * A DROP TABLE statement, as parsed from SQL.
