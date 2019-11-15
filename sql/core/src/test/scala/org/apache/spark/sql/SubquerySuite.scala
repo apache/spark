@@ -1080,9 +1080,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
            |                    HAVING max(c2) > 0
            |                    ORDER  BY c1)
         """.stripMargin
-      // The rule to remove redundant sorts is not able to remove the inner sort under
-      // an Aggregate operator. We only remove the top level sort.
-      assert(getNumSortsInQuery(query6) == 1)
+
+      assert(getNumSortsInQuery(query6) == 0)
 
       // Cases when sort is not removed from the plan
       // Limit on top of sort

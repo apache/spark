@@ -24,10 +24,11 @@ import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.IntegerType
 
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
@@ -150,24 +151,86 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
       Repartition(numPartitions = 200, shuffle = true, child = testRelation))
 
-    val errMsgCoal = "COALESCE Hint expects a partition number as parameter"
+    val errMsg = "COALESCE Hint expects a partition number as a parameter"
+
     assertAnalysisError(
       UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")),
-      Seq(errMsgCoal))
+      Seq(errMsg))
     assertAnalysisError(
       UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")),
-      Seq(errMsgCoal))
+      Seq(errMsg))
     assertAnalysisError(
       UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")),
-      Seq(errMsgCoal))
+      Seq(errMsg))
 
-    val errMsgRepa = "REPARTITION Hint expects a partition number as parameter"
-    assertAnalysisError(
+    checkAnalysis(
+      UnresolvedHint("RePartition", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
+
+    checkAnalysis(
+      UnresolvedHint("REPARTITION", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
+
+    checkAnalysis(
       UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
-      Seq(errMsgRepa))
+      RepartitionByExpression(
+        Seq(AttributeReference("a", IntegerType)()), testRelation, conf.numShufflePartitions))
+
+    val e = intercept[IllegalArgumentException] {
+      checkAnalysis(
+        UnresolvedHint("REPARTITION",
+          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
+          table("TaBlE")),
+        RepartitionByExpression(
+          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10)
+      )
+    }
+    e.getMessage.contains("For range partitioning use REPARTITION_BY_RANGE instead")
+
+    checkAnalysis(
+      UnresolvedHint(
+        "REPARTITION_BY_RANGE", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(
+        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10))
+
+    checkAnalysis(
+      UnresolvedHint(
+        "REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(
+        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
+        testRelation, conf.numShufflePartitions))
+
+    val errMsg2 = "REPARTITION Hint parameter should include columns, but"
+
     assertAnalysisError(
       UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
-      Seq(errMsgRepa))
+      Seq(errMsg2))
+
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION",
+        Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
+        table("TaBlE")),
+      Seq(errMsg2))
+
+    val errMsg3 = "REPARTITION_BY_RANGE Hint parameter should include columns, but"
+
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION_BY_RANGE",
+        Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
+        table("TaBlE")),
+      Seq(errMsg3))
+
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION_BY_RANGE",
+        Seq(Literal(10), Literal(10)),
+        table("TaBlE")),
+      Seq(errMsg3))
+
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION_BY_RANGE",
+        Seq(Literal(10), Literal(10), UnresolvedAttribute("a")),
+        table("TaBlE")),
+      Seq(errMsg3))
   }
 
   test("log warnings for invalid hints") {

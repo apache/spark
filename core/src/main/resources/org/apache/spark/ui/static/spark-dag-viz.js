@@ -513,7 +513,7 @@ function addTooltipsForRDDs(svgContainer) {
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
-        .attr("data-placement", "bottom")
+        .attr("data-placement", "top")
         .attr("data-html", "true") // to interpret line break, tooltipText is showing <circle> title
         .attr("title", tooltipText);
     }

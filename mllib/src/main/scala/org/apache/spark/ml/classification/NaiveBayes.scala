@@ -359,7 +359,8 @@ class NaiveBayesModel private[ml] (
 
   @Since("1.5.0")
   override def toString: String = {
-    s"NaiveBayesModel (uid=$uid) with ${pi.size} classes"
+    s"NaiveBayesModel: uid=$uid, modelType=${$(modelType)}, numClasses=$numClasses, " +
+      s"numFeatures=$numFeatures"
   }
 
   @Since("1.6.0")

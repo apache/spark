@@ -42,7 +42,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
   private var orderedLabeledPoints5_20: RDD[LabeledPoint] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     orderedLabeledPoints50_1000 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000))
@@ -56,7 +56,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
-  def binaryClassificationTestWithContinuousFeatures(rf: RandomForestClassifier) {
+  def binaryClassificationTestWithContinuousFeatures(rf: RandomForestClassifier): Unit = {
     val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2
     val newRF = rf
@@ -228,6 +228,26 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
       rf, spark) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
+  }
+
+  test("tree params") {
+    val rdd = orderedLabeledPoints5_20
+    val rf = new RandomForestClassifier()
+      .setImpurity("entropy")
+      .setMaxDepth(3)
+      .setNumTrees(3)
+      .setSeed(123)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val numClasses = 2
+
+    val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val model = rf.fit(df)
+
+    model.trees.foreach (i => {
+      assert(i.getMaxDepth === model.getMaxDepth)
+      assert(i.getSeed === model.getSeed)
+      assert(i.getImpurity === model.getImpurity)
+    })
   }
 
   /////////////////////////////////////////////////////////////////////////////

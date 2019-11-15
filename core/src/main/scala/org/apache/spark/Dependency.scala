@@ -96,6 +96,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     shuffleId, this)
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
+  _rdd.sparkContext.shuffleDriverComponents.registerShuffle(shuffleId)
 }
 
 

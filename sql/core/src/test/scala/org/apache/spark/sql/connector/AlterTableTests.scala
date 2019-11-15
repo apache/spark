@@ -50,7 +50,7 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains(s"${catalogAndNamespace}table_name"))
-      assert(exc.getMessage.contains("Table or view not found"))
+      assert(exc.getMessage.contains("Table not found"))
     }
   }
 
@@ -813,6 +813,19 @@ trait AlterTableTests extends SharedSparkSession {
       assert(table.name === fullTableName(t))
       assert(table.properties ===
         Map("provider" -> v2Format, "location" -> "s3://bucket/path").asJava)
+    }
+  }
+
+  test("AlterTable: set partition location") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
+      }
+      assert(exc.getMessage.contains(
+        "ALTER TABLE SET LOCATION does not support partition for v2 tables"))
     }
   }
 

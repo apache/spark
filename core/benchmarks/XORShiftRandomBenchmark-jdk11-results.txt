@@ -6,29 +6,29 @@ OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 nextInt:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   1357           1358           0         73.7          13.6       1.0X
-XORShiftRandom                                      228            228           0        438.0           2.3       5.9X
+java.util.Random                                   1362           1362           0         73.4          13.6       1.0X
+XORShiftRandom                                      227            227           0        440.6           2.3       6.0X
 
 OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 nextLong:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   2718           2719           1         36.8          27.2       1.0X
-XORShiftRandom                                      632            633           0        158.1           6.3       4.3X
+java.util.Random                                   2725           2726           1         36.7          27.3       1.0X
+XORShiftRandom                                      694            694           1        144.1           6.9       3.9X
 
 OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 nextDouble:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   2722           2723           0         36.7          27.2       1.0X
-XORShiftRandom                                      632            632           0        158.3           6.3       4.3X
+java.util.Random                                   2727           2728           0         36.7          27.3       1.0X
+XORShiftRandom                                      693            694           0        144.2           6.9       3.9X
 
 OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 nextGaussian:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   6979           6979           1         14.3          69.8       1.0X
-XORShiftRandom                                     5183           5183           0         19.3          51.8       1.3X
+java.util.Random                                   7012           7016           4         14.3          70.1       1.0X
+XORShiftRandom                                     6065           6067           1         16.5          60.7       1.2X
 
 
 ================================================================================================
@@ -39,6 +39,6 @@ OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Hash seed:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-XORShiftRandom.hashSeed                              38             39           1        263.9           3.8       1.0X
+XORShiftRandom.hashSeed                              36             37           1        276.5           3.6       1.0X
 
 

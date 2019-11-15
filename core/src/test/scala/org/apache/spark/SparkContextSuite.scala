@@ -450,7 +450,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     sc.setLocalProperty("testProperty", "testValue")
     var result = "unset";
-    val thread = new Thread() { override def run() = {result = sc.getLocalProperty("testProperty")}}
+    val thread = new Thread() {
+      override def run(): Unit = {result = sc.getLocalProperty("testProperty")}
+    }
     thread.start()
     thread.join()
     sc.stop()
@@ -461,10 +463,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     var result = "unset";
     val thread1 = new Thread() {
-      override def run() = {sc.setLocalProperty("testProperty", "testValue")}}
+      override def run(): Unit = {sc.setLocalProperty("testProperty", "testValue")}}
     // testProperty should be unset and thus return null
     val thread2 = new Thread() {
-      override def run() = {result = sc.getLocalProperty("testProperty")}}
+      override def run(): Unit = {result = sc.getLocalProperty("testProperty")}}
     thread1.start()
     thread1.join()
     thread2.start()
@@ -840,7 +842,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The configuration of resource: gpu (exec = 4, task = 2) will result " +
+    assert(error.contains(
+      "The configuration of resource: gpu (exec = 4, task = 2, runnable tasks = 2) will result " +
       "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
       "executor to: 1. Please adjust your configuration."))
   }

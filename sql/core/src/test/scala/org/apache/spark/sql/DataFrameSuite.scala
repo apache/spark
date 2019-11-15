@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.Random
 
@@ -553,7 +554,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   }
 
   test("replace column using withColumns") {
-    val df2 = sparkContext.parallelize(Array((1, 2), (2, 3), (3, 4))).toDF("x", "y")
+    val df2 = sparkContext.parallelize(Seq((1, 2), (2, 3), (3, 4))).toDF("x", "y")
     val df3 = df2.withColumns(Seq("x", "newCol1", "newCol2"),
       Seq(df2("x") + 1, df2("y"), df2("y") + 1))
     checkAnswer(
@@ -2105,17 +2106,17 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         // partitions.
         .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
 
-      var numJobs = 0
+      val numJobs = new AtomicLong(0)
       sparkContext.addSparkListener(new SparkListener {
         override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-          numJobs += 1
+          numJobs.incrementAndGet()
         }
       })
 
       val df = spark.read.json(path.getCanonicalPath)
       assert(df.columns === Array("i", "p"))
       spark.sparkContext.listenerBus.waitUntilEmpty()
-      assert(numJobs == 1)
+      assert(numJobs.get() == 1L)
     }
   }
 
@@ -2201,5 +2202,23 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         """== Physical Plan ==
           |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
     }
+  }
+
+  test("SPARK-29442 Set `default` mode should override the existing mode") {
+    val df = Seq(Tuple1(1)).toDF()
+    val writer = df.write.mode("overwrite").mode("default")
+    val modeField = classOf[DataFrameWriter[Tuple1[Int]]].getDeclaredField("mode")
+    modeField.setAccessible(true)
+    assert(SaveMode.ErrorIfExists === modeField.get(writer).asInstanceOf[SaveMode])
+  }
+
+  test("sample should not duplicated the input data") {
+    val df1 = spark.range(10).select($"id" as "id1", $"id" % 5 as "key1")
+    val df2 = spark.range(10).select($"id" as "id2", $"id" % 5 as "key2")
+    val sampled = df1.join(df2, $"key1" === $"key2")
+      .sample(0.5, 42)
+      .select("id1", "id2")
+    val idTuples = sampled.collect().map(row => row.getLong(0) -> row.getLong(1))
+    assert(idTuples.length == idTuples.toSet.size)
   }
 }

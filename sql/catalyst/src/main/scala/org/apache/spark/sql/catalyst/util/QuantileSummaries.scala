@@ -159,14 +159,72 @@ class QuantileSummaries(
       other.shallowCopy
     } else {
       // Merge the two buffers.
-      // The GK algorithm is a bit unclear about it, but it seems there is no need to adjust the
-      // statistics during the merging: the invariants are still respected after the merge.
-      // TODO: could replace full sort by ordered merge, the two lists are known to be sorted
-      // already.
-      val res = (sampled ++ other.sampled).sortBy(_.value)
-      val comp = compressImmut(res, mergeThreshold = 2 * relativeError * count)
-      new QuantileSummaries(
-        other.compressThreshold, other.relativeError, comp, other.count + count, true)
+      // The GK algorithm is a bit unclear about it, but we need to adjust the statistics during the
+      // merging. The main idea is that samples that come from one side will suffer from the lack of
+      // precision of the other.
+      // As a concrete example, take two QuantileSummaries whose samples (value, g, delta) are:
+      // `a = [(0, 1, 0), (20, 99, 0)]` and `b = [(10, 1, 0), (30, 49, 0)]`
+      // This means `a` has 100 values, whose minimum is 0 and maximum is 20,
+      // while `b` has 50 values, between 10 and 30.
+      // The resulting samples of the merge will be:
+      // a+b = [(0, 1, 0), (10, 1, ??), (20, 99, ??), (30, 49, 0)]
+      // The values of `g` do not change, as they represent the minimum number of values between two
+      // consecutive samples. The values of `delta` should be adjusted, however.
+      // Take the case of the sample `10` from `b`. In the original stream, it could have appeared
+      // right after `0` (as expressed by `g=1`) or right before `20`, so `delta=99+0-1=98`.
+      // In the GK algorithm's style of working in terms of maximum bounds, one can observe that the
+      // maximum additional uncertainty over samples comming from `b` is `max(g_a + delta_a) =
+      // floor(2 * eps_a * n_a)`. Likewise, additional uncertainty over samples from `a` is
+      // `floor(2 * eps_b * n_b)`.
+      // Only samples that interleave the other side are affected. That means that samples from
+      // one side that are lesser (or greater) than all samples from the other side are just copied
+      // unmodifed.
+      // If the merging instances have different `relativeError`, the resulting instance will cary
+      // the largest one: `eps_ab = max(eps_a, eps_b)`.
+      // The main invariant of the GK algorithm is kept:
+      // `max(g_ab + delta_ab) <= floor(2 * eps_ab * (n_a + n_b))` since
+      // `max(g_ab + delta_ab) <= floor(2 * eps_a * n_a) + floor(2 * eps_b * n_b)`
+      // Finally, one can see how the `insert(x)` operation can be expressed as `merge([(x, 1, 0])`
+
+      val mergedSampled = new ArrayBuffer[Stats]()
+      val mergedRelativeError = math.max(relativeError, other.relativeError)
+      val mergedCount = count + other.count
+      val additionalSelfDelta = math.floor(2 * other.relativeError * other.count).toLong
+      val additionalOtherDelta = math.floor(2 * relativeError * count).toLong
+
+      // Do a merge of two sorted lists until one of the lists is fully consumed
+      var selfIdx = 0
+      var otherIdx = 0
+      while (selfIdx < sampled.length && otherIdx < other.sampled.length) {
+        val selfSample = sampled(selfIdx)
+        val otherSample = other.sampled(otherIdx)
+
+        // Detect next sample
+        val (nextSample, additionalDelta) = if (selfSample.value < otherSample.value) {
+          selfIdx += 1
+          (selfSample, if (otherIdx > 0) additionalSelfDelta else 0)
+        } else {
+          otherIdx += 1
+          (otherSample, if (selfIdx > 0) additionalOtherDelta else 0)
+        }
+
+        // Insert it
+        mergedSampled += nextSample.copy(delta = nextSample.delta + additionalDelta)
+      }
+
+      // Copy the remaining samples from the other list
+      // (by construction, at most one `while` loop will run)
+      while (selfIdx < sampled.length) {
+        mergedSampled += sampled(selfIdx)
+        selfIdx += 1
+      }
+      while (otherIdx < other.sampled.length) {
+        mergedSampled += other.sampled(otherIdx)
+        otherIdx += 1
+      }
+
+      val comp = compressImmut(mergedSampled, 2 * mergedRelativeError * mergedCount)
+      new QuantileSummaries(other.compressThreshold, mergedRelativeError, comp, mergedCount, true)
     }
   }
 

@@ -179,6 +179,21 @@ package object config {
   private[spark] val EVENT_LOG_CALLSITE_LONG_FORM =
     ConfigBuilder("spark.eventLog.longForm.enabled").booleanConf.createWithDefault(false)
 
+  private[spark] val EVENT_LOG_ENABLE_ROLLING =
+    ConfigBuilder("spark.eventLog.rolling.enabled")
+      .doc("Whether rolling over event log files is enabled.  If set to true, it cuts down " +
+        "each event log file to the configured size.")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_ROLLING_MAX_FILE_SIZE =
+    ConfigBuilder("spark.eventLog.rolling.maxFileSize")
+      .doc("The max size of event log file to be rolled over.")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
+        "configured to be at least 10 MiB.")
+      .createWithDefaultString("128m")
+
   private[spark] val EXECUTOR_ID =
     ConfigBuilder("spark.executor.id").stringConf.createOptional
 
@@ -591,6 +606,23 @@ package object config {
       .intConf
       .createWithDefault(128)
 
+  private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_ENABLED =
+    ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent.enabled")
+      .internal()
+      .doc("When enabled, log the event that takes too much time to process. This helps us " +
+        "discover the event types that cause performance bottlenecks. The time threshold is " +
+        "controlled by spark.scheduler.listenerbus.logSlowEvent.threshold.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD =
+    ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent.threshold")
+      .internal()
+      .doc("The time threshold of whether a event is considered to be taking too much time to " +
+        "process. Log the event if spark.scheduler.listenerbus.logSlowEvent.enabled is true.")
+      .timeConf(TimeUnit.NANOSECONDS)
+      .createWithDefaultString("1s")
+
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .stringConf
@@ -599,6 +631,12 @@ package object config {
   private[spark] val METRICS_CONF = ConfigBuilder("spark.metrics.conf")
     .stringConf
     .createOptional
+
+  private[spark] val METRICS_STATIC_SOURCES_ENABLED =
+    ConfigBuilder("spark.metrics.static.sources.enabled")
+      .doc("Whether to register static sources with the metrics system.")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
     .stringConf
@@ -782,6 +820,17 @@ package object config {
         "spark.io.compression.codec.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME =
+    ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocsExpireTime")
+      .internal()
+      .doc("Expire time in minutes for caching preferred locations of checkpointed RDD." +
+        "Caching preferred locations can relieve query loading to DFS and save the query " +
+        "time. The drawback is that the cached locations can be possibly outdated and " +
+        "lose data locality. If this config is not specified, it will not cache.")
+      .timeConf(TimeUnit.MINUTES)
+      .checkValue(_ > 0, "The expire time for caching preferred locations cannot be non-positive.")
+      .createOptional
 
   private[spark] val SHUFFLE_ACCURATE_BLOCK_THRESHOLD =
     ConfigBuilder("spark.shuffle.accurateBlockThreshold")
@@ -1133,12 +1182,13 @@ package object config {
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
       .createWithDefault(1024 * 1024)
 
-  private[spark] val EXECUTOR_PLUGINS =
-    ConfigBuilder("spark.executor.plugins")
-      .doc("Comma-separated list of class names for \"plugins\" implementing " +
-        "org.apache.spark.ExecutorPlugin.  Plugins have the same privileges as any task " +
-        "in a Spark executor.  They can also interfere with task execution and fail in " +
-        "unexpected ways.  So be sure to only use this for trusted plugins.")
+  private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
+
+  private[spark] val PLUGINS =
+    ConfigBuilder("spark.plugins")
+      .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
+      .doc("Comma-separated list of class names implementing " +
+        "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
       .stringConf
       .toSequence
       .createWithDefault(Nil)

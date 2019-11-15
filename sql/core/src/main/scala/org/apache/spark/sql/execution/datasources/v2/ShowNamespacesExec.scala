@@ -19,14 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
-import org.apache.spark.sql.execution.LeafExecNode
 
 /**
  * Physical plan node for showing namespaces.
@@ -36,9 +34,9 @@ case class ShowNamespacesExec(
     catalog: SupportsNamespaces,
     namespace: Option[Seq[String]],
     pattern: Option[String])
-    extends LeafExecNode {
+    extends V2CommandExec {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     val namespaces = namespace.map { ns =>
         if (ns.nonEmpty) {
           catalog.listNamespaces(ns.toArray)
@@ -59,6 +57,6 @@ case class ShowNamespacesExec(
       }
     }
 
-    sparkContext.parallelize(rows, 1)
+    rows
   }
 }
