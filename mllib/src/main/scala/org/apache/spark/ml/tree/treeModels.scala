@@ -90,10 +90,10 @@ private[spark] trait DecisionTreeModel {
     }
   }
 
-  @transient private[ml] lazy val numLeave: Int =
+  private[ml] lazy val numLeave: Int =
     leafIterator(rootNode).size
 
-  @transient private[ml] lazy val leafAttr = {
+  private[ml] lazy val leafAttr = {
     if (numLeave == 2) {
       BinaryAttribute.defaultAttr
     } else {

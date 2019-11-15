@@ -207,18 +207,15 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model1 = new DecisionTreeClassificationModel("dtc", TreeTests.root1, 3, 2)
     val model = new RandomForestClassificationModel("rfc", Array(model0, model1), 3, 2)
     model.setLeafCol("predictedLeafId")
+      .setRawPredictionCol("")
+      .setPredictionCol("")
+      .setProbabilityCol("")
 
     val data = TreeTests.getTwoTreesLeafData
     data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
     val df = sc.parallelize(data, 1).toDF("leafId", "features")
-    val transformed = model.transform(df)
-    checkNominalOnDF(transformed, "prediction", model.numClasses)
-    checkVectorSizeOnDF(transformed, "predictedLeafId", model.trees.length)
-    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
-    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
-
-    transformed.select("leafId", "predictedLeafId")
+    model.transform(df).select("leafId", "predictedLeafId")
       .collect()
       .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
         assert(leafId === predictedLeafId)
@@ -245,6 +242,13 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val model = rf.fit(df)
+    model.setLeafCol("predictedLeafId")
+
+    val transformed = model.transform(df)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "predictedLeafId", model.trees.length)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
 
     model.trees.foreach (i => {
       assert(i.getMaxDepth === model.getMaxDepth)
