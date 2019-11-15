@@ -21,7 +21,6 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
-import org.apache.spark.sql.types.StructType;
 
 /**
  * An interface for building the {@link BatchWrite}. Implementations can mix in some interfaces to

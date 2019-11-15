@@ -23,8 +23,8 @@ import org.apache.spark.annotation.Evolving;
  * An interface that defines how to write the data to data source for batch processing.
  *
  * The writing procedure is:
- *   1. Create a writer factory by {@link #createBatchWriterFactory(PhysicalWriteInfo)}, serialize and send it to all
- *      the partitions of the input data(RDD).
+ *   1. Create a writer factory by {@link #createBatchWriterFactory(PhysicalWriteInfo)}, serialize
+ *      and send it to all the partitions of the input data(RDD).
  *   2. For each partition, create the data writer, and write the data of the partition with this
  *      writer. If all the data are written successfully, call {@link DataWriter#commit()}. If
  *      exception happens during the writing, call {@link DataWriter#abort()}.
