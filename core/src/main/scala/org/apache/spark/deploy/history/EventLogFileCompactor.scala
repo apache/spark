@@ -137,9 +137,8 @@ class FilteredEventLogFileRewriter(
     require(eventLogFiles.nonEmpty)
 
     val targetEventLogFilePath = eventLogFiles.last.getPath
-    val logWriter: CompactedEventLogFileWriter = new CompactedEventLogFileWriter(
-      targetEventLogFilePath, "dummy", None, targetEventLogFilePath.getParent.toUri,
-      sparkConf, hadoopConf)
+    val logWriter = new CompactedEventLogFileWriter(targetEventLogFilePath, "dummy", None,
+      targetEventLogFilePath.getParent.toUri, sparkConf, hadoopConf)
 
     logWriter.start()
     eventLogFiles.foreach { file => rewriteFile(logWriter, file) }
@@ -169,13 +168,13 @@ class FilteredEventLogFileRewriter(
             // ignore any exception occurred from unidentified json
             // just skip handling and write the line
             case NonFatal(_) =>
-              logWriter.writeLine(currentLine)
+              logWriter.writeEvent(currentLine, flushLogger = true)
               None
           }
 
           event.foreach { e =>
             if (checkFilters(e)) {
-              logWriter.writeLine(currentLine)
+              logWriter.writeEvent(currentLine, flushLogger = true)
             }
           }
         }
@@ -245,9 +244,4 @@ class CompactedEventLogFileWriter(
   extends SingleEventLogFileWriter(appId, appAttemptId, logBaseDir, sparkConf, hadoopConf) {
 
   override val logPath: String = originalFilePath.toUri.toString + EventLogFileWriter.COMPACTED
-
-  // override to make writeLine method be 'public' only for this class
-  override def writeLine(line: String, flushLogger: Boolean): Unit = {
-    super.writeLine(line, flushLogger)
-  }
 }
