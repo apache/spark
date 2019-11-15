@@ -25,29 +25,42 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, JavaCo
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.postgreSQL.StringUtils
-import org.apache.spark.sql.types.{BooleanType, DataType, DateType, IntegerType, NullType, StringType, TimestampType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-abstract class PostgreCastBase extends CastBase{
+abstract class PostgreCastBase(toType: DataType) extends CastBase {
+
+  def fromTypes: TypeCollection
+
+  override def dataType: DataType = toType
 
   override protected def ansiEnabled: Boolean =
     throw new UnsupportedOperationException("PostgreSQL dialect doesn't support ansi mode")
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!fromTypes.acceptsType(child.dataType)) {
+      TypeCheckResult.TypeCheckFailure(
+        s"cannot cast type ${child.dataType.simpleString} to ${toType.simpleString}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
   override def nullable: Boolean = child.nullable
+
+  override def sql: String = s"CAST(${child.sql} AS ${toType.sql})"
+
+  override def toString: String =
+    s"PostgreCastTo${toType.simpleString}($child as ${toType.simpleString})"
 }
 
 case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
-  extends PostgreCastBase {
+  extends PostgreCastBase(BooleanType) {
+
+  override def fromTypes: TypeCollection = TypeCollection(StringType, IntegerType, NullType)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
-
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case StringType | IntegerType | NullType =>
-      TypeCheckResult.TypeCheckSuccess
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(s"cannot cast type ${child.dataType} to boolean")
-  }
 
   override def castToBoolean(from: DataType): Any => Any = from match {
     case StringType =>
@@ -68,7 +81,7 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
   override def castToBooleanCode(from: DataType): CastFunction = from match {
     case StringType =>
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
-      (c, evPrim, evNull) =>
+      (c, evPrim, _) =>
         code"""
           if ($stringUtils.isTrueString($c.trim().toLowerCase())) {
             $evPrim = true;
@@ -78,29 +91,16 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
             throw new IllegalArgumentException("invalid input syntax for type boolean: $c");
           }
         """
-
     case IntegerType =>
       super.castToBooleanCode(from)
   }
-
-  override def dataType: DataType = BooleanType
-
-  override def toString: String = s"PostgreCastToBoolean($child as ${dataType.simpleString})"
-
-  override def sql: String = s"CAST(${child.sql} AS ${dataType.sql})"
 }
 
 case class PostgreCastToTimestamp(child: Expression, timeZoneId: Option[String])
-  extends PostgreCastBase {
-  override def dataType: DataType = TimestampType
+  extends PostgreCastBase(TimestampType) {
 
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case StringType | DateType =>
-      TypeCheckResult.TypeCheckSuccess
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(s"cannot cast type ${child.dataType} to timestamp")
-  }
-  /** Returns a copy of this expression with the specified timeZoneId. */
+  override def fromTypes: TypeCollection = TypeCollection(StringType, DateType, NullType)
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
@@ -121,21 +121,17 @@ case class PostgreCastToTimestamp(child: Expression, timeZoneId: Option[String])
         ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
         zoneIdClass)
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
-      (c, evPrim, evNull) =>
+      (c, evPrim, _) =>
         code"""
           scala.Option<Long> $longOpt =
             org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $zid);
           if ($longOpt.isDefined()) {
             $evPrim = ((Long) $longOpt.get()).longValue();
           } else {
-            $evNull = throw new AnalysisException(s"invalid input syntax for type timestamp:$c");
+            throw new AnalysisException(s"invalid input syntax for type timestamp:$c");
           }
          """
     case DateType =>
       super.castToTimestampCode(from, ctx)
   }
-
-  override def toString: String = s"PostgreCastToTimestamp($child as ${dataType.simpleString})"
-
-  override def sql: String = s"CAST(${child.sql} AS ${dataType.sql})"
 }
