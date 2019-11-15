@@ -507,7 +507,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // ShortConverter
-  private[this] def castToShort(from: DataType): Any => Any = from match {
+  protected[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toShort(result)) {
@@ -1363,7 +1363,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
   }
 
-  private[this] def castToShortCode(
+  protected[this] def castToShortCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
