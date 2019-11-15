@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 
+import java.nio.ByteOrder;
+
 public final class RecordBinaryComparator extends RecordComparator {
 
   @Override
@@ -49,9 +51,13 @@ public final class RecordBinaryComparator extends RecordComparator {
     // for architectures that support unaligned accesses, chew it up 8 bytes at a time
     if (Platform.unaligned() || (((leftOff + i) % 8 == 0) && ((rightOff + i) % 8 == 0))) {
       while (i <= leftLen - 8) {
-        final long v1 = Platform.getLong(leftObj, leftOff + i);
-        final long v2 = Platform.getLong(rightObj, rightOff + i);
+        long v1 = Platform.getLong(leftObj, leftOff + i);
+        long v2 = Platform.getLong(rightObj, rightOff + i);
         if (v1 != v2) {
+          if (ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN)) {
+            v1 = Long.reverseBytes(v1);
+            v2 = Long.reverseBytes(v2);
+          }
           return v1 > v2 ? 1 : -1;
         }
         i += 8;

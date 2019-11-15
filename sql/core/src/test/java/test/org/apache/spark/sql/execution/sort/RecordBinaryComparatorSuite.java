@@ -273,7 +273,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 1) < 0);
+    assert(compare(0, 1) > 0);
   }
 
   @Test
