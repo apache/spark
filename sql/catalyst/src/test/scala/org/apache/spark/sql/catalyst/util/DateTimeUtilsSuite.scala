@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
+import org.apache.commons.lang3.time.FastDateFormat
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
@@ -689,6 +691,43 @@ class DateTimeUtilsSuite extends SparkFunSuite {
           assert(millisToDays(daysToMillis(d, tz), tz) === d,
             s"Round trip of ${d} did not work in tz ${tz}")
         }
+      }
+    }
+  }
+
+  test("parsing timestamp strings up to microsecond precision") {
+    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+      def check(pattern: String, input: String, reference: String): Unit = {
+        val parser = new TimestampParser(FastDateFormat.getInstance(pattern, timeZone, Locale.US))
+        val expected = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(reference), timeZone).get
+        val actual = parser.parse(input)
+        assert(actual === expected)
+      }
+
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
+        "2019-10-14T09:39:07.3220000Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+        "2019-10-14T09:39:07.322000", "2019-10-14T09:39:07.322")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSX",
+        "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.00001Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.S",
+        "2019-10-14T09:39:07.1", "2019-10-14T09:39:07.1")
+      check("yyyy-MM-dd'T'HH:mm:ss.SS",
+        "2019-10-14T09:39:07.10", "2019-10-14T09:39:07.1")
+
+      try {
+        new TimestampParser(
+          FastDateFormat.getInstance("yyyy/MM/dd HH_mm_ss.SSSSSS", timeZone, Locale.US))
+          .parse("2019/11/14 20#25#30.123456")
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("is an invalid timestamp"))
       }
     }
   }

@@ -18,15 +18,18 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.text.{DateFormat, SimpleDateFormat}
+import java.text.{DateFormat, ParsePosition, SimpleDateFormat}
 import java.time.Instant
-import java.util.{Calendar, Locale, TimeZone}
+import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.{Function => JFunction}
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
 
+import org.apache.commons.lang3.time.FastDateFormat
+
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -1163,5 +1166,44 @@ object DateTimeUtils {
     threadLocalGmtCalendar.remove()
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
+  }
+
+  /**
+   * The custom sub-class of `GregorianCalendar` is needed to get access to
+   * protected `fields` immediately after parsing. We cannot use
+   * the `get()` method because it performs normalization of the fraction
+   * part. Accordingly, the `MILLISECOND` field doesn't contain original value.
+   */
+  private class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
+    // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
+    // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
+    // if the `MILLISECOND` field was parsed to `1234`.
+    def getMicros(digitsInFraction: Int): SQLTimestamp = {
+      // Append 6 zeros to the field: 1234 -> 1234000000
+      val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
+      // Take the first 6 digits from `d`: 1234000000 -> 123400
+      // The rest contains exactly `digitsInFraction`: `0000` = 10 ^ digitsInFraction
+      // So, the result is `(1234 * 1000000) / (10 ^ digitsInFraction)
+      d / Decimal.POW_10(digitsInFraction)
+    }
+  }
+
+  /**
+   * An instance of the class is aimed to re-use many times. It contains helper objects
+   * `cal` and `digitsInFraction` that are reused between `parse()` invokes.
+   */
+  class TimestampParser(format: FastDateFormat) {
+    private val digitsInFraction = format.getPattern.count(_ == 'S')
+    private val cal = new MicrosCalendar(format.getTimeZone)
+
+    def parse(s: String): SQLTimestamp = {
+      cal.clear() // Clear the calendar because it can be re-used many times
+      if (!format.parse(s, new ParsePosition(0), cal)) {
+        throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
+      }
+      val micros = cal.getMicros(digitsInFraction)
+      cal.set(Calendar.MILLISECOND, 0)
+      cal.getTimeInMillis * MICROS_PER_MILLIS + micros
+    }
   }
 }

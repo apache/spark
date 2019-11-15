@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimestampParser
 import org.apache.spark.sql.execution.datasources.FailureSafeParser
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -76,6 +77,8 @@ class UnivocityParser(
   }
 
   private val row = new GenericInternalRow(requiredSchema.length)
+
+  @transient private lazy val timestampParser = new TimestampParser(options.timestampFormat)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -156,10 +159,7 @@ class UnivocityParser(
 
     case _: TimestampType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        Try(options.timestampFormat.parse(datum).getTime * 1000L)
-          .getOrElse {
+        Try(timestampParser.parse(datum)).getOrElse {
           // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
           // compatibility.
           DateTimeUtils.stringToTime(datum).getTime * 1000L
