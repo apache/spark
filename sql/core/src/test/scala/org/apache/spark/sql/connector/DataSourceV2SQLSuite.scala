@@ -872,9 +872,9 @@ class DataSourceV2SQLSuite
 
   test("DescribeNamespace using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
-      spark.sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test'")
-      val descriptionDf = spark.sql("DESCRIBE NAMESPACE testcat.ns1.ns2")
+      val descriptionDf = sql("DESCRIBE NAMESPACE testcat.ns1.ns2")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
         Seq(
           ("name", StringType),

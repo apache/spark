@@ -46,14 +46,16 @@ case class DescribeNamespaceExec(
     val rows = new ArrayBuffer[InternalRow]()
     val nsCatalog = catalog.asNamespaceCatalog
     val ns = namespace.toArray
-    val nsMetadata = nsCatalog.loadNamespaceMetadata(ns)
-    val properties = nsMetadata.asScala.toSeq.filter(p => !RESERVED_PROPERTIES.contains(p._1))
+    val metadata = nsCatalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Namespace Name", ns.last)
-    rows += toCatalystRow("Description", nsMetadata.get(COMMENT_TABLE_PROP))
-    rows += toCatalystRow("Location", nsMetadata.get(LOCATION_TABLE_PROP))
-    if (isExtended && properties.nonEmpty) {
-      rows += toCatalystRow("Properties", properties.mkString("(", ",", ")"))
+    rows += toCatalystRow("Description", metadata.get(COMMENT_TABLE_PROP))
+    rows += toCatalystRow("Location", metadata.get(LOCATION_TABLE_PROP))
+    if (isExtended) {
+      val properties = metadata.asScala.toSeq.filter(p => !RESERVED_PROPERTIES.contains(p._1))
+      if (properties.nonEmpty) {
+        rows += toCatalystRow("Properties", properties.mkString("(", ",", ")"))
+      }
     }
     rows
   }
