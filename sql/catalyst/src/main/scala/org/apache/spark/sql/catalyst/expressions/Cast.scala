@@ -471,7 +471,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // LongConverter
-  private[this] def castToLong(from: DataType): Any => Any = from match {
+  protected[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new LongWrapper()
       buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
@@ -1422,7 +1422,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
   }
 
-  private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+  protected[this] def castToLongCode(
+      from: DataType,
+      ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
 

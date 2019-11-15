@@ -70,4 +70,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(PostgreCastToBoolean(Literal(1.toDouble), None).checkInputDataTypes().isFailure)
     assert(PostgreCastToBoolean(Literal(1.toFloat), None).checkInputDataTypes().isFailure)
   }
+
+  test("unsupported data types to cast to long") {
+    // TODO: Test cases to be added
+  }
 }

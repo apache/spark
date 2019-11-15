@@ -19,6 +19,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.DateType
 
 class PostgreSQLDialectQuerySuite extends QueryTest with SharedSparkSession {
 
@@ -38,5 +39,9 @@ class PostgreSQLDialectQuerySuite extends QueryTest with SharedSparkSession {
     Seq("o", "abc", "").foreach { input =>
       intercept[IllegalArgumentException](sql(s"select cast('$input' as boolean)").collect())
     }
+  }
+
+  test("cast to long") {
+    // TODO: Add test cases
   }
 }
