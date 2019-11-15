@@ -1170,7 +1170,7 @@ object DateTimeUtils {
 
   /**
    * The custom sub-class of `GregorianCalendar` is needed to get access to
-   * the array of parsed `fields` immediately after parsing. We cannot use
+   * protected `fields` immediately after parsing. We cannot use
    * the `get()` method because it performs normalization of the fraction
    * part. Accordingly, the `MILLISECOND` field doesn't contain original value.
    */
