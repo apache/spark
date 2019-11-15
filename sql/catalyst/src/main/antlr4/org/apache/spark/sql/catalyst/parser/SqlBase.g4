@@ -217,14 +217,6 @@ statement
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
-    | DELETE FROM multipartIdentifier tableAlias whereClause?          #deleteFromTable
-    | UPDATE multipartIdentifier tableAlias setClause whereClause?     #updateTable
-    | MERGE INTO target=multipartIdentifier targetAlias=tableAlias
-        USING (source=multipartIdentifier |
-          '(' sourceQuery=query')') sourceAlias=tableAlias
-        ON mergeCondition=booleanExpression
-        matchedClause*
-        notMatchedClause*                                              #mergeIntoTable
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -401,6 +393,14 @@ resource
 dmlStatementNoWith
     : insertInto queryTerm queryOrganization                                       #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
+    | DELETE FROM multipartIdentifier tableAlias whereClause?                      #deleteFromTable
+    | UPDATE multipartIdentifier tableAlias setClause whereClause?                 #updateTable
+    | MERGE INTO target=multipartIdentifier targetAlias=tableAlias
+        USING (source=multipartIdentifier |
+          '(' sourceQuery=query')') sourceAlias=tableAlias
+        ON mergeCondition=booleanExpression
+        matchedClause*
+        notMatchedClause*                                                          #mergeIntoTable
     ;
 
 queryOrganization
