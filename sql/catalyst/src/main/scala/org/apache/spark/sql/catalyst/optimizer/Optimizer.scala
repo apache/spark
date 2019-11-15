@@ -1006,7 +1006,6 @@ object EliminateSorts extends Rule[LogicalPlan] {
       case _: Min => true
       case _: Max => true
       case _: Count => true
-      case _: Average => true
       case _: CentralMomentAgg => true
       case _ => false
     }

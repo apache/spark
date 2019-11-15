@@ -1271,6 +1271,18 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Cannot remove sort for AVG from subquery plan because it is order-sensitive") {
+    val query =
+      """
+        |SELECT k, AVG(v) FROM (
+        |  SELECT k, v
+        |  FROM VALUES (1, 2), (2, 1) t(k, v)
+        |  ORDER BY v)
+        |GROUP BY k
+      """.stripMargin
+    assert(getNumSortsInQuery(query) == 1)
+  }
+
   test("SPARK-25482: Forbid pushdown to datasources of filters containing subqueries") {
     withTempView("t1", "t2") {
       sql("create temporary view t1(a int) using parquet")
