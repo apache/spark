@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.Predicate
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -86,7 +86,7 @@ case class SortAggregateExec(
         // so return an empty iterator.
         Iterator[UnsafeRow]()
       } else {
-        val filterPredicates = new HashMap[Int, GenPredicate]
+        val filterPredicates = new mutable.Map[Int, Predicate]
         aggregateExpressions.zipWithIndex.foreach{
           case (ae: AggregateExpression, i) =>
             ae.mode match {

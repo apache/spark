@@ -135,8 +135,8 @@ case class AggregateExpression(
   @transient
   override lazy val references: AttributeSet = {
     mode match {
-      case Partial | Complete if filter == None => aggregateFunction.references
-      case Partial | Complete => aggregateFunction.references ++ filter.map(_.references).get
+      case Partial | Complete =>
+        aggregateFunction.references ++ filter.map(_.references).getOrElse(AttributeSet.empty)
       case PartialMerge | Final => AttributeSet(aggregateFunction.aggBufferAttributes)
     }
   }

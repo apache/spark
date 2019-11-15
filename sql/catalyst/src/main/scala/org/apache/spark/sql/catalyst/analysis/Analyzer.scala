@@ -1084,11 +1084,10 @@ class Analyzer(
           result
         case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
           ExtractValue(child, fieldExpr, resolver)
-        case f @ UnresolvedFunction(_, children, _, filter) if filter.isDefined =>
+        case f @ UnresolvedFunction(_, children, _, Some(filter)) =>
           val newChildren = children.map(resolveExpressionTopDown(_, q))
-          val newFilter = filter.map{ expr => expr.mapChildren(resolveExpressionTopDown(_, q))}
-          val newFun = f.copy(children = newChildren, filter = newFilter)
-          newFun
+          val newFilter = filter.mapChildren(resolveExpressionTopDown(_, q))
+          f.copy(children = newChildren, filter = Some(newFilter))
         case _ => e.mapChildren(resolveExpressionTopDown(_, q))
       }
     }

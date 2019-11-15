@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{BaseOrdering, GenerateOrdering, Predicate => GenPredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{BaseOrdering, GenerateOrdering, Predicate}
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
@@ -45,7 +45,7 @@ class ObjectAggregationIterator(
     inputRows: Iterator[InternalRow],
     fallbackCountThreshold: Int,
     numOutputRows: SQLMetric,
-    predicates: HashMap[Int, GenPredicate])
+    predicates: mutable.Map[Int, Predicate])
   extends AggregationIterator(
     partIndex,
     groupingExpressions,

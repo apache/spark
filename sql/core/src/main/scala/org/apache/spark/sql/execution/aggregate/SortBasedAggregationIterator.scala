@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
-import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.Predicate
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
@@ -40,7 +40,7 @@ class SortBasedAggregationIterator(
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     numOutputRows: SQLMetric,
-    predicates: HashMap[Int, GenPredicate])
+    predicates: mutable.Map[Int, Predicate])
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
