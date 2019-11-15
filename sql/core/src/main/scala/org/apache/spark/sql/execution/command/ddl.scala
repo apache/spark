@@ -471,6 +471,9 @@ case class AlterTableAddPartitionCommand(
         locationUri = location.map(CatalogUtils.stringToURI)))
     }
 
+    // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
+    // Also the request to metastore times out when adding lot of partitions in one shot.
+    // we should split them into smaller batches
     val batchSize = 100
     parts.toIterator.grouped(batchSize).foreach { batch =>
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
