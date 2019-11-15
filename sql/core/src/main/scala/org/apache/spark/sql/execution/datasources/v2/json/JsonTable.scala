@@ -51,8 +51,8 @@ case class JsonTable(
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: LogicalWriteInfo): WriteBuilder =
-    new JsonWriteBuilder(options, paths, formatName, supportsDataType, writeInfo)
+      info: LogicalWriteInfo): WriteBuilder =
+    new JsonWriteBuilder(options, paths, formatName, supportsDataType, info)
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: AtomicType => true

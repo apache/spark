@@ -41,8 +41,8 @@ case class TextTable(
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: LogicalWriteInfo): WriteBuilder =
-    new TextWriteBuilder(options, paths, formatName, supportsDataType, writeInfo)
+      info: LogicalWriteInfo): WriteBuilder =
+    new TextWriteBuilder(options, paths, formatName, supportsDataType, info)
 
   override def supportsDataType(dataType: DataType): Boolean = dataType == StringType
 

@@ -33,8 +33,8 @@ class TextWriteBuilder(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    writeInfo: LogicalWriteInfo)
-  extends FileWriteBuilder(options, paths, formatName, supportsDataType, writeInfo) {
+    info: LogicalWriteInfo)
+  extends FileWriteBuilder(options, paths, formatName, supportsDataType, info) {
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
       throw new AnalysisException(

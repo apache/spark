@@ -44,9 +44,9 @@ case class AvroTable(
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: LogicalWriteInfo): WriteBuilder =
+      info: LogicalWriteInfo): WriteBuilder =
     new AvroWriteBuilder(
-      options, paths, formatName, supportsDataType, writeInfo)
+      options, paths, formatName, supportsDataType, info)
 
   override def supportsDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
 

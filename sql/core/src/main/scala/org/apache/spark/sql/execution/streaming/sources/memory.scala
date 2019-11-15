@@ -55,10 +55,10 @@ class MemorySink extends Table with SupportsWrite with Logging {
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: LogicalWriteInfo): WriteBuilder = {
+      info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private var needTruncate: Boolean = false
-      private val inputSchema: StructType = writeInfo.schema()
+      private val inputSchema: StructType = info.schema()
 
       override def truncate(): WriteBuilder = {
         this.needTruncate = true

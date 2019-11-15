@@ -56,9 +56,9 @@ case class ForeachWriterTable[T](
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: LogicalWriteInfo): WriteBuilder = {
+      info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
-      private var inputSchema: StructType = writeInfo.schema()
+      private var inputSchema: StructType = info.schema()
 
       // Do nothing for truncate. Foreach sink is special that it just forwards all the records to
       // ForeachWriter.

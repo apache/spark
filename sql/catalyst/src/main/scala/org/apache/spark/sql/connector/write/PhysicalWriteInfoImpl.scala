@@ -17,4 +17,4 @@
 
 package org.apache.spark.sql.connector.write
 
-case class PhysicalWriteInfoImpl(numPartitions: Int) extends PhysicalWriteInfo
+private[sql] case class PhysicalWriteInfoImpl(numPartitions: Int) extends PhysicalWriteInfo

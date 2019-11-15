@@ -70,9 +70,9 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     override def readSchema(): StructType = tableSchema
   }
 
-  class MyWriteBuilder(path: String, writeInfo: LogicalWriteInfo)
+  class MyWriteBuilder(path: String, info: LogicalWriteInfo)
       extends WriteBuilder with SupportsTruncate {
-    private val queryId: String = writeInfo.queryId()
+    private val queryId: String = info.queryId()
     private var needTruncate = false
 
     override def truncate(): WriteBuilder = {
@@ -141,8 +141,8 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
 
     override def newWriteBuilder(
         options: CaseInsensitiveStringMap,
-        writeInfo: LogicalWriteInfo): WriteBuilder = {
-      new MyWriteBuilder(path, writeInfo)
+        info: LogicalWriteInfo): WriteBuilder = {
+      new MyWriteBuilder(path, info)
     }
 
     override def capabilities(): util.Set[TableCapability] =

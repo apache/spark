@@ -37,8 +37,8 @@ class ParquetWriteBuilder(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    writeInfo: LogicalWriteInfo)
-  extends FileWriteBuilder(options, paths, formatName, supportsDataType, writeInfo) with Logging {
+    info: LogicalWriteInfo)
+  extends FileWriteBuilder(options, paths, formatName, supportsDataType, info) with Logging {
 
   override def prepareWrite(
       sqlConf: SQLConf,

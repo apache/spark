@@ -588,11 +588,11 @@ abstract class StreamExecution(
       table: SupportsWrite,
       options: Map[String, String],
       inputPlan: LogicalPlan): StreamingWrite = {
-    val writeInfo = LogicalWriteInfoImpl(
+    val info = LogicalWriteInfoImpl(
       queryId = id.toString,
       inputPlan.schema)
     val writeBuilder = table.newWriteBuilder(
-      new CaseInsensitiveStringMap(options.asJava), writeInfo)
+      new CaseInsensitiveStringMap(options.asJava), info)
     outputMode match {
       case Append =>
         writeBuilder.buildForStreaming()

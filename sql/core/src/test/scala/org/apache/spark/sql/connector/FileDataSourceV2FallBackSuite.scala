@@ -76,7 +76,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: LogicalWriteInfo): WriteBuilder =
+      info: LogicalWriteInfo): WriteBuilder =
     throw new AnalysisException("Dummy file writer")
 
   override def capabilities(): java.util.Set[TableCapability] =

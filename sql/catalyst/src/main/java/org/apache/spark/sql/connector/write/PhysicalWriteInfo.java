@@ -21,13 +21,13 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory;
 
 /**
- * This interface contains physical (i.e. RDD) write information that data sources can use when
+ * This interface contains physical write information that data sources can use when
  * generating a {@link DataWriterFactory} or a {@link StreamingDataWriterFactory}.
  */
 @Evolving
 public interface PhysicalWriteInfo {
   /**
-   * @return  The number of partitions of the RDD that is going to be written.
+   * @return  The number of partitions of the input data that is going to be written.
    */
   int numPartitions();
 }

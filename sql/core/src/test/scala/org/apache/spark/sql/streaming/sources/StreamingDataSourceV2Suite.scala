@@ -88,7 +88,7 @@ trait FakeStreamingWriteTable extends Table with SupportsWrite {
   }
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: LogicalWriteInfo): WriteBuilder = {
+      info: LogicalWriteInfo): WriteBuilder = {
     new FakeWriteBuilder
   }
 }

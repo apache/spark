@@ -21,8 +21,10 @@ import java.util.UUID
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
 import org.apache.spark.sql.execution.SparkPlan
@@ -37,7 +39,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class AppendDataExecV1(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V1FallbackWriters {
+    plan: LogicalPlan) extends V1FallbackWriters {
 
   override protected def doExecute(): RDD[InternalRow] = {
     writeWithV1(newWriteBuilder().buildForV1Write())
@@ -59,7 +61,7 @@ case class OverwriteByExpressionExecV1(
     table: SupportsWrite,
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V1FallbackWriters {
+    plan: LogicalPlan) extends V1FallbackWriters {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
@@ -96,10 +98,10 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
   }
 
   protected def newWriteBuilder(): V1WriteBuilder = {
-    val writeInfo = LogicalWriteInfoImpl(
+    val info = LogicalWriteInfoImpl(
       queryId = UUID.randomUUID().toString,
-      schema = query.schema)
-    val writeBuilder = table.newWriteBuilder(writeOptions, writeInfo)
+      schema = plan.schema)
+    val writeBuilder = table.newWriteBuilder(writeOptions, info)
 
     writeBuilder.asV1Builder
   }
@@ -108,9 +110,12 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
 /**
  * A trait that allows Tables that use V1 Writer interfaces to append data.
  */
-trait SupportsV1Write extends SparkPlan with WriteBase {
+trait SupportsV1Write extends SparkPlan {
+  // TODO: We should be able to work on SparkPlans at this point.
+  def plan: LogicalPlan
+
   protected def writeWithV1(relation: InsertableRelation): RDD[InternalRow] = {
-    relation.insert(sqlContext.internalCreateDataFrame(rdd, query.schema), overwrite = false)
+    relation.insert(Dataset.ofRows(sqlContext.sparkSession, plan), overwrite = false)
     sparkContext.emptyRDD
   }
 }

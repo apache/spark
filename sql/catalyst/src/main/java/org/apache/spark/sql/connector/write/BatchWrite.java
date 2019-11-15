@@ -46,7 +46,7 @@ public interface BatchWrite {
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    *
-   * @param info Information about the RDD that will be written to this data writer
+   * @param info Physical information about the input data that will be written to this data writer.
    */
   DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo info);
 

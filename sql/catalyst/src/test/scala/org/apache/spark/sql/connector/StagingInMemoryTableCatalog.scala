@@ -90,8 +90,8 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
 
     override def newWriteBuilder(
         options: CaseInsensitiveStringMap,
-        writeInfo: LogicalWriteInfo): WriteBuilder = {
-      delegateTable.newWriteBuilder(options, writeInfo)
+        info: LogicalWriteInfo): WriteBuilder = {
+      delegateTable.newWriteBuilder(options, info)
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {

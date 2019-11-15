@@ -44,9 +44,9 @@ abstract class FileWriteBuilder(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    writeInfo: LogicalWriteInfo) extends WriteBuilder {
-  private val schema = writeInfo.schema()
-  private val queryId = writeInfo.queryId()
+    info: LogicalWriteInfo) extends WriteBuilder {
+  private val schema = info.schema()
+  private val queryId = info.queryId()
   private var mode: SaveMode = _
 
   def mode(mode: SaveMode): WriteBuilder = {

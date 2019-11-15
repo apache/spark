@@ -73,9 +73,9 @@ object ConsoleTable extends Table with SupportsWrite {
 
   override def newWriteBuilder(
       options: CaseInsensitiveStringMap,
-      writeInfo: LogicalWriteInfo): WriteBuilder = {
+      info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
-      private val inputSchema: StructType = writeInfo.schema()
+      private val inputSchema: StructType = info.schema()
 
       // Do nothing for truncate. Console sink is special that it just prints all the records.
       override def truncate(): WriteBuilder = this

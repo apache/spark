@@ -31,8 +31,8 @@ class AvroWriteBuilder(
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
-    writeInfo: LogicalWriteInfo)
-  extends FileWriteBuilder(options, paths, formatName, supportsDataType, writeInfo) {
+    info: LogicalWriteInfo)
+  extends FileWriteBuilder(options, paths, formatName, supportsDataType, info) {
   override def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
