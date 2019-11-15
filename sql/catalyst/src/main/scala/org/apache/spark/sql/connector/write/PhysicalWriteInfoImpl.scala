@@ -17,8 +17,4 @@
 
 package org.apache.spark.sql.connector.write
 
-import org.apache.spark.sql.types.StructType
-
-private[sql] case class WriteInfoImpl(
-    queryId: String,
-    schema: StructType) extends WriteInfo
+case class PhysicalWriteInfoImpl(numPartitions: Int) extends PhysicalWriteInfo

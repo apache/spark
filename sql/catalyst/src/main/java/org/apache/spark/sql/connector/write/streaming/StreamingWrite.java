@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.write.streaming;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.write.DataWriter;
+import org.apache.spark.sql.connector.write.PhysicalWriteInfo;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 
 /**
@@ -48,8 +49,10 @@ public interface StreamingWrite {
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
+   *
+   * @param writeInfo Information about the RDD that will be written to this data writer
    */
-  StreamingDataWriterFactory createStreamingWriterFactory();
+  StreamingDataWriterFactory createStreamingWriterFactory(PhysicalWriteInfo writeInfo);
 
   /**
    * Commits this writing job for the specified epoch with a list of commit messages. The commit

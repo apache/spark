@@ -71,8 +71,9 @@ object ConsoleTable extends Table with SupportsWrite {
     Set(TableCapability.STREAMING_WRITE).asJava
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap,
-                               writeInfo: WriteInfo): WriteBuilder = {
+  override def newWriteBuilder(
+      options: CaseInsensitiveStringMap,
+      writeInfo: WriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private val inputSchema: StructType = writeInfo.schema()
 

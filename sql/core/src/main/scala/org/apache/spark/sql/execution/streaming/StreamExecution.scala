@@ -590,8 +590,7 @@ abstract class StreamExecution(
       inputPlan: LogicalPlan): StreamingWrite = {
     val writeInfo = WriteInfoImpl(
       queryId = id.toString,
-      inputPlan.schema,
-      ???)
+      inputPlan.schema)
     val writeBuilder = table.newWriteBuilder(
       new CaseInsensitiveStringMap(options.asJava), writeInfo)
     outputMode match {

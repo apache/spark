@@ -42,8 +42,9 @@ case class AvroTable(
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     AvroUtils.inferSchema(sparkSession, options.asScala.toMap, files)
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap,
-                               writeInfo: WriteInfo): WriteBuilder =
+  override def newWriteBuilder(
+      options: CaseInsensitiveStringMap,
+      writeInfo: WriteInfo): WriteBuilder =
     new AvroWriteBuilder(
       options, paths, formatName, supportsDataType, writeInfo)
 

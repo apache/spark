@@ -49,8 +49,9 @@ case class JsonTable(
       sparkSession, files, parsedOptions)
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap,
-                               writeInfo: WriteInfo): WriteBuilder =
+  override def newWriteBuilder(
+      options: CaseInsensitiveStringMap,
+      writeInfo: WriteInfo): WriteBuilder =
     new JsonWriteBuilder(options, paths, formatName, supportsDataType, writeInfo)
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {

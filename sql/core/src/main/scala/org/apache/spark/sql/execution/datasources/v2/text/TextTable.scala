@@ -39,8 +39,9 @@ case class TextTable(
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     Some(StructType(Seq(StructField("value", StringType))))
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap,
-                               writeInfo: WriteInfo): WriteBuilder =
+  override def newWriteBuilder(
+      options: CaseInsensitiveStringMap,
+      writeInfo: WriteInfo): WriteBuilder =
     new TextWriteBuilder(options, paths, formatName, supportsDataType, writeInfo)
 
   override def supportsDataType(dataType: DataType): Boolean = dataType == StringType

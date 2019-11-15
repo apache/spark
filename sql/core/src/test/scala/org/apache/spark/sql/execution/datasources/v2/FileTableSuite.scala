@@ -44,8 +44,9 @@ class DummyFileTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = null
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap,
-                               writeInfo: WriteInfo): WriteBuilder = null
+  override def newWriteBuilder(
+      options: CaseInsensitiveStringMap,
+      writeInfo: WriteInfo): WriteBuilder = null
 
   override def supportsDataType(dataType: DataType): Boolean = dataType == StringType
 

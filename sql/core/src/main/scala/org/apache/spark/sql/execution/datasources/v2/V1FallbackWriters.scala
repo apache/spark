@@ -80,7 +80,7 @@ case class OverwriteByExpressionExecV1(
 }
 
 /** Some helper interfaces that use V2 write semantics through the V1 writer interface. */
-sealed trait V1FallbackWriters extends SupportsV1Write { this: SupportsV1Write =>
+sealed trait V1FallbackWriters extends SupportsV1Write {
   override def output: Seq[Attribute] = Nil
   override final def children: Seq[SparkPlan] = Nil
 
@@ -98,8 +98,7 @@ sealed trait V1FallbackWriters extends SupportsV1Write { this: SupportsV1Write =
   protected def newWriteBuilder(): V1WriteBuilder = {
     val writeInfo: WriteInfo = WriteInfoImpl(
       queryId = UUID.randomUUID().toString,
-      schema = query.schema,
-      numPartitions = rdd.getNumPartitions)
+      schema = query.schema)
     val writeBuilder = table.newWriteBuilder(writeOptions, writeInfo)
 
     writeBuilder.asV1Builder
