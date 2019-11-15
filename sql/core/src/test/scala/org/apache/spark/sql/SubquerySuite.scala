@@ -1271,8 +1271,21 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Cannot remove sort for AVG from subquery plan because it is order-sensitive") {
-    val query =
+  test("Cannot remove sort for floating-point AVG from subquery because it is order-sensitive") {
+    Seq("float", "double").foreach { typeName =>
+      val query1 =
+        s"""
+          |SELECT k, AVG(v) FROM (
+          |  SELECT k, v
+          |  FROM VALUES (1, $typeName(2.0)), (2, $typeName(1.0)) t(k, v)
+          |  ORDER BY v)
+          |GROUP BY k
+        """.stripMargin
+      assert(getNumSortsInQuery(query1) == 1)
+    }
+
+    // For integral aggreagtes, we can remove redundant sort in a plan
+    val query2 =
       """
         |SELECT k, AVG(v) FROM (
         |  SELECT k, v
@@ -1280,7 +1293,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
         |  ORDER BY v)
         |GROUP BY k
       """.stripMargin
-    assert(getNumSortsInQuery(query) == 1)
+    assert(getNumSortsInQuery(query2) == 0)
   }
 
   test("SPARK-25482: Forbid pushdown to datasources of filters containing subqueries") {

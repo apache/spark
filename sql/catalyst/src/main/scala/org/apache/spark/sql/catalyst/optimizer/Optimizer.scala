@@ -1007,6 +1007,8 @@ object EliminateSorts extends Rule[LogicalPlan] {
       case _: Max => true
       case _: Count => true
       case _: CentralMomentAgg => true
+      // Floating-piont Average aggregates are order-sensitive
+      case a: Average => !Seq(FloatType, DoubleType).exists(_.sameType(a.child.dataType))
       case _ => false
     }
 
