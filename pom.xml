@@ -2343,6 +2343,7 @@
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
+              <io.netty.tryReflectionSetAccessible>true</io.netty.tryReflectionSetAccessible>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.master.rest.enabled>false</spark.master.rest.enabled>
