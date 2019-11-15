@@ -90,12 +90,18 @@ case class ShuffleExchangeExec(
   /**
    * Caches the created ShuffleRowRDD so we can reuse that.
    */
-  private var cachedShuffleRDD: ShuffledRowRDD = null
+  private var cachedShuffleRDD: RDD[InternalRow] = null
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = createShuffledRDD(None)
+      cachedShuffleRDD =
+        if (cachedShuffleRDD.getNumPartitions == 1 &&
+          outputPartitioning.numPartitions == 1) {
+          inputRDD
+        } else {
+          createShuffledRDD(None)
+        }
     }
     cachedShuffleRDD
   }

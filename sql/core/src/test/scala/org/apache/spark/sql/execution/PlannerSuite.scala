@@ -856,6 +856,13 @@ class PlannerSuite extends SharedSparkSession {
         StructField("f2", StringType, nullable = true),
         StructField("f3", StringType, nullable = false))))
   }
+
+  test("Pruning coalesce with one partition") {
+    val df = spark.range(0, 10, 1)
+    val plan = df.queryExecution.executedPlan
+    val coalesce = CoalesceExec(1, plan).execute()
+    assert(coalesce.dependencies.isEmpty)
+  }
 }
 
 // Used for unit-testing EnsureRequirements

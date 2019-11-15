@@ -23,7 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
@@ -155,5 +155,13 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
     val projection1 = cached.select("_1", "_2").queryExecution.executedPlan
     val projection2 = cached.select("_1", "_3").queryExecution.executedPlan
     assert(!projection1.sameResult(projection2))
+  }
+
+  test("Pruning shuffle exchange with one partition") {
+    val df = spark.range(0, 10, 1)
+    val plan = df.queryExecution.executedPlan
+    val part = RoundRobinPartitioning(1)
+    val exchange = ShuffleExchangeExec(part, plan)
+    assert(exchange.execute().dependencies.isEmpty)
   }
 }
