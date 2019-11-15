@@ -26,8 +26,8 @@ import org.apache.spark.sql.connector.write.WriterCommitMessage;
  * An interface that defines how to write the data to data source in streaming queries.
  *
  * The writing procedure is:
- *   1. Create a writer factory by {@link #createStreamingWriterFactory()}, serialize and send it to
- *      all the partitions of the input data(RDD).
+ *   1. Create a writer factory by {@link #createStreamingWriterFactory(PhysicalWriteInfo)},
+ *      serialize and send it to all the partitions of the input data(RDD).
  *   2. For each epoch in each partition, create the data writer, and write the data of the epoch in
  *      the partition with this writer. If all the data are written successfully, call
  *      {@link DataWriter#commit()}. If exception happens during the writing, call
