@@ -877,7 +877,6 @@ class SessionCatalog(
 
   /**
    * Drop all existing temporary views.
-   * For testing only.
    */
   def clearTempTables(): Unit = synchronized {
     tempViews.clear()
