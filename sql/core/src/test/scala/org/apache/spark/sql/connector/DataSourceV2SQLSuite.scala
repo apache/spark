@@ -1665,7 +1665,7 @@ class DataSourceV2SQLSuite
 
   private def testV1CommandNamespace(sqlCommand: String, namespace: String): Unit = {
     val e = intercept[AnalysisException] {
-      sql(s"$sqlCommand")
+      sql(sqlCommand)
     }
     assert(e.message.contains(s"The database name is not valid: ${namespace}"))
   }

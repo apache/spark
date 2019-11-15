@@ -314,7 +314,7 @@ class ResolveSessionCatalog(
 
     case ShowTableStatement(namespace, pattern, partitionsSpec) =>
       val db = namespace match {
-        case Some(namespace) if (namespace.length != 1) =>
+        case Some(namespace) if namespace.length != 1 =>
           throw new AnalysisException(
             s"The database name is not valid: ${namespace.quoted}")
         case _ => namespace.map(_.head)
