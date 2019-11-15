@@ -251,6 +251,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           catalogProxy.cacheTable(tableIdentifier, created)
           created
         }
+
         logicalRelation
       })
     }
