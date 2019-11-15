@@ -716,7 +716,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
         "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
       check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
-        "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.000010Z")
+        "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.00001Z")
       check("yyyy-MM-dd'T'HH:mm:ss.S",
         "2019-10-14T09:39:07.1", "2019-10-14T09:39:07.1")
       check("yyyy-MM-dd'T'HH:mm:ss.SS",
