@@ -365,13 +365,10 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
   since = "3.0.0")
 case class UnNest(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
 
-  override def prettyName: String = "unnest"
-
   override def elementSchema: StructType = {
     new StructType().add(prettyName, getLeafDataType(child.dataType), true)
   }
 
-  // TODO: multidimensional arrays must have array expressions with matching dimensions
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(_: NullType, _) => TypeCheckResult.TypeCheckSuccess
     case _: ArrayType =>
