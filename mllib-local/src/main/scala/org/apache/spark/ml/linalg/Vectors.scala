@@ -220,6 +220,12 @@ sealed trait Vector extends Serializable {
   @Since("3.0.0")
   def +(v: Vector): Vector
 
+  /**
+   * Vector subtraction.
+   */
+  @Since("3.0.0")
+  def -(v: Vector): Vector = this + (-v)
+
 }
 
 /**

@@ -454,9 +454,21 @@ class VectorsSuite extends SparkMLFunSuite {
     val sv3 = Vectors.sparse(3, Array(2), Array(1))
 
     assert((sv2 + sv3).toArray === Array(1, 0, 1))
+  }
 
-    // pure sparse vector addition may introduce new zero values
-    assert((sv + (-sv)).numNonzeros === 0)
+  test("vector subtraction") {
+    val dv = Vectors.dense(arr)
+    val sv = Vectors.sparse(n, indices, values)
+
+    assert((dv - dv).toArray === Array(0, 0, 0, 0))
+    assert((dv - sv).toArray === Array(0, 0, 0, 0))
+    assert((sv - dv).toArray === Array(0, 0, 0, 0))
+    assert((sv - sv).toArray === Array(0, 0, 0, 0))
+
+    val sv2 = Vectors.sparse(3, Array(0), Array(1))
+    val sv3 = Vectors.sparse(3, Array(2), Array(1))
+
+    assert((sv2 - sv3).toArray === Array(1, 0, -1))
   }
 
 }
