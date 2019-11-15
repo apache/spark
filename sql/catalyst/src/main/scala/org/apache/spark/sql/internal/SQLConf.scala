@@ -1674,8 +1674,9 @@ object SQLConf {
       .createWithDefault(Dialect.SPARK.toString)
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("This configuration will be deprecated in the future releases and replaced by" +
-      "spark.sql.dialect.spark.ansi.enabled, we keep it now for forward compatibility.")
+    .internal()
+    .doc("This configuration is deprecated and will be removed in the future releases." +
+      "It is replaced by spark.sql.dialect.spark.ansi.enabled.")
     .booleanConf
     .createWithDefault(false)
 
