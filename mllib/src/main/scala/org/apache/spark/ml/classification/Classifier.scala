@@ -189,9 +189,12 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     var outputSchema = super.transformSchema(schema)
     if ($(predictionCol).nonEmpty) {
       val attr = if (numClasses == 2) {
-        new BinaryAttribute(name = Some($(predictionCol)))
+        BinaryAttribute.defaultAttr
+          .withName($(predictionCol))
       } else {
-        new NominalAttribute(name = Some($(predictionCol)), numValues = Some(numClasses))
+        NominalAttribute.defaultAttr
+          .withName($(predictionCol))
+          .withNumValues(numClasses)
       }
       outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
     }
@@ -235,7 +238,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
         }
         predictUDF(col(getFeaturesCol))
       }
-      outputData = outputData.withColumn(getPredictionCol, predUDF)
+      outputData = outputData.withColumn(getPredictionCol, predUDF,
+        outputSchema($(predictionCol)).metadata)
       numColsOutput += 1
     }
 

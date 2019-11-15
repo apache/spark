@@ -207,15 +207,18 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model1 = new DecisionTreeClassificationModel("dtc", TreeTests.root1, 3, 2)
     val model = new RandomForestClassificationModel("rfc", Array(model0, model1), 3, 2)
     model.setLeafCol("predictedLeafId")
-      .setRawPredictionCol("")
-      .setPredictionCol("")
-      .setProbabilityCol("")
 
     val data = TreeTests.getTwoTreesLeafData
     data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
     val df = sc.parallelize(data, 1).toDF("leafId", "features")
-    model.transform(df).select("leafId", "predictedLeafId")
+    val transformed = model.transform(df)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "predictedLeafId", model.trees.length)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
+
+    transformed.select("leafId", "predictedLeafId")
       .collect()
       .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
         assert(leafId === predictedLeafId)

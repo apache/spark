@@ -95,9 +95,10 @@ private[spark] trait DecisionTreeModel {
 
   @transient private[ml] lazy val leafAttr = {
     if (numLeave == 2) {
-      new BinaryAttribute()
+      BinaryAttribute.defaultAttr
     } else {
-      new NominalAttribute(numValues = Some(numLeave))
+      NominalAttribute.defaultAttr
+        .withNumValues(numLeave)
     }
   }
 
