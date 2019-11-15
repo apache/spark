@@ -379,7 +379,7 @@ object IntervalUtils {
     import ParseState._
     var state = PREFIX
     def throwIAE(msg: String, e: Exception = null) = {
-      throw new IllegalArgumentException(s"Error parsing interval, $msg", e)
+      throw new IllegalArgumentException(s"Error parsing '$input' to interval, $msg", e)
     }
 
     if (input == null) {
@@ -409,8 +409,10 @@ object IntervalUtils {
       }
     }
 
-    def nextWord: UTF8String = {
-      s.substring(i, s.numBytes()).subStringIndex(UTF8String.blankString(1), 1)
+    def currentWord: String = {
+      val strings = s.toString.split("\\s+")
+      val lenLeft = s.substring(i, s.numBytes()).toString.split("\\s+").length
+      strings(strings.length - lenLeft)
     }
 
     while (i < bytes.length) {
@@ -449,10 +451,10 @@ object IntervalUtils {
               isNegative = false
             case '.' =>
               isNegative = false
-              i += 1
               fractionScale = (NANOS_PER_SECOND / 10).toInt
+              i += 1
               state = VALUE_FRACTIONAL_PART
-            case _ => throwIAE( s"unrecognized sign '$nextWord'")
+            case _ => throwIAE( s"unrecognized number '$currentWord'")
           }
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
@@ -467,7 +469,7 @@ object IntervalUtils {
             case '.' =>
               fractionScale = (NANOS_PER_SECOND / 10).toInt
               state = VALUE_FRACTIONAL_PART
-            case _ => throwIAE(s"invalid value '$nextWord'")
+            case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
@@ -479,15 +481,16 @@ object IntervalUtils {
               fraction /= NANOS_PER_MICROS.toInt
               state = TRIM_BEFORE_UNIT
             case _ if '0' <= b && b <= '9' =>
-              throwIAE(s"invalid value fractional part '$fraction$nextWord' out of range")
-            case _ => throwIAE(s"invalid value '$nextWord' in fractional part")
+              throwIAE(s"interval can only support nanosecond precision, '$currentWord' is out" +
+                s" of range")
+            case _ => throwIAE(s"invalid value '$currentWord' in fractional part")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
         case UNIT_BEGIN =>
           // Checks that only seconds can have the fractional part
           if (b != 's' && fractionScale >= 0) {
-            throwIAE(s"'$nextWord' with fractional part is unsupported")
+            throwIAE(s"'$currentWord' cannot have fractional part")
           }
           if (isNegative) {
             currentValue = -currentValue
@@ -531,8 +534,8 @@ object IntervalUtils {
                 } else if (s.matchAt(microsStr, i)) {
                   microseconds = Math.addExact(microseconds, currentValue)
                   i += microsStr.numBytes()
-                } else throwIAE(s"invalid unit '$nextWord'")
-              case _ => throwIAE(s"invalid unit '$nextWord'")
+                } else throwIAE(s"invalid unit '$currentWord'")
+              case _ => throwIAE(s"invalid unit '$currentWord'")
             }
           } catch {
             case e: ArithmeticException => throwIAE(e.getMessage, e)
@@ -542,7 +545,7 @@ object IntervalUtils {
           b match {
             case 's' => state = UNIT_END
             case ' ' => state = TRIM_BEFORE_SIGN
-            case _ => throwIAE(s"invalid unit suffix '$nextWord'")
+            case _ => throwIAE(s"invalid unit '$currentWord'")
           }
           i += 1
         case UNIT_END =>
@@ -550,7 +553,7 @@ object IntervalUtils {
             case ' ' =>
               i += 1
               state = TRIM_BEFORE_SIGN
-            case _ => throwIAE(s"invalid unit suffix '$nextWord'")
+            case _ => throwIAE(s"invalid unit '$currentWord'")
           }
       }
     }

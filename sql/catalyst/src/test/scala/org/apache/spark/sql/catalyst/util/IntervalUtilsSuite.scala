@@ -80,7 +80,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromInvalidString(null, "cannot be null")
 
     for (input <- Seq("", " ", "interval", "interval1 day", "foo", "foo 1 day")) {
-      checkFromInvalidString(input, "Error parsing interval")
+      checkFromInvalidString(input, "Error parsing")
     }
   }
 
@@ -104,16 +104,15 @@ class IntervalUtilsSuite extends SparkFunSuite {
     // Allow duplicated units and summarize their values
     checkFromString("1 day 10 day", new CalendarInterval(0, 11, 0))
     // Only the seconds units can have the fractional part
-    checkFromInvalidString("1.5 days", "'days' with fractional part is unsupported")
-    checkFromInvalidString("1. hour", "'hour' with fractional part is unsupported")
-    checkFromInvalidString("1 hourX", "invalid unit suffix")
-    checkFromInvalidString("~1 hour", "unrecognized sign")
+    checkFromInvalidString("1.5 days", "'days' cannot have fractional part")
+    checkFromInvalidString("1. hour", "'hour' cannot have fractional part")
+    checkFromInvalidString("1 hourX", "invalid unit 'hourx'")
+    checkFromInvalidString("~1 hour", "unrecognized number '~1'")
     checkFromInvalidString("1 Mour", "invalid unit 'mour'")
     checkFromInvalidString("1 aour", "invalid unit 'aour'")
-    checkFromInvalidString("1a1 hour", "invalid value 'a1'")
-    checkFromInvalidString("1.1a1 seconds", "invalid value 'a1' in fractional part")
+    checkFromInvalidString("1a1 hour", "invalid value '1a1'")
+    checkFromInvalidString("1.1a1 seconds", "invalid value '1.1a1' in fractional part")
     checkFromInvalidString("2234567890 days", "integer overflow")
-
   }
 
   test("string to interval: seconds with fractional part") {
@@ -126,7 +125,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     // truncate nanoseconds to microseconds
     checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 999999))
     checkFromString(".999999999 seconds", new CalendarInterval(0, 0, 999999))
-    checkFromInvalidString("0.123456789123 seconds", "'123456789123' out of range")
+    checkFromInvalidString("0.123456789123 seconds", "'0.123456789123' is out of range")
   }
 
   test("from year-month string") {
