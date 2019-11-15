@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types._
 
@@ -104,6 +105,59 @@ private[spark] object SchemaUtils {
   def appendColumn(schema: StructType, col: StructField): StructType = {
     require(!schema.fieldNames.contains(col.name), s"Column ${col.name} already exists.")
     StructType(schema.fields :+ col)
+  }
+
+  /**
+   * Update the size of a ML Vector column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param colName column name
+   * @param size number of features
+   * @return new schema
+   */
+  def updateAttributeGroupSize(
+      schema: StructType,
+      colName: String,
+      size: Int): StructType = {
+    require(size > 0)
+    val attrGroup = new AttributeGroup(colName, size)
+    if (schema.fieldNames.contains(colName)) {
+      val newFields = schema.fields.map { field =>
+        if (field.name == colName) {
+          attrGroup.toStructField(field.metadata)
+        } else {
+          field
+        }
+      }
+      StructType(newFields)
+    } else {
+      appendColumn(schema, attrGroup.toStructField)
+    }
+  }
+
+  /**
+   * Update the metadata of an existing column.
+   * @param schema input schema
+   * @param colName column name
+   * @param metadata meta data
+   * @return new schema
+   */
+  def updateMeta(
+      schema: StructType,
+      colName: String,
+      metadata: Metadata): StructType = {
+    require(schema.fieldNames.contains(colName))
+    val newFields = schema.fields.map { field =>
+      if (field.name == colName) {
+        val newMeta = new MetadataBuilder()
+          .withMetadata(field.metadata)
+          .withMetadata(metadata)
+          .build()
+        StructField(colName, field.dataType, field.nullable, newMeta)
+      } else {
+        field
+      }
+    }
+    StructType(newFields)
   }
 
   /**

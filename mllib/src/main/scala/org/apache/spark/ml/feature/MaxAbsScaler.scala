@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
@@ -118,7 +117,7 @@ class MaxAbsScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val scale = maxAbs.toArray.map { v => if (v == 0) 1.0 else 1 / v }
     val func = StandardScalerModel.getTransformFunc(
@@ -126,12 +125,17 @@ class MaxAbsScalerModel private[ml] (
     val transformer = udf(func)
 
     dataset.withColumn($(outputCol), transformer(col($(inputCol))),
-      AttributeGroup.toMeta($(outputCol), maxAbs.size))
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    val outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), maxAbs.size)
+    } else {
+      outputSchema
+    }
   }
 
   @Since("2.0.0")

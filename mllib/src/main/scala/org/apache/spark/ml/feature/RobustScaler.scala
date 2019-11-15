@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasRelativeError}
@@ -228,7 +227,7 @@ class RobustScalerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val shift = if ($(withCentering)) median.toArray else Array.emptyDoubleArray
     val scale = if ($(withScaling)) {
@@ -240,11 +239,16 @@ class RobustScalerModel private[ml] (
     val transformer = udf(func)
 
     dataset.withColumn($(outputCol), transformer(col($(inputCol))),
-      AttributeGroup.toMeta($(outputCol), median.size))
+      outputSchema($(outputCol)).metadata)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    val outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), median.size)
+    } else {
+      outputSchema
+    }
   }
 
   override def copy(extra: ParamMap): RobustScalerModel = {

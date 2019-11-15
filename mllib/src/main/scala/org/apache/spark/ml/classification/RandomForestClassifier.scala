@@ -21,7 +21,6 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -37,6 +36,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.StructType
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> learning algorithm for
@@ -211,14 +211,24 @@ class RandomForestClassificationModel private[ml] (
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = {
+    val outputSchema = super.transformSchema(schema)
+    if ($(leafCol).nonEmpty) {
+      SchemaUtils.appendColumn(schema, getLeafField($(leafCol)))
+    } else {
+      outputSchema
+    }
+  }
+
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { features: Vector => predictLeaf(features) }
       outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
-        AttributeGroup.toMeta($(leafCol), trees.length))
+        outputSchema($(leafCol)).metadata)
     } else {
       outputData
     }

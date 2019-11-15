@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
@@ -175,7 +174,7 @@ class MinMaxScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val numFeatures = originalMax.size
     val scale = $(max) - $(min)
@@ -212,12 +211,17 @@ class MinMaxScalerModel private[ml] (
     }
 
     dataset.withColumn($(outputCol), transformer(col($(inputCol))),
-      AttributeGroup.toMeta($(outputCol), originalMin.size))
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    val outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), originalMin.size)
+    } else {
+      outputSchema
+    }
   }
 
   @Since("1.5.0")

@@ -22,7 +22,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -289,7 +288,7 @@ class Word2VecModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val vectors = wordVectors.getVectors
       .mapValues(vv => Vectors.dense(vv.map(_.toDouble)))
       .map(identity) // mapValues doesn't return a serializable map (SI-7005)
@@ -310,12 +309,17 @@ class Word2VecModel private[ml] (
       }
     }
     dataset.withColumn($(outputCol), word2Vec(col($(inputCol))),
-      AttributeGroup.toMeta($(outputCol), ${vectorSize}))
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    val outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), $(vectorSize))
+    } else {
+      outputSchema
+    }
   }
 
   @Since("1.4.1")

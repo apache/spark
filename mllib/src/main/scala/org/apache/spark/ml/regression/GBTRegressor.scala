@@ -24,7 +24,6 @@ import org.json4s.JsonDSL._
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -36,6 +35,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StructType
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Gradient-Boosted Trees (GBTs)</a>
@@ -256,8 +256,18 @@ class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = {
+    val outputSchema = super.transformSchema(schema)
+    if ($(leafCol).nonEmpty) {
+      SchemaUtils.appendColumn(schema, getLeafField($(leafCol)))
+    } else {
+      outputSchema
+    }
+  }
+
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
@@ -274,7 +284,7 @@ class GBTRegressionModel private[ml](
       val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
-        .as($(leafCol), AttributeGroup.toMeta($(leafCol), trees.length))
+        .as($(leafCol), outputSchema($(leafCol)).metadata)
     }
 
     if (predictionColNames.nonEmpty) {

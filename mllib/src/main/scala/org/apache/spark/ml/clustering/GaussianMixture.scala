@@ -23,7 +23,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.impl.Utils.EPSILON
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
@@ -113,7 +112,7 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
     var outputData = dataset
@@ -122,7 +121,7 @@ class GaussianMixtureModel private[ml] (
     if ($(probabilityCol).nonEmpty) {
       val probUDF = udf((vector: Vector) => predictProbability(vector))
       outputData = outputData.withColumn($(probabilityCol), probUDF(vectorCol),
-        AttributeGroup.toMeta($(probabilityCol), weights.length))
+        outputSchema($(probabilityCol)).metadata)
       numColsOutput += 1
     }
 
@@ -146,7 +145,12 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    val outputSchema = validateAndTransformSchema(schema)
+    if ($(probabilityCol).nonEmpty) {
+      SchemaUtils.updateAttributeGroupSize(schema, $(probabilityCol), weights.length)
+    } else {
+      outputSchema
+    }
   }
 
   @Since("3.0.0")

@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
@@ -185,6 +185,19 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   /** Number of classes (values which the label can take). */
   def numClasses: Int
 
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if (outputSchema.contains($(predictionCol))) {
+      val attr = new NominalAttribute(numValues = Some(numClasses))
+      outputSchema = SchemaUtils.updateMeta(outputSchema, $(predictionCol), attr.toMetadata)
+    }
+    if ($(rawPredictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(rawPredictionCol), numClasses)
+    }
+    outputSchema
+  }
+
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
@@ -195,7 +208,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * @return transformed dataset
    */
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     // Output selected columns only.
     // This is a bit complicated since it tries to avoid repeated computation.
@@ -206,7 +219,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
         predictRaw(features.asInstanceOf[FeaturesType])
       }
       outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)),
-        AttributeGroup.toMeta($(rawPredictionCol), numClasses))
+        outputSchema($(rawPredictionCol)).metadata)
       numColsOutput += 1
     }
     if (getPredictionCol != "") {

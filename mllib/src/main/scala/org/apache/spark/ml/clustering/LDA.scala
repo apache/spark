@@ -29,7 +29,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
@@ -460,13 +459,13 @@ abstract class LDAModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val func = getTopicDistributionMethod
     val transformer = udf(func)
     dataset.withColumn($(topicDistributionCol),
       transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
-      AttributeGroup.toMeta($(topicDistributionCol), oldLocalModel.k))
+      outputSchema($(topicDistributionCol)).metadata)
   }
 
   /**
@@ -506,7 +505,12 @@ abstract class LDAModel private[ml] (
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    val outputSchema = validateAndTransformSchema(schema)
+    if ($(topicDistributionCol).nonEmpty) {
+      SchemaUtils.updateAttributeGroupSize(outputSchema, $(topicDistributionCol), $(k))
+    } else {
+      outputSchema
+    }
   }
 
   /**

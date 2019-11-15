@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -91,6 +90,15 @@ abstract class ProbabilisticClassificationModel[
     set(thresholds, value).asInstanceOf[M]
   }
 
+  override def transformSchema(schema: StructType): StructType = {
+    val outputSchema = super.transformSchema(schema)
+    if ($(probabilityCol).nonEmpty) {
+      SchemaUtils.updateAttributeGroupSize(outputSchema, $(probabilityCol), numClasses)
+    } else {
+      outputSchema
+    }
+  }
+
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
@@ -102,7 +110,7 @@ abstract class ProbabilisticClassificationModel[
    * @return transformed dataset
    */
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
         ".transform() called with non-matching numClasses and thresholds.length." +
@@ -118,7 +126,7 @@ abstract class ProbabilisticClassificationModel[
         predictRaw(features.asInstanceOf[FeaturesType])
       }
       outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)),
-        AttributeGroup.toMeta($(rawPredictionCol), numClasses))
+        outputSchema($(rawPredictionCol)).metadata)
       numColsOutput += 1
     }
     if ($(probabilityCol).nonEmpty) {
@@ -131,7 +139,7 @@ abstract class ProbabilisticClassificationModel[
         probabilityUDF(col($(featuresCol)))
       }
       outputData = outputData.withColumn($(probabilityCol), probUDF,
-        AttributeGroup.toMeta($(probabilityCol), numClasses))
+        outputSchema($(probabilityCol)).metadata)
       numColsOutput += 1
     }
     if ($(predictionCol).nonEmpty) {

@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -158,7 +157,7 @@ class StandardScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val shift = if ($(withMean)) mean.toArray else Array.emptyDoubleArray
     val scale = if ($(withStd)) {
       std.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
@@ -168,12 +167,17 @@ class StandardScalerModel private[ml] (
     val transformer = udf(func)
 
     dataset.withColumn($(outputCol), transformer(col($(inputCol))),
-      AttributeGroup.toMeta($(outputCol), mean.size))
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    val outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), mean.size)
+    } else {
+      outputSchema
+    }
   }
 
   @Since("1.4.1")
