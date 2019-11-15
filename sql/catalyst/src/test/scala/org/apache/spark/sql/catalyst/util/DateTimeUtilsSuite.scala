@@ -698,9 +698,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   test("fast parse to micros") {
     DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
       def check(pattern: String, input: String, reference: String): Unit = {
-        val parser = getTimestampParser(
-          FastDateFormat.getInstance(pattern, timeZone, Locale.US),
-          timeZone)
+        val parser = new TimestampParser(FastDateFormat.getInstance(pattern, timeZone, Locale.US))
         val expected = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString(reference), timeZone).get
         val actual = parser.parse(input)
@@ -723,9 +721,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         "2019-10-14T09:39:07.10", "2019-10-14T09:39:07.1")
 
       try {
-        getTimestampParser(
-          FastDateFormat.getInstance("yyyy/MM/dd HH_mm_ss.SSSSSS", timeZone, Locale.US),
-          timeZone).parse("2019/11/14 20#25#30.123456")
+        new TimestampParser(
+          FastDateFormat.getInstance("yyyy/MM/dd HH_mm_ss.SSSSSS", timeZone, Locale.US))
+          .parse("2019/11/14 20#25#30.123456")
         fail("Expected to throw an exception for the invalid input")
       } catch {
         case e: IllegalArgumentException =>

@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimestampParser
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimestampParser
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -54,8 +54,7 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
-  @transient private lazy val timestampParser =
-    getTimestampParser(options.timestampFormat, options.timeZone)
+  @transient private lazy val timestampParser = new TimestampParser(options.timestampFormat)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`

@@ -1174,7 +1174,7 @@ object DateTimeUtils {
    * the `get()` method because it performs normalization of the fraction
    * part. Accordingly, the `MILLISECOND` field doesn't contain original value.
    */
-  class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
+  private class MicrosCalendar(tz: TimeZone) extends GregorianCalendar(tz, Locale.US) {
     // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
     // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
     // if the `MILLISECOND` field was parsed to `1234`.
@@ -1190,13 +1190,12 @@ object DateTimeUtils {
 
   /**
    * An instance of the class is aimed to re-use many times. It contains helper objects
-   * that can be reused between `parse()` invokes.
-   * @param format The parser itself.
-   * @param digitsInFraction The number of digits in the seconds fraction precalculated
-   *                         from the pattern. For `ss.SSSS`, it is 4.
-   * @param cal The calendar which can get microseconds from the second fraction.
+   * `cal` and `digitsInFraction` that are reused between `parse()` invokes.
    */
-  class DateTimeParser(format: FastDateFormat, digitsInFraction: Int, cal: MicrosCalendar) {
+  class TimestampParser(format: FastDateFormat) {
+    private val digitsInFraction = format.getPattern.count(_ == 'S')
+    private val cal = new MicrosCalendar(format.getTimeZone)
+
     def parse(s: String): SQLTimestamp = {
       cal.clear() // Clear the calendar because it can be re-used many times
       if (!format.parse(s, new ParsePosition(0), cal)) {
@@ -1206,9 +1205,5 @@ object DateTimeUtils {
       cal.set(Calendar.MILLISECOND, 0)
       cal.getTimeInMillis * MICROS_PER_MILLIS + micros
     }
-  }
-
-  def getTimestampParser(format: FastDateFormat, tz: TimeZone): DateTimeParser = {
-    new DateTimeParser(format, format.getPattern.count(_ == 'S'), new MicrosCalendar(tz))
   }
 }
