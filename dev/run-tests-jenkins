@@ -26,7 +26,6 @@ FWDIR="$( cd "$( dirname "$0" )/.." && pwd )"
 cd "$FWDIR"
 
 export PATH=/home/anaconda/envs/py36/bin:$PATH
-export ARROW_PRE_0_15_IPC_FORMAT=1
 
 PYTHON_VERSION_CHECK=$(python3 -c 'import sys; print(sys.version_info < (3, 6, 0))')
 if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
