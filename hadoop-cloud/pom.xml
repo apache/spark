@@ -202,7 +202,7 @@
      enables store-specific committers.
     -->
     <profile>
-      <id>hadoop-3.2</id>
+      <id>skip-hadoop-3.2-profile</id>
       <properties>
         <extra.source.dir>src/hadoop-3/main/scala</extra.source.dir>
         <extra.testsource.dir>src/hadoop-3/test/scala</extra.testsource.dir>
