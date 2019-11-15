@@ -21,10 +21,12 @@ import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
+import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -542,5 +544,100 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         .jdbc(url1, "TEST.TIMEOUTTEST", properties)
     }.getMessage
     assert(errMsg.contains("Statement was canceled or the session timed out"))
+  }
+
+  test("metrics") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+
+    runAndVerifyRecordsWritten(2) {
+      df.write.mode(SaveMode.Append).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+
+    runAndVerifyRecordsWritten(1) {
+      df2.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+
+    runAndVerifyRecordsWritten(1) {
+      df2.write.mode(SaveMode.Overwrite).option("truncate", true)
+        .jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+
+    runAndVerifyRecordsWritten(0) {
+      intercept[AnalysisException] {
+        df2.write.mode(SaveMode.ErrorIfExists).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+      }
+    }
+
+    runAndVerifyRecordsWritten(0) {
+      df.write.mode(SaveMode.Ignore).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+  }
+
+  test("SPARK-29644: Write tables with ShortType") {
+    import testImplicits._
+    val df = Seq(-32768.toShort, 0.toShort, 1.toShort, 38.toShort, 32768.toShort).toDF("a")
+    val tablename = "shorttable"
+    df.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url", url)
+      .option("dbtable", tablename)
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url", url)
+      .option("dbtable", tablename)
+      .load()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(0) == "class java.lang.Short")
+  }
+
+  test("SPARK-29644: Write tables with ByteType") {
+    import testImplicits._
+    val df = Seq(-127.toByte, 0.toByte, 1.toByte, 38.toByte, 128.toByte).toDF("a")
+    val tablename = "bytetable"
+    df.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url", url)
+      .option("dbtable", tablename)
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url", url)
+      .option("dbtable", tablename)
+      .load()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(0) == "class java.lang.Byte")
+  }
+
+  private def runAndVerifyRecordsWritten(expected: Long)(job: => Unit): Unit = {
+    assert(expected === runAndReturnMetrics(job, _.taskMetrics.outputMetrics.recordsWritten))
+  }
+
+  private def runAndReturnMetrics(job: => Unit, collector: (SparkListenerTaskEnd) => Long): Long = {
+    val taskMetrics = new ArrayBuffer[Long]()
+
+    // Avoid receiving earlier taskEnd events
+    sparkContext.listenerBus.waitUntilEmpty()
+
+    val listener = new SparkListener() {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        taskMetrics += collector(taskEnd)
+      }
+    }
+    sparkContext.addSparkListener(listener)
+
+    job
+
+    sparkContext.listenerBus.waitUntilEmpty()
+
+    sparkContext.removeSparkListener(listener)
+    taskMetrics.sum
   }
 }

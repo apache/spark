@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.util
 
-import java.time.{LocalDateTime, LocalTime, ZoneOffset}
+import java.time.{Instant, LocalDateTime, LocalTime, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
@@ -25,8 +25,7 @@ import org.scalatest.Matchers
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, instantToMicros, MICROS_PER_DAY}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 
 class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers {
 
@@ -137,22 +136,22 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   }
 
   test("special timestamp values") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val zoneId = getZoneId(timeZone)
-        val formatter = TimestampFormatter(zoneId)
-        val tolerance = TimeUnit.SECONDS.toMicros(30)
+    testSpecialDatetimeValues { zoneId =>
+      val formatter = TimestampFormatter(zoneId)
+      val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-        assert(formatter.parse("EPOCH") === 0)
-        val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
-        formatter.parse("now") should be (now +- tolerance)
-        val today = instantToMicros(LocalDateTime.now(zoneId)
-          .`with`(LocalTime.MIDNIGHT)
-          .atZone(zoneId).toInstant)
-        formatter.parse("yesterday CET") should be (today - MICROS_PER_DAY +- tolerance)
-        formatter.parse(" TODAY ") should be (today +- tolerance)
-        formatter.parse("Tomorrow ") should be (today + MICROS_PER_DAY +- tolerance)
-      }
+      assert(formatter.parse("EPOCH") === 0)
+      val now = instantToMicros(Instant.now())
+      formatter.parse("now") should be(now +- tolerance)
+      val localToday = LocalDateTime.now(zoneId)
+        .`with`(LocalTime.MIDNIGHT)
+        .atZone(zoneId)
+      val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
+      formatter.parse("yesterday CET") should be(yesterday +- tolerance)
+      val today = instantToMicros(localToday.toInstant)
+      formatter.parse(" TODAY ") should be(today +- tolerance)
+      val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
+      formatter.parse("Tomorrow ") should be(tomorrow +- tolerance)
     }
   }
 }

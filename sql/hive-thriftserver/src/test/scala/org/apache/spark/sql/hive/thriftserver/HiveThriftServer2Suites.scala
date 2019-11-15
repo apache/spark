@@ -675,7 +675,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement() { statement =>
       val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
       assert(rs.next())
-      assert(rs.getString(1) === "interval 3 months 1 hours")
+      assert(rs.getString(1) === "3 months 1 hours")
     }
     // Invalid interval value
     withJdbcStatement() { statement =>
