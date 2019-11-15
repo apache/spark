@@ -300,7 +300,7 @@ class CountVectorizerModel(
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
       val dict = vocabulary.zipWithIndex.toMap
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
@@ -326,14 +326,19 @@ class CountVectorizerModel(
 
       Vectors.sparse(dictBr.value.size, effectiveCounts)
     }
-    val attrs = vocabulary.map(_ => new NumericAttribute).asInstanceOf[Array[Attribute]]
-    val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
-    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))), metadata)
+    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      val attrs: Array[Attribute] = vocabulary.map(_ => new NumericAttribute)
+      val field = new AttributeGroup($(outputCol), attrs).toStructField()
+      outputSchema = SchemaUtils.updateMeta(schema, field)
+    }
+    outputSchema
   }
 
   @Since("1.5.0")

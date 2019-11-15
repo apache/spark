@@ -131,7 +131,7 @@ class IDFModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val func = { vector: Vector =>
       vector match {
@@ -149,7 +149,8 @@ class IDFModel private[ml] (
     }
 
     val transformer = udf(func)
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
