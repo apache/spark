@@ -36,7 +36,7 @@ class PostgreSQLDialectQuerySuite extends QueryTest with SharedSparkSession {
     }
 
     Seq("o", "abc", "").foreach { input =>
-      intercept[IllegalArgumentException](sql(s"select cast('$input' as boolean)").collect())
+      intercept[AnalysisException](sql(s"select cast('$input' as boolean)").collect())
     }
   }
 }
