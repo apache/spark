@@ -848,6 +848,7 @@ Spark SQL supports the vast majority of Hive features, such as:
 * All Hive DDL Functions, including:
   * `CREATE TABLE`
   * `CREATE TABLE AS SELECT`
+  * `CREATE TABLE LIKE`
   * `ALTER TABLE`
 * Most Hive Data types, including:
   * `TINYINT`

@@ -372,6 +372,20 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       assert(table.provider == Some("org.apache.spark.sql.hive.orc"))
     }
   }
+
+  test("Create Table LIKE with specified TBLPROPERTIES") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t") {
+      sql("CREATE TABLE s(a INT, b INT) USING hive TBLPROPERTIES('a'='apple')")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.properties("a") == "apple")
+      sql("CREATE TABLE t LIKE s STORED AS parquet TBLPROPERTIES('f'='foo', 'b'='bar')")
+      val table = catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.properties.get("a") === None)
+      assert(table.properties("f") == "foo")
+      assert(table.properties("b") == "bar")
+    }
+  }
 }
 
 class HiveDDLSuite

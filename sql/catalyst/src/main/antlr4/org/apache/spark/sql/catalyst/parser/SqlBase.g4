@@ -120,7 +120,9 @@ statement
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier
-        (tableProvider | createFileFormat)? locationSpec?              #createTableLike
+        (tableProvider | createFileFormat)?
+        locationSpec?
+        (TBLPROPERTIES tableProps=tablePropertyList)?                  #createTableLike
     | replaceTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitioning=transformList) |

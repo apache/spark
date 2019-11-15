@@ -63,7 +63,7 @@ import org.apache.spark.sql.util.SchemaUtils
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
  *   LIKE [other_db_name.]existing_table_name [USING provider | STORED AS hiveFormat]
- *   [locationSpec]
+ *   [locationSpec] [TBLPROPERTIES (property_name=property_value, ...)]
  * }}}
  */
 case class CreateTableLikeCommand(
@@ -72,6 +72,7 @@ case class CreateTableLikeCommand(
     provider: Option[String],
     hiveFormat: Option[CatalogStorageFormat],
     location: Option[String],
+    properties: Map[String, String] = Map.empty,
     ifNotExists: Boolean) extends RunnableCommand {
 
   assert(!(hiveFormat.isDefined && provider.isDefined),
@@ -118,7 +119,8 @@ case class CreateTableLikeCommand(
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
-        bucketSpec = sourceTableDesc.bucketSpec)
+        bucketSpec = sourceTableDesc.bucketSpec,
+        properties = properties)
 
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
