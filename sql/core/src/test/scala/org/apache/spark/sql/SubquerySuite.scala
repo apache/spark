@@ -1275,7 +1275,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     Seq("float", "double").foreach { typeName =>
       Seq("SUM", "AVG", "KURTOSIS", "SKEWNESS", "STDDEV_POP", "STDDEV_SAMP",
           "VAR_POP", "VAR_SAMP").foreach { aggName =>
-        val query1 =
+        val query =
           s"""
             |SELECT k, $aggName(v) FROM (
             |  SELECT k, v
@@ -1283,7 +1283,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
             |  ORDER BY v)
             |GROUP BY k
           """.stripMargin
-        assert(getNumSortsInQuery(query1) == 1)
+        assert(getNumSortsInQuery(query) == 1)
       }
     }
   }
