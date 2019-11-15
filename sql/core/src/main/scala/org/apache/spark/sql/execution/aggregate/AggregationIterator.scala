@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.collection.mutable.
+import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.Predicate
 
 /**
  * The base class of [[SortBasedAggregationIterator]] and [[TungstenAggregationIterator]].
@@ -41,7 +41,7 @@ abstract class AggregationIterator(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    predicates: mutable.Map[Int, GenPredicate],
+    predicates: mutable.Map[Int, Predicate],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection)
   extends Iterator[UnsafeRow] with Logging {
 
