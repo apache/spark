@@ -187,7 +187,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
-    if (outputSchema.contains($(predictionCol))) {
+    if ($(predictionCol).nonEmpty) {
       val attr = if (numClasses == 2) {
         new BinaryAttribute(name = Some($(predictionCol)))
       } else {

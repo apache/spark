@@ -130,12 +130,11 @@ class MaxAbsScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    val outputSchema = validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), maxAbs.size)
-    } else {
-      outputSchema
+      outputSchema = SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), maxAbs.size)
     }
+    outputSchema
   }
 
   @Since("2.0.0")

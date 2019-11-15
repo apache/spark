@@ -154,7 +154,11 @@ class IDFModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), idf.size)
+    }
+    outputSchema
   }
 
   @Since("1.4.1")
@@ -180,7 +184,7 @@ class IDFModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"IDFModel: uid=$uid, numDocs=$numDocs"
+    s"IDFModel: uid=$uid, numDocs=$numDocs, numFeatures=${idf.size}"
   }
 }
 

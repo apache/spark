@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -110,15 +111,26 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol),
-      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
+      outputSchema($(predictionCol)).metadata)
   }
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    val k = parentModel.k
+    if ($(predictionCol).nonEmpty) {
+      val attr = if (k == 2) {
+        new BinaryAttribute(name = Some($(predictionCol)))
+      } else {
+        new NominalAttribute(name = Some($(predictionCol)), numValues = Some(k))
+      }
+      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+    }
+    outputSchema
   }
 
   @Since("3.0.0")

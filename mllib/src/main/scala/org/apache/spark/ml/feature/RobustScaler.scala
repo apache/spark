@@ -243,12 +243,11 @@ class RobustScalerModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    val outputSchema = validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), median.size)
-    } else {
-      outputSchema
+      outputSchema = SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), median.size)
     }
+    outputSchema
   }
 
   override def copy(extra: ParamMap): RobustScalerModel = {
