@@ -1867,8 +1867,8 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData( 3, "three")).toDS()
       .repartition($"id").sortWithinPartitions("id")
 
-    val df3 = df1.groupBy("id").keyAs[Int]
-      .cogroup(df2.groupBy("id").keyAs[Int]) { case (key, data1, data2) =>
+    val df3 = df1.groupBy("id").as[Int, DoubleData]
+      .cogroup(df2.groupBy("id").as[Int, DoubleData]) { case (key, data1, data2) =>
         if (key == 1) {
           Iterator(DoubleData(key, (data1 ++ data2).foldLeft("")((cur, next) => cur + next.val1)))
         } else Iterator.empty

@@ -167,7 +167,7 @@ private[sql] object SQLUtils extends Logging {
    * The helper function for gapply() on R side.
    */
   def gapply(
-      gd: RelationalGroupedDataset[_],
+      gd: RelationalGroupedDataset,
       func: Array[Byte],
       packageNames: Array[Byte],
       broadcastVars: Array[Object],

@@ -30,6 +30,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
@@ -2228,8 +2229,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a", "b", "c")
       .repartition($"a", $"b").sortWithinPartitions("a", "b")
 
-    val df3 = df1.groupBy("a", "b").keyAs[GroupByKey]
-      .cogroup(df2.groupBy("a", "b").keyAs[GroupByKey]) { case (_, data1, data2) =>
+    implicit val valueEncoder = RowEncoder(df1.schema)
+
+    val df3 = df1.groupBy("a", "b").as[GroupByKey, Row]
+      .cogroup(df2.groupBy("a", "b").as[GroupByKey, Row]) { case (_, data1, data2) =>
         data1.zip(data2).map { p =>
           p._1.getInt(2) + p._2.getInt(2)
         }
@@ -2250,8 +2253,13 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a1", "b", "c")
       .repartition($"a1", $"b").sortWithinPartitions("a1", "b")
 
-    val df3 = df1.groupBy(($"a1" + 1).as("a"), $"b").keyAs[GroupByKey]
-      .cogroup(df2.groupBy(($"a1" + 1).as("a"), $"b").keyAs[GroupByKey]) { case (_, data1, data2) =>
+    implicit val valueEncoder = RowEncoder(df1.schema)
+
+    val relationalGroupedDataset1 = df1.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
+    val relationalGroupedDataset2 = df2.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
+
+    val df3 = relationalGroupedDataset1
+      .cogroup(relationalGroupedDataset2) { case (_, data1, data2) =>
         data1.zip(data2).map { p =>
           p._1.getInt(2) + p._2.getInt(2)
         }
