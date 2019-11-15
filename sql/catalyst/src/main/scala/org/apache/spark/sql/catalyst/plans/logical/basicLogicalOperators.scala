@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types._
@@ -383,283 +383,6 @@ case class Join(
 }
 
 /**
- * Base trait for DataSourceV2 write commands
- */
-trait V2WriteCommand extends Command {
-  def table: NamedRelation
-  def query: LogicalPlan
-
-  override def children: Seq[LogicalPlan] = Seq(query)
-
-  override lazy val resolved: Boolean = outputResolved
-
-  def outputResolved: Boolean = {
-    // If the table doesn't require schema match, we don't need to resolve the output columns.
-    table.skipSchemaResolution || {
-      table.resolved && query.resolved && query.output.size == table.output.size &&
-        query.output.zip(table.output).forall {
-          case (inAttr, outAttr) =>
-            // names and types must match, nullability must be compatible
-            inAttr.name == outAttr.name &&
-              DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
-              (outAttr.nullable || !inAttr.nullable)
-        }
-    }
-  }
-}
-
-/**
- * Create a new table with a v2 catalog.
- */
-case class CreateV2Table(
-    catalog: TableCatalog,
-    tableName: Identifier,
-    tableSchema: StructType,
-    partitioning: Seq[Transform],
-    properties: Map[String, String],
-    ignoreIfExists: Boolean) extends Command with V2CreateTablePlan {
-  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
-    this.copy(partitioning = rewritten)
-  }
-}
-
-/**
- * Create a new table from a select query with a v2 catalog.
- */
-case class CreateTableAsSelect(
-    catalog: TableCatalog,
-    tableName: Identifier,
-    partitioning: Seq[Transform],
-    query: LogicalPlan,
-    properties: Map[String, String],
-    writeOptions: Map[String, String],
-    ignoreIfExists: Boolean) extends Command with V2CreateTablePlan {
-
-  override def tableSchema: StructType = query.schema
-  override def children: Seq[LogicalPlan] = Seq(query)
-
-  override lazy val resolved: Boolean = childrenResolved && {
-    // the table schema is created from the query schema, so the only resolution needed is to check
-    // that the columns referenced by the table's partitioning exist in the query schema
-    val references = partitioning.flatMap(_.references).toSet
-    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
-  }
-
-  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
-    this.copy(partitioning = rewritten)
-  }
-}
-
-/**
- * Replace a table with a v2 catalog.
- *
- * If the table does not exist, and orCreate is true, then it will be created.
- * If the table does not exist, and orCreate is false, then an exception will be thrown.
- *
- * The persisted table will have no contents as a result of this operation.
- */
-case class ReplaceTable(
-    catalog: TableCatalog,
-    tableName: Identifier,
-    tableSchema: StructType,
-    partitioning: Seq[Transform],
-    properties: Map[String, String],
-    orCreate: Boolean) extends Command with V2CreateTablePlan {
-  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
-    this.copy(partitioning = rewritten)
-  }
-}
-
-/**
- * Replaces a table from a select query with a v2 catalog.
- *
- * If the table does not exist, and orCreate is true, then it will be created.
- * If the table does not exist, and orCreate is false, then an exception will be thrown.
- */
-case class ReplaceTableAsSelect(
-    catalog: TableCatalog,
-    tableName: Identifier,
-    partitioning: Seq[Transform],
-    query: LogicalPlan,
-    properties: Map[String, String],
-    writeOptions: Map[String, String],
-    orCreate: Boolean) extends Command with V2CreateTablePlan {
-
-  override def tableSchema: StructType = query.schema
-  override def children: Seq[LogicalPlan] = Seq(query)
-
-  override lazy val resolved: Boolean = childrenResolved && {
-    // the table schema is created from the query schema, so the only resolution needed is to check
-    // that the columns referenced by the table's partitioning exist in the query schema
-    val references = partitioning.flatMap(_.references).toSet
-    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
-  }
-
-  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
-    this.copy(partitioning = rewritten)
-  }
-}
-
-/**
- * Append data to an existing table.
- */
-case class AppendData(
-    table: NamedRelation,
-    query: LogicalPlan,
-    writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand
-
-object AppendData {
-  def byName(
-      table: NamedRelation,
-      df: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, df, writeOptions, isByName = true)
-  }
-
-  def byPosition(
-      table: NamedRelation,
-      query: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, query, writeOptions, isByName = false)
-  }
-}
-
-/**
- * Overwrite data matching a filter in an existing table.
- */
-case class OverwriteByExpression(
-    table: NamedRelation,
-    deleteExpr: Expression,
-    query: LogicalPlan,
-    writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
-  override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
-}
-
-object OverwriteByExpression {
-  def byName(
-      table: NamedRelation,
-      df: LogicalPlan,
-      deleteExpr: Expression,
-      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true)
-  }
-
-  def byPosition(
-      table: NamedRelation,
-      query: LogicalPlan,
-      deleteExpr: Expression,
-      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false)
-  }
-}
-
-/**
- * Dynamically overwrite partitions in an existing table.
- */
-case class OverwritePartitionsDynamic(
-    table: NamedRelation,
-    query: LogicalPlan,
-    writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand
-
-object OverwritePartitionsDynamic {
-  def byName(
-      table: NamedRelation,
-      df: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true)
-  }
-
-  def byPosition(
-      table: NamedRelation,
-      query: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false)
-  }
-}
-
-/**
- * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
- */
-case class ShowNamespaces(
-    catalog: SupportsNamespaces,
-    namespace: Option[Seq[String]],
-    pattern: Option[String]) extends Command {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("namespace", StringType, nullable = false)())
-}
-
-case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
-
-  override def children: Seq[LogicalPlan] = Seq(table)
-
-  override val output = DescribeTableSchema.describeTableAttributes()
-}
-
-case class DeleteFromTable(
-    child: LogicalPlan,
-    condition: Option[Expression]) extends Command {
-
-  override def children: Seq[LogicalPlan] = child :: Nil
-}
-
-/**
- * Drop a table.
- */
-case class DropTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    ifExists: Boolean) extends Command
-
-/**
- * Alter a table.
- */
-case class AlterTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    table: NamedRelation,
-    changes: Seq[TableChange]) extends Command {
-
-  override def children: Seq[LogicalPlan] = Seq(table)
-
-  override lazy val resolved: Boolean = childrenResolved && {
-    changes.forall {
-      case add: AddColumn =>
-        add.fieldNames match {
-          case Array(_) =>
-            // a top-level field can always be added
-            true
-          case _ =>
-            // the parent field must exist
-            table.schema.findNestedField(add.fieldNames.init, includeCollections = true).isDefined
-        }
-
-      case colChange: ColumnChange =>
-        // the column that will be changed must exist
-        table.schema.findNestedField(colChange.fieldNames, includeCollections = true).isDefined
-
-      case _ =>
-        // property changes require no resolution checks
-        true
-    }
-  }
-}
-
-/**
- * The logical plan of the SHOW TABLE command that works for v2 catalogs.
- */
-case class ShowTables(
-    catalog: TableCatalog,
-    namespace: Seq[String],
-    pattern: Option[String]) extends Command {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("namespace", StringType, nullable = false)(),
-    AttributeReference("tableName", StringType, nullable = false)())
-}
-
-/**
  * Insert query result into a directory.
  *
  * @param isLocal Indicates whether the specified directory is local directory
@@ -949,6 +672,8 @@ case class Expand(
   override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
+  override def producedAttributes: AttributeSet = AttributeSet(output diff child.output)
+
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override protected lazy val validConstraints: Set[Expression] = Set.empty[Expression]
@@ -1233,15 +958,8 @@ case class Deduplicate(
   override def output: Seq[Attribute] = child.output
 }
 
-/** A trait used for logical plan nodes that create or replace V2 table definitions. */
-trait V2CreateTablePlan extends LogicalPlan {
-  def tableName: Identifier
-  def partitioning: Seq[Transform]
-  def tableSchema: StructType
-
-  /**
-   * Creates a copy of this node with the new partitoning transforms. This method is used to
-   * rewrite the partition transforms normalized according to the table schema.
-   */
-  def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
-}
+/**
+ * A trait to represent the commands that support subqueries.
+ * This is used to whitelist such commands in the subquery-related checks.
+ */
+trait SupportsSubquery extends LogicalPlan

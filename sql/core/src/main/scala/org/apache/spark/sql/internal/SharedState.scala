@@ -18,7 +18,9 @@
 package org.apache.spark.sql.internal
 
 import java.net.URL
-import java.util.Locale
+import java.util.{Locale, UUID}
+import java.util.concurrent.ConcurrentHashMap
+import javax.annotation.concurrent.GuardedBy
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -31,8 +33,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
 
@@ -109,6 +113,16 @@ private[sql] class SharedState(
    * Class for caching query results reused in future executions.
    */
   val cacheManager: CacheManager = new CacheManager
+
+  /** A global lock for all streaming query lifecycle tracking and management. */
+  private[sql] val activeQueriesLock = new Object
+
+  /**
+   * A map of active streaming queries to the session specific StreamingQueryManager that manages
+   * the lifecycle of that stream.
+   */
+  @GuardedBy("activeQueriesLock")
+  private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamExecution]()
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific

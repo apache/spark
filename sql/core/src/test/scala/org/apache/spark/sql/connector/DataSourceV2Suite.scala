@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapabil
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
@@ -195,7 +195,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
         withClue(cls.getName) {
           val df = spark.read.format(cls.getName).load()
           val logical = df.queryExecution.optimizedPlan.collect {
-            case d: DataSourceV2Relation => d
+            case d: DataSourceV2ScanRelation => d
           }.head
 
           val statics = logical.computeStats()
@@ -225,8 +225,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select('id, -'id))
 
-        // default save mode is append
-        spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
+        // default save mode is ErrorIfExists
+        intercept[AnalysisException] {
+          spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
+            .option("path", path).save()
+        }
+        spark.range(10).select('id as 'i, -'id as 'j).write.mode("append").format(cls.getName)
           .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
@@ -281,7 +285,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
 
         val numPartition = 6
         spark.range(0, 10, 1, numPartition).select('id as 'i, -'id as 'j).write.format(cls.getName)
-          .option("path", path).save()
+          .mode("append").option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select('id, -'id))
@@ -328,7 +332,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
   test("SPARK-23315: get output from canonicalized data source v2 related plans") {
     def checkCanonicalizedOutput(
         df: DataFrame, logicalNumOutput: Int, physicalNumOutput: Int): Unit = {
-      val logical = df.queryExecution.optimizedPlan.collect {
+      val logical = df.queryExecution.logical.collect {
         case d: DataSourceV2Relation => d
       }.head
       assert(logical.canonicalized.output.length == logicalNumOutput)
@@ -352,7 +356,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
         .read
         .option(optionName, false)
         .format(classOf[DataSourceV2WithSessionConfig].getName).load()
-      val options = df.queryExecution.optimizedPlan.collectFirst {
+      val options = df.queryExecution.logical.collectFirst {
         case d: DataSourceV2Relation => d.options
       }.get
       assert(options.get(optionName) === "false")
@@ -368,7 +372,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
           val format = classOf[SimpleWritableDataSource].getName
 
           val df = Seq((1L, 2L)).toDF("i", "j")
-          df.write.format(format).option("path", optionPath).save()
+          df.write.format(format).mode("append").option("path", optionPath).save()
           assert(!new File(sessionPath).exists)
           checkAnswer(spark.read.format(format).option("path", optionPath).load(), df)
         }

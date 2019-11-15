@@ -23,10 +23,10 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random
  * values; instead, they're biased to return "interesting" values (such as maximum / minimum values)
@@ -172,7 +172,7 @@ object RandomDataGenerator {
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }
-            DateTimeUtils.toJavaDate((milliseconds / DateTimeUtils.MILLIS_PER_DAY).toInt)
+            DateTimeUtils.toJavaDate((milliseconds / MILLIS_PER_DAY).toInt)
           }
         Some(generator)
       case TimestampType =>
@@ -193,8 +193,9 @@ object RandomDataGenerator {
         Some(generator)
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
+        val days = rand.nextInt(10000)
         val ns = rand.nextLong()
-        new CalendarInterval(months, ns)
+        new CalendarInterval(months, days, ns)
       })
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(

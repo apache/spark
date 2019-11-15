@@ -280,6 +280,14 @@ class JavaParams(JavaWrapper, Params):
             that._transfer_params_to_java()
         return that
 
+    def clear(self, param):
+        """
+        Clears a param from the param map if it has been explicitly set.
+        """
+        super(JavaParams, self).clear(param)
+        java_param = self._java_obj.getParam(param.name)
+        self._java_obj.clear(java_param)
+
 
 @inherit_doc
 class JavaEstimator(JavaParams, Estimator):
@@ -366,15 +374,17 @@ class JavaModel(JavaTransformer, Model):
 
 
 @inherit_doc
-class JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
+class _JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
     """
-    (Private) Trait for parameters for prediction (regression and classification)
+    Params for :py:class:`JavaPredictor` and :py:class:`JavaPredictorModel`.
+
+    .. versionadded:: 3.0.0
     """
     pass
 
 
 @inherit_doc
-class JavaPredictor(JavaEstimator, JavaPredictorParams):
+class JavaPredictor(JavaEstimator, _JavaPredictorParams):
     """
     (Private) Java Estimator for prediction tasks (regression and classification).
     """
@@ -402,7 +412,7 @@ class JavaPredictor(JavaEstimator, JavaPredictorParams):
 
 
 @inherit_doc
-class JavaPredictionModel(JavaModel, JavaPredictorParams):
+class JavaPredictionModel(JavaModel, _JavaPredictorParams):
     """
     (Private) Java Model for prediction tasks (regression and classification).
     """

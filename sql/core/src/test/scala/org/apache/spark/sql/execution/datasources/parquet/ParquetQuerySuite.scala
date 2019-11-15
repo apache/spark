@@ -162,9 +162,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   test("SPARK-10634 timestamp written and read as INT64 - truncation") {
     withTable("ts") {
       sql("create table ts (c1 int, c2 timestamp) using parquet")
-      sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+      sql("insert into ts values (1, timestamp'2016-01-01 10:11:12.123456')")
       sql("insert into ts values (2, null)")
-      sql("insert into ts values (3, '1965-01-01 10:11:12.123456')")
+      sql("insert into ts values (3, timestamp'1965-01-01 10:11:12.123456')")
       val expected = Seq(
         (1, "2016-01-01 10:11:12.123456"),
         (2, null),
@@ -177,13 +177,13 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     withTable("ts") {
       withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
         sql("create table ts (c1 int, c2 timestamp) using parquet")
-        sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+        sql("insert into ts values (1, timestamp'2016-01-01 10:11:12.123456')")
         sql("insert into ts values (2, null)")
-        sql("insert into ts values (3, '1965-01-01 10:11:12.125456')")
-        sql("insert into ts values (4, '1965-01-01 10:11:12.125')")
-        sql("insert into ts values (5, '1965-01-01 10:11:12.1')")
-        sql("insert into ts values (6, '1965-01-01 10:11:12.123456789')")
-        sql("insert into ts values (7, '0001-01-01 00:00:00.000000')")
+        sql("insert into ts values (3, timestamp'1965-01-01 10:11:12.125456')")
+        sql("insert into ts values (4, timestamp'1965-01-01 10:11:12.125')")
+        sql("insert into ts values (5, timestamp'1965-01-01 10:11:12.1')")
+        sql("insert into ts values (6, timestamp'1965-01-01 10:11:12.123456789')")
+        sql("insert into ts values (7, timestamp'0001-01-01 00:00:00.000000')")
         val expected = Seq(
           (1, "2016-01-01 10:11:12.123"),
           (2, null),

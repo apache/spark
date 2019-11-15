@@ -55,9 +55,10 @@ class HeartbeatReceiverSuite
   private var heartbeatReceiverClock: ManualClock = null
 
   // Helper private method accessors for HeartbeatReceiver
-  private val _executorLastSeen = PrivateMethod[collection.Map[String, Long]]('executorLastSeen)
-  private val _executorTimeoutMs = PrivateMethod[Long]('executorTimeoutMs)
-  private val _killExecutorThread = PrivateMethod[ExecutorService]('killExecutorThread)
+  private val _executorLastSeen =
+    PrivateMethod[collection.Map[String, Long]](Symbol("executorLastSeen"))
+  private val _executorTimeoutMs = PrivateMethod[Long](Symbol("executorTimeoutMs"))
+  private val _killExecutorThread = PrivateMethod[ExecutorService](Symbol("killExecutorThread"))
 
   /**
    * Before each test, set up the SparkContext and a custom [[HeartbeatReceiver]]
@@ -73,6 +74,7 @@ class HeartbeatReceiverSuite
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
     when(scheduler.nodeBlacklist).thenReturn(Predef.Set[String]())
+    when(scheduler.resourcesReqsPerTask).thenReturn(Seq.empty)
     when(scheduler.sc).thenReturn(sc)
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)

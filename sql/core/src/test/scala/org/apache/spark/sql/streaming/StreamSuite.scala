@@ -201,7 +201,7 @@ class StreamSuite extends StreamTest {
   }
 
   test("DataFrame reuse") {
-    def assertDF(df: DataFrame) {
+    def assertDF(df: DataFrame): Unit = {
       withTempDir { outputDir =>
         withTempDir { checkpointDir =>
           val query = df.writeStream.format("parquet")
@@ -1175,7 +1175,7 @@ class FakeDefaultSource extends FakeSource {
         ds.toDF("a")
       }
 
-      override def stop() {}
+      override def stop(): Unit = {}
     }
   }
 }

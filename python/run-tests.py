@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,7 +17,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
 import logging
 from argparse import ArgumentParser
 import os
@@ -117,7 +116,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
                     log_file.writelines(per_test_output)
                 per_test_output.seek(0)
                 for line in per_test_output:
-                    decoded_line = line.decode()
+                    decoded_line = line.decode("utf-8", "replace")
                     if not re.match('[0-9]+', decoded_line):
                         print(decoded_line, end='')
                 per_test_output.close()
@@ -134,7 +133,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             per_test_output.seek(0)
             # Here expects skipped test output from unittest when verbosity level is
             # 2 (or --verbose option is enabled).
-            decoded_lines = map(lambda line: line.decode(), iter(per_test_output))
+            decoded_lines = map(lambda line: line.decode("utf-8", "replace"), iter(per_test_output))
             skipped_tests = list(filter(
                 lambda line: re.search(r'test_.* \(pyspark\..*\) ... (skip|SKIP)', line),
                 decoded_lines))
@@ -160,11 +159,15 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python2.7", "python3.6", "pypy"] if which(x)]
-    if "python2.7" not in python_execs:
-        LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
-                       " back to `python` instead")
-        python_execs.insert(0, "python")
+    python_execs = [x for x in ["python3.6", "python2.7", "pypy"] if which(x)]
+
+    if "python3.6" not in python_execs:
+        p = which("python3")
+        if not p:
+            LOGGER.error("No python3 executable found.  Exiting!")
+            os._exit(1)
+        else:
+            python_execs.insert(0, p)
     return python_execs
 
 

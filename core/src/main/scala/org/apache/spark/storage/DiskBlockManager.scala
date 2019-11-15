@@ -20,6 +20,8 @@ package org.apache.spark.storage
 import java.io.{File, IOException}
 import java.util.UUID
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
@@ -117,20 +119,38 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
-    var blockId = new TempLocalBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
-      blockId = new TempLocalBlockId(UUID.randomUUID())
+    var blockId = TempLocalBlockId(UUID.randomUUID())
+    var tempLocalFile = getFile(blockId)
+    var count = 0
+    while (!canCreateFile(tempLocalFile) && count < Utils.MAX_DIR_CREATION_ATTEMPTS) {
+      blockId = TempLocalBlockId(UUID.randomUUID())
+      tempLocalFile = getFile(blockId)
+      count += 1
     }
-    (blockId, getFile(blockId))
+    (blockId, tempLocalFile)
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
-    var blockId = new TempShuffleBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
-      blockId = new TempShuffleBlockId(UUID.randomUUID())
+    var blockId = TempShuffleBlockId(UUID.randomUUID())
+    var tempShuffleFile = getFile(blockId)
+    var count = 0
+    while (!canCreateFile(tempShuffleFile) && count < Utils.MAX_DIR_CREATION_ATTEMPTS) {
+      blockId = TempShuffleBlockId(UUID.randomUUID())
+      tempShuffleFile = getFile(blockId)
+      count += 1
     }
-    (blockId, getFile(blockId))
+    (blockId, tempShuffleFile)
+  }
+
+  private def canCreateFile(file: File): Boolean = {
+    try {
+      file.createNewFile()
+    } catch {
+      case NonFatal(_) =>
+        logError("Failed to create temporary block file: " + file.getAbsoluteFile)
+        false
+    }
   }
 
   /**
@@ -161,7 +181,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   /** Cleanup local dirs and stop shuffle sender. */
-  private[spark] def stop() {
+  private[spark] def stop(): Unit = {
     // Remove the shutdown hook.  It causes memory leaks if we leave it around.
     try {
       ShutdownHookManager.removeShutdownHook(shutdownHook)

@@ -170,8 +170,8 @@ object JdbcUtils extends Logging {
       case LongType => Option(JdbcType("BIGINT", java.sql.Types.BIGINT))
       case DoubleType => Option(JdbcType("DOUBLE PRECISION", java.sql.Types.DOUBLE))
       case FloatType => Option(JdbcType("REAL", java.sql.Types.FLOAT))
-      case ShortType => Option(JdbcType("INTEGER", java.sql.Types.SMALLINT))
-      case ByteType => Option(JdbcType("BYTE", java.sql.Types.TINYINT))
+      case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+      case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
       case BooleanType => Option(JdbcType("BIT(1)", java.sql.Types.BIT))
       case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
       case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
@@ -235,7 +235,7 @@ object JdbcUtils extends Logging {
       case java.sql.Types.REF           => StringType
       case java.sql.Types.REF_CURSOR    => null
       case java.sql.Types.ROWID         => LongType
-      case java.sql.Types.SMALLINT      => IntegerType
+      case java.sql.Types.SMALLINT      => ShortType
       case java.sql.Types.SQLXML        => StringType
       case java.sql.Types.STRUCT        => StringType
       case java.sql.Types.TIME          => TimestampType
@@ -244,7 +244,7 @@ object JdbcUtils extends Logging {
       case java.sql.Types.TIMESTAMP     => TimestampType
       case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
                                         => null
-      case java.sql.Types.TINYINT       => IntegerType
+      case java.sql.Types.TINYINT       => ByteType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
       case _                            =>
@@ -445,7 +445,7 @@ object JdbcUtils extends Logging {
 
     case ByteType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.update(pos, rs.getByte(pos + 1))
+        row.setByte(pos, rs.getByte(pos + 1))
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -546,11 +546,11 @@ object JdbcUtils extends Logging {
 
     case ShortType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setInt(pos + 1, row.getShort(pos))
+        stmt.setShort(pos + 1, row.getShort(pos))
 
     case ByteType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setInt(pos + 1, row.getByte(pos))
+        stmt.setByte(pos + 1, row.getByte(pos))
 
     case BooleanType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
@@ -605,6 +605,13 @@ object JdbcUtils extends Logging {
    * implementation changes elsewhere might easily render such a closure
    * non-Serializable.  Instead, we explicitly close over all variables that
    * are used.
+   *
+   * Note that this method records task output metrics. It assumes the method is
+   * running in a task. For now, we only records the number of rows being written
+   * because there's no good way to measure the total bytes being written. Only
+   * effective outputs are taken into account: for example, metric will not be updated
+   * if it supports transaction and transaction is rolled back, but metric will be
+   * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
   def savePartition(
       getConnection: () => Connection,
@@ -615,7 +622,9 @@ object JdbcUtils extends Logging {
       batchSize: Int,
       dialect: JdbcDialect,
       isolationLevel: Int,
-      options: JDBCOptions): Iterator[Byte] = {
+      options: JDBCOptions): Unit = {
+    val outMetrics = TaskContext.get().taskMetrics().outputMetrics
+
     val conn = getConnection()
     var committed = false
 
@@ -643,7 +652,7 @@ object JdbcUtils extends Logging {
       }
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
-
+    var totalRowCount = 0L
     try {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
@@ -672,6 +681,7 @@ object JdbcUtils extends Logging {
           }
           stmt.addBatch()
           rowCount += 1
+          totalRowCount += 1
           if (rowCount % batchSize == 0) {
             stmt.executeBatch()
             rowCount = 0
@@ -687,7 +697,6 @@ object JdbcUtils extends Logging {
         conn.commit()
       }
       committed = true
-      Iterator.empty
     } catch {
       case e: SQLException =>
         val cause = e.getNextException
@@ -715,9 +724,13 @@ object JdbcUtils extends Logging {
         // tell the user about another problem.
         if (supportsTransactions) {
           conn.rollback()
+        } else {
+          outMetrics.setRecordsWritten(totalRowCount)
         }
         conn.close()
       } else {
+        outMetrics.setRecordsWritten(totalRowCount)
+
         // The stage must succeed.  We cannot propagate any exception close() might throw.
         try {
           conn.close()
@@ -840,10 +853,10 @@ object JdbcUtils extends Logging {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition(iterator => savePartition(
+    repartitionedDF.rdd.foreachPartition { iterator => savePartition(
       getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
       options)
-    )
+    }
   }
 
   /**

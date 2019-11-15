@@ -22,7 +22,7 @@ license: |
 ### Description
 Lists the databases that match an optionally supplied string pattern. If no
 pattern is supplied then the command lists all the databases in the system.
-Please note that the usage of `SCHEMAS` and `DATABASES` are interchangable
+Please note that the usage of `SCHEMAS` and `DATABASES` are interchangeable
 and mean the same thing.
 
 ### Syntax
@@ -74,6 +74,6 @@ SHOW SCHEMAS;
   +------------+
 {% endhighlight %}
 ### Related Statements
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-databases.html)
+- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
 - [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
 - [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)

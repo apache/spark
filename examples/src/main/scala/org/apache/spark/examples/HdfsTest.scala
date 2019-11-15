@@ -26,7 +26,7 @@ import org.apache.spark.sql.SparkSession
 object HdfsTest {
 
   /** Usage: HdfsTest [file] */
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       System.err.println("Usage: HdfsTest <file>")
       System.exit(1)

@@ -19,6 +19,8 @@ package org.apache.spark.shuffle.sort
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.shuffle._
@@ -122,9 +124,25 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(
+      handle.shuffleId, startPartition, endPartition)
     new BlockStoreShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
-      startPartition, endPartition, context, metrics)
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
+      shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
+  }
+
+  override def getReaderForOneMapper[K, C](
+      handle: ShuffleHandle,
+      mapIndex: Int,
+      startPartition: Int,
+      endPartition: Int,
+      context: TaskContext,
+      metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByMapIndex(
+      handle.shuffleId, mapIndex, startPartition, endPartition)
+    new BlockStoreShuffleReader(
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
+      shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
@@ -185,9 +203,25 @@ private[spark] object SortShuffleManager extends Logging {
    * The maximum number of shuffle output partitions that SortShuffleManager supports when
    * buffering map outputs in a serialized form. This is an extreme defensive programming measure,
    * since it's extremely unlikely that a single shuffle produces over 16 million output partitions.
-   * */
+   */
   val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE =
     PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
+
+  /**
+   * The local property key for continuous shuffle block fetching feature.
+   */
+  val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY =
+    "__fetch_continuous_blocks_in_batch_enabled"
+
+  /**
+   * Helper method for determining whether a shuffle reader should fetch the continuous blocks
+   * in batch.
+   */
+  def canUseBatchFetch(startPartition: Int, endPartition: Int, context: TaskContext): Boolean = {
+    val fetchMultiPartitions = endPartition - startPartition > 1
+    fetchMultiPartitions &&
+      context.getLocalProperty(FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY) == "true"
+  }
 
   /**
    * Helper method for determining whether a shuffle should use an optimized serialized shuffle
@@ -215,12 +249,13 @@ private[spark] object SortShuffleManager extends Logging {
   }
 
   private def loadShuffleExecutorComponents(conf: SparkConf): ShuffleExecutorComponents = {
-    val configuredPluginClasses = conf.get(config.SHUFFLE_IO_PLUGIN_CLASS)
-    val maybeIO = Utils.loadExtensions(
-      classOf[ShuffleDataIO], Seq(configuredPluginClasses), conf)
-    require(maybeIO.size == 1, s"Failed to load plugins of type $configuredPluginClasses")
-    val executorComponents = maybeIO.head.executor()
-    executorComponents.initializeExecutor(conf.getAppId, SparkEnv.get.executorId)
+    val executorComponents = ShuffleDataIOUtils.loadShuffleDataIO(conf).executor()
+    val extraConfigs = conf.getAllWithPrefix(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX)
+        .toMap
+    executorComponents.initializeExecutor(
+      conf.getAppId,
+      SparkEnv.get.executorId,
+      extraConfigs.asJava)
     executorComponents
   }
 }

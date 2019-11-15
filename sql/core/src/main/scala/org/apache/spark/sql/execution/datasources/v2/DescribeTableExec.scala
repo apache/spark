@@ -20,22 +20,20 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StructType
 
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
-    isExtended: Boolean) extends LeafExecNode {
+    isExtended: Boolean) extends V2CommandExec {
 
   private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
 
@@ -43,7 +41,7 @@ case class DescribeTableExec(
       addPartitioning(rows)
       addProperties(rows)
     }
-    sparkContext.parallelize(rows)
+    rows
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {

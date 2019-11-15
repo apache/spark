@@ -41,7 +41,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
 
   // Helper private method accessors for FetchedDataPool
   private type PoolCacheType = mutable.Map[CacheKey, CachedFetchedDataList]
-  private val _cache = PrivateMethod[PoolCacheType]('cache)
+  private val _cache = PrivateMethod[PoolCacheType](Symbol("cache"))
 
   def getCache(pool: FetchedDataPool): PoolCacheType = {
     pool.invokePrivate(_cache())

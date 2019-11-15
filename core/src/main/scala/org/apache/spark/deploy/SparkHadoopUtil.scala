@@ -57,7 +57,7 @@ private[spark] class SparkHadoopUtil extends Logging {
    * you need to look https://issues.apache.org/jira/browse/HDFS-3545 and possibly
    * do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
    */
-  def runAsSparkUser(func: () => Unit) {
+  def runAsSparkUser(func: () => Unit): Unit = {
     createSparkUser().doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
@@ -71,7 +71,7 @@ private[spark] class SparkHadoopUtil extends Logging {
     ugi
   }
 
-  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
+  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation): Unit = {
     dest.addCredentials(source.getCredentials())
   }
 
@@ -79,8 +79,10 @@ private[spark] class SparkHadoopUtil extends Logging {
    * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
    * configuration.
    */
-  def appendS3AndSparkHadoopConfigurations(conf: SparkConf, hadoopConf: Configuration): Unit = {
-    SparkHadoopUtil.appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
+  def appendS3AndSparkHadoopHiveConfigurations(
+      conf: SparkConf,
+      hadoopConf: Configuration): Unit = {
+    SparkHadoopUtil.appendS3AndSparkHadoopHiveConfigurations(conf, hadoopConf)
   }
 
   /**
@@ -100,6 +102,15 @@ private[spark] class SparkHadoopUtil extends Logging {
     // Copy any "spark.hadoop.foo=bar" system properties into destMap as "foo=bar"
     for ((key, value) <- srcMap if key.startsWith("spark.hadoop.")) {
       destMap.put(key.substring("spark.hadoop.".length), value)
+    }
+  }
+
+  def appendSparkHiveConfigs(
+      srcMap: Map[String, String],
+      destMap: HashMap[String, String]): Unit = {
+    // Copy any "spark.hive.foo=bar" system properties into destMap as "hive.foo=bar"
+    for ((key, value) <- srcMap if key.startsWith("spark.hive.")) {
+      destMap.put(key.substring("spark.".length), value)
     }
   }
 
@@ -140,7 +151,7 @@ private[spark] class SparkHadoopUtil extends Logging {
    * Add or overwrite current user's credentials with serialized delegation tokens,
    * also confirms correct hadoop configuration is set.
    */
-  private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
+  private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf): Unit = {
     UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
     val creds = deserialize(tokens)
     logInfo("Updating delegation tokens for current user.")
@@ -413,11 +424,11 @@ private[spark] object SparkHadoopUtil {
    */
   private[spark] def newConfiguration(conf: SparkConf): Configuration = {
     val hadoopConf = new Configuration()
-    appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
+    appendS3AndSparkHadoopHiveConfigurations(conf, hadoopConf)
     hadoopConf
   }
 
-  private def appendS3AndSparkHadoopConfigurations(
+  private def appendS3AndSparkHadoopHiveConfigurations(
       conf: SparkConf,
       hadoopConf: Configuration): Unit = {
     // Note: this null check is around more than just access to the "conf" object to maintain
@@ -440,6 +451,7 @@ private[spark] object SparkHadoopUtil {
         }
       }
       appendSparkHadoopConfigs(conf, hadoopConf)
+      appendSparkHiveConfigs(conf, hadoopConf)
       val bufferSize = conf.get(BUFFER_SIZE).toString
       hadoopConf.set("io.file.buffer.size", bufferSize)
     }
@@ -449,6 +461,13 @@ private[spark] object SparkHadoopUtil {
     // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
       hadoopConf.set(key.substring("spark.hadoop.".length), value)
+    }
+  }
+
+  private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    // Copy any "spark.hive.foo=bar" spark properties into conf as "hive.foo=bar"
+    for ((key, value) <- conf.getAll if key.startsWith("spark.hive.")) {
+      hadoopConf.set(key.substring("spark.".length), value)
     }
   }
 

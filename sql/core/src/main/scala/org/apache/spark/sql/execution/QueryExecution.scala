@@ -137,7 +137,11 @@ class QueryExecution(
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
     if (formatted) {
-      ExplainUtils.processPlan(executedPlan, concat.append)
+      try {
+        ExplainUtils.processPlan(executedPlan, concat.append)
+      } catch {
+        case e: AnalysisException => concat.append(e.toString)
+      }
     } else {
       QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
     }
@@ -176,8 +180,11 @@ class QueryExecution(
     val maxFields = SQLConf.get.maxToStringFields
 
     // trigger to compute stats for logical plans
-    optimizedPlan.stats
-
+    try {
+      optimizedPlan.stats
+    } catch {
+      case e: AnalysisException => concat.append(e.toString + "\n")
+    }
     // only show optimized logical plan and physical plan
     concat.append("== Optimized Logical Plan ==\n")
     QueryPlan.append(optimizedPlan, concat.append, verbose = true, addSuffix = true, maxFields)
