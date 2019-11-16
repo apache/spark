@@ -190,8 +190,9 @@ private class LiveTask(
     val handleZeros = mutable.HashSet[String]()
 
     /**
-     * For non successful tasks, store the metrics as negetive to avoid the calculation in the
-     * task summary. `toApi` method in TaskDataWrapper will make it actual value.
+     * SPARK-26260: For non successful tasks, store the metrics as negetive to avoid
+     * the calculation in the task summary. `toApi` method in the `TaskDataWrapper` will make
+     * it actual value.
      */
     val taskMetrics: v1.TaskMetrics = if (hasMetrics && !info.successful) {
       makeNegative(metrics, handleZeros)

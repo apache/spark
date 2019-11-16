@@ -181,7 +181,7 @@ private[spark] class TaskDataWrapper(
     val errorMessage: Option[String],
 
     val hasMetrics: Boolean,
-    // Non successful metrics will have negative values in `TaskDataWrapper`.
+    // Non successful metrics now will have negative values in `TaskDataWrapper`.
     // `TaskData` will have actual metric values. To recover the actual metric value
     // from `TaskDataWrapper`, need use `getMetricValue` method. parameter `handleZero` is to
     // check whether the index has zero metric value, which is used in the `getMetricValue`.
@@ -242,9 +242,9 @@ private[spark] class TaskDataWrapper(
     val stageId: Int,
     val stageAttemptId: Int) {
 
-  // To handle non successful tasks metrics (Running, Failed, Killed).
+  // SPARK-26260: To handle non successful tasks metrics (Running, Failed, Killed).
   private def getMetricValue(metric: Long, index: String): Long = {
-    if (handleZero(index)) {
+    if (status != "SUCCESS" && handleZero(index)) {
       0L
     } else {
       math.abs(metric)
