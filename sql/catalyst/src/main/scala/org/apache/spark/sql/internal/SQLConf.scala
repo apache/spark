@@ -720,14 +720,6 @@ object SQLConf {
     .stringConf
     .createWithDefault("_corrupt_record")
 
-  val FROM_JSON_FORCE_NULLABLE_SCHEMA = buildConf("spark.sql.fromJsonForceNullableSchema")
-    .internal()
-    .doc("When true, force the output schema of the from_json() function to be nullable " +
-      "(including all the fields). Otherwise, the schema might not be compatible with" +
-      "actual data, which leads to corruptions. This config will be removed in Spark 3.0.")
-    .booleanConf
-    .createWithDefault(true)
-
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
     .timeConf(TimeUnit.SECONDS)
