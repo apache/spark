@@ -22,7 +22,6 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_PLAINTEXT
-import org.scalatest.Ignore
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
@@ -31,7 +30,6 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
-@Ignore
 class KafkaDelegationTokenSuite extends StreamTest with SharedSparkSession with KafkaTest {
 
   import testImplicits._
