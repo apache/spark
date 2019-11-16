@@ -602,6 +602,17 @@ object IntervalUtils {
           state = TRIM_BEFORE_SIGN
         case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
         case SIGN =>
+          currentValue = 0
+          fraction = 0
+          // We preset next state from SIGN to TRIM_BEFORE_VALUE. If we meet '.' in the SIGN state,
+          // it means that the interval value we deal with here is a numeric with only fractional
+          // part, such as '.11 second', which can be parsed to 0.11 seconds. In this case, we need
+          // to reset next state to `VALUE_FRACTIONAL_PART` to go parse the fraction part of the
+          // interval value.
+          state = TRIM_BEFORE_VALUE
+          // We preset the scale to an invalid value to track fraction presence in the UNIT_BEGIN
+          // state. If we meet '.', the scale become valid for the VALUE_FRACTIONAL_PART state.
+          fractionScale = -1
           b match {
             case '-' =>
               isNegative = true
@@ -611,14 +622,13 @@ object IntervalUtils {
               i += 1
             case _ if '0' <= b && b <= '9' =>
               isNegative = false
+            case '.' =>
+              isNegative = false
+              fractionScale = (NANOS_PER_SECOND / 10).toInt
+              i += 1
+              state = VALUE_FRACTIONAL_PART
             case _ => return null
           }
-          currentValue = 0
-          fraction = 0
-          // Sets the scale to an invalid value to track fraction presence
-          // in the BEGIN_UNIT_NAME state
-          fractionScale = -1
-          state = TRIM_BEFORE_VALUE
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
           b match {

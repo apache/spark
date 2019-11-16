@@ -1093,6 +1093,15 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
+  val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
+    buildConf("spark.sql.streaming.stopActiveRunOnRestart")
+    .doc("Running multiple runs of the same streaming query concurrently is not supported. " +
+      "If we find a concurrent active run for a streaming query (in the same or different " +
+      "SparkSessions on the same cluster) and this flag is true, we will stop the old streaming " +
+      "query run to start the new one.")
+    .booleanConf
+    .createWithDefault(true)
+
   val STREAMING_JOIN_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.join.stateFormatVersion")
       .internal()
@@ -1664,6 +1673,20 @@ object SQLConf {
       .checkValues(Dialect.values.map(_.toString))
       .createWithDefault(Dialect.SPARK.toString)
 
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .internal()
+    .doc("This configuration is deprecated and will be removed in the future releases." +
+      "It is replaced by spark.sql.dialect.spark.ansi.enabled.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val DIALECT_SPARK_ANSI_ENABLED = buildConf("spark.sql.dialect.spark.ansi.enabled")
+    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
+      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
+      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser.")
+    .fallbackConf(ANSI_ENABLED)
+
   val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
     buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
     .internal()
@@ -1774,14 +1797,6 @@ object SQLConf {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
-
-  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
-      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser.")
-    .booleanConf
-    .createWithDefault(false)
 
   object IntervalStyle extends Enumeration {
     type IntervalStyle = Value
@@ -2035,10 +2050,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val DEFAULT_V2_CATALOG = buildConf("spark.sql.default.catalog")
-    .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+  val DEFAULT_CATALOG = buildConf("spark.sql.defaultCatalog")
+    .doc("Name of the default catalog. This will be the current catalog if users have not " +
+      "explicitly set the current catalog yet.")
     .stringConf
-    .createOptional
+    .createWithDefault(SESSION_CATALOG_NAME)
 
   val V2_SESSION_CATALOG_IMPLEMENTATION =
     buildConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME")
@@ -2530,9 +2546,11 @@ class SQLConf extends Serializable with Logging {
 
   def intervalOutputStyle: IntervalStyle.Value = IntervalStyle.withName(getConf(INTERVAL_STYLE))
 
-  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString
 
-  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString()
+  def dialectSparkAnsiEnabled: Boolean = getConf(DIALECT_SPARK_ANSI_ENABLED)
+
+  def ansiEnabled: Boolean = usePostgreSQLDialect || dialectSparkAnsiEnabled
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
@@ -2573,8 +2591,6 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
-
-  def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 

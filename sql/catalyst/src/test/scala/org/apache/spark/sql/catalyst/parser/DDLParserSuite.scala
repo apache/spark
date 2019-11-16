@@ -653,6 +653,13 @@ class DDLParserSuite extends AnalysisTest {
         "DESC TABLE COLUMN for a specific partition is not supported"))
   }
 
+  test("describe database") {
+    val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
+    val sql2 = "DESCRIBE DATABASE a.b"
+    comparePlans(parsePlan(sql1), DescribeNamespaceStatement(Seq("a", "b"), extended = true))
+    comparePlans(parsePlan(sql2), DescribeNamespaceStatement(Seq("a", "b"), extended = false))
+  }
+
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
       DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
@@ -772,17 +779,15 @@ class DDLParserSuite extends AnalysisTest {
 
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
-      DeleteFromStatement(
-        Seq("testcat", "ns1", "ns2", "tbl"),
-        None,
+      DeleteFromTable(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         None))
   }
 
   test("delete from table: with alias and where clause") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl AS t WHERE t.a = 2",
-      DeleteFromStatement(
-        Seq("testcat", "ns1", "ns2", "tbl"),
-        Some("t"),
+      DeleteFromTable(
+        SubqueryAlias("t", UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"))),
         Some(EqualTo(UnresolvedAttribute("t.a"), Literal(2)))))
   }
 
@@ -798,13 +803,12 @@ class DDLParserSuite extends AnalysisTest {
     parseCompare(
       """
         |UPDATE testcat.ns1.ns2.tbl
-        |SET t.a='Robert', t.b=32
+        |SET a='Robert', b=32
       """.stripMargin,
-      UpdateTableStatement(
-        Seq("testcat", "ns1", "ns2", "tbl"),
-        None,
-        Seq(Seq("t", "a"), Seq("t", "b")),
-        Seq(Literal("Robert"), Literal(32)),
+      UpdateTable(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Seq(Assignment(UnresolvedAttribute("a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("b"), Literal(32))),
         None))
   }
 
@@ -815,11 +819,10 @@ class DDLParserSuite extends AnalysisTest {
         |SET t.a='Robert', t.b=32
         |WHERE t.c=2
       """.stripMargin,
-      UpdateTableStatement(
-        Seq("testcat", "ns1", "ns2", "tbl"),
-        Some("t"),
-        Seq(Seq("t", "a"), Seq("t", "b")),
-        Seq(Literal("Robert"), Literal(32)),
+      UpdateTable(
+        SubqueryAlias("t", UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"))),
+        Seq(Assignment(UnresolvedAttribute("t.a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("t.b"), Literal(32))),
         Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
   }
 
@@ -1024,6 +1027,31 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
+  }
+
+  test("show table extended") {
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED LIKE '*test*'"),
+      ShowTableStatement(None, "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*'"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*'"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09', hr=11)"),
+      ShowTableStatement(None, "*test*", Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
+        Some(Map("ds" -> "2008-04-09"))))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
+        Some(Map("ds" -> "2008-04-09"))))
   }
 
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {

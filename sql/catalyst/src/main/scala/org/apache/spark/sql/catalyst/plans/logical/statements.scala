@@ -270,30 +270,19 @@ case class DescribeTableStatement(
     isExtended: Boolean) extends ParsedStatement
 
 /**
+ * A DESCRIBE NAMESPACE statement, as parsed from SQL.
+ */
+case class DescribeNamespaceStatement(
+    namespace: Seq[String],
+    extended: Boolean) extends ParsedStatement
+
+/**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
  */
 case class DescribeColumnStatement(
     tableName: Seq[String],
     colNameParts: Seq[String],
     isExtended: Boolean) extends ParsedStatement
-
-/**
- * A DELETE FROM statement, as parsed from SQL.
- */
-case class DeleteFromStatement(
-    tableName: Seq[String],
-    tableAlias: Option[String],
-    condition: Option[Expression]) extends ParsedStatement
-
-/**
- * A UPDATE tbl_name statement, as parsed from SQL.
- */
-case class UpdateTableStatement(
-    tableName: Seq[String],
-    tableAlias: Option[String],
-    columns: Seq[Seq[String]],
-    values: Seq[Expression],
-    condition: Option[Expression]) extends ParsedStatement
 
 /**
  * An INSERT INTO statement, as parsed from SQL.
@@ -329,6 +318,15 @@ case class InsertIntoStatement(
  * A SHOW TABLES statement, as parsed from SQL.
  */
 case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[String])
+  extends ParsedStatement
+
+/**
+ * A SHOW TABLE EXTENDED statement, as parsed from SQL.
+ */
+case class ShowTableStatement(
+    namespace: Option[Seq[String]],
+    pattern: String,
+    partitionSpec: Option[TablePartitionSpec])
   extends ParsedStatement
 
 /**

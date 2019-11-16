@@ -1271,6 +1271,23 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Cannot remove sort for floating-point order-sensitive aggregates from subquery") {
+    Seq("float", "double").foreach { typeName =>
+      Seq("SUM", "AVG", "KURTOSIS", "SKEWNESS", "STDDEV_POP", "STDDEV_SAMP",
+          "VAR_POP", "VAR_SAMP").foreach { aggName =>
+        val query =
+          s"""
+            |SELECT k, $aggName(v) FROM (
+            |  SELECT k, v
+            |  FROM VALUES (1, $typeName(2.0)), (2, $typeName(1.0)) t(k, v)
+            |  ORDER BY v)
+            |GROUP BY k
+          """.stripMargin
+        assert(getNumSortsInQuery(query) == 1)
+      }
+    }
+  }
+
   test("SPARK-25482: Forbid pushdown to datasources of filters containing subqueries") {
     withTempView("t1", "t2") {
       sql("create temporary view t1(a int) using parquet")
