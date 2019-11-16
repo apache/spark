@@ -410,8 +410,8 @@ object IntervalUtils {
 
     def currentWord: UTF8String = {
       val strings = s.split(UTF8String.blankString(1), -1)
-      val lenLeft = s.substring(i, s.numBytes()).split(UTF8String.blankString(1), -1).length
-      strings(strings.length - lenLeft)
+      val lenRight = s.substring(i, s.numBytes()).split(UTF8String.blankString(1), -1).length
+      strings(strings.length - lenRight)
     }
 
     while (i < bytes.length) {
