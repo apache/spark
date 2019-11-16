@@ -81,7 +81,37 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputPartitioning: Partitioning = {
+    def checkProjectList(attr: AttributeReference): Option[Attribute] = {
+      val result = projectList.map{
+        case alias: Alias => alias.child match {
+          case childAttr: AttributeReference =>
+            if (childAttr.semanticEquals(attr)) {
+              Some(alias.toAttribute)
+            } else {
+              None
+            }
+          case _ => None
+        }
+        case _ => None
+      }.filter(_.nonEmpty)
+
+      require(result.size <= 1)
+      result.headOption.getOrElse(None)
+    }
+
+    val outputPartitioning = child.outputPartitioning
+    outputPartitioning match {
+      case h @ HashPartitioning(expressions, numPartitions) =>
+        val newExpressions = expressions.map{
+          case a: AttributeReference =>
+            checkProjectList(a).getOrElse(a)
+          case other => other
+        }
+        HashPartitioning(newExpressions, numPartitions)
+      case other => other
+    }
+  }
 
   override def verboseStringWithOperatorId(): String = {
     s"""

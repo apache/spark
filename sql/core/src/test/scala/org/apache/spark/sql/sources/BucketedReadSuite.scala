@@ -46,12 +46,13 @@ class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedS
 }
 
 
-abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
+class BucketedReadSuite extends QueryTest with SQLTestUtils with SharedSparkSession {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     spark.sessionState.conf.setConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
   }
 
   protected override def afterAll(): Unit = {
@@ -593,6 +594,22 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
+  }
+
+  test("terry") {
+    df1.write.format("parquet").bucketBy(8, "i").sortBy("i", "j").saveAsTable("t1")
+    df1.write.format("parquet").bucketBy(8, "i").sortBy("i", "j").saveAsTable("t2")
+    spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "0")
+    sql("describe extended t1").show
+    sql("describe extended t2").show
+    sql("with t3 as (select i as i2 from t2) select * from t1, t3 where t1.i = t3.i2").explain(true)
+    // sql("select * from t1, t2 where t1.i = t2.i").explain(true)
+    // val table1 = spark.table("table1")
+    // val table2 = spark.table("table2")
+    // table1.join(table2, "i").explain(true)
+    // val df = spark.sql("select * from table1, table2 where table1.i = table2.i")
+    // df.explain(true)
+    // df.show
   }
 
   test("avoid shuffle when grouping keys are a super-set of bucket keys") {
