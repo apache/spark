@@ -834,7 +834,6 @@ class DataSourceV2SQLSuite
         assert(catalogPath.equals(catalogPath))
       }
     }
-    // TODO: Add tests for validating namespace metadata when DESCRIBE NAMESPACE is available.
   }
 
   test("CreateNameSpace: test handling of 'IF NOT EXIST'") {
@@ -913,6 +912,25 @@ class DataSourceV2SQLSuite
       sql("DROP NAMESPACE testcat.ns1")
     }
     assert(exception.getMessage.contains("Namespace 'ns1' not found"))
+  }
+
+  test("DescribeNamespace using v2 catalog") {
+    withNamespace("testcat.ns1.ns2") {
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
+        "'test namespace' LOCATION '/tmp/ns_test'")
+      val descriptionDf = sql("DESCRIBE NAMESPACE testcat.ns1.ns2")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+        Seq(
+          ("name", StringType),
+          ("value", StringType)
+        ))
+      val description = descriptionDf.collect()
+      assert(description === Seq(
+        Row("Namespace Name", "ns2"),
+        Row("Description", "test namespace"),
+        Row("Location", "/tmp/ns_test")
+      ))
+    }
   }
 
   test("ShowNamespaces: show root namespaces with default v2 catalog") {
