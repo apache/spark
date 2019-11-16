@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -254,6 +254,21 @@ case class DropNamespace(
     namespace: Seq[String],
     ifExists: Boolean,
     cascade: Boolean) extends Command
+
+/**
+ * The logical plan of the DESCRIBE NAMESPACE command that works for v2 catalogs.
+ */
+case class DescribeNamespace(
+    catalog: CatalogPlugin,
+    namespace: Seq[String],
+    extended: Boolean) extends Command {
+
+  override def output: Seq[Attribute] = Seq(
+    AttributeReference("name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the column").build())(),
+    AttributeReference("value", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "value of the column").build())())
+}
 
 /**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.

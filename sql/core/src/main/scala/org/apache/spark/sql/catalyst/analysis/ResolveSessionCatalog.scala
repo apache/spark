@@ -158,6 +158,13 @@ class ResolveSessionCatalog(
     case AlterViewUnsetPropertiesStatement(SessionCatalog(catalog, tableName), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(tableName.asTableIdentifier, keys, ifExists, isView = true)
 
+    case d @ DescribeNamespaceStatement(SessionCatalog(_, nameParts), _) =>
+      if (nameParts.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${nameParts.quoted}")
+      }
+      DescribeDatabaseCommand(nameParts.head, d.extended)
+
     case DescribeTableStatement(
          nameParts @ SessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       loadTable(catalog, tableName.asIdentifier).collect {
@@ -300,6 +307,15 @@ class ResolveSessionCatalog(
 
     case ShowTablesStatement(None, pattern) if isSessionCatalog(currentCatalog) =>
       ShowTablesCommand(None, pattern)
+
+    case ShowTableStatement(namespace, pattern, partitionsSpec) =>
+      val db = namespace match {
+        case Some(namespace) if namespace.length != 1 =>
+          throw new AnalysisException(
+            s"The database name is not valid: ${namespace.quoted}")
+        case _ => namespace.map(_.head)
+      }
+      ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
 
     case AnalyzeTableStatement(tableName, partitionSpec, noScan) =>
       val v1TableName = parseV1Table(tableName, "ANALYZE TABLE")

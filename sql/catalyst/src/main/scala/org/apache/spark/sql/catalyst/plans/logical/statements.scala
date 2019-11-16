@@ -270,6 +270,13 @@ case class DescribeTableStatement(
     isExtended: Boolean) extends ParsedStatement
 
 /**
+ * A DESCRIBE NAMESPACE statement, as parsed from SQL.
+ */
+case class DescribeNamespaceStatement(
+    namespace: Seq[String],
+    extended: Boolean) extends ParsedStatement
+
+/**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
  */
 case class DescribeColumnStatement(
@@ -311,6 +318,15 @@ case class InsertIntoStatement(
  * A SHOW TABLES statement, as parsed from SQL.
  */
 case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[String])
+  extends ParsedStatement
+
+/**
+ * A SHOW TABLE EXTENDED statement, as parsed from SQL.
+ */
+case class ShowTableStatement(
+    namespace: Option[Seq[String]],
+    pattern: String,
+    partitionSpec: Option[TablePartitionSpec])
   extends ParsedStatement
 
 /**
