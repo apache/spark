@@ -32,12 +32,10 @@ case class AlterNamespaceSetPropertiesExec(
   override protected def run(): Seq[InternalRow] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-    val nsCatalog = catalog.asNamespaceCatalog
-    val ns = namespace.toArray
-    val changes = props.map(kv => {
-      NamespaceChange.setProperty(kv._1, kv._2)
-    }).toSeq
-    nsCatalog.alterNamespace(ns, changes: _*)
+    val changes = props.map{ case (k, v) =>
+      NamespaceChange.setProperty(k, v)
+    }.toSeq
+    catalog.asNamespaceCatalog.alterNamespace(namespace.toArray, changes: _*)
     Seq.empty
   }
 

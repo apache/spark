@@ -2537,11 +2537,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *   SET (DBPROPERTIES|PROPERTIES) (property_name=property_value, ...);
    * }}}
    */
-  override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan =
+  override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
-    AlterNamespaceSetPropertiesStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      visitPropertyKeyValues(ctx.tablePropertyList))
+      AlterNamespaceSetPropertiesStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        visitPropertyKeyValues(ctx.tablePropertyList))
+    }
   }
 
   /**

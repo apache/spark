@@ -1160,18 +1160,34 @@ class DDLParserSuite extends AnalysisTest {
       DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = true))
   }
 
-  test("alter namespace set dbproperties") {
-    val sql1 = "ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"
-    val sql2 = "ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"
-    val sql3 = "ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"
-
-    comparePlans(parsePlan(sql1),
+  test("set namespace properties") {
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
       AlterNamespaceSetPropertiesStatement(
         Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
-    comparePlans(parsePlan(sql2),
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
       AlterNamespaceSetPropertiesStatement(
         Seq("a", "b", "c"), Map("a" -> "a")))
-    comparePlans(parsePlan(sql3),
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("b" -> "b")))
+
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a")))
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
       AlterNamespaceSetPropertiesStatement(
         Seq("a", "b", "c"), Map("b" -> "b")))
   }

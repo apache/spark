@@ -271,8 +271,8 @@ case class DescribeNamespace(
 }
 
 /**
- * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET DBPROPERTIES command
- * that works for v2 catalogs.
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES)
+ * command that works for v2 catalogs.
  */
 case class AlterNamespaceSetProperties(
     catalog: CatalogPlugin,

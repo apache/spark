@@ -938,12 +938,12 @@ class DataSourceV2SQLSuite
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test' WITH PROPERTIES ('a'='a','b'='b','c'='c')")
       sql("ALTER NAMESPACE testcat.ns1.ns2 SET PROPERTIES ('a'='b','b'='a')")
-      val descriptionDf = spark.sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
+      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test"),
-        Row("Properties", Seq(('a', 'b'), ('b', 'a'), ('c', 'c')).mkString("(", ",", ")"))
+        Row("Properties", "((a,b),(b,a),(c,c))")
       ))
     }
   }
