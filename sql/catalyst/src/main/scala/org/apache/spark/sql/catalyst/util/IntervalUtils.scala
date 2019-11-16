@@ -377,7 +377,6 @@ object IntervalUtils {
    */
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
-    var state = PREFIX
     def throwIAE(msg: String, e: Exception = null) = {
       throw new IllegalArgumentException(s"Error parsing '$input' to interval, $msg", e)
     }
@@ -392,7 +391,7 @@ object IntervalUtils {
     if (bytes.isEmpty) {
       throwIAE("interval string cannot be empty")
     }
-
+    var state = PREFIX
     var i = 0
     var currentValue: Long = 0
     var isNegative: Boolean = false
@@ -483,7 +482,7 @@ object IntervalUtils {
             case _ if '0' <= b && b <= '9' =>
               throwIAE(s"interval can only support nanosecond precision, '$currentWord' is out" +
                 s" of range")
-            case _ => throwIAE(s"invalid value '$currentWord' in fractional part")
+            case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
