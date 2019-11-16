@@ -156,7 +156,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     }
   }
 
-  test("parsing timestamp strings up to microsecond precision") {
+  test("parsing timestamp strings with various seconds fractions") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
       def check(pattern: String, input: String, reference: String): Unit = {
         val formatter = TimestampFormatter(pattern, zoneId)
