@@ -422,4 +422,12 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
       assert(aliasedRelation.analyze.constraints.isEmpty)
     }
   }
+
+  test("SPARK-29606 Avoid generating too many constraints") {
+    val aliasedRelation = LocalRelation('a.int, 'b.int, 'c.int)
+      .select('a, 'b, 'c, ('a + 'b + 'c).as("abc"))
+      .select('a.as("a1"), 'b.as("b1"), 'c.as("c1"), 'abc.as("abc1"))
+    assert(aliasedRelation.analyze.isInstanceOf[Project])
+    assert(aliasedRelation.analyze.asInstanceOf[Project].validConstraints.size === 5)
+  }
 }
