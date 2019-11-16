@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.CatalogPlugin
-import org.apache.spark.sql.connector.catalog.NamespaceChange.SetProperty
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, NamespaceChange}
 
 /**
  * Physical plan node for setting properties of namespace.
@@ -36,7 +35,7 @@ case class AlterNamespaceSetPropertiesExec(
     val nsCatalog = catalog.asNamespaceCatalog
     val ns = namespace.toArray
     val changes = props.map(kv => {
-      new SetProperty(kv._1, kv._2)
+      NamespaceChange.setProperty(kv._1, kv._2)
     }).toSeq
     nsCatalog.alterNamespace(ns, changes: _*)
     Seq.empty
