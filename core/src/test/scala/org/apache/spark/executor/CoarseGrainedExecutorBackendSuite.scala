@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Properties
@@ -30,7 +29,7 @@ import org.json4s.JsonAST.{JArray, JObject}
 import org.json4s.JsonDSL._
 import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TestUtils._
@@ -55,7 +54,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val env = createMockEnv(conf, serializer)
 
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
+    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1", "host1",
       4, Seq.empty[URL], env, None)
     withTempDir { tmpDir =>
       val testResourceArgs: JObject = ("" -> "")
@@ -77,7 +76,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
+    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1", "host1",
       4, Seq.empty[URL], env, None)
     withTempDir { tmpDir =>
       val ra = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
@@ -88,7 +87,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.size === 1)
       assert(parsedResources.get(GPU).nonEmpty)
       assert(parsedResources.get(GPU).get.name === GPU)
-      assert(parsedResources.get(GPU).get.addresses.deep === Array("0", "1").deep)
+      assert(parsedResources.get(GPU).get.addresses.sameElements(Array("0", "1")))
     }
   }
 
@@ -102,7 +101,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
+    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1", "host1",
       4, Seq.empty[URL], env, None)
 
     withTempDir { tmpDir =>
@@ -116,10 +115,10 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.size === 2)
       assert(parsedResources.get(GPU).nonEmpty)
       assert(parsedResources.get(GPU).get.name === GPU)
-      assert(parsedResources.get(GPU).get.addresses.deep === Array("0", "1").deep)
+      assert(parsedResources.get(GPU).get.addresses.sameElements(Array("0", "1")))
       assert(parsedResources.get(FPGA).nonEmpty)
       assert(parsedResources.get(FPGA).get.name === FPGA)
-      assert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.get(FPGA).get.addresses.sameElements(Array("f1", "f2", "f3")))
     }
   }
 
@@ -130,13 +129,13 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
+    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
       4, Seq.empty[URL], env, None)
 
     // not enough gpu's on the executor
     withTempDir { tmpDir =>
       val gpuArgs = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0"))
-            val ja = Extraction.decompose(Seq(gpuArgs))
+      val ja = Extraction.decompose(Seq(gpuArgs))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
       var error = intercept[IllegalArgumentException] {
@@ -169,7 +168,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
+    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
       4, Seq.empty[URL], env, None)
 
     // executor resources < required
@@ -201,7 +200,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val env = createMockEnv(conf, serializer)
 
       // we don't really use this, just need it to get at the parser function
-      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
+      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
         4, Seq.empty[URL], env, None)
 
       val parsedResources = backend.parseOrFindResources(None)
@@ -209,7 +208,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.size === 1)
       assert(parsedResources.get(FPGA).nonEmpty)
       assert(parsedResources.get(FPGA).get.name === FPGA)
-      assert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.get(FPGA).get.addresses.sameElements(Array("f1", "f2", "f3")))
     }
   }
 
@@ -227,7 +226,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val env = createMockEnv(conf, serializer)
 
       // we don't really use this, just need it to get at the parser function
-      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
+      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
         4, Seq.empty[URL], env, None)
       val gpuArgs = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
       val ja = Extraction.decompose(Seq(gpuArgs))
@@ -237,10 +236,10 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.size === 2)
       assert(parsedResources.get(GPU).nonEmpty)
       assert(parsedResources.get(GPU).get.name === GPU)
-      assert(parsedResources.get(GPU).get.addresses.deep === Array("0", "1").deep)
+      assert(parsedResources.get(GPU).get.addresses.sameElements(Array("0", "1")))
       assert(parsedResources.get(FPGA).nonEmpty)
       assert(parsedResources.get(FPGA).get.name === FPGA)
-      assert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.get(FPGA).get.addresses.sameElements(Array("f1", "f2", "f3")))
     }
   }
 
@@ -255,7 +254,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val rpcEnv = RpcEnv.create("1", "localhost", 0, conf, securityMgr)
       val env = createMockEnv(conf, serializer, Some(rpcEnv))
       backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
-        "host1", 4, Seq.empty[URL], env, None)
+        "host1", "host1", 4, Seq.empty[URL], env, None)
       assert(backend.taskResources.isEmpty)
 
       val taskId = 1000000
@@ -288,6 +287,31 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         backend.rpcEnv.shutdown()
       }
     }
+  }
+
+  test("SPARK-24203 when bindAddress is not set, it defaults to hostname") {
+    val args1 = Array(
+      "--driver-url", "driverurl",
+      "--executor-id", "1",
+      "--hostname", "host1",
+      "--cores", "1",
+      "--app-id", "app1")
+
+    val arg = CoarseGrainedExecutorBackend.parseArguments(args1, "")
+    assert(arg.bindAddress == "host1")
+  }
+
+  test("SPARK-24203 when bindAddress is different, it does not default to hostname") {
+    val args1 = Array(
+      "--driver-url", "driverurl",
+      "--executor-id", "1",
+      "--hostname", "host1",
+      "--bind-address", "bindaddress1",
+      "--cores", "1",
+      "--app-id", "app1")
+
+    val arg = CoarseGrainedExecutorBackend.parseArguments(args1, "")
+    assert(arg.bindAddress == "bindaddress1")
   }
 
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer,

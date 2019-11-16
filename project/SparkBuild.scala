@@ -475,7 +475,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
     "org.apache.spark.ml.classification.LinearSVCSuite",
     "org.apache.spark.sql.SQLQueryTestSuite",
-    "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite"
+    "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite",
+    "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -977,10 +978,12 @@ object TestSettings {
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=false",
     javaOptions in Test += "-Dderby.system.durability=test",
+    javaOptions in Test += "-Dio.netty.tryReflectionSetAccessible=true",
     javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
-    javaOptions in Test ++= "-Xmx4g -Xss4m"
+    // SPARK-29282 This is for consistency between JDK8 and JDK11.
+    javaOptions in Test ++= "-Xmx4g -Xss4m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Exclude tags defined in a system property

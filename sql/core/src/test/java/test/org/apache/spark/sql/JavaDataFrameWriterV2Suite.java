@@ -57,21 +57,18 @@ public class JavaDataFrameWriterV2Suite {
   public void testAppendAPI() throws NoSuchTableException {
     df().writeTo("testcat.t").append();
     df().writeTo("testcat.t").option("property", "value").append();
-    df().writeTo("testcat.t").tableProperty("property", "value").append();
   }
 
   @Test
   public void testOverwritePartitionsAPI() throws NoSuchTableException {
     df().writeTo("testcat.t").overwritePartitions();
     df().writeTo("testcat.t").option("property", "value").overwritePartitions();
-    df().writeTo("testcat.t").tableProperty("property", "value").overwritePartitions();
   }
 
   @Test
   public void testOverwriteAPI() throws NoSuchTableException {
     df().writeTo("testcat.t").overwrite(lit(true));
     df().writeTo("testcat.t").option("property", "value").overwrite(lit(true));
-    df().writeTo("testcat.t").tableProperty("property", "value").overwrite(lit(true));
   }
 
   @Test

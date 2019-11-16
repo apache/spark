@@ -138,7 +138,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
     assert(c(6) === "3_")
     assert(c(7) === "4_")
 
-    val nums1 = sc.makeRDD(Array("a\t1", "b\t2", "a\t3", "b\t4"), 2)
+    val nums1 = sc.makeRDD(Seq("a\t1", "b\t2", "a\t3", "b\t4"), 2)
     val d = nums1.groupBy(str => str.split("\t")(0)).
       pipe(Seq("cat"),
         Map[String, String](),
@@ -237,7 +237,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
     testExportInputFile("mapreduce_map_input_file")
   }
 
-  def testExportInputFile(varName: String) {
+  def testExportInputFile(varName: String): Unit = {
     assume(TestUtils.testCommandAvailable(envCommand))
     val nums = new HadoopRDD(sc, new JobConf(), classOf[TextInputFormat], classOf[LongWritable],
       classOf[Text], 2) {

@@ -31,8 +31,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class BasicInMemoryTableCatalog extends TableCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
+  protected val namespaces: util.Map[List[String], Map[String, String]] =
+    new ConcurrentHashMap[List[String], Map[String, String]]()
+
   protected val tables: util.Map[Identifier, InMemoryTable] =
     new ConcurrentHashMap[Identifier, InMemoryTable]()
+
+  private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
 
   private var _name: Option[String] = None
 
@@ -55,6 +60,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
   }
 
+  override def invalidateTable(ident: Identifier): Unit = {
+    invalidatedTables.add(ident)
+  }
+
   override def createTable(
       ident: Identifier,
       schema: StructType,
@@ -68,6 +77,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     val table = new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties)
     tables.put(ident, table)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
   }
 
@@ -104,17 +114,16 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
   }
 
+  def isTableInvalidated(ident: Identifier): Boolean = {
+    invalidatedTables.contains(ident)
+  }
+
   def clearTables(): Unit = {
     tables.clear()
   }
 }
 
 class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-  protected val namespaces: util.Map[List[String], Map[String, String]] =
-    new ConcurrentHashMap[List[String], Map[String, String]]()
-
   private def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
   }
@@ -171,9 +180,8 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   }
 
   override def dropNamespace(namespace: Array[String]): Boolean = {
-    if (listTables(namespace).nonEmpty) {
-      throw new IllegalStateException(s"Cannot delete non-empty namespace: ${namespace.quoted}")
-    }
+    listNamespaces(namespace).map(dropNamespace)
+    listTables(namespace).map(dropTable)
     Option(namespaces.remove(namespace.toList)).isDefined
   }
 }

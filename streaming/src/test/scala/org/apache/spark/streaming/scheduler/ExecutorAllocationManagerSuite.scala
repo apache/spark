@@ -21,8 +21,8 @@ import org.mockito.ArgumentMatchers.{eq => meq}
 import org.mockito.Mockito.{never, reset, times, verify, when}
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
-import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
@@ -363,11 +363,11 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
     }
   }
 
-  private val _addBatchProcTime = PrivateMethod[Unit]('addBatchProcTime)
-  private val _requestExecutors = PrivateMethod[Unit]('requestExecutors)
-  private val _killExecutor = PrivateMethod[Unit]('killExecutor)
+  private val _addBatchProcTime = PrivateMethod[Unit](Symbol("addBatchProcTime"))
+  private val _requestExecutors = PrivateMethod[Unit](Symbol("requestExecutors"))
+  private val _killExecutor = PrivateMethod[Unit](Symbol("killExecutor"))
   private val _executorAllocationManager =
-    PrivateMethod[Option[ExecutorAllocationManager]]('executorAllocationManager)
+    PrivateMethod[Option[ExecutorAllocationManager]](Symbol("executorAllocationManager"))
 
   private def addBatchProcTime(manager: ExecutorAllocationManager, timeMs: Long): Unit = {
     manager invokePrivate _addBatchProcTime(timeMs)

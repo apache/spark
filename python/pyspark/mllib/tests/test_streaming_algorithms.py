@@ -28,6 +28,7 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint, StreamingLinearRegressionWithSGD
 from pyspark.mllib.util import LinearDataGenerator
 from pyspark.streaming import StreamingContext
+from pyspark.testing.utils import eventually
 
 
 class MLLibStreamingTestCase(unittest.TestCase):
@@ -38,44 +39,6 @@ class MLLibStreamingTestCase(unittest.TestCase):
     def tearDown(self):
         self.ssc.stop(False)
         self.sc.stop()
-
-    @staticmethod
-    def _eventually(condition, timeout=30.0, catch_assertions=False):
-        """
-        Wait a given amount of time for a condition to pass, else fail with an error.
-        This is a helper utility for streaming ML tests.
-        :param condition: Function that checks for termination conditions.
-                          condition() can return:
-                           - True: Conditions met. Return without error.
-                           - other value: Conditions not met yet. Continue. Upon timeout,
-                                          include last such value in error message.
-                          Note that this method may be called at any time during
-                          streaming execution (e.g., even before any results
-                          have been created).
-        :param timeout: Number of seconds to wait.  Default 30 seconds.
-        :param catch_assertions: If False (default), do not catch AssertionErrors.
-                                 If True, catch AssertionErrors; continue, but save
-                                 error to throw upon timeout.
-        """
-        start_time = time()
-        lastValue = None
-        while time() - start_time < timeout:
-            if catch_assertions:
-                try:
-                    lastValue = condition()
-                except AssertionError as e:
-                    lastValue = e
-            else:
-                lastValue = condition()
-            if lastValue is True:
-                return
-            sleep(0.01)
-        if isinstance(lastValue, AssertionError):
-            raise lastValue
-        else:
-            raise AssertionError(
-                "Test failed due to timeout after %g sec, with last condition returning: %s"
-                % (timeout, lastValue))
 
 
 class StreamingKMeansTest(MLLibStreamingTestCase):
@@ -111,7 +74,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         def condition():
             self.assertEqual(stkm.latestModel().clusterWeights, [25.0])
             return True
-        self._eventually(condition, catch_assertions=True)
+        eventually(condition, catch_assertions=True)
 
         realCenters = array_sum(array(centers), axis=0)
         for i in range(5):
@@ -155,7 +118,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
             self.assertTrue(all(finalModel.centers == array(initCenters)))
             self.assertEqual(finalModel.clusterWeights, [5.0, 5.0, 5.0, 5.0])
             return True
-        self._eventually(condition, catch_assertions=True)
+        eventually(condition, catch_assertions=True)
 
     def test_predictOn_model(self):
         """Test that the model predicts correctly on toy data."""
@@ -183,7 +146,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
             self.assertEqual(result, [[0], [1], [2], [3]])
             return True
 
-        self._eventually(condition, catch_assertions=True)
+        eventually(condition, catch_assertions=True)
 
     @unittest.skip("SPARK-10086: Flaky StreamingKMeans test in PySpark")
     def test_trainOn_predictOn(self):
@@ -216,7 +179,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
             self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
             return True
 
-        self._eventually(condition, catch_assertions=True)
+        eventually(condition, catch_assertions=True)
 
 
 class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
@@ -263,7 +226,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
             self.assertAlmostEqual(rel, 0.1, 1)
             return True
 
-        self._eventually(condition, catch_assertions=True)
+        eventually(condition, catch_assertions=True)
 
     def test_convergence(self):
         """
@@ -289,7 +252,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
             return True
 
         # We want all batches to finish for this test.
-        self._eventually(condition, 60.0, catch_assertions=True)
+        eventually(condition, 60.0, catch_assertions=True)
 
         t_models = array(models)
         diff = t_models[1:] - t_models[:-1]
@@ -322,7 +285,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
             self.assertEqual(len(true_predicted), len(input_batches))
             return True
 
-        self._eventually(condition, catch_assertions=True)
+        eventually(condition, catch_assertions=True)
 
         # Test that the accuracy error is no more than 0.4 on each batch.
         for batch in true_predicted:
@@ -364,7 +327,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
                 return True
             return "Latest errors: " + ", ".join(map(lambda x: str(x), errors))
 
-        self._eventually(condition, timeout=60.0)
+        eventually(condition, timeout=60.0)
 
 
 class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
@@ -400,7 +363,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
             self.assertAlmostEqual(slr.latestModel().intercept, 0.0, 1)
             return True
 
-        self._eventually(condition, catch_assertions=True)
+        eventually(condition, catch_assertions=True)
 
     def test_parameter_convergence(self):
         """Test that the model parameters improve with streaming data."""
@@ -426,7 +389,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
             return True
 
         # We want all batches to finish for this test.
-        self._eventually(condition, catch_assertions=True)
+        eventually(condition, catch_assertions=True)
 
         w = array(model_weights)
         diff = w[1:] - w[:-1]
@@ -459,7 +422,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
             return True
 
         # We want all batches to finish for this test.
-        self._eventually(condition, catch_assertions=True)
+        eventually(condition, catch_assertions=True)
 
         # Test that mean absolute error on each batch is less than 0.1
         for batch in samples:
@@ -500,7 +463,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
                 return True
             return "Latest errors: " + ", ".join(map(lambda x: str(x), errors))
 
-        self._eventually(condition)
+        eventually(condition)
 
 
 if __name__ == "__main__":

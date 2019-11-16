@@ -47,6 +47,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.logging.DriverLogger
@@ -74,8 +75,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       appAttemptId: Option[String],
       inProgress: Boolean,
       codec: Option[String] = None): File = {
-    val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
-    val logUri = EventLoggingListener.getLogPath(testDir.toURI, appId, appAttemptId, codec)
+    val ip = if (inProgress) EventLogFileWriter.IN_PROGRESS else ""
+    val logUri = SingleEventLogFileWriter.getLogPath(testDir.toURI, appId, appAttemptId, codec)
     val logPath = new Path(logUri).toUri.getPath + ip
     new File(logPath)
   }
@@ -86,7 +87,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
   }
 
-  private def testAppLogParsing(inMemory: Boolean) {
+  private def testAppLogParsing(inMemory: Boolean): Unit = {
     val clock = new ManualClock(12345678)
     val conf = createTestConf(inMemory = inMemory)
     val provider = new FsHistoryProvider(conf, clock)
@@ -161,10 +162,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     class TestFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
       var mergeApplicationListingCall = 0
       override protected def mergeApplicationListing(
-          fileStatus: FileStatus,
+          reader: EventLogFileReader,
           lastSeen: Long,
           enableSkipToEnd: Boolean): Unit = {
-        super.mergeApplicationListing(fileStatus, lastSeen, enableSkipToEnd)
+        super.mergeApplicationListing(reader, lastSeen, enableSkipToEnd)
         mergeApplicationListingCall += 1
       }
     }
@@ -199,13 +200,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     )
     updateAndCheck(provider) { list =>
       list.size should be (1)
-      provider.getAttempt("app1", None).logPath should endWith(EventLoggingListener.IN_PROGRESS)
+      provider.getAttempt("app1", None).logPath should endWith(EventLogFileWriter.IN_PROGRESS)
     }
 
     logFile1.renameTo(newLogFile("app1", None, inProgress = false))
     updateAndCheck(provider) { list =>
       list.size should be (1)
-      provider.getAttempt("app1", None).logPath should not endWith(EventLoggingListener.IN_PROGRESS)
+      provider.getAttempt("app1", None).logPath should not endWith(EventLogFileWriter.IN_PROGRESS)
     }
   }
 
@@ -1161,29 +1162,45 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     when(mockedFs.open(path)).thenReturn(in)
     when(in.getWrappedStream).thenReturn(dfsIn)
     when(dfsIn.getFileLength).thenReturn(200)
+
     // FileStatus.getLen is more than logInfo fileSize
     var fileStatus = new FileStatus(200, false, 0, 0, 0, path)
+    when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
     var logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100)
-    assert(mockedProvider.shouldReloadLog(logInfo, fileStatus))
+      Some("attemptId"), 100, None, false)
+    var reader = EventLogFileReader(mockedFs, path)
+    assert(reader.isDefined)
+    assert(mockedProvider.shouldReloadLog(logInfo, reader.get))
 
     fileStatus = new FileStatus()
     fileStatus.setPath(path)
+    when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
     // DFSInputStream.getFileLength is more than logInfo fileSize
     logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100)
-    assert(mockedProvider.shouldReloadLog(logInfo, fileStatus))
+      Some("attemptId"), 100, None, false)
+    reader = EventLogFileReader(mockedFs, path)
+    assert(reader.isDefined)
+    assert(mockedProvider.shouldReloadLog(logInfo, reader.get))
+
     // DFSInputStream.getFileLength is equal to logInfo fileSize
     logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 200)
-    assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
+      Some("attemptId"), 200, None, false)
+    reader = EventLogFileReader(mockedFs, path)
+    assert(reader.isDefined)
+    assert(!mockedProvider.shouldReloadLog(logInfo, reader.get))
+
     // in.getWrappedStream returns other than DFSInputStream
     val bin = mock(classOf[BufferedInputStream])
     when(in.getWrappedStream).thenReturn(bin)
-    assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
+    reader = EventLogFileReader(mockedFs, path)
+    assert(reader.isDefined)
+    assert(!mockedProvider.shouldReloadLog(logInfo, reader.get))
+
     // fs.open throws exception
     when(mockedFs.open(path)).thenThrow(new IOException("Throwing intentionally"))
-    assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
+    reader = EventLogFileReader(mockedFs, path)
+    assert(reader.isDefined)
+    assert(!mockedProvider.shouldReloadLog(logInfo, reader.get))
   }
 
   test("log cleaner with the maximum number of log files") {
@@ -1236,6 +1253,86 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
   }
 
+  test("backwards compatibility with LogInfo from Spark 2.4") {
+    case class LogInfoV24(
+         logPath: String,
+         lastProcessed: Long,
+         appId: Option[String],
+         attemptId: Option[String],
+         fileSize: Long)
+
+    val oldObj = LogInfoV24("dummy", System.currentTimeMillis(), Some("hello"),
+      Some("attempt1"), 100)
+
+    val serializer = new KVStoreScalaSerializer()
+    val serializedOldObj = serializer.serialize(oldObj)
+    val deserializedOldObj = serializer.deserialize(serializedOldObj, classOf[LogInfo])
+    assert(deserializedOldObj.logPath === oldObj.logPath)
+    assert(deserializedOldObj.lastProcessed === oldObj.lastProcessed)
+    assert(deserializedOldObj.appId === oldObj.appId)
+    assert(deserializedOldObj.attemptId === oldObj.attemptId)
+    assert(deserializedOldObj.fileSize === oldObj.fileSize)
+
+    // SPARK-25118: added logType: LogType.Value - expected 'null' on old format
+    assert(deserializedOldObj.logType === null)
+
+    // SPARK-28869: added lastIndex: Option[Long], isComplete: Boolean - expected 'None' and
+    // 'false' on old format. The default value for isComplete is wrong value for completed app,
+    // but the value will be corrected once checkForLogs is called.
+    assert(deserializedOldObj.lastIndex === None)
+    assert(deserializedOldObj.isComplete === false)
+  }
+
+  test("SPARK-29755 LogInfo should be serialized/deserialized by jackson properly") {
+    def assertSerDe(serializer: KVStoreScalaSerializer, info: LogInfo): Unit = {
+      val infoAfterSerDe = serializer.deserialize(serializer.serialize(info), classOf[LogInfo])
+      assert(infoAfterSerDe === info)
+      assertOptionAfterSerde(infoAfterSerDe.lastIndex, info.lastIndex)
+    }
+
+    val serializer = new KVStoreScalaSerializer()
+    val logInfoWithIndexAsNone = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100, None, false)
+    assertSerDe(serializer, logInfoWithIndexAsNone)
+
+    val logInfoWithIndex = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100, Some(3), false)
+    assertSerDe(serializer, logInfoWithIndex)
+  }
+
+  test("SPARK-29755 AttemptInfoWrapper should be serialized/deserialized by jackson properly") {
+    def assertSerDe(serializer: KVStoreScalaSerializer, attempt: AttemptInfoWrapper): Unit = {
+      val attemptAfterSerDe = serializer.deserialize(serializer.serialize(attempt),
+        classOf[AttemptInfoWrapper])
+      assert(attemptAfterSerDe.info === attempt.info)
+      // skip comparing some fields, as they've not triggered SPARK-29755
+      assertOptionAfterSerde(attemptAfterSerDe.lastIndex, attempt.lastIndex)
+    }
+
+    val serializer = new KVStoreScalaSerializer()
+    val appInfo = new ApplicationAttemptInfo(None, new Date(1), new Date(1), new Date(1),
+      10, "spark", false, "dummy")
+    val attemptInfoWithIndexAsNone = new AttemptInfoWrapper(appInfo, "dummyPath", 10, None,
+      None, None, None, None)
+    assertSerDe(serializer, attemptInfoWithIndexAsNone)
+
+    val attemptInfoWithIndex = new AttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1),
+      None, None, None, None)
+    assertSerDe(serializer, attemptInfoWithIndex)
+  }
+
+  private def assertOptionAfterSerde(opt: Option[Long], expected: Option[Long]): Unit = {
+    if (expected.isEmpty) {
+      assert(opt.isEmpty)
+    } else {
+      // The issue happens only when the value in Option is being unboxed. Here we ensure unboxing
+      // to Long succeeds: even though IDE suggests `.toLong` is redundant, direct comparison
+      // doesn't trigger unboxing and passes even without SPARK-29755, so don't remove
+      // `.toLong` below. Please refer SPARK-29755 for more details.
+      assert(opt.get.toLong === expected.get.toLong)
+    }
+  }
+
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
    * app list. Example:
@@ -1254,9 +1351,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
   private def writeFile(file: File, codec: Option[CompressionCodec],
     events: SparkListenerEvent*) = {
     val fstream = new FileOutputStream(file)
-    val cstream = codec.map(_.compressedOutputStream(fstream)).getOrElse(fstream)
+    val cstream = codec.map(_.compressedContinuousOutputStream(fstream)).getOrElse(fstream)
     val bstream = new BufferedOutputStream(cstream)
-    EventLoggingListener.initEventLog(bstream, false, null)
+
+    val metadata = SparkListenerLogStart(org.apache.spark.SPARK_VERSION)
+    val eventJson = JsonProtocol.logStartToJson(metadata)
+    val metadataJson = compact(eventJson) + "\n"
+    bstream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
 
     val writer = new OutputStreamWriter(bstream, StandardCharsets.UTF_8)
     Utils.tryWithSafeFinally {

@@ -103,14 +103,6 @@
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
     </dependency>
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-contrib</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>${hive.group}.hcatalog</groupId>
-      <artifactId>hive-hcatalog-core</artifactId>
-    </dependency>
     <!--
         <dependency>
           <groupId>${hive.group}</groupId>
@@ -252,7 +244,7 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
       <plugin>

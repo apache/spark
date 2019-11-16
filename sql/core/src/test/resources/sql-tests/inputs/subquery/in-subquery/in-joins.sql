@@ -51,6 +51,18 @@ create temporary view t3 as select * from values
   ("val3b", 8S, null, 19L, float(17), 25D, 26E2, timestamp '2015-05-04 01:02:00.000', date '2015-05-04')
   as t3(t3a, t3b, t3c, t3d, t3e, t3f, t3g, t3h, t3i);
 
+create temporary view s1 as select * from values
+    (1), (3), (5), (7), (9)
+  as s1(id);
+
+create temporary view s2 as select * from values
+    (1), (3), (4), (6), (9)
+  as s2(id);
+
+create temporary view s3 as select * from values
+    (3), (4), (6), (9)
+  as s3(id);
+
 -- correlated IN subquery
 -- different JOIN in parent side
 -- TC 01.01
@@ -83,7 +95,7 @@ GROUP BY  t1a,
           t3a,
           t3b,
           t3c
-ORDER BY  t1a DESC, t3b DESC;
+ORDER BY  t1a DESC, t3b DESC, t3c ASC;
 
 -- TC 01.03
 SELECT     Count(DISTINCT(t1a))
@@ -272,3 +284,101 @@ Group By t1a, t1b, t1c, t2a, t2b, t2c
 HAVING t2c IS NOT NULL
 ORDER By t2b DESC nulls last;
 
+
+SELECT s1.id FROM s1
+JOIN s2 ON s1.id = s2.id
+AND s1.id IN (SELECT 9);
+
+
+SELECT s1.id FROM s1
+JOIN s2 ON s1.id = s2.id
+AND s1.id NOT IN (SELECT 9);
+
+
+-- IN with Subquery ON INNER JOIN
+SELECT s1.id FROM s1
+JOIN s2 ON s1.id = s2.id
+AND s1.id IN (SELECT id FROM s3);
+
+
+-- IN with Subquery ON LEFT SEMI JOIN
+SELECT s1.id AS id2 FROM s1
+LEFT SEMI JOIN s2
+ON s1.id = s2.id
+AND s1.id IN (SELECT id FROM s3);
+
+
+-- IN with Subquery ON LEFT ANTI JOIN
+SELECT s1.id as id2 FROM s1
+LEFT ANTI JOIN s2
+ON s1.id = s2.id
+AND s1.id IN (SELECT id FROM s3);
+
+
+-- IN with Subquery ON LEFT OUTER JOIN
+SELECT s1.id, s2.id as id2 FROM s1
+LEFT OUTER JOIN s2
+ON s1.id = s2.id
+AND s1.id IN (SELECT id FROM s3);
+
+
+-- IN with Subquery ON RIGHT OUTER JOIN
+SELECT s1.id, s2.id as id2 FROM s1
+RIGHT OUTER JOIN s2
+ON s1.id = s2.id
+AND s1.id IN (SELECT id FROM s3);
+
+
+-- IN with Subquery ON FULL OUTER JOIN
+SELECT s1.id, s2.id AS id2 FROM s1
+FULL OUTER JOIN s2
+ON s1.id = s2.id
+AND s1.id IN (SELECT id FROM s3);
+
+
+-- NOT IN with Subquery ON INNER JOIN
+SELECT s1.id FROM s1
+JOIN s2 ON s1.id = s2.id
+AND s1.id NOT IN (SELECT id FROM s3);
+
+
+-- NOT IN with Subquery ON LEFT SEMI JOIN
+SELECT s1.id AS id2 FROM s1
+LEFT SEMI JOIN s2
+ON s1.id = s2.id
+AND s1.id NOT IN (SELECT id FROM s3);
+
+
+-- NOT IN with Subquery ON LEFT ANTI JOIN
+SELECT s1.id AS id2 FROM s1
+LEFT ANTI JOIN s2
+ON s1.id = s2.id
+AND s1.id NOT IN (SELECT id FROM s3);
+
+
+-- NOT IN with Subquery ON LEFT OUTER JOIN
+SELECT s1.id, s2.id AS id2 FROM s1
+LEFT OUTER JOIN s2
+ON s1.id = s2.id
+AND s1.id NOT IN (SELECT id FROM s3);
+
+
+-- NOT IN with Subquery ON RIGHT OUTER JOIN
+SELECT s1.id, s2.id AS id2 FROM s1
+RIGHT OUTER JOIN s2
+ON s1.id = s2.id
+AND s1.id NOT IN (SELECT id FROM s3);
+
+
+-- NOT IN with Subquery ON FULL OUTER JOIN
+SELECT s1.id, s2.id AS id2 FROM s1
+FULL OUTER JOIN s2
+ON s1.id = s2.id
+AND s1.id NOT IN (SELECT id FROM s3);
+
+
+DROP VIEW s1;
+
+DROP VIEW s2;
+
+DROP VIEW s3;

@@ -67,6 +67,8 @@ class KafkaTestUtils(
     secure: Boolean = false) extends Logging {
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
+  private val IBM_KRB_DEBUG_CONFIG = "com.ibm.security.krb5.Krb5Debug"
+  private val SUN_KRB_DEBUG_CONFIG = "sun.security.krb5.debug"
 
   private val localCanonicalHostName = InetAddress.getLoopbackAddress().getCanonicalHostName()
   logInfo(s"Local host name is $localCanonicalHostName")
@@ -133,6 +135,7 @@ class KafkaTestUtils(
   private def setUpMiniKdc(): Unit = {
     val kdcDir = Utils.createTempDir()
     val kdcConf = MiniKdc.createConf()
+    kdcConf.setProperty(MiniKdc.DEBUG, "true")
     kdc = new MiniKdc(kdcConf, kdcDir)
     kdc.start()
     kdcReady = true
@@ -238,6 +241,7 @@ class KafkaTestUtils(
     }
 
     if (secure) {
+      setupKrbDebug()
       setUpMiniKdc()
       val jaasConfigFile = createKeytabsAndJaasConfigFile()
       System.setProperty(JAVA_AUTH_CONFIG, jaasConfigFile)
@@ -249,6 +253,14 @@ class KafkaTestUtils(
     setupEmbeddedKafkaServer()
     eventually(timeout(1.minute)) {
       assert(zkUtils.getAllBrokersInCluster().nonEmpty, "Broker was not up in 60 seconds")
+    }
+  }
+
+  private def setupKrbDebug(): Unit = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      System.setProperty(IBM_KRB_DEBUG_CONFIG, "all")
+    } else {
+      System.setProperty(SUN_KRB_DEBUG_CONFIG, "true")
     }
   }
 
@@ -303,6 +315,15 @@ class KafkaTestUtils(
       kdc.stop()
     }
     UserGroupInformation.reset()
+    teardownKrbDebug()
+  }
+
+  private def teardownKrbDebug(): Unit = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      System.clearProperty(IBM_KRB_DEBUG_CONFIG)
+    } else {
+      System.clearProperty(SUN_KRB_DEBUG_CONFIG)
+    }
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
@@ -353,57 +374,33 @@ class KafkaTestUtils(
     }
   }
 
-  /** Java-friendly function for sending messages to the Kafka broker */
-  def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
-    sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))
+  def sendMessages(topic: String, msgs: Array[String]): Seq[(String, RecordMetadata)] = {
+    sendMessages(topic, msgs, None)
   }
 
-  /** Send the messages to the Kafka broker */
-  def sendMessages(topic: String, messageToFreq: Map[String, Int]): Unit = {
-    val messages = messageToFreq.flatMap { case (s, freq) => Seq.fill(freq)(s) }.toArray
-    sendMessages(topic, messages)
-  }
-
-  /** Send the array of messages to the Kafka broker */
-  def sendMessages(topic: String, messages: Array[String]): Seq[(String, RecordMetadata)] = {
-    sendMessages(topic, messages, None)
-  }
-
-  /** Send the array of messages to the Kafka broker using specified partition */
   def sendMessages(
       topic: String,
-      messages: Array[String],
-      partition: Option[Int]): Seq[(String, RecordMetadata)] = {
-    sendMessages(topic, messages.map(m => (m, Seq())), partition)
+      msgs: Array[String],
+      part: Option[Int]): Seq[(String, RecordMetadata)] = {
+    val records = msgs.map { msg =>
+      val builder = new RecordBuilder(topic, msg)
+      part.foreach { p => builder.partition(p) }
+      builder.build()
+    }
+    sendMessages(records)
   }
 
-  /** Send record to the Kafka broker with headers using specified partition */
-  def sendMessage(topic: String,
-                  record: (String, Seq[(String, Array[Byte])]),
-                  partition: Option[Int]): Seq[(String, RecordMetadata)] = {
-    sendMessages(topic, Array(record).toSeq, partition)
+  def sendMessage(msg: ProducerRecord[String, String]): Seq[(String, RecordMetadata)] = {
+    sendMessages(Array(msg))
   }
 
-  /** Send the array of records to the Kafka broker with headers using specified partition */
-  def sendMessages(topic: String,
-                   records: Seq[(String, Seq[(String, Array[Byte])])],
-                   partition: Option[Int]): Seq[(String, RecordMetadata)] = {
+  def sendMessages(msgs: Seq[ProducerRecord[String, String]]): Seq[(String, RecordMetadata)] = {
     producer = new KafkaProducer[String, String](producerConfiguration)
     val offsets = try {
-      records.map { case (value, header) =>
-        val headers = header.map { case (k, v) =>
-          new RecordHeader(k, v).asInstanceOf[Header]
-        }
-        val record = partition match {
-          case Some(p) =>
-            new ProducerRecord[String, String](topic, p, null, value, headers.asJava)
-          case None =>
-            new ProducerRecord[String, String](topic, null, null, value, headers.asJava)
-        }
-        val metadata = producer.send(record).get(10, TimeUnit.SECONDS)
-        logInfo(s"\tSent ($value, $header) to partition ${metadata.partition}," +
-          " offset ${metadata.offset}")
-        (value, metadata)
+      msgs.map { msg =>
+        val metadata = producer.send(msg).get(10, TimeUnit.SECONDS)
+        logInfo(s"\tSent ($msg) to partition ${metadata.partition}, offset ${metadata.offset}")
+        (msg.value(), metadata)
       }
     } finally {
       if (producer != null) {
@@ -574,7 +571,7 @@ class KafkaTestUtils(
       zkUtils: ZkUtils,
       topic: String,
       numPartitions: Int,
-      servers: Seq[KafkaServer]) {
+      servers: Seq[KafkaServer]): Unit = {
     eventually(timeout(1.minute), interval(200.milliseconds)) {
       try {
         verifyTopicDeletion(topic, numPartitions, servers)
@@ -637,7 +634,7 @@ class KafkaTestUtils(
 
     val actualPort = factory.getLocalPort
 
-    def shutdown() {
+    def shutdown(): Unit = {
       factory.shutdown()
       // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
@@ -658,4 +655,3 @@ class KafkaTestUtils(
     }
   }
 }
-

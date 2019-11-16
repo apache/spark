@@ -22,6 +22,7 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.FileAlreadyExistsException
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -38,7 +39,7 @@ import org.apache.spark.util.{AccumulatorV2, ManualClock}
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
 
-  override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
+  override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {
     taskScheduler.startedTasks += taskInfo.index
   }
 
@@ -48,13 +49,13 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       result: Any,
       accumUpdates: Seq[AccumulatorV2[_, _]],
       metricPeaks: Array[Long],
-      taskInfo: TaskInfo) {
+      taskInfo: TaskInfo): Unit = {
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
 
-  override def executorAdded(execId: String, host: String) {}
+  override def executorAdded(execId: String, host: String): Unit = {}
 
-  override def executorLost(execId: String, reason: ExecutorLossReason) {}
+  override def executorLost(execId: String, reason: ExecutorLossReason): Unit = {}
 
   override def taskSetFailed(
       taskSet: TaskSet,
@@ -74,13 +75,13 @@ object FakeRackUtil {
   var numBatchInvocation = 0
   var numSingleHostInvocation = 0
 
-  def cleanUp() {
+  def cleanUp(): Unit = {
     hostToRack.clear()
     numBatchInvocation = 0
     numSingleHostInvocation = 0
   }
 
-  def assignHostToRack(host: String, rack: String) {
+  def assignHostToRack(host: String, rack: String): Unit = {
     hostToRack(host) = rack
   }
 
@@ -124,7 +125,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   dagScheduler = new FakeDAGScheduler(sc, this)
 
-  def removeExecutor(execId: String) {
+  def removeExecutor(execId: String): Unit = {
     executors -= execId
     val host = executorIdToHost.get(execId)
     assert(host != None)
@@ -149,7 +150,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     hostsByRack.get(rack) != None
   }
 
-  def addExecutor(execId: String, host: String) {
+  def addExecutor(execId: String, host: String): Unit = {
     executors.put(execId, host)
     val executorsOnHost = hostToExecutors.getOrElseUpdate(host, new mutable.HashSet[String])
     executorsOnHost += execId
@@ -1262,7 +1263,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // now fail those tasks
     tsmSpy.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
-      FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
+      FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0L, 0, 0, "ignored"))
     tsmSpy.handleFailedTask(taskDescs(1).taskId, TaskState.FAILED,
       ExecutorLostFailure(taskDescs(1).executorId, exitCausedByApp = false, reason = None))
     tsmSpy.handleFailedTask(taskDescs(2).taskId, TaskState.FAILED,
@@ -1302,7 +1303,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Fail the task with fetch failure
     tsm.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
-      FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
+      FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0L, 0, 0, "ignored"))
 
     assert(blacklistTracker.isNodeBlacklisted("host1"))
   }
@@ -1774,5 +1775,24 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
     assert(!manager.checkSpeculatableTasks(0))
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+  }
+
+  test("TaskOutputFileAlreadyExistException lead to task set abortion") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    assert(sched.taskSetsFailed.isEmpty)
+
+    val offerResult = manager.resourceOffer("exec1", "host1", ANY)
+    assert(offerResult.isDefined,
+      "Expect resource offer on iteration 0 to return a task")
+    assert(offerResult.get.index === 0)
+    val reason = new ExceptionFailure(
+      new TaskOutputFileAlreadyExistException(
+        new FileAlreadyExistsException("file already exists")),
+      Seq.empty[AccumulableInfo])
+    manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
+    assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 }

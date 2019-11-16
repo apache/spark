@@ -23,7 +23,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -34,9 +34,8 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
 
 
 /**
@@ -118,12 +117,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       dataset: Dataset[_]): DecisionTreeRegressionModel = instrumented { instr =>
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances =
-      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
+    val instances = extractInstances(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
 
     instr.logPipelineStage(this)
@@ -138,15 +132,14 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(
-      data: RDD[LabeledPoint],
+      data: RDD[Instance],
       oldStrategy: OldStrategy,
       featureSubsetStrategy: String): DecisionTreeRegressionModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(data)
     instr.logParams(this, params: _*)
 
-    val instances = data.map(_.toInstance)
-    val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,
+    val trees = RandomForest.run(data, oldStrategy, numTrees = 1,
       featureSubsetStrategy, seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
@@ -250,7 +243,8 @@ class DecisionTreeRegressionModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"DecisionTreeRegressionModel (uid=$uid) of depth $depth with $numNodes nodes"
+    s"DecisionTreeRegressionModel: uid=$uid, depth=$depth, numNodes=$numNodes, " +
+      s"numFeatures=$numFeatures"
   }
 
   /**

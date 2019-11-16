@@ -16,16 +16,19 @@
  */
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, UnresolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
@@ -122,6 +125,25 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
+  case class MyHintRule(spark: SparkSession) extends Rule[LogicalPlan] {
+    val MY_HINT_NAME = Set("CONVERT_TO_EMPTY")
+
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveOperators {
+      case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        LocalRelation(h.output, data = Seq.empty, isStreaming = h.isStreaming)
+    }
+  }
+
+  test("inject custom hint rule") {
+    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+      assert(
+        session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
+        "plan is expected to be a local relation"
+      )
+    }
+  }
+
   test("inject columnar") {
     val extensions = create { extensions =>
       extensions.injectColumnar(session =>
@@ -147,6 +169,30 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(result(0).getLong(0) == 102L) // Check that broken columnar Add was used.
       assert(result(1).getLong(0) == 202L)
       assert(result(2).getLong(0) == 302L)
+    }
+  }
+
+  test("reset column vectors") {
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(COLUMN_BATCH_SIZE.key, 2)
+      .withExtensions { extensions =>
+        extensions.injectColumnar(session =>
+          MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())) }
+      .getOrCreate()
+
+    try {
+      assert(session.sessionState.columnarRules.contains(
+        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      import session.sqlContext.implicits._
+
+      val input = Seq((100L), (200L), (300L))
+      val data = input.toDF("vals").repartition(1)
+      val df = data.selectExpr("vals + 1")
+      val result = df.collect()
+      assert(result sameElements input.map(x => Row(x + 2)))
+    } finally {
+      stop(session)
     }
   }
 

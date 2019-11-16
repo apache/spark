@@ -29,11 +29,20 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractSqlParser extends ParserInterface with Logging {
+abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Logging {
+
+  /**
+   * Creates [[CalendarInterval]] for a given SQL String. Throws [[ParseException]] if the SQL
+   * string is not a valid interval format.
+   */
+  def parseInterval(sqlText: String): CalendarInterval = parse(sqlText) { parser =>
+    astBuilder.visitSingleInterval(parser.singleInterval())
+  }
 
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
@@ -91,16 +100,16 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
-    lexer.ansi = SQLConf.get.ansiEnabled
+    lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    lexer.ansi = conf.dialectSparkAnsiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
-    parser.ansi = SQLConf.get.ansiEnabled
+    parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    parser.ansi = conf.dialectSparkAnsiEnabled
 
     try {
       try {
@@ -134,12 +143,12 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
-class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
+class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
   val astBuilder = new AstBuilder(conf)
 }
 
 /** For test-only. */
-object CatalystSqlParser extends AbstractSqlParser {
+object CatalystSqlParser extends AbstractSqlParser(SQLConf.get) {
   val astBuilder = new AstBuilder(SQLConf.get)
 }
 

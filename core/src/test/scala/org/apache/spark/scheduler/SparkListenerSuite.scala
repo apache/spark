@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
@@ -156,7 +156,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(!drained)
 
     new Thread("ListenerBusStopper") {
-      override def run() {
+      override def run(): Unit = {
         stopperStarted.release()
         // stop() will block until notify() is called below
         bus.stop()
@@ -228,8 +228,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
     stageInfo.rddInfos.exists(_.name == "Target RDD") should be {true}
     stageInfo.numTasks should be {4}
-    stageInfo.submissionTime should be ('defined)
-    stageInfo.completionTime should be ('defined)
+    stageInfo.submissionTime should be (Symbol("defined"))
+    stageInfo.completionTime should be (Symbol("defined"))
     taskInfoMetrics.length should be {4}
   }
 
@@ -560,7 +560,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   /**
    * Assert that the given list of numbers has an average that is greater than zero.
    */
-  private def checkNonZeroAvg(m: Iterable[Long], msg: String) {
+  private def checkNonZeroAvg(m: Iterable[Long], msg: String): Unit = {
     assert(m.sum / m.size.toDouble > 0.0, msg)
   }
 
@@ -571,7 +571,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val stageInfos = mutable.Map[StageInfo, Seq[(TaskInfo, TaskMetrics)]]()
     var taskInfoMetrics = mutable.Buffer[(TaskInfo, TaskMetrics)]()
 
-    override def onTaskEnd(task: SparkListenerTaskEnd) {
+    override def onTaskEnd(task: SparkListenerTaskEnd): Unit = {
       val info = task.taskInfo
       val metrics = task.taskMetrics
       if (info != null && metrics != null) {
@@ -579,7 +579,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       }
     }
 
-    override def onStageCompleted(stage: SparkListenerStageCompleted) {
+    override def onStageCompleted(stage: SparkListenerStageCompleted): Unit = {
       stageInfos(stage.stageInfo) = taskInfoMetrics
       taskInfoMetrics = mutable.Buffer.empty
     }
@@ -603,7 +603,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       notify()
     }
 
-    override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult) {
+    override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult): Unit = {
       startedGettingResultTasks += taskGettingResult.taskInfo.index
     }
   }

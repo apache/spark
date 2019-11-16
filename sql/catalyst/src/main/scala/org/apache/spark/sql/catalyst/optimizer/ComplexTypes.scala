@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- * Simplify redundant [[CreateNamedStructLike]], [[CreateArray]] and [[CreateMap]] expressions.
+ * Simplify redundant [[CreateNamedStruct]], [[CreateArray]] and [[CreateMap]] expressions.
  */
 object SimplifyExtractValueOps extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -37,8 +37,8 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
     case a: Aggregate => a
     case p => p.transformExpressionsUp {
       // Remove redundant field extraction.
-      case GetStructField(createNamedStructLike: CreateNamedStructLike, ordinal, _) =>
-        createNamedStructLike.valExprs(ordinal)
+      case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
+        createNamedStruct.valExprs(ordinal)
 
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems), field, ordinal, _, _) =>

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
@@ -171,6 +172,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // This is very perf sensitive.
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
+    val extraIsNotNullAttrs = mutable.Set[Attribute]()
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
@@ -178,6 +180,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.
           genPredicate(notNullPreds(idx), input, child.output)
+        } else if (notNullAttributes.contains(r.exprId) && !extraIsNotNullAttrs.contains(r)) {
+          extraIsNotNullAttrs += r
+          genPredicate(IsNotNull(r), input, child.output)
         } else {
           ""
         }
@@ -294,7 +299,9 @@ case class SampleExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def needCopyResult: Boolean = withReplacement
+  override def needCopyResult: Boolean = {
+    child.asInstanceOf[CodegenSupport].needCopyResult || withReplacement
+  }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
