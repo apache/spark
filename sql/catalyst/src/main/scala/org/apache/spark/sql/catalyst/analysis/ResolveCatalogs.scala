@@ -81,9 +81,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val changes = Seq(TableChange.setProperty("location", newLoc))
       createAlterTable(nameParts, catalog, tableName, changes)
 
-    case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
-      AlterNamespaceSetProperties(catalog, nameParts, properties)
-
     case AlterViewSetPropertiesStatement(
          NonSessionCatalog(catalog, tableName), props) =>
       throw new AnalysisException(
@@ -95,6 +92,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       throw new AnalysisException(
         s"Can not specify catalog `${catalog.name}` for view ${tableName.quoted} " +
           s"because view support in catalog has not been implemented yet")
+
+    case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
+      AlterNamespaceSetProperties(catalog, nameParts, properties)
 
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
