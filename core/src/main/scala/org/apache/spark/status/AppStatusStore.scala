@@ -275,8 +275,7 @@ private[spark] class AppStatusStore(
         t.gettingResultTime
       },
       schedulerDelay = scanTasks(TaskIndexNames.SCHEDULER_DELAY) { t => t.schedulerDelay },
-      peakExecutionMemory = scanTasks(TaskIndexNames.PEAK_MEM) { t =>
-        t.peakExecutionMemory },
+      peakExecutionMemory = scanTasks(TaskIndexNames.PEAK_MEM) { t => t.peakExecutionMemory },
       memoryBytesSpilled = scanTasks(TaskIndexNames.MEM_SPILL) { t => t.memoryBytesSpilled },
       diskBytesSpilled = scanTasks(TaskIndexNames.DISK_SPILL) { t => t.diskBytesSpilled },
       inputMetrics = new v1.InputMetricDistributions(
@@ -290,8 +289,7 @@ private[spark] class AppStatusStore(
           m.shuffleLocalBytesRead + m.shuffleRemoteBytesRead
         },
         scanTasks(TaskIndexNames.SHUFFLE_READ_RECORDS) { t => t.shuffleRecordsRead },
-        scanTasks(TaskIndexNames.SHUFFLE_REMOTE_BLOCKS) { t =>
-          t.shuffleRemoteBlocksFetched },
+        scanTasks(TaskIndexNames.SHUFFLE_REMOTE_BLOCKS) { t => t.shuffleRemoteBlocksFetched },
         scanTasks(TaskIndexNames.SHUFFLE_LOCAL_BLOCKS) { t => t.shuffleLocalBlocksFetched },
         scanTasks(TaskIndexNames.SHUFFLE_READ_TIME) { t => t.shuffleFetchWaitTime },
         scanTasks(TaskIndexNames.SHUFFLE_REMOTE_READS) { t => t.shuffleRemoteBytesRead },

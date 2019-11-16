@@ -731,9 +731,7 @@ private object LiveEntityHelpers {
    * Convert all the metric values to negative as well as handle zero values.
    * This method assumes that all the metric values are greater than or equal to zero
    */
-  def makeNegative(
-    m: v1.TaskMetrics,
-    handleZeros: mutable.HashSet[String]): v1.TaskMetrics = {
+  def makeNegative(m: v1.TaskMetrics, handleZeros: mutable.HashSet[String]): v1.TaskMetrics = {
     // If the metric value is 0, then make -1 and update the metric index in handleZeros.
     def updateMetricValue(metric: Long, index: String): Long = {
       if (metric == 0L) {

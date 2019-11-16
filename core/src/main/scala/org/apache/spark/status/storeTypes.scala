@@ -182,8 +182,7 @@ private[spark] class TaskDataWrapper(
 
     val hasMetrics: Boolean,
     // Non successful metrics will have negative values in `TaskDataWrapper`.
-    // zero metric value will be converted to -1 and update the index in the hashset.
-    // However `TaskData` will have actual metric values. To recover the actual metric value
+    // `TaskData` will have actual metric values. To recover the actual metric value
     // from `TaskDataWrapper`, need use `getMetricValue` method. parameter `handleZero` is to
     // check whether the index has zero metric value, which is used in the `getMetricValue`.
     val handleZero: HashSet[String],
@@ -244,7 +243,7 @@ private[spark] class TaskDataWrapper(
     val stageAttemptId: Int) {
 
   // To handle non successful tasks metrics (Running, Failed, Killed).
-  private def gerMetricValue(metric: Long, index: String): Long = {
+  private def getMetricValue(metric: Long, index: String): Long = {
     if (handleZero(index)) {
       0L
     } else {
@@ -255,34 +254,35 @@ private[spark] class TaskDataWrapper(
   def toApi: TaskData = {
     val metrics = if (hasMetrics) {
       Some(new TaskMetrics(
-        gerMetricValue(executorDeserializeTime, TaskIndexNames.DESER_TIME),
-        gerMetricValue(executorDeserializeCpuTime, TaskIndexNames.DESER_CPU_TIME),
-        gerMetricValue(executorRunTime, TaskIndexNames.EXEC_RUN_TIME),
-        gerMetricValue(executorCpuTime, TaskIndexNames.EXEC_CPU_TIME),
-        gerMetricValue(resultSize, TaskIndexNames.RESULT_SIZE),
-        gerMetricValue(jvmGcTime, TaskIndexNames.GC_TIME),
-        gerMetricValue(resultSerializationTime, TaskIndexNames.SER_TIME),
-        gerMetricValue(memoryBytesSpilled, TaskIndexNames.MEM_SPILL),
-        gerMetricValue(diskBytesSpilled, TaskIndexNames.DISK_SPILL),
-        gerMetricValue(peakExecutionMemory, TaskIndexNames.PEAK_MEM),
+        getMetricValue(executorDeserializeTime, TaskIndexNames.DESER_TIME),
+        getMetricValue(executorDeserializeCpuTime, TaskIndexNames.DESER_CPU_TIME),
+        getMetricValue(executorRunTime, TaskIndexNames.EXEC_RUN_TIME),
+        getMetricValue(executorCpuTime, TaskIndexNames.EXEC_CPU_TIME),
+        getMetricValue(resultSize, TaskIndexNames.RESULT_SIZE),
+        getMetricValue(jvmGcTime, TaskIndexNames.GC_TIME),
+        getMetricValue(resultSerializationTime, TaskIndexNames.SER_TIME),
+        getMetricValue(memoryBytesSpilled, TaskIndexNames.MEM_SPILL),
+        getMetricValue(diskBytesSpilled, TaskIndexNames.DISK_SPILL),
+        getMetricValue(peakExecutionMemory, TaskIndexNames.PEAK_MEM),
         new InputMetrics(
-          gerMetricValue(inputBytesRead, TaskIndexNames.INPUT_SIZE),
-          gerMetricValue(inputRecordsRead, TaskIndexNames.INPUT_RECORDS)),
+          getMetricValue(inputBytesRead, TaskIndexNames.INPUT_SIZE),
+          getMetricValue(inputRecordsRead, TaskIndexNames.INPUT_RECORDS)),
         new OutputMetrics(
-          gerMetricValue(outputBytesWritten, TaskIndexNames.OUTPUT_SIZE),
-          gerMetricValue(outputRecordsWritten, TaskIndexNames.OUTPUT_RECORDS)),
+          getMetricValue(outputBytesWritten, TaskIndexNames.OUTPUT_SIZE),
+          getMetricValue(outputRecordsWritten, TaskIndexNames.OUTPUT_RECORDS)),
         new ShuffleReadMetrics(
-          gerMetricValue(shuffleRemoteBlocksFetched, TaskIndexNames.SHUFFLE_REMOTE_BLOCKS),
-          gerMetricValue(shuffleLocalBlocksFetched, TaskIndexNames.SHUFFLE_LOCAL_BLOCKS),
-          gerMetricValue(shuffleFetchWaitTime, TaskIndexNames.SHUFFLE_READ_TIME),
-          gerMetricValue(shuffleRemoteBytesRead, TaskIndexNames.SHUFFLE_REMOTE_READS),
-          gerMetricValue(shuffleRemoteBytesReadToDisk, TaskIndexNames.SHUFFLE_REMOTE_READS_TO_DISK),
-          gerMetricValue(shuffleLocalBytesRead, TaskIndexNames.SHUFFLE_LOCAL_READ),
-          gerMetricValue(shuffleRecordsRead, TaskIndexNames.SHUFFLE_READ_RECORDS)),
+          getMetricValue(shuffleRemoteBlocksFetched, TaskIndexNames.SHUFFLE_REMOTE_BLOCKS),
+          getMetricValue(shuffleLocalBlocksFetched, TaskIndexNames.SHUFFLE_LOCAL_BLOCKS),
+          getMetricValue(shuffleFetchWaitTime, TaskIndexNames.SHUFFLE_READ_TIME),
+          getMetricValue(shuffleRemoteBytesRead, TaskIndexNames.SHUFFLE_REMOTE_READS),
+          getMetricValue(shuffleRemoteBytesReadToDisk,
+            TaskIndexNames.SHUFFLE_REMOTE_READS_TO_DISK),
+          getMetricValue(shuffleLocalBytesRead, TaskIndexNames.SHUFFLE_LOCAL_READ),
+          getMetricValue(shuffleRecordsRead, TaskIndexNames.SHUFFLE_READ_RECORDS)),
         new ShuffleWriteMetrics(
-          gerMetricValue(shuffleBytesWritten, TaskIndexNames.SHUFFLE_WRITE_SIZE),
-          gerMetricValue(shuffleWriteTime, TaskIndexNames.SHUFFLE_WRITE_TIME),
-          gerMetricValue(shuffleRecordsWritten, TaskIndexNames.SHUFFLE_WRITE_RECORDS))))
+          getMetricValue(shuffleBytesWritten, TaskIndexNames.SHUFFLE_WRITE_SIZE),
+          getMetricValue(shuffleWriteTime, TaskIndexNames.SHUFFLE_WRITE_TIME),
+          getMetricValue(shuffleRecordsWritten, TaskIndexNames.SHUFFLE_WRITE_RECORDS))))
     } else {
       None
     }
@@ -314,9 +314,9 @@ private[spark] class TaskDataWrapper(
   def schedulerDelay: Long = {
     if (hasMetrics) {
       AppStatusUtils.schedulerDelay(launchTime, resultFetchStart, duration,
-        gerMetricValue(executorDeserializeTime, TaskIndexNames.DESER_TIME),
-        gerMetricValue(resultSerializationTime, TaskIndexNames.SER_TIME),
-        gerMetricValue(executorRunTime, TaskIndexNames.EXEC_RUN_TIME))
+        getMetricValue(executorDeserializeTime, TaskIndexNames.DESER_TIME),
+        getMetricValue(resultSerializationTime, TaskIndexNames.SER_TIME),
+        getMetricValue(executorRunTime, TaskIndexNames.EXEC_RUN_TIME))
     } else {
       -1L
     }
@@ -349,8 +349,8 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_READS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalReads: Long = {
     if (hasMetrics) {
-      gerMetricValue(shuffleLocalBytesRead, TaskIndexNames.SHUFFLE_LOCAL_READ) +
-        gerMetricValue(shuffleRemoteBytesRead, TaskIndexNames.SHUFFLE_REMOTE_READS)
+      getMetricValue(shuffleLocalBytesRead, TaskIndexNames.SHUFFLE_LOCAL_READ) +
+        getMetricValue(shuffleRemoteBytesRead, TaskIndexNames.SHUFFLE_REMOTE_READS)
     } else {
       -1L
     }
@@ -359,8 +359,8 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_BLOCKS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalBlocks: Long = {
     if (hasMetrics) {
-      gerMetricValue(shuffleLocalBlocksFetched, TaskIndexNames.SHUFFLE_LOCAL_BLOCKS) +
-        gerMetricValue(shuffleRemoteBlocksFetched, TaskIndexNames.SHUFFLE_REMOTE_BLOCKS)
+      getMetricValue(shuffleLocalBlocksFetched, TaskIndexNames.SHUFFLE_LOCAL_BLOCKS) +
+        getMetricValue(shuffleRemoteBlocksFetched, TaskIndexNames.SHUFFLE_REMOTE_BLOCKS)
     } else {
       -1L
     }
