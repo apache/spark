@@ -277,8 +277,7 @@ case class DescribeNamespace(
 case class AlterNamespaceSetProperties(
     catalog: CatalogPlugin,
     namespace: Seq[String],
-    properties: Map[String, String]
-    ) extends Command
+    properties: Map[String, String]) extends Command
 
 /**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
