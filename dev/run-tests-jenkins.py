@@ -118,9 +118,17 @@ def run_tests(tests_timeout):
     @return a tuple containing the test result code and the result note to post to Github
     """
 
+    # set up java11 env if this is a pull request build with 'test-java11' in the title
+    test_env = os.environ
+    if "ghprbPullTitle" in os.environ:
+        if "test-java11" in os.environ["ghprbPullTitle"].lower():
+            test_env["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
+            test_env["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
+
     test_result_code = subprocess.Popen(['timeout',
                                          tests_timeout,
-                                         os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
+                                         os.path.join(SPARK_HOME, 'dev', 'run-tests')],
+                                        env=dict(test_env)).wait()
 
     failure_note_by_errcode = {
         # error to denote run-tests script failures:
@@ -182,8 +190,6 @@ def main():
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.7"
     if "test-hadoop3.2" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop3.2"
-    if "test-java11" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_JDK"] = "java11"
 
     build_display_name = os.environ["BUILD_DISPLAY_NAME"]
     build_url = os.environ["BUILD_URL"]
@@ -236,7 +242,7 @@ def main():
     result_message += '\n' + ' * This patch tested by `%s` with `%s` and `%s`.' % (
         os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt"),
         os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7"),
-        os.environ.get("AMPLAB_JENKINS_BUILD_JDK", "java8"))
+        os.environ["JAVA_HOME"])
 
     post_message_to_github(result_message, ghprb_pull_id)
 

@@ -403,10 +403,7 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
     if excluded_tags:
         test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
 
-    # set up java11 env if this is a pull request build with 'test-java11' in the title
     if "java11" in os.environ.get("AMPLAB_JENKINS_BUILD_JDK", "java8"):
-        os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
-        os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
         test_profiles += ['-Djava.version=11']
 
     if build_tool == "maven":
