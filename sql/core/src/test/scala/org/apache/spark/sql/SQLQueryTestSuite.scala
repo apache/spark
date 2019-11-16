@@ -285,7 +285,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
     // When we are regenerating the golden files, we don't need to set any config as they
     // all need to return the same result
-    if (regenerateGoldenFiles || !isTestWithConfigSets) {
+    if ((regenerateGoldenFiles && importedTestCaseName.isEmpty) || !isTestWithConfigSets) {
       runQueries(queries, testCase, None)
     } else {
       val configSets = {
