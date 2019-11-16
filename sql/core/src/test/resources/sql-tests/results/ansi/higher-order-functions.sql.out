@@ -259,14 +259,26 @@ struct<v:map<int,int>>
 -- !query 27
 select transform(ys, all -> all * all) as v from values (array(32, 97)) as t(ys)
 -- !query 27 schema
-struct<v:array<int>>
+struct<>
 -- !query 27 output
-[1024,9409]
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'all'(line 1, pos 21)
+
+== SQL ==
+select transform(ys, all -> all * all) as v from values (array(32, 97)) as t(ys)
+---------------------^^^
 
 
 -- !query 28
 select transform(ys, (all, i) -> all + i) as v from values (array(32, 97)) as t(ys)
 -- !query 28 schema
-struct<v:array<int>>
+struct<>
 -- !query 28 output
-[32,98]
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'all'(line 1, pos 22)
+
+== SQL ==
+select transform(ys, (all, i) -> all + i) as v from values (array(32, 97)) as t(ys)
+----------------------^^^

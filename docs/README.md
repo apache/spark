@@ -36,8 +36,7 @@ You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/
 installed. Also install the following libraries:
 
 ```sh
-$ sudo gem install jekyll jekyll-redirect-from pygments.rb
-$ sudo pip install Pygments
+$ sudo gem install jekyll jekyll-redirect-from rouge
 # Following is needed only for generating API docs
 $ sudo pip install sphinx pypandoc mkdocs
 $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "rmarkdown"), repos="https://cloud.r-project.org/")'
