@@ -21,8 +21,8 @@ import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.immutable.{HashSet, TreeSet}
-import scala.collection.mutable.HashMap
 import scala.collection.mutable
+import scala.collection.mutable.HashMap
 
 import com.google.common.collect.Interners
 
