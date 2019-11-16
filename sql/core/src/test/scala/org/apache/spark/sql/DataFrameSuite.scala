@@ -163,7 +163,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
 
     Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+      withSQLConf((SQLConf.DIALECT_SPARK_ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
         if (!ansiEnabled) {
           checkAnswer(structDf, Row(null))
