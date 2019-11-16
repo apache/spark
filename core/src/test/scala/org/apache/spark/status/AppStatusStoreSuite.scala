@@ -17,7 +17,12 @@
 
 package org.apache.spark.status
 
+import scala.collection.mutable.HashSet
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.status.LiveEntityHelpers.makeNegative
+import org.apache.spark.status.api.v1
+import org.apache.spark.status.api.v1.{InputMetrics, OutputMetrics, ShuffleReadMetrics, ShuffleWriteMetrics}
 import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore._
 
@@ -128,6 +133,15 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
+  test("task summary size for default metrics should be zero") {
+    val store = new InMemoryStore()
+    (0 until 5).foreach { _ => store.write(newTaskData(-1, status = "RUNNING")) }
+    Seq(new AppStatusStore(store), createLiveStore(store)).foreach { appStore =>
+      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
+      assert(summary.size === 0)
+    }
+  }
+
   test("SPARK-26260: summary should contain successful tasks only when with LevelDB store") {
     val testDir = Utils.createTempDir()
     val diskStore = KVUtils.open(testDir, getClass().getName())
@@ -171,10 +185,51 @@ class AppStatusStoreSuite extends SparkFunSuite {
   }
 
   private def newTaskData(i: Int, status: String = "SUCCESS"): TaskDataWrapper = {
+
+    val metrics = new v1.TaskMetrics(
+      i, i, i, i, i, i, i, i, i, i,
+      new InputMetrics(i, i),
+      new OutputMetrics(i, i),
+      new ShuffleReadMetrics(i, i, i, i, i, i, i),
+      new ShuffleWriteMetrics(i, i, i))
+
+    val hasMetrics = i >= 0
+    val handleZero = HashSet[String]()
+
+    val taskMetrics: v1.TaskMetrics = if (hasMetrics && status != "SUCCESS") {
+      makeNegative(metrics, handleZero)
+    } else {
+      metrics
+    }
+
     new TaskDataWrapper(
-      i, i, i, i, i, i, i.toString, i.toString, status, i.toString, false, Nil, None,
-      i, i, i, i, i, i, i, i, i, i,
-      i, i, i, i, i, i, i, i, i, i,
-      i, i, i, i, stageId, attemptId)
+      i.toLong, i, i, i, i, i, i.toString, i.toString, status, i.toString, false, Nil, None,
+      hasMetrics,
+      handleZero,
+      taskMetrics.executorDeserializeTime,
+      taskMetrics.executorDeserializeCpuTime,
+      taskMetrics.executorRunTime,
+      taskMetrics.executorCpuTime,
+      taskMetrics.resultSize,
+      taskMetrics.jvmGcTime,
+      taskMetrics.resultSerializationTime,
+      taskMetrics.memoryBytesSpilled,
+      taskMetrics.diskBytesSpilled,
+      taskMetrics.peakExecutionMemory,
+      taskMetrics.inputMetrics.bytesRead,
+      taskMetrics.inputMetrics.recordsRead,
+      taskMetrics.outputMetrics.bytesWritten,
+      taskMetrics.outputMetrics.recordsWritten,
+      taskMetrics.shuffleReadMetrics.remoteBlocksFetched,
+      taskMetrics.shuffleReadMetrics.localBlocksFetched,
+      taskMetrics.shuffleReadMetrics.fetchWaitTime,
+      taskMetrics.shuffleReadMetrics.remoteBytesRead,
+      taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk,
+      taskMetrics.shuffleReadMetrics.localBytesRead,
+      taskMetrics.shuffleReadMetrics.recordsRead,
+      taskMetrics.shuffleWriteMetrics.bytesWritten,
+      taskMetrics.shuffleWriteMetrics.writeTime,
+      taskMetrics.shuffleWriteMetrics.recordsWritten,
+      stageId, attemptId)
   }
 }

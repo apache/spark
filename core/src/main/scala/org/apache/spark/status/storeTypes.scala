@@ -20,6 +20,8 @@ package org.apache.spark.status
 import java.lang.{Long => JLong}
 import java.util.Date
 
+import scala.collection.mutable.HashSet
+
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
@@ -98,41 +100,6 @@ private[spark] class StageDataWrapper(
 }
 
 /**
- * This object map the indices names of successful tasks' metrices. Mapped to short strings
- * to save space when using a disk store.
- */
-private[spark] object SuccessTaskIndexNames {
-  final val DESER_CPU_TIME = "sdct"
-  final val DESER_TIME = "sdes"
-  final val DISK_SPILL = "sdbs"
-  final val EXEC_CPU_TIME = "sect"
-  final val EXEC_RUN_TIME = "sert"
-  final val GC_TIME = "sgc"
-  final val GETTING_RESULT_TIME = "sgrt"
-  final val INPUT_RECORDS = "sir"
-  final val INPUT_SIZE = "sis"
-  final val MEM_SPILL = "smbs"
-  final val OUTPUT_RECORDS = "sor"
-  final val OUTPUT_SIZE = "sos"
-  final val PEAK_MEM = "spem"
-  final val RESULT_SIZE = "srs"
-  final val SCHEDULER_DELAY = "sdly"
-  final val SER_TIME = "srst"
-  final val SHUFFLE_LOCAL_BLOCKS = "sslbl"
-  final val SHUFFLE_READ_RECORDS = "ssrr"
-  final val SHUFFLE_READ_TIME = "ssrt"
-  final val SHUFFLE_REMOTE_BLOCKS = "ssrbl"
-  final val SHUFFLE_REMOTE_READS = "ssrby"
-  final val SHUFFLE_REMOTE_READS_TO_DISK = "ssrbd"
-  final val SHUFFLE_TOTAL_READS = "sstby"
-  final val SHUFFLE_TOTAL_BLOCKS = "sstbl"
-  final val SHUFFLE_WRITE_RECORDS = "sswr"
-  final val SHUFFLE_WRITE_SIZE = "ssws"
-  final val SHUFFLE_WRITE_TIME = "sswt"
-  final val STAGE = "stage"
-}
-
-/**
  * Tasks have a lot of indices that are used in a few different places. This object keeps logical
  * names for these indices, mapped to short strings to save space when using a disk store.
  */
@@ -172,6 +139,7 @@ private[spark] object TaskIndexNames {
   final val SHUFFLE_WRITE_RECORDS = "swr"
   final val SHUFFLE_WRITE_SIZE = "sws"
   final val SHUFFLE_WRITE_TIME = "swt"
+  final val SHUFFLE_LOCAL_READ = "slr"
   final val STAGE = "stage"
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
@@ -212,6 +180,13 @@ private[spark] class TaskDataWrapper(
     val accumulatorUpdates: Seq[AccumulableInfo],
     val errorMessage: Option[String],
 
+    val hasMetrics: Boolean,
+    // Non successful metrics will have negative values in `TaskDataWrapper`.
+    // zero metric value will be converted to -1 and update the index in the hashset.
+    // However `TaskData` will have actual metric values. To recover the actual metric value
+    // from `TaskDataWrapper`, need use `getMetricValue` method. parameter `handleZero` is to
+    // check whether the index has zero metric value, which is used in the `getMetricValue`.
+    val handleZero: HashSet[String],
     // The following is an exploded view of a TaskMetrics API object. This saves 5 objects
     // (= 80 bytes of Java object overhead) per instance of this wrapper. If the first value
     // (executorDeserializeTime) is -1L, it means the metrics for this task have not been
@@ -268,41 +243,46 @@ private[spark] class TaskDataWrapper(
     val stageId: Int,
     val stageAttemptId: Int) {
 
-  def hasMetrics: Boolean = executorDeserializeTime >= 0
-
-  private val isSuccess = status == "SUCCESS"
+  // To handle non successful tasks metrics (Running, Failed, Killed).
+  private def gerMetricValue(metric: Long, index: String): Long = {
+    if (handleZero(index)) {
+      0L
+    } else {
+      math.abs(metric)
+    }
+  }
 
   def toApi: TaskData = {
     val metrics = if (hasMetrics) {
       Some(new TaskMetrics(
-        executorDeserializeTime,
-        executorDeserializeCpuTime,
-        executorRunTime,
-        executorCpuTime,
-        resultSize,
-        jvmGcTime,
-        resultSerializationTime,
-        memoryBytesSpilled,
-        diskBytesSpilled,
-        peakExecutionMemory,
+        gerMetricValue(executorDeserializeTime, TaskIndexNames.DESER_TIME),
+        gerMetricValue(executorDeserializeCpuTime, TaskIndexNames.DESER_CPU_TIME),
+        gerMetricValue(executorRunTime, TaskIndexNames.EXEC_RUN_TIME),
+        gerMetricValue(executorCpuTime, TaskIndexNames.EXEC_CPU_TIME),
+        gerMetricValue(resultSize, TaskIndexNames.RESULT_SIZE),
+        gerMetricValue(jvmGcTime, TaskIndexNames.GC_TIME),
+        gerMetricValue(resultSerializationTime, TaskIndexNames.SER_TIME),
+        gerMetricValue(memoryBytesSpilled, TaskIndexNames.MEM_SPILL),
+        gerMetricValue(diskBytesSpilled, TaskIndexNames.DISK_SPILL),
+        gerMetricValue(peakExecutionMemory, TaskIndexNames.PEAK_MEM),
         new InputMetrics(
-          inputBytesRead,
-          inputRecordsRead),
+          gerMetricValue(inputBytesRead, TaskIndexNames.INPUT_SIZE),
+          gerMetricValue(inputRecordsRead, TaskIndexNames.INPUT_RECORDS)),
         new OutputMetrics(
-          outputBytesWritten,
-          outputRecordsWritten),
+          gerMetricValue(outputBytesWritten, TaskIndexNames.OUTPUT_SIZE),
+          gerMetricValue(outputRecordsWritten, TaskIndexNames.OUTPUT_RECORDS)),
         new ShuffleReadMetrics(
-          shuffleRemoteBlocksFetched,
-          shuffleLocalBlocksFetched,
-          shuffleFetchWaitTime,
-          shuffleRemoteBytesRead,
-          shuffleRemoteBytesReadToDisk,
-          shuffleLocalBytesRead,
-          shuffleRecordsRead),
+          gerMetricValue(shuffleRemoteBlocksFetched, TaskIndexNames.SHUFFLE_REMOTE_BLOCKS),
+          gerMetricValue(shuffleLocalBlocksFetched, TaskIndexNames.SHUFFLE_LOCAL_BLOCKS),
+          gerMetricValue(shuffleFetchWaitTime, TaskIndexNames.SHUFFLE_READ_TIME),
+          gerMetricValue(shuffleRemoteBytesRead, TaskIndexNames.SHUFFLE_REMOTE_READS),
+          gerMetricValue(shuffleRemoteBytesReadToDisk, TaskIndexNames.SHUFFLE_REMOTE_READS_TO_DISK),
+          gerMetricValue(shuffleLocalBytesRead, TaskIndexNames.SHUFFLE_LOCAL_READ),
+          gerMetricValue(shuffleRecordsRead, TaskIndexNames.SHUFFLE_READ_RECORDS)),
         new ShuffleWriteMetrics(
-          shuffleBytesWritten,
-          shuffleWriteTime,
-          shuffleRecordsWritten)))
+          gerMetricValue(shuffleBytesWritten, TaskIndexNames.SHUFFLE_WRITE_SIZE),
+          gerMetricValue(shuffleWriteTime, TaskIndexNames.SHUFFLE_WRITE_TIME),
+          gerMetricValue(shuffleRecordsWritten, TaskIndexNames.SHUFFLE_WRITE_RECORDS))))
     } else {
       None
     }
@@ -327,127 +307,16 @@ private[spark] class TaskDataWrapper(
       gettingResultTime = 0L)
   }
 
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.DESER_TIME, parent = TaskIndexNames.STAGE)
-  def executorDeserializeTimeIndex: Long = if (isSuccess) {
-    executorDeserializeTime
-  } else {
-    -1L
-  }
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.DESER_CPU_TIME, parent = TaskIndexNames.STAGE)
-  def executorDeserializeCpuTimeIndex: Long = if (isSuccess) {
-    executorDeserializeCpuTime
-  } else {
-    -1L
-  }
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.EXEC_RUN_TIME, parent = TaskIndexNames.STAGE)
-  def executorRunTimeIndex: Long = if (isSuccess) executorRunTime else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.EXEC_CPU_TIME, parent = TaskIndexNames.STAGE)
-  def executorCpuTimeIndex: Long = if (isSuccess) executorCpuTime else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.RESULT_SIZE, parent = TaskIndexNames.STAGE)
-  def resultSizeIndex: Long = if (isSuccess) resultSize else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.GC_TIME, parent = TaskIndexNames.STAGE)
-  def jvmGcTimeIndex: Long = if (isSuccess) jvmGcTime else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SER_TIME, parent = TaskIndexNames.STAGE)
-  def resultSerializationTimeIndex: Long = if (isSuccess) resultSerializationTime else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.MEM_SPILL, parent = TaskIndexNames.STAGE)
-  def memoryBytesSpilledIndex: Long = if (isSuccess) memoryBytesSpilled else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.DISK_SPILL, parent = TaskIndexNames.STAGE)
-  def diskBytesSpilledIndex: Long = if (isSuccess) diskBytesSpilled else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.PEAK_MEM, parent = TaskIndexNames.STAGE)
-  def peakExecutionMemoryIndex: Long = if (isSuccess) peakExecutionMemory else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.INPUT_SIZE, parent = TaskIndexNames.STAGE)
-  def inputBytesReadIndex: Long = if (isSuccess) inputBytesRead else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.INPUT_RECORDS, parent = TaskIndexNames.STAGE)
-  def inputRecordsReadIndex: Long = if (isSuccess) inputRecordsRead else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.OUTPUT_SIZE, parent = TaskIndexNames.STAGE)
-  def outputBytesWrittenIndex: Long = if (isSuccess) outputBytesWritten else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.OUTPUT_RECORDS, parent = TaskIndexNames.STAGE)
-  def outputRecordsWrittenIndex: Long = if (isSuccess) outputRecordsWritten else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_REMOTE_BLOCKS,
-    parent = TaskIndexNames.STAGE)
-  def shuffleRemoteBlocksFetchedIndex: Long = if (isSuccess) {
-    shuffleRemoteBlocksFetched
-  } else {
-    -1L
-  }
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_LOCAL_BLOCKS,
-    parent = TaskIndexNames.STAGE)
-  def shuffleLocalBlocksFetchedIndex: Long = if (isSuccess) {
-    shuffleLocalBlocksFetched
-  } else {
-    -1L
-  }
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_READ_TIME,
-    parent = TaskIndexNames.STAGE)
-  def shuffleFetchWaitTimeIndex: Long = if (isSuccess) shuffleFetchWaitTime else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_REMOTE_READS,
-    parent = TaskIndexNames.STAGE)
-  def shuffleRemoteBytesReadIndex: Long = if (isSuccess) shuffleRemoteBytesRead else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_REMOTE_READS_TO_DISK,
-    parent = TaskIndexNames.STAGE)
-  def shuffleRemoteBytesReadToDiskIndex: Long = if (isSuccess) {
-    shuffleRemoteBytesReadToDisk
-  } else {
-    -1L
-  }
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_READ_RECORDS,
-    parent = TaskIndexNames.STAGE)
-  def shuffleRecordsReadIndex: Long = if (isSuccess) shuffleRecordsRead else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_WRITE_SIZE,
-    parent = TaskIndexNames.STAGE)
-  def shuffleBytesWrittenIndex: Long = if (isSuccess) shuffleBytesWritten else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_WRITE_TIME,
-    parent = TaskIndexNames.STAGE)
-  def shuffleWriteTimeIndex: Long = if (isSuccess) shuffleWriteTime else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_WRITE_RECORDS,
-    parent = TaskIndexNames.STAGE)
-  def shuffleRecordsWrittenIndex: Long = if (isSuccess) shuffleRecordsWritten else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SCHEDULER_DELAY, parent = TaskIndexNames.STAGE)
-  def schedulerDelayIndex: Long = if (isSuccess) schedulerDelay else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.GETTING_RESULT_TIME,
-    parent = TaskIndexNames.STAGE)
-  def gettingResultTimeIndex: Long = if (isSuccess) gettingResultTime else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_TOTAL_READS,
-    parent = TaskIndexNames.STAGE)
-  def shuffleTotalReadsIndex: Long = if (isSuccess) shuffleTotalReads else -1L
-
-  @JsonIgnore @KVIndex(value = SuccessTaskIndexNames.SHUFFLE_TOTAL_BLOCKS,
-    parent = TaskIndexNames.STAGE)
-  private def shuffleTotalBlocksIndex: Long = if (isSuccess) shuffleTotalBlocks else -1L
-
   @JsonIgnore @KVIndex(TaskIndexNames.STAGE)
   private def stage: Array[Int] = Array(stageId, stageAttemptId)
 
   @JsonIgnore @KVIndex(value = TaskIndexNames.SCHEDULER_DELAY, parent = TaskIndexNames.STAGE)
   def schedulerDelay: Long = {
     if (hasMetrics) {
-      AppStatusUtils.schedulerDelay(launchTime, resultFetchStart, duration, executorDeserializeTime,
-        resultSerializationTime, executorRunTime)
+      AppStatusUtils.schedulerDelay(launchTime, resultFetchStart, duration,
+        gerMetricValue(executorDeserializeTime, TaskIndexNames.DESER_TIME),
+        gerMetricValue(resultSerializationTime, TaskIndexNames.SER_TIME),
+        gerMetricValue(executorRunTime, TaskIndexNames.EXEC_RUN_TIME))
     } else {
       -1L
     }
@@ -480,7 +349,8 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_READS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalReads: Long = {
     if (hasMetrics) {
-      shuffleLocalBytesRead + shuffleRemoteBytesRead
+      gerMetricValue(shuffleLocalBytesRead, TaskIndexNames.SHUFFLE_LOCAL_READ) +
+        gerMetricValue(shuffleRemoteBytesRead, TaskIndexNames.SHUFFLE_REMOTE_READS)
     } else {
       -1L
     }
@@ -489,7 +359,8 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_BLOCKS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalBlocks: Long = {
     if (hasMetrics) {
-      shuffleLocalBlocksFetched + shuffleRemoteBlocksFetched
+      gerMetricValue(shuffleLocalBlocksFetched, TaskIndexNames.SHUFFLE_LOCAL_BLOCKS) +
+        gerMetricValue(shuffleRemoteBlocksFetched, TaskIndexNames.SHUFFLE_REMOTE_BLOCKS)
     } else {
       -1L
     }

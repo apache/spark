@@ -158,7 +158,7 @@ private[spark] class AppStatusStore(
       Utils.tryWithResource(
         store.view(classOf[TaskDataWrapper])
           .parent(stageKey)
-          .index(SuccessTaskIndexNames.EXEC_RUN_TIME)
+          .index(TaskIndexNames.EXEC_RUN_TIME)
           .first(0L)
           .closeableIterator()
       ) { it =>
@@ -258,53 +258,53 @@ private[spark] class AppStatusStore(
 
     val computedQuantiles = new v1.TaskMetricDistributions(
       quantiles = quantiles,
-      executorDeserializeTime = scanTasks(SuccessTaskIndexNames.DESER_TIME) { t =>
+      executorDeserializeTime = scanTasks(TaskIndexNames.DESER_TIME) { t =>
         t.executorDeserializeTime
       },
-      executorDeserializeCpuTime = scanTasks(SuccessTaskIndexNames.DESER_CPU_TIME) { t =>
+      executorDeserializeCpuTime = scanTasks(TaskIndexNames.DESER_CPU_TIME) { t =>
         t.executorDeserializeCpuTime
       },
-      executorRunTime = scanTasks(SuccessTaskIndexNames.EXEC_RUN_TIME) { t => t.executorRunTime },
-      executorCpuTime = scanTasks(SuccessTaskIndexNames.EXEC_CPU_TIME) { t => t.executorCpuTime },
-      resultSize = scanTasks(SuccessTaskIndexNames.RESULT_SIZE) { t => t.resultSize },
-      jvmGcTime = scanTasks(SuccessTaskIndexNames.GC_TIME) { t => t.jvmGcTime },
-      resultSerializationTime = scanTasks(SuccessTaskIndexNames.SER_TIME) { t =>
+      executorRunTime = scanTasks(TaskIndexNames.EXEC_RUN_TIME) { t => t.executorRunTime },
+      executorCpuTime = scanTasks(TaskIndexNames.EXEC_CPU_TIME) { t => t.executorCpuTime },
+      resultSize = scanTasks(TaskIndexNames.RESULT_SIZE) { t => t.resultSize },
+      jvmGcTime = scanTasks(TaskIndexNames.GC_TIME) { t => t.jvmGcTime },
+      resultSerializationTime = scanTasks(TaskIndexNames.SER_TIME) { t =>
         t.resultSerializationTime
       },
-      gettingResultTime = scanTasks(SuccessTaskIndexNames.GETTING_RESULT_TIME) { t =>
+      gettingResultTime = scanTasks(TaskIndexNames.GETTING_RESULT_TIME) { t =>
         t.gettingResultTime
       },
-      schedulerDelay = scanTasks(SuccessTaskIndexNames.SCHEDULER_DELAY) { t => t.schedulerDelay },
-      peakExecutionMemory = scanTasks(SuccessTaskIndexNames.PEAK_MEM) { t =>
+      schedulerDelay = scanTasks(TaskIndexNames.SCHEDULER_DELAY) { t => t.schedulerDelay },
+      peakExecutionMemory = scanTasks(TaskIndexNames.PEAK_MEM) { t =>
         t.peakExecutionMemory },
-      memoryBytesSpilled = scanTasks(SuccessTaskIndexNames.MEM_SPILL) { t => t.memoryBytesSpilled },
-      diskBytesSpilled = scanTasks(SuccessTaskIndexNames.DISK_SPILL) { t => t.diskBytesSpilled },
+      memoryBytesSpilled = scanTasks(TaskIndexNames.MEM_SPILL) { t => t.memoryBytesSpilled },
+      diskBytesSpilled = scanTasks(TaskIndexNames.DISK_SPILL) { t => t.diskBytesSpilled },
       inputMetrics = new v1.InputMetricDistributions(
-        scanTasks(SuccessTaskIndexNames.INPUT_SIZE) { t => t.inputBytesRead },
-        scanTasks(SuccessTaskIndexNames.INPUT_RECORDS) { t => t.inputRecordsRead }),
+        scanTasks(TaskIndexNames.INPUT_SIZE) { t => t.inputBytesRead },
+        scanTasks(TaskIndexNames.INPUT_RECORDS) { t => t.inputRecordsRead }),
       outputMetrics = new v1.OutputMetricDistributions(
-        scanTasks(SuccessTaskIndexNames.OUTPUT_SIZE) { t => t.outputBytesWritten },
-        scanTasks(SuccessTaskIndexNames.OUTPUT_RECORDS) { t => t.outputRecordsWritten }),
+        scanTasks(TaskIndexNames.OUTPUT_SIZE) { t => t.outputBytesWritten },
+        scanTasks(TaskIndexNames.OUTPUT_RECORDS) { t => t.outputRecordsWritten }),
       shuffleReadMetrics = new v1.ShuffleReadMetricDistributions(
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_TOTAL_READS) { m =>
+        scanTasks(TaskIndexNames.SHUFFLE_TOTAL_READS) { m =>
           m.shuffleLocalBytesRead + m.shuffleRemoteBytesRead
         },
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_READ_RECORDS) { t => t.shuffleRecordsRead },
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_REMOTE_BLOCKS) { t =>
+        scanTasks(TaskIndexNames.SHUFFLE_READ_RECORDS) { t => t.shuffleRecordsRead },
+        scanTasks(TaskIndexNames.SHUFFLE_REMOTE_BLOCKS) { t =>
           t.shuffleRemoteBlocksFetched },
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_LOCAL_BLOCKS) { t => t.shuffleLocalBlocksFetched },
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_READ_TIME) { t => t.shuffleFetchWaitTime },
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_REMOTE_READS) { t => t.shuffleRemoteBytesRead },
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_REMOTE_READS_TO_DISK) { t =>
+        scanTasks(TaskIndexNames.SHUFFLE_LOCAL_BLOCKS) { t => t.shuffleLocalBlocksFetched },
+        scanTasks(TaskIndexNames.SHUFFLE_READ_TIME) { t => t.shuffleFetchWaitTime },
+        scanTasks(TaskIndexNames.SHUFFLE_REMOTE_READS) { t => t.shuffleRemoteBytesRead },
+        scanTasks(TaskIndexNames.SHUFFLE_REMOTE_READS_TO_DISK) { t =>
           t.shuffleRemoteBytesReadToDisk
         },
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_TOTAL_BLOCKS) { m =>
+        scanTasks(TaskIndexNames.SHUFFLE_TOTAL_BLOCKS) { m =>
           m.shuffleLocalBlocksFetched + m.shuffleRemoteBlocksFetched
         }),
       shuffleWriteMetrics = new v1.ShuffleWriteMetricDistributions(
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_WRITE_SIZE) { t => t.shuffleBytesWritten },
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_WRITE_RECORDS) { t => t.shuffleRecordsWritten },
-        scanTasks(SuccessTaskIndexNames.SHUFFLE_WRITE_TIME) { t => t.shuffleWriteTime }))
+        scanTasks(TaskIndexNames.SHUFFLE_WRITE_SIZE) { t => t.shuffleBytesWritten },
+        scanTasks(TaskIndexNames.SHUFFLE_WRITE_RECORDS) { t => t.shuffleRecordsWritten },
+        scanTasks(TaskIndexNames.SHUFFLE_WRITE_TIME) { t => t.shuffleWriteTime }))
 
     // Go through the computed quantiles and cache the values that match the caching criteria.
     computedQuantiles.quantiles.zipWithIndex
@@ -548,7 +548,7 @@ private[spark] class AppStatusStore(
 
 private[spark] object AppStatusStore {
 
-  val CURRENT_VERSION = 1L
+  val CURRENT_VERSION = 2L
 
   /**
    * Create an in-memory store for a live application.
