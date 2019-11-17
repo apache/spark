@@ -166,9 +166,9 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
       for (rdf_slice in rdf_slices) {
         batch <- arrow::record_batch(rdf_slice)
         if (is.null(stream_writer)) {
-          stream <- arrow::FileOutputStream(fileName)
+          stream <- arrow::FileOutputStream$create(fileName)
           schema <- batch$schema
-          stream_writer <- arrow::RecordBatchStreamWriter(stream, schema)
+          stream_writer <- arrow::RecordBatchStreamWriter$create(stream, schema)
         }
 
         stream_writer$write_batch(batch)
