@@ -750,7 +750,9 @@ launchScript <- function(script, combinedArgs, wait = FALSE, stdout = "", stderr
   if (.Platform$OS.type == "windows") {
     scriptWithArgs <- paste(script, combinedArgs, sep = " ")
     # on Windows, intern = F seems to mean output to the console. (documentation on this is missing)
-    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait) # nolint
+    # nolint start
+    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait)
+    # nolint end
   } else {
     # http://stat.ethz.ch/R-manual/R-devel/library/base/html/system2.html
     # stdout = F means discard output
