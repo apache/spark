@@ -24,7 +24,7 @@ LINT_R_REPORT_FILE_NAME="$SPARK_ROOT_DIR/dev/lint-r-report.log"
 
 if ! type "Rscript" > /dev/null; then
   echo "ERROR: You should install R"
-  exit
+  exit 1
 fi
 
 `which Rscript` --vanilla "$SPARK_ROOT_DIR/dev/lint-r.R" "$SPARK_ROOT_DIR" | tee "$LINT_R_REPORT_FILE_NAME"
