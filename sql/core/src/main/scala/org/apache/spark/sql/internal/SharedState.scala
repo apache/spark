@@ -199,8 +199,8 @@ object SharedState extends Logging {
       try {
         URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
       } catch {
-        case _: Error =>
-          logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+        case NonFatal(e) =>
+          logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory", e)
       }
     }
   }
