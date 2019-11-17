@@ -96,6 +96,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
       AlterNamespaceSetProperties(catalog, nameParts, properties)
 
+    case AlterNamespaceSetLocationStatement(NonSessionCatalog(catalog, nameParts), location) =>
+      AlterNamespaceSetLocation(catalog, nameParts, location)
+
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
