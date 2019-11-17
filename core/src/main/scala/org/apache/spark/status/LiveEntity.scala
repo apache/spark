@@ -21,7 +21,6 @@ import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.immutable.{HashSet, TreeSet}
-import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import com.google.common.collect.Interners
@@ -30,7 +29,6 @@ import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
-import org.apache.spark.status.TaskIndexNames._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
 import org.apache.spark.ui.SparkUI
@@ -187,7 +185,6 @@ private class LiveTask(
     }
 
     val hasMetrics = metrics.executorDeserializeTime >= 0
-    val handleZeros = mutable.HashSet[String]()
 
     /**
      * SPARK-26260: For non successful tasks, store the metrics as negetive to avoid
@@ -195,7 +192,7 @@ private class LiveTask(
      * it actual value.
      */
     val taskMetrics: v1.TaskMetrics = if (hasMetrics && !info.successful) {
-      makeNegative(metrics, handleZeros)
+      makeNegative(metrics)
     } else {
       metrics
     }
@@ -216,7 +213,6 @@ private class LiveTask(
       errorMessage,
 
       hasMetrics,
-      handleZeros,
       taskMetrics.executorDeserializeTime,
       taskMetrics.executorDeserializeCpuTime,
       taskMetrics.executorRunTime,
@@ -732,42 +728,40 @@ private object LiveEntityHelpers {
    * Convert all the metric values to negative as well as handle zero values.
    * This method assumes that all the metric values are greater than or equal to zero
    */
-  def makeNegative(m: v1.TaskMetrics, handleZeros: mutable.HashSet[String]): v1.TaskMetrics = {
-    // If the metric value is 0, then make -1 and update the metric index in handleZeros.
-    def updateMetricValue(metric: Long, index: String): Long = {
-      if (metric == 0L) {
-        handleZeros.add(index)
-        -1L
-      } else {
-        metric * -1L
-      }
+  def makeNegative(m: v1.TaskMetrics): v1.TaskMetrics = {
+    // To handle 0 metric value, add  1 and make the metric negative.
+    // To recover actual value do `math.abs(metric + 1)`
+    // Eg: if the metric values are (5, 3, 0, 1) => Updated metrics value will be (-6, -4, -1, -2)
+    // To get actual metric value math.abs(metric +1) => (5, 3, 0, 1)
+    def updateMetricValue(metric: Long): Long = {
+      metric * -1L - 1L
     }
 
     createMetrics(
-      updateMetricValue(m.executorDeserializeTime, DESER_TIME),
-      updateMetricValue(m.executorDeserializeCpuTime, DESER_CPU_TIME),
-      updateMetricValue(m.executorRunTime, EXEC_RUN_TIME),
-      updateMetricValue(m.executorCpuTime, EXEC_CPU_TIME),
-      updateMetricValue(m.resultSize, RESULT_SIZE),
-      updateMetricValue(m.jvmGcTime, GC_TIME),
-      updateMetricValue(m.resultSerializationTime, SER_TIME),
-      updateMetricValue(m.memoryBytesSpilled, MEM_SPILL),
-      updateMetricValue(m.diskBytesSpilled, DISK_SPILL),
-      updateMetricValue(m.peakExecutionMemory, PEAK_MEM),
-      updateMetricValue(m.inputMetrics.bytesRead, INPUT_SIZE),
-      updateMetricValue(m.inputMetrics.recordsRead, INPUT_RECORDS),
-      updateMetricValue(m.outputMetrics.bytesWritten, OUTPUT_SIZE),
-      updateMetricValue(m.outputMetrics.recordsWritten, OUTPUT_RECORDS),
-      updateMetricValue(m.shuffleReadMetrics.remoteBlocksFetched, SHUFFLE_REMOTE_BLOCKS),
-      updateMetricValue(m.shuffleReadMetrics.localBlocksFetched, SHUFFLE_LOCAL_BLOCKS),
-      updateMetricValue(m.shuffleReadMetrics.fetchWaitTime, SHUFFLE_READ_TIME),
-      updateMetricValue(m.shuffleReadMetrics.remoteBytesRead, SHUFFLE_REMOTE_READS),
-      updateMetricValue(m.shuffleReadMetrics.remoteBytesReadToDisk, SHUFFLE_REMOTE_READS_TO_DISK),
-      updateMetricValue(m.shuffleReadMetrics.localBytesRead, SHUFFLE_LOCAL_READ),
-      updateMetricValue(m.shuffleReadMetrics.recordsRead, SHUFFLE_READ_RECORDS),
-      updateMetricValue(m.shuffleWriteMetrics.bytesWritten, SHUFFLE_WRITE_SIZE),
-      updateMetricValue(m.shuffleWriteMetrics.writeTime, SHUFFLE_WRITE_TIME),
-      updateMetricValue(m.shuffleWriteMetrics.recordsWritten, SHUFFLE_WRITE_RECORDS))
+      updateMetricValue(m.executorDeserializeTime),
+      updateMetricValue(m.executorDeserializeCpuTime),
+      updateMetricValue(m.executorRunTime),
+      updateMetricValue(m.executorCpuTime),
+      updateMetricValue(m.resultSize),
+      updateMetricValue(m.jvmGcTime),
+      updateMetricValue(m.resultSerializationTime),
+      updateMetricValue(m.memoryBytesSpilled),
+      updateMetricValue(m.diskBytesSpilled),
+      updateMetricValue(m.peakExecutionMemory),
+      updateMetricValue(m.inputMetrics.bytesRead),
+      updateMetricValue(m.inputMetrics.recordsRead),
+      updateMetricValue(m.outputMetrics.bytesWritten),
+      updateMetricValue(m.outputMetrics.recordsWritten),
+      updateMetricValue(m.shuffleReadMetrics.remoteBlocksFetched),
+      updateMetricValue(m.shuffleReadMetrics.localBlocksFetched),
+      updateMetricValue(m.shuffleReadMetrics.fetchWaitTime),
+      updateMetricValue(m.shuffleReadMetrics.remoteBytesRead),
+      updateMetricValue(m.shuffleReadMetrics.remoteBytesReadToDisk),
+      updateMetricValue(m.shuffleReadMetrics.localBytesRead),
+      updateMetricValue(m.shuffleReadMetrics.recordsRead),
+      updateMetricValue(m.shuffleWriteMetrics.bytesWritten),
+      updateMetricValue(m.shuffleWriteMetrics.writeTime),
+      updateMetricValue(m.shuffleWriteMetrics.recordsWritten))
   }
 
   private def addMetrics(m1: v1.TaskMetrics, m2: v1.TaskMetrics, mult: Int): v1.TaskMetrics = {

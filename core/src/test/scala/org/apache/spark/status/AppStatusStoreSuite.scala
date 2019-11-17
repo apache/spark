@@ -17,8 +17,6 @@
 
 package org.apache.spark.status
 
-import scala.collection.mutable.HashSet
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.status.LiveEntityHelpers.makeNegative
 import org.apache.spark.status.api.v1
@@ -194,10 +192,9 @@ class AppStatusStoreSuite extends SparkFunSuite {
       new ShuffleWriteMetrics(i, i, i))
 
     val hasMetrics = i >= 0
-    val handleZero = HashSet[String]()
 
     val taskMetrics: v1.TaskMetrics = if (hasMetrics && status != "SUCCESS") {
-      makeNegative(metrics, handleZero)
+      makeNegative(metrics)
     } else {
       metrics
     }
@@ -205,7 +202,6 @@ class AppStatusStoreSuite extends SparkFunSuite {
     new TaskDataWrapper(
       i.toLong, i, i, i, i, i, i.toString, i.toString, status, i.toString, false, Nil, None,
       hasMetrics,
-      handleZero,
       taskMetrics.executorDeserializeTime,
       taskMetrics.executorDeserializeCpuTime,
       taskMetrics.executorRunTime,
