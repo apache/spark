@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.internal.config.DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
@@ -202,7 +203,7 @@ object SharedState extends Logging {
           "so it can not be modified")
       case None => synchronized {
         try {
-          if (conf.getBoolean("spark.fsUrlStreamHandlerFactory.enabled", true)) {
+          if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED)) {
             URL.setURLStreamHandlerFactory(defaultFactory)
             factory = Some(defaultFactory)
           }
