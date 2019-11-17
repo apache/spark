@@ -328,9 +328,13 @@ class ResolveSessionCatalog(
         isOverwrite,
         partition)
 
-    case ShowCreateTableStatement(tableName) =>
+    case ShowCreateTableStatement(tableName, asSpark) if !asSpark =>
       val v1TableName = parseV1Table(tableName, "SHOW CREATE TABLE")
       ShowCreateTableCommand(v1TableName.asTableIdentifier)
+
+    case ShowCreateTableStatement(tableName, asSpark) if asSpark =>
+      val v1TableName = parseV1Table(tableName, "SHOW CREATE TABLE AS SPARK")
+      ShowCreateTableAsSparkCommand(v1TableName.asTableIdentifier)
 
     case CacheTableStatement(tableName, plan, isLazy, options) =>
       val v1TableName = parseV1Table(tableName, "CACHE TABLE")

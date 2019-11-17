@@ -382,7 +382,9 @@ case class LoadDataStatement(
 /**
  * A SHOW CREATE TABLE statement, as parsed from SQL.
  */
-case class ShowCreateTableStatement(tableName: Seq[String]) extends ParsedStatement
+case class ShowCreateTableStatement(
+    tableName: Seq[String],
+    asSpark: Boolean = false) extends ParsedStatement
 
 /**
  * A CACHE TABLE statement, as parsed from SQL
