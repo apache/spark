@@ -1028,10 +1028,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>Int.MaxValue</td>
   <td>
     The maximum number of event log files which will be retained as non-compacted.
-     By default, all event log files will be retained. Please set the configuration and
-     <code>spark.eventLog.rolling.maxFileSize</code> accordingly if you want to control
-     the overall size of event log files. The event log files older than these retained
-     files will be compacted into single file and deleted afterwards.
+    By default, all event log files will be retained. Please set the configuration and
+    <code>spark.eventLog.rolling.maxFileSize</code> accordingly if you want to control
+    the overall size of event log files. The event log files older than these retained
+    files will be compacted into single file and deleted afterwards.
   </td>
 </tr>
 <tr>
