@@ -1679,14 +1679,6 @@ object SQLConf {
       "the SQL parser.")
     .fallbackConf(ANSI_ENABLED)
 
-  val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
-    buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
-    .internal()
-    .doc("When this option is set to true, creating managed tables with nonempty location " +
-      "is allowed. Otherwise, an analysis exception is thrown. ")
-    .booleanConf
-    .createWithDefault(false)
-
   val VALIDATE_PARTITION_COLUMNS =
     buildConf("spark.sql.sources.validatePartitionColumns")
       .internal()
@@ -2495,9 +2487,6 @@ class SQLConf extends Serializable with Logging {
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
-
-  def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
-    getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
 
