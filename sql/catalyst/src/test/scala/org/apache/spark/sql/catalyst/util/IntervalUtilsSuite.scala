@@ -135,43 +135,47 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("from day-time string - legacy") {
-    withSQLConf(SQLConf.LEGACY_FROM_DAYTIME_STRING.key -> "true") {
-      assert(fromDayTimeString("5 12:40:30.999999999") ===
-        new CalendarInterval(
-          0,
-          5,
-          12 * MICROS_PER_HOUR +
-            40 * MICROS_PER_MINUTE +
-            30 * MICROS_PER_SECOND + 999999L))
-      assert(fromDayTimeString("10 0:12:0.888") ===
-        new CalendarInterval(
-          0,
-          10,
-          12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLIS))
-      assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
+    Seq(
+      SQLConf.LEGACY_FROM_DAYTIME_STRING.key -> "true",
+      SQLConf.DIALECT.key -> "PostgreSQL").foreach { config =>
+      withSQLConf(config) {
+        assert(fromDayTimeString("5 12:40:30.999999999") ===
+          new CalendarInterval(
+            0,
+            5,
+            12 * MICROS_PER_HOUR +
+              40 * MICROS_PER_MINUTE +
+              30 * MICROS_PER_SECOND + 999999L))
+        assert(fromDayTimeString("10 0:12:0.888") ===
+          new CalendarInterval(
+            0,
+            10,
+            12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLIS))
+        assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
 
-      try {
-        fromDayTimeString("5 30:12:20")
-        fail("Expected to throw an exception for the invalid input")
-      } catch {
-        case e: IllegalArgumentException =>
-          assert(e.getMessage.contains("hour 30 outside range"))
-      }
+        try {
+          fromDayTimeString("5 30:12:20")
+          fail("Expected to throw an exception for the invalid input")
+        } catch {
+          case e: IllegalArgumentException =>
+            assert(e.getMessage.contains("hour 30 outside range"))
+        }
 
-      try {
-        fromDayTimeString("5 30-12")
-        fail("Expected to throw an exception for the invalid input")
-      } catch {
-        case e: IllegalArgumentException =>
-          assert(e.getMessage.contains("must match day-time format"))
-      }
+        try {
+          fromDayTimeString("5 30-12")
+          fail("Expected to throw an exception for the invalid input")
+        } catch {
+          case e: IllegalArgumentException =>
+            assert(e.getMessage.contains("must match day-time format"))
+        }
 
-      try {
-        fromDayTimeString("5 1:12:20", HOUR, MICROSECOND)
-        fail("Expected to throw an exception for the invalid convention type")
-      } catch {
-        case e: IllegalArgumentException =>
-          assert(e.getMessage.contains("Cannot support (interval"))
+        try {
+          fromDayTimeString("5 1:12:20", HOUR, MICROSECOND)
+          fail("Expected to throw an exception for the invalid convention type")
+        } catch {
+          case e: IllegalArgumentException =>
+            assert(e.getMessage.contains("Cannot support (interval"))
+        }
       }
     }
   }
