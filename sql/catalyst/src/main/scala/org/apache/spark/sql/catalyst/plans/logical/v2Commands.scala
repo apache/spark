@@ -271,6 +271,15 @@ case class DescribeNamespace(
 }
 
 /**
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES)
+ * command that works for v2 catalogs.
+ */
+case class AlterNamespaceSetProperties(
+    catalog: CatalogPlugin,
+    namespace: Seq[String],
+    properties: Map[String, String]) extends Command
+
+/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
