@@ -194,24 +194,13 @@ private[sql] class SharedState(
 }
 
 object SharedState extends Logging {
-  @volatile private var factory: Option[FsUrlStreamHandlerFactory] = None
-  private lazy val defaultFactory = new FsUrlStreamHandlerFactory()
   private def setFsUrlStreamHandlerFactory(conf: SparkConf): Unit = {
-    factory match {
-      case Some(_) =>
-        logWarning("FsUrlStreamHandlerFactory has been already initialized, " +
-          "so it can not be modified")
-      case None => synchronized {
-        try {
-          if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED)) {
-            URL.setURLStreamHandlerFactory(defaultFactory)
-            factory = Some(defaultFactory)
-          }
-        } catch {
-          case e: Error =>
-            logWarning("URL.setURLStreamHandlerFactory failed to set " +
-              "FsUrlStreamHandlerFactory", e)
-        }
+    if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED)) {
+      try {
+        URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+      } catch {
+        case _: Error =>
+          logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
       }
     }
   }
