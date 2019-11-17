@@ -731,8 +731,8 @@ private object LiveEntityHelpers {
   def makeNegative(m: v1.TaskMetrics): v1.TaskMetrics = {
     // To handle 0 metric value, add  1 and make the metric negative.
     // To recover actual value do `math.abs(metric + 1)`
-    // Eg: if the metric values are (5, 3, 0, 1) => Updated metrics value will be (-6, -4, -1, -2)
-    // To get actual metric value math.abs(metric +1) => (5, 3, 0, 1)
+    // Eg: if the metric values are (5, 3, 0, 1) => Updated metric values will be (-6, -4, -1, -2)
+    // To get actual metric value, do math.abs(metric + 1) => (5, 3, 0, 1)
     def updateMetricValue(metric: Long): Long = {
       metric * -1L - 1L
     }

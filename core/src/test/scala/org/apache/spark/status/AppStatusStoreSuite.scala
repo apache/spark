@@ -131,6 +131,16 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
+
+  test("SPARK-26260: task summary size for default metrics should be zero") {
+    val store = new InMemoryStore()
+    store.write(newTaskData(-1, status = "RUNNING"))
+    Seq(new AppStatusStore(store), createLiveStore(store)).foreach { appStore =>
+      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
+      assert(summary.size === 0)
+    }
+  }
+
   test("SPARK-26260: summary should contain successful tasks only when with LevelDB store") {
     val testDir = Utils.createTempDir()
     val diskStore = KVUtils.open(testDir, getClass().getName())
@@ -155,15 +165,6 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
     diskStore.close()
     Utils.deleteRecursively(testDir)
-  }
-
-  test("SPARK-26260: task summary size for default metrics should be zero") {
-    val store = new InMemoryStore()
-    store.write(newTaskData(-1, status = "RUNNING"))
-    Seq(new AppStatusStore(store), createLiveStore(store)).foreach { appStore =>
-      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
-      assert(summary.size === 0)
-    }
   }
 
   private def compareQuantiles(count: Int, quantiles: Array[Double]): Unit = {

@@ -137,7 +137,6 @@ private[spark] object TaskIndexNames {
   final val SHUFFLE_WRITE_RECORDS = "swr"
   final val SHUFFLE_WRITE_SIZE = "sws"
   final val SHUFFLE_WRITE_TIME = "swt"
-  final val SHUFFLE_LOCAL_READ = "slr"
   final val STAGE = "stage"
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
