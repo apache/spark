@@ -1174,7 +1174,7 @@ setMethod("dim",
 #' firstName <- names(collected)[1]
 #' }
 #' @note collect since 1.4.0
-setMethod("collect",
+setMethod("collect", # nolint
           signature(x = "SparkDataFrame"),
           function(x, stringsAsFactors = FALSE) {
             connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
@@ -2252,7 +2252,7 @@ setMethod("mutate",
 
             # The last column of the same name in the specific columns takes effect
             deDupCols <- list()
-            for (i in 1:length(cols)) {
+            for (i in seq_len(length(cols))) {
               deDupCols[[ns[[i]]]] <- alias(cols[[i]], ns[[i]])
             }
 
@@ -2416,7 +2416,7 @@ setMethod("arrange",
             # builds a list of columns of type Column
             # example: [[1]] Column Species ASC
             #          [[2]] Column Petal_Length DESC
-            jcols <- lapply(seq_len(length(decreasing)), function(i){
+            jcols <- lapply(seq_len(length(decreasing)), function(i) {
               if (decreasing[[i]]) {
                 desc(getColumn(x, by[[i]]))
               } else {
@@ -2653,7 +2653,7 @@ setMethod("crossJoin",
 #' merge(df1, df2, by = NULL) # Performs a Cartesian join
 #' }
 #' @note merge since 1.5.0
-setMethod("merge",
+setMethod("merge", # nolint
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, by = intersect(names(x), names(y)), by.x = by, by.y = by,
                    all = FALSE, all.x = all, all.y = all,
@@ -2749,7 +2749,7 @@ genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
     col <- getColumn(x, colName)
     if (colName %in% intersectedColNames) {
       newJoin <- paste(colName, suffix, sep = "")
-      if (newJoin %in% allColNames){
+      if (newJoin %in% allColNames) {
         stop("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
           "Please use different suffixes for the intersected columns.")
       }
@@ -3475,7 +3475,7 @@ setMethod("str",
             cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
 
             if (nrow(localDF) > 0) {
-              for (i in 1 : ncol(localDF)) {
+              for (i in seq_len(ncol(localDF))) {
                 # Get the first elements for each column
 
                 firstElements <- if (types[i] == "character") {
@@ -3865,7 +3865,7 @@ setMethod("isStreaming",
 #' }
 #' @note write.stream since 2.2.0
 #' @note experimental
-setMethod("write.stream",
+setMethod("write.stream", # nolint
           signature(df = "SparkDataFrame"),
           function(df, source = NULL, outputMode = NULL, partitionBy = NULL,
                    trigger.processingTime = NULL, trigger.once = NULL, ...) {

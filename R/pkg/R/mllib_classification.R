@@ -290,7 +290,7 @@ function(object, path, overwrite = FALSE) {
 #'                      lowerBoundsOnIntercepts = lbi)
 #' }
 #' @note spark.logit since 2.1.0
-setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
+setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"), # nolint
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
                    tol = 1E-6, family = "auto", standardization = TRUE,
                    thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,

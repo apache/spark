@@ -80,7 +80,7 @@ predict_internal <- function(object, newData) {
 #' model <- read.ml(path)
 #' }
 #' @note read.ml since 2.0.0
-read.ml <- function(path) {
+read.ml <- function(path) { # nolint
   path <- suppressWarnings(normalizePath(path))
   sparkSession <- getSparkSession()
   callJStatic("org.apache.spark.ml.r.RWrappers", "session", sparkSession)

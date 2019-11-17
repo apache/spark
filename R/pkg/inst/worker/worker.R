@@ -160,7 +160,7 @@ isEmpty <- SparkR:::readInt(inputCon)
 computeInputElapsDiff <- 0
 outputComputeElapsDiff <- 0
 
-if (isEmpty != 0) {
+if (isEmpty != 0) { # nolint
   if (numPartitions == -1) {
     if (deserializer == "byte") {
       # Now read as many characters as described in funcLen
@@ -194,7 +194,7 @@ if (isEmpty != 0) {
        } else {
         # gapply mode
         outputs <- list()
-        for (i in 1:length(data)) {
+        for (i in seq_len(length(data))) {
           # Timing reading input data for execution
           inputElap <- elapsedSecs()
           output <- compute(mode, partition, serializer, deserializer, keys[[i]],

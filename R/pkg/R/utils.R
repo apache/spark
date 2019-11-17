@@ -131,7 +131,7 @@ hashCode <- function(key) {
     } else {
       asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
       hashC <- 0
-      for (k in 1:length(asciiVals)) {
+      for (k in seq_len(length(asciiVals))) {
         hashC <- mult31AndAdd(hashC, asciiVals[k])
       }
       as.integer(hashC)
@@ -335,7 +335,7 @@ varargsToEnv <- function(...) {
 
 # Utility function to capture the varargs into environment object but all values are converted
 # into string.
-varargsToStrEnv <- function(...) {
+varargsToStrEnv <- function(...) { # nolint
   pairs <- list(...)
   nameList <- names(pairs)
   env <- new.env()
@@ -404,7 +404,7 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                          "OFF_HEAP" = callJStatic(storageLevelClass, "OFF_HEAP"))
 }
 
-storageLevelToString <- function(levelObj) {
+storageLevelToString <- function(levelObj) { # nolint
   useDisk <- callJMethod(levelObj, "useDisk")
   useMemory <- callJMethod(levelObj, "useMemory")
   useOffHeap <- callJMethod(levelObj, "useOffHeap")
@@ -465,7 +465,7 @@ numToInt <- function(num) {
 #   checkedFunc An environment of function objects examined during cleanClosure. It can
 #               be considered as a "name"-to-"list of functions" mapping.
 #   newEnv A new function environment to store necessary function dependencies, an output argument.
-processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
+processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) { # nolint
   nodeLen <- length(node)
 
   if (nodeLen > 1 && typeof(node) == "language") {
@@ -724,7 +724,7 @@ assignNewEnv <- function(data) {
   stopifnot(length(cols) > 0)
 
   env <- new.env()
-  for (i in 1:length(cols)) {
+  for (i in seq_len(length(cols))) {
     assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
   }
   env

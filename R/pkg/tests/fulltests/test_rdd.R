@@ -194,7 +194,7 @@ test_that("sampleRDD() on RDDs", {
   expect_equal(unlist(collectRDD(sampleRDD(rdd, FALSE, 1.0, 2014L))), nums)
 })
 
-test_that("takeSample() on RDDs", {
+test_that("takeSample() on RDDs", { # nolint
   # ported from RDDSuite.scala, modified seeds
   data <- parallelize(sc, 1:100, 2L)
   for (seed in 4:5) {
