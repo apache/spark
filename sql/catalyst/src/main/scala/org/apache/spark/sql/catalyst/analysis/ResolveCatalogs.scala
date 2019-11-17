@@ -93,6 +93,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${tableName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
+    case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
+      AlterNamespaceSetProperties(catalog, nameParts, properties)
+
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {

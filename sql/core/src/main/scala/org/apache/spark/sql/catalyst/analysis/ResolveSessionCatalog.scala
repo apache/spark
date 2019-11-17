@@ -165,6 +165,13 @@ class ResolveSessionCatalog(
       }
       DescribeDatabaseCommand(nameParts.head, d.extended)
 
+    case AlterNamespaceSetPropertiesStatement(SessionCatalog(_, nameParts), properties) =>
+      if (nameParts.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${nameParts.quoted}")
+      }
+      AlterDatabasePropertiesCommand(nameParts.head, properties)
+
     case DescribeTableStatement(
          nameParts @ SessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       loadTable(catalog, tableName.asIdentifier).collect {

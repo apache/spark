@@ -351,6 +351,13 @@ case class DropNamespaceStatement(
     cascade: Boolean) extends ParsedStatement
 
 /**
+ * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES) command, as parsed from SQL.
+ */
+case class AlterNamespaceSetPropertiesStatement(
+    namespace: Seq[String],
+    properties: Map[String, String]) extends ParsedStatement
+
+/**
  * A SHOW NAMESPACES statement, as parsed from SQL.
  */
 case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
