@@ -77,6 +77,11 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): PolynomialExpansion = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"PolynomialExpansion: uid=$uid, degree=${$(degree)}"
+  }
 }
 
 /**

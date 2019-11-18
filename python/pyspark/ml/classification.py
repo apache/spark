@@ -192,11 +192,11 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     0.01
     >>> model = svm.fit(df)
     >>> model.setPredictionCol("newPrediction")
-    LinearSVC...
+    LinearSVCModel...
     >>> model.getPredictionCol()
     'newPrediction'
     >>> model.setThreshold(0.5)
-    LinearSVC...
+    LinearSVCModel...
     >>> model.getThreshold()
     0.5
     >>> model.coefficients
@@ -594,7 +594,7 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
     >>> blorModel.intercept == model2.intercept
     True
     >>> model2
-    LogisticRegressionModel: uid = ..., numClasses = 2, numFeatures = 2
+    LogisticRegressionModel: uid=..., numClasses=2, numFeatures=2
 
     .. versionadded:: 1.3.0
     """
@@ -811,9 +811,6 @@ class LogisticRegressionModel(JavaProbabilisticClassificationModel, _LogisticReg
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
         return BinaryLogisticRegressionSummary(java_blr_summary)
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 class LogisticRegressionSummary(JavaWrapper):
@@ -1146,7 +1143,7 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
     >>> model.numClasses
     2
     >>> print(model.toDebugString)
-    DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
+    DecisionTreeClassificationModel...depth=1, numNodes=3...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.predict(test0.head().features)
     0.0
@@ -1183,7 +1180,7 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
     >>> dt3 = DecisionTreeClassifier(maxDepth=2, weightCol="weight", labelCol="indexed")
     >>> model3 = dt3.fit(td3)
     >>> print(model3.toDebugString)
-    DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
+    DecisionTreeClassificationModel...depth=1, numNodes=3...
 
     .. versionadded:: 1.4.0
     """
@@ -1394,7 +1391,7 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
     >>> model.transform(test1).head().prediction
     1.0
     >>> model.trees
-    [DecisionTreeClassificationModel (uid=...) of depth..., DecisionTreeClassificationModel...]
+    [DecisionTreeClassificationModel...depth=..., DecisionTreeClassificationModel...]
     >>> rfc_path = temp_path + "/rfc"
     >>> rf.save(rfc_path)
     >>> rf2 = RandomForestClassifier.load(rfc_path)
@@ -1651,7 +1648,7 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
     >>> model.totalNumNodes
     15
     >>> print(model.toDebugString)
-    GBTClassificationModel (uid=...)...with 5 trees...
+    GBTClassificationModel...numTrees=5...
     >>> gbtc_path = temp_path + "gbtc"
     >>> gbt.save(gbtc_path)
     >>> gbt2 = GBTClassifier.load(gbtc_path)
@@ -1665,7 +1662,7 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
     >>> model.treeWeights == model2.treeWeights
     True
     >>> model.trees
-    [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    [DecisionTreeRegressionModel...depth=..., DecisionTreeRegressionModel...]
     >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0),)],
     ...              ["indexed", "features"])
     >>> model.evaluateEachIteration(validation)
@@ -1921,7 +1918,7 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
     >>> model = nb.fit(df)
     >>> model.setFeaturesCol("features")
-    NaiveBayes_...
+    NaiveBayesModel...
     >>> model.getSmoothing()
     1.0
     >>> model.pi
@@ -2114,7 +2111,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     100
     >>> model = mlp.fit(df)
     >>> model.setFeaturesCol("features")
-    MultilayerPerceptronClassifier...
+    MultilayerPerceptronClassificationModel...
     >>> model.layers
     [2, 2, 2]
     >>> model.weights.size

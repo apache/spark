@@ -184,6 +184,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MulticlassClassificationEvaluator = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"MulticlassClassificationEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"metricLabel=${$(metricLabel)}, beta=${$(beta)}, eps=${$(eps)}"
+  }
 }
 
 @Since("1.6.0")

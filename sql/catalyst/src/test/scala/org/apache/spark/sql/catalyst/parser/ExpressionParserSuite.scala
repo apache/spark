@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -436,6 +438,9 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
     intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
+    assertEqual(
+      "-interval '3 month 1 hour'",
+      Literal(IntervalUtils.fromString("interval -3 month -1 hour")))
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
@@ -586,27 +591,33 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   val intervalUnits = Seq(
-    "year",
-    "month",
-    "week",
-    "day",
-    "hour",
-    "minute",
-    "second",
-    "millisecond",
-    "microsecond")
+    YEAR,
+    MONTH,
+    WEEK,
+    DAY,
+    HOUR,
+    MINUTE,
+    SECOND,
+    MILLISECOND,
+    MICROSECOND)
 
-  def intervalLiteral(u: String, s: String): Literal = {
+  def intervalLiteral(u: IntervalUnit, s: String): Literal = {
     Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
   }
 
   test("intervals") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      assertEqual(s"interval $intervalValue", expected)
+      Seq(
+        "" -> expected,
+        "-" -> expected.copy(
+          value = IntervalUtils.negate(expected.value.asInstanceOf[CalendarInterval]))
+      ).foreach { case (sign, expectedLiteral) =>
+        assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
 
-      // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        assertEqual(intervalValue, expected)
+        // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
+        withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
+          assertEqual(intervalValue, expected)
+        }
       }
     }
 
@@ -627,19 +638,19 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Hive nanosecond notation.
-    checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
+    checkIntervals("13.123456789 seconds", intervalLiteral(SECOND, "13.123456789"))
     checkIntervals(
       "-13.123456789 second",
       Literal(new CalendarInterval(
         0,
         0,
-        -13 * DateTimeUtils.MICROS_PER_SECOND - 123 * DateTimeUtils.MICROS_PER_MILLIS - 456)))
+        -13 * MICROS_PER_SECOND - 123 * MICROS_PER_MILLIS - 456)))
     checkIntervals(
       "13.123456 second",
       Literal(new CalendarInterval(
         0,
         0,
-        13 * DateTimeUtils.MICROS_PER_SECOND + 123 * DateTimeUtils.MICROS_PER_MILLIS + 456)))
+        13 * MICROS_PER_SECOND + 123 * MICROS_PER_MILLIS + 456)))
     checkIntervals("1.001 second", Literal(IntervalUtils.fromString("1 second 1 millisecond")))
 
     // Non Existing unit
@@ -690,15 +701,15 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("SPARK-23264 Interval Compatibility tests") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
         assertEqual(intervalValue, expected)
       }
 
       // Compatibility tests: If ANSI SQL disabled, `intervalValue` should be parsed as an alias
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false") {
         val aliases = defaultParser.parseExpression(intervalValue).collect {
           case a @ Alias(_: Literal, name)
-            if intervalUnits.exists { unit => name.startsWith(unit) } => a
+            if intervalUnits.exists { unit => name.startsWith(unit.toString) } => a
         }
         assert(aliases.size === 1)
       }
@@ -793,12 +804,12 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("current date/timestamp braceless expressions") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
     }
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false") {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
     }

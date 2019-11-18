@@ -43,7 +43,7 @@ class CatalogManagerSuite extends SparkFunSuite {
     assert(catalogManager.currentNamespace.sameElements(Array("default")))
 
     conf.setConfString("spark.sql.catalog.dummy", classOf[DummyCatalog].getName)
-    conf.setConfString(SQLConf.DEFAULT_V2_CATALOG.key, "dummy")
+    conf.setConfString(SQLConf.DEFAULT_CATALOG.key, "dummy")
 
     // The current catalog should be changed if the default catalog is set.
     assert(catalogManager.currentCatalog.name() == "dummy")
@@ -60,7 +60,7 @@ class CatalogManagerSuite extends SparkFunSuite {
     assert(catalogManager.currentNamespace.sameElements(Array("a", "b")))
 
     conf.setConfString("spark.sql.catalog.dummy2", classOf[DummyCatalog].getName)
-    conf.setConfString(SQLConf.DEFAULT_V2_CATALOG.key, "dummy2")
+    conf.setConfString(SQLConf.DEFAULT_CATALOG.key, "dummy2")
     // The current catalog shouldn't be changed if it's set before.
     assert(catalogManager.currentCatalog.name() == "dummy")
   }

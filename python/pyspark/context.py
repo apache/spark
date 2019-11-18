@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 import os
 import shutil
 import signal
@@ -1009,14 +1007,61 @@ class SparkContext(object):
         in Thread.interrupt() being called on the job's executor threads. This is useful to help
         ensure that the tasks are actually stopped in a timely manner, but is off by default due
         to HDFS-1208, where HDFS may respond to Thread.interrupt() by marking nodes as dead.
+
+        .. note:: Currently, setting a group ID (set to local properties) with a thread does
+            not properly work. Internally threads on PVM and JVM are not synced, and JVM thread
+            can be reused for multiple threads on PVM, which fails to isolate local properties
+            for each thread on PVM. To work around this, you can set `PYSPARK_PIN_THREAD` to
+            `'true'` (see SPARK-22340). However, note that it cannot inherit the local properties
+            from the parent thread although it isolates each thread on PVM and JVM with its own
+            local properties. To work around this, you should manually copy and set the local
+            properties from the parent thread to the child thread when you create another thread.
         """
+        warnings.warn(
+            "Currently, setting a group ID (set to local properties) with a thread does "
+            "not properly work. "
+            "\n"
+            "Internally threads on PVM and JVM are not synced, and JVM thread can be reused "
+            "for multiple threads on PVM, which fails to isolate local properties for each "
+            "thread on PVM. "
+            "\n"
+            "To work around this, you can set PYSPARK_PIN_THREAD to true (see SPARK-22340). "
+            "However, note that it cannot inherit the local properties from the parent thread "
+            "although it isolates each thread on PVM and JVM with its own local properties. "
+            "\n"
+            "To work around this, you should manually copy and set the local properties from "
+            "the parent thread to the child thread when you create another thread.",
+            UserWarning)
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
 
     def setLocalProperty(self, key, value):
         """
         Set a local property that affects jobs submitted from this thread, such as the
         Spark fair scheduler pool.
+
+        .. note:: Currently, setting a local property with a thread does
+            not properly work. Internally threads on PVM and JVM are not synced, and JVM thread
+            can be reused for multiple threads on PVM, which fails to isolate local properties
+            for each thread on PVM. To work around this, you can set `PYSPARK_PIN_THREAD` to
+            `'true'` (see SPARK-22340). However, note that it cannot inherit the local properties
+            from the parent thread although it isolates each thread on PVM and JVM with its own
+            local properties. To work around this, you should manually copy and set the local
+            properties from the parent thread to the child thread when you create another thread.
         """
+        warnings.warn(
+            "Currently, setting a local property with a thread does not properly work. "
+            "\n"
+            "Internally threads on PVM and JVM are not synced, and JVM thread can be reused "
+            "for multiple threads on PVM, which fails to isolate local properties for each "
+            "thread on PVM. "
+            "\n"
+            "To work around this, you can set PYSPARK_PIN_THREAD to true (see SPARK-22340). "
+            "However, note that it cannot inherit the local properties from the parent thread "
+            "although it isolates each thread on PVM and JVM with its own local properties. "
+            "\n"
+            "To work around this, you should manually copy and set the local properties from "
+            "the parent thread to the child thread when you create another thread.",
+            UserWarning)
         self._jsc.setLocalProperty(key, value)
 
     def getLocalProperty(self, key):
@@ -1029,7 +1074,31 @@ class SparkContext(object):
     def setJobDescription(self, value):
         """
         Set a human readable description of the current job.
+
+        .. note:: Currently, setting a job description (set to local properties) with a thread does
+            not properly work. Internally threads on PVM and JVM are not synced, and JVM thread
+            can be reused for multiple threads on PVM, which fails to isolate local properties
+            for each thread on PVM. To work around this, you can set `PYSPARK_PIN_THREAD` to
+            `'true'` (see SPARK-22340). However, note that it cannot inherit the local properties
+            from the parent thread although it isolates each thread on PVM and JVM with its own
+            local properties. To work around this, you should manually copy and set the local
+            properties from the parent thread to the child thread when you create another thread.
         """
+        warnings.warn(
+            "Currently, setting a job description (set to local properties) with a thread does "
+            "not properly work. "
+            "\n"
+            "Internally threads on PVM and JVM are not synced, and JVM thread can be reused "
+            "for multiple threads on PVM, which fails to isolate local properties for each "
+            "thread on PVM. "
+            "\n"
+            "To work around this, you can set PYSPARK_PIN_THREAD to true (see SPARK-22340). "
+            "However, note that it cannot inherit the local properties from the parent thread "
+            "although it isolates each thread on PVM and JVM with its own local properties. "
+            "\n"
+            "To work around this, you should manually copy and set the local properties from "
+            "the parent thread to the child thread when you create another thread.",
+            UserWarning)
         self._jsc.setJobDescription(value)
 
     def sparkUser(self):

@@ -15,16 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark
 
-import com.codahale.metrics.MetricRegistry
-
-import org.apache.spark.metrics.source.Source
-
-private[spark]
-class ExecutorPluginSource(name: String) extends Source {
-
-  override val metricRegistry = new MetricRegistry()
-
-  override val sourceName = name
-}
+/**
+ * Exception thrown when a task cannot write to output file due to the file already exists.
+ */
+private[spark] class TaskOutputFileAlreadyExistException(error: Throwable) extends Exception(error)
