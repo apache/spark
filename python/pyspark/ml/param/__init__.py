@@ -488,9 +488,6 @@ class Params(Identifiable):
             for param, value in extra.items():
                 if isinstance(param, Param):
                     paramMap[param] = value
-                elif self.hasParam(param):
-                    # set value by name if vaiid
-                    paramMap[self.getParam(param)] = value
                 else:
                     raise ValueError("Expecting a valid instance of Param, but received: {}"
                                      .format(param))
