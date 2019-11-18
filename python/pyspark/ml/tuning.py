@@ -89,7 +89,8 @@ class ParamGridBuilder(object):
         """
         Sets the given parameters in this grid to fixed values.
 
-        param must be an instance of Param associated with an instance of Params such as Estimator or Transformer,
+        param must be an instance of Param associated with an instance of Params
+        (such as Estimator or Transformer).
         """
         if isinstance(param, Param):
             self._param_grid[param] = values
