@@ -53,13 +53,13 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
 
   /**
    * The model type which is a string (case-sensitive).
-   * Supported options: "multinomial", "bernoulli", "gaussian".
+   * Supported options: "multinomial", "complement", "bernoulli", "gaussian".
    * (default = multinomial)
    * @group param
    */
   final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
-    "which is a string (case-sensitive). Supported options: multinomial (default), bernoulli" +
-    " and gaussian.",
+    "which is a string (case-sensitive). Supported options: multinomial (default), complement, " +
+    "bernoulli and gaussian.",
     ParamValidators.inArray[String](NaiveBayes.supportedModelTypes.toArray))
 
   /** @group getParam */
@@ -106,7 +106,7 @@ class NaiveBayes @Since("1.5.0") (
 
   /**
    * Set the model type using a string (case-sensitive).
-   * Supported options: "multinomial" and "bernoulli".
+   * Supported options: "multinomial", "complement", "bernoulli", and "gaussian".
    * Default is "multinomial"
    * @group setParam
    */
@@ -151,7 +151,7 @@ class NaiveBayes @Since("1.5.0") (
     }
 
     $(modelType) match {
-      case Bernoulli | Multinomial =>
+      case Bernoulli | Multinomial | Complement =>
         trainDiscreteImpl(dataset, instr)
       case Gaussian =>
         trainGaussianImpl(dataset, instr)
@@ -168,7 +168,7 @@ class NaiveBayes @Since("1.5.0") (
     import spark.implicits._
 
     val validateUDF = $(modelType) match {
-      case Multinomial =>
+      case Multinomial | Complement =>
         udf { vector: Vector => requireNonnegativeValues(vector); vector }
       case Bernoulli =>
         udf { vector: Vector => requireZeroOneBernoulliValues(vector); vector }
@@ -204,14 +204,29 @@ class NaiveBayes @Since("1.5.0") (
     val piArray = new Array[Double](numLabels)
     val thetaArray = new Array[Double](numLabels * numFeatures)
 
+    val aggIter = $(modelType) match {
+      case Multinomial | Bernoulli => aggregated.iterator
+      case Complement =>
+        val featureSum = Vectors.zeros(numFeatures)
+        aggregated.foreach { case (_, _, sumTermFreqs, _) =>
+          BLAS.axpy(1.0, sumTermFreqs, featureSum)
+        }
+        aggregated.iterator.map { case (label, n, sumTermFreqs, count) =>
+          val comp = featureSum.copy
+          BLAS.axpy(-1.0, sumTermFreqs, comp)
+          (label, n, comp, count)
+        }
+    }
+
     val lambda = $(smoothing)
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
     var i = 0
-    aggregated.foreach { case (label, n, sumTermFreqs, _) =>
+    aggIter.foreach { case (label, n, sumTermFreqs, _) =>
       labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
       val thetaLogDenom = $(modelType) match {
-        case Multinomial => math.log(sumTermFreqs.toArray.sum + numFeatures * lambda)
+        case Multinomial | Complement =>
+          math.log(sumTermFreqs.toArray.sum + numFeatures * lambda)
         case Bernoulli => math.log(n + 2.0 * lambda)
       }
       var j = 0
@@ -322,8 +337,12 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   /** String name for Gaussian model type. */
   private[classification] val Gaussian: String = "gaussian"
 
+  /** String name for Complement model type. */
+  private[classification] val Complement: String = "complement"
+
   /* Set of modelTypes that NaiveBayes supports */
-  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli, Gaussian)
+  private[classification] val supportedModelTypes =
+    Set(Multinomial, Bernoulli, Gaussian, Complement)
 
   private[NaiveBayes] def requireNonnegativeValues(v: Vector): Unit = {
     val values = v match {
@@ -368,7 +387,7 @@ class NaiveBayesModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
-  import NaiveBayes.{Bernoulli, Multinomial, Gaussian}
+  import NaiveBayes._
 
   /**
    * mllib NaiveBayes is a wrapper of ml implementation currently.
@@ -432,6 +451,12 @@ class NaiveBayesModel private[ml] (
     prob
   }
 
+  private def complementCalculation(features: Vector) = {
+    val prob = theta.multiply(features)
+    BLAS.scal(-1, prob)
+    prob
+  }
+
   private def bernoulliCalculation(features: Vector) = {
     features.foreachActive((_, value) =>
       require(value == 0.0 || value == 1.0,
@@ -464,6 +489,8 @@ class NaiveBayesModel private[ml] (
     $(modelType) match {
       case Multinomial =>
         features: Vector => multinomialCalculation(features)
+      case Complement =>
+        features: Vector => complementCalculation(features)
       case Bernoulli =>
         features: Vector => bernoulliCalculation(features)
       case Gaussian =>
@@ -533,7 +560,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val dataPath = new Path(path, "data").toString
 
       instance.getModelType match {
-        case Multinomial | Bernoulli =>
+        case Multinomial | Bernoulli | Complement =>
           // Save model data: pi, theta
           require(instance.sigma == null)
           val data = Data(instance.pi, instance.theta)
