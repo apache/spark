@@ -1573,7 +1573,8 @@ object SQLConf {
       .doc("When true, columns will be looked up by name if labeled with a string and fallback " +
         "to use position if not. When false, a grouped map Pandas UDF will assign columns from " +
         "the returned Pandas DataFrame based on position, regardless of column label type. " +
-        "This configuration will be deprecated in future releases.")
+        "This configuration will be deprecated in future releases. " +
+        "This config will be removed in Spark 4.0 or a later release.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1615,7 +1616,8 @@ object SQLConf {
       .internal()
       .doc("When integral literal is used in decimal operations, pick a minimum precision " +
         "required by the literal if this config is true, to make the resulting precision and/or " +
-        "scale smaller. This can reduce the possibility of precision lose and/or overflow.")
+        "scale smaller. This can reduce the possibility of precision lose and/or overflow. " +
+        "This config will be removed in Spark 4.0 or a later release.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1899,14 +1901,16 @@ object SQLConf {
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
-      "The size function returns null for null input if the flag is disabled.")
+      "The size function returns null for null input if the flag is disabled. " +
+      "This config will be removed in Spark 4.0 or a later release.")
     .booleanConf
     .createWithDefault(false)
 
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
       .doc("If it is set to true, the data source provider com.databricks.spark.avro is mapped " +
-        "to the built-in but external Avro data source module for backward compatibility.")
+        "to the built-in but external Avro data source module for backward compatibility. " +
+        "This config will be removed in Spark 4.0 or a later release.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1916,13 +1920,15 @@ object SQLConf {
       .doc("When set to true and the order of evaluation is not specified by parentheses, the " +
         "set operations are performed from left to right as they appear in the query. When set " +
         "to false and order of evaluation is not specified by parentheses, INTERSECT operations " +
-        "are performed before any UNION, EXCEPT and MINUS operations.")
+        "are performed before any UNION, EXCEPT and MINUS operations. " +
+        "This config will be removed in Spark 4.0 or a later release.")
       .booleanConf
       .createWithDefault(false)
 
   val LEGACY_INTEGRALDIVIDE_RETURN_LONG = buildConf("spark.sql.legacy.integralDivide.returnBigint")
     .doc("If it is set to true, the div operator returns always a bigint. This behavior was " +
-      "inherited from Hive. Otherwise, the return type is the data type of the operands.")
+      "inherited from Hive. Otherwise, the return type is the data type of the operands. " +
+      "This config will be removed in Spark 4.0 or a later release.")
     .internal()
     .booleanConf
     .createWithDefault(false)
@@ -1931,7 +1937,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.bucketedTableScan.outputOrdering")
       .internal()
       .doc("When true, the bucketed table scan will list files during planning to figure out the " +
-        "output ordering, which is expensive and may make the planning quite slow.")
+        "output ordering, which is expensive and may make the planning quite slow. " +
+        "This config will be removed in Spark 4.0 or a later release.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1939,7 +1946,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
       .internal()
       .doc("If it is set to true, the parser will treat HAVING without GROUP BY as a normal " +
-        "WHERE, which does not follow SQL standard.")
+        "WHERE, which does not follow SQL standard. " +
+        "This config will be removed in Spark 4.0 or a later release.")
       .booleanConf
       .createWithDefault(false)
 
@@ -1948,7 +1956,7 @@ object SQLConf {
       .internal()
       .doc("When set to true, the key attribute resulted from running `Dataset.groupByKey` " +
         "for non-struct key type, will be named as `value`, following the behavior of Spark " +
-        "version 2.4 and earlier.")
+        "version 2.4 and earlier. This config will be removed in Spark 4.0 or a later release.")
       .booleanConf
       .createWithDefault(false)
 
@@ -1974,7 +1982,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
       .internal()
       .doc("If it is set to true, SET command will fail when the key is registered as " +
-        "a SparkConf entry.")
+        "a SparkConf entry. This config will be removed in Spark 4.0 or a later release.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1988,7 +1996,8 @@ object SQLConf {
 
   val UTC_TIMESTAMP_FUNC_ENABLED = buildConf("spark.sql.legacy.utcTimestampFunc.enabled")
     .doc("The configuration property enables the to_utc_timestamp() " +
-         "and from_utc_timestamp() functions.")
+         "and from_utc_timestamp() functions. " +
+         "This config will be removed in Spark 4.0 or a later release.")
     .booleanConf
     .createWithDefault(false)
 
@@ -2003,7 +2012,7 @@ object SQLConf {
   val LEGACY_CAST_DATETIME_TO_STRING =
     buildConf("spark.sql.legacy.typeCoercion.datetimeToString")
       .doc("If it is set to true, date/timestamp will cast to string in binary comparisons " +
-        "with String")
+        "with String. This config will be removed in Spark 4.0 or a later release.")
     .booleanConf
     .createWithDefault(false)
 
@@ -2025,19 +2034,22 @@ object SQLConf {
       .createOptional
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
-    .doc("When true, the upcast will be loose and allows string to atomic types.")
+    .doc("When true, the upcast will be loose and allows string to atomic types. " +
+      "This config will be removed in Spark 4.0 or a later release.")
     .booleanConf
     .createWithDefault(false)
 
   val LEGACY_CTE_PRECEDENCE_ENABLED = buildConf("spark.sql.legacy.ctePrecedence.enabled")
     .internal()
-    .doc("When true, outer CTE definitions takes precedence over inner definitions.")
+    .doc("When true, outer CTE definitions takes precedence over inner definitions. " +
+      "This config will be removed in Spark 4.0 or a later release.")
     .booleanConf
     .createWithDefault(false)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
-      .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
+      .doc("When true, the ArrayExists will follow the three-valued boolean logic. " +
+        "This config will be removed in Spark 4.0 or a later release.")
       .booleanConf
       .createWithDefault(true)
 
