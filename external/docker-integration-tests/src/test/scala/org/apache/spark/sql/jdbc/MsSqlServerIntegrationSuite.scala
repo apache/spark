@@ -59,7 +59,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       """
         |INSERT INTO numbers VALUES (
         |0,
-        |255, 32767, 2147483647, 9223372036854775807,
+        |127, 32767, 2147483647, 9223372036854775807,
         |123456789012345.123456789012345, 123456789012345.123456789012345,
         |123456789012345.123456789012345,
         |123, 12345.12,
@@ -119,7 +119,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     val types = row.toSeq.map(x => x.getClass.toString)
     assert(types.length == 12)
     assert(types(0).equals("class java.lang.Boolean"))
-    assert(types(1).equals("class java.lang.Integer"))
+    assert(types(1).equals("class java.lang.Byte"))
     assert(types(2).equals("class java.lang.Short"))
     assert(types(3).equals("class java.lang.Integer"))
     assert(types(4).equals("class java.lang.Long"))
@@ -131,7 +131,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(10).equals("class java.math.BigDecimal"))
     assert(types(11).equals("class java.math.BigDecimal"))
     assert(row.getBoolean(0) == false)
-    assert(row.getInt(1) == 255)
+    assert(row.getByte(1) == 127)
     assert(row.getShort(2) == 32767)
     assert(row.getInt(3) == 2147483647)
     assert(row.getLong(4) == 9223372036854775807L)
@@ -201,5 +201,47 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
+  }
+
+  test("SPARK-29644: Write tables with ShortType") {
+    import testImplicits._
+    val df = Seq(-32768.toShort, 0.toShort, 1.toShort, 38.toShort, 32768.toShort).toDF("a")
+    val tablename = "shorttable"
+    df.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .load()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(0) == "class java.lang.Short")
+  }
+
+  test("SPARK-29644: Write tables with ByteType") {
+    import testImplicits._
+    val df = Seq(-127.toByte, 0.toByte, 1.toByte, 38.toByte, 128.toByte).toDF("a")
+    val tablename = "bytetable"
+    df.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .load()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(0) == "class java.lang.Byte")
   }
 }

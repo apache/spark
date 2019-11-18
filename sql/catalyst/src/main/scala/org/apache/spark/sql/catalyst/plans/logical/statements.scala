@@ -238,6 +238,13 @@ case class AlterViewUnsetPropertiesStatement(
     propertyKeys: Seq[String],
     ifExists: Boolean) extends ParsedStatement
 
+/**
+ * ALTER VIEW ... Query command, as parsed from SQL.
+ */
+case class AlterViewAsStatement(
+    viewName: Seq[String],
+    originalText: String,
+    query: LogicalPlan) extends ParsedStatement
 
 /**
  * A DROP TABLE statement, as parsed from SQL.
@@ -263,30 +270,19 @@ case class DescribeTableStatement(
     isExtended: Boolean) extends ParsedStatement
 
 /**
+ * A DESCRIBE NAMESPACE statement, as parsed from SQL.
+ */
+case class DescribeNamespaceStatement(
+    namespace: Seq[String],
+    extended: Boolean) extends ParsedStatement
+
+/**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
  */
 case class DescribeColumnStatement(
     tableName: Seq[String],
     colNameParts: Seq[String],
     isExtended: Boolean) extends ParsedStatement
-
-/**
- * A DELETE FROM statement, as parsed from SQL.
- */
-case class DeleteFromStatement(
-    tableName: Seq[String],
-    tableAlias: Option[String],
-    condition: Option[Expression]) extends ParsedStatement
-
-/**
- * A UPDATE tbl_name statement, as parsed from SQL.
- */
-case class UpdateTableStatement(
-    tableName: Seq[String],
-    tableAlias: Option[String],
-    columns: Seq[Seq[String]],
-    values: Seq[Expression],
-    condition: Option[Expression]) extends ParsedStatement
 
 /**
  * An INSERT INTO statement, as parsed from SQL.
@@ -325,6 +321,15 @@ case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[S
   extends ParsedStatement
 
 /**
+ * A SHOW TABLE EXTENDED statement, as parsed from SQL.
+ */
+case class ShowTableStatement(
+    namespace: Option[Seq[String]],
+    pattern: String,
+    partitionSpec: Option[TablePartitionSpec])
+  extends ParsedStatement
+
+/**
  * A CREATE NAMESPACE statement, as parsed from SQL.
  */
 case class CreateNamespaceStatement(
@@ -344,6 +349,20 @@ case class DropNamespaceStatement(
     namespace: Seq[String],
     ifExists: Boolean,
     cascade: Boolean) extends ParsedStatement
+
+/**
+ * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES) command, as parsed from SQL.
+ */
+case class AlterNamespaceSetPropertiesStatement(
+    namespace: Seq[String],
+    properties: Map[String, String]) extends ParsedStatement
+
+/**
+ * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command, as parsed from SQL.
+ */
+case class AlterNamespaceSetLocationStatement(
+    namespace: Seq[String],
+    location: String) extends ParsedStatement
 
 /**
  * A SHOW NAMESPACES statement, as parsed from SQL.
@@ -441,3 +460,10 @@ case class ShowColumnsStatement(
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
+
+/**
+ * A SHOW TBLPROPERTIES statement, as parsed from SQL
+ */
+case class ShowTablePropertiesStatement(
+    tableName: Seq[String],
+    propertyKey: Option[String]) extends ParsedStatement

@@ -27,12 +27,11 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -94,7 +93,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "subquery/in-subquery/in-group-by.sql",
     "subquery/in-subquery/simple-in.sql",
     "subquery/in-subquery/in-order-by.sql",
-    "subquery/in-subquery/in-set-operations.sql"
+    "subquery/in-subquery/in-set-operations.sql",
+    // SPARK-29783: need to set conf
+    "interval-display-iso_8601.sql",
+    "interval-display-sql_standard.sql"
   )
 
   override def runQueries(
@@ -108,10 +110,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
       testCase match {
         case _: PgSQLTest =>
-          // PostgreSQL enabled cartesian product by default.
-          statement.execute(s"SET ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
+          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
+        case _: AnsiTest =>
+          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
         case _ =>
       }
 
@@ -231,7 +233,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  override def listTestCases(): Seq[TestCase] = {
+  override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
@@ -241,6 +243,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
         Seq.empty
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
+        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }

@@ -324,6 +324,12 @@ class Word2VecModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new Word2VecModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"Word2VecModel: uid=$uid, numWords=${wordVectors.wordIndex.size}, " +
+      s"vectorSize=${$(vectorSize)}"
+  }
 }
 
 @Since("1.6.0")
