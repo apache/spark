@@ -65,7 +65,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *  1. A list of SQL queries separated by semicolon.
  *  2. Lines starting with -- are treated as comments and ignored.
  *  3. Lines starting with --SET are used to run the file with the following set of configs.
- *  4. Lines starting with --import are used to load queries from another test file.
+ *  4. Lines starting with --IMPORT are used to load queries from another test file.
  *
  * For example:
  * {{{
@@ -265,9 +265,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
     val (comments, code) = input.split("\n").partition(_.trim.startsWith("--"))
 
-    // If `--import` found, load code from another test case file, then insert them
+    // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
-    val importedTestCaseName = comments.filter(_.startsWith("--import ")).map(_.substring(9))
+    val importedTestCaseName = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
     val importedCode = importedTestCaseName.flatMap { testCaseName =>
       listTestCases.find(_.name == testCaseName).map { testCase =>
         val input = fileToString(new File(testCase.inputFile))
@@ -283,13 +283,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
 
-    // When we are regenerating the golden files, we don't need to set any config as they
-    // all need to return the same result
+    // When we are regenerating the golden files for test cases without '--IMPORT' specified, or
+    // running test cases against [[ThriftServerQueryTestSuite], we don't need to set any config as
+    // they all need to return the same result.
     if ((regenerateGoldenFiles && importedTestCaseName.isEmpty) || !isTestWithConfigSets) {
       runQueries(queries, testCase, None)
     } else {
       val configSets = {
-        val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
+        val configLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
         val configs = configLines.map(_.split(",").map { confAndValue =>
           val (conf, value) = confAndValue.span(_ != '=')
           conf.trim -> value.substring(1).trim
