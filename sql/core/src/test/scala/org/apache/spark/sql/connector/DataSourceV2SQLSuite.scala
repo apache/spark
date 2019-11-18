@@ -948,6 +948,20 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("AlterNamespaceSetLocation using v2 catalog") {
+    withNamespace("testcat.ns1.ns2") {
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
+        "'test namespace' LOCATION '/tmp/ns_test_1'")
+      sql("ALTER NAMESPACE testcat.ns1.ns2 SET LOCATION '/tmp/ns_test_2'")
+      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
+      assert(descriptionDf.collect() === Seq(
+        Row("Namespace Name", "ns2"),
+        Row("Description", "test namespace"),
+        Row("Location", "/tmp/ns_test_2")
+      ))
+    }
+  }
+
   test("ShowNamespaces: show root namespaces with default v2 catalog") {
     spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
 

@@ -1192,6 +1192,20 @@ class DDLParserSuite extends AnalysisTest {
         Seq("a", "b", "c"), Map("b" -> "b")))
   }
 
+  test("set namespace location") {
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+  }
+
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),
