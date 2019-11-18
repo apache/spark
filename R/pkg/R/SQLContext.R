@@ -197,7 +197,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
       as.list(schema)
     }
     if (is.null(names)) {
-      names <- lapply(1:length(firstRow), function(x) {
+      names <- lapply(seq_len(length(firstRow)), function(x) {
         paste0("_", as.character(x))
       })
     }
@@ -213,7 +213,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     })
 
     types <- lapply(firstRow, infer_type)
-    fields <- lapply(1:length(firstRow), function(i) {
+    fields <- lapply(seq_len(length(firstRow)), function(i) {
       structField(names[[i]], types[[i]], TRUE)
     })
     schema <- do.call(structType, fields)
