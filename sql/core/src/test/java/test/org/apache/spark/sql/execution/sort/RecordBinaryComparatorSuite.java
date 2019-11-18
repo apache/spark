@@ -356,7 +356,8 @@ public class RecordBinaryComparatorSuite {
     Platform.putLong(arr3, arrayOffset, 0xa000000000000000L);
     long[] arr4 = new long[2];
     Platform.putLong(arr4, arrayOffset, 0x0000000000000000L);
-    // both leftBaseOffset and rightBaseOffset are not aligned, so it will start with 4 bytes byte-by-byte comparison,
+    // both leftBaseOffset and rightBaseOffset are not aligned,
+    // so it will start with 4 bytes byte-by-byte comparison,
     // followed by a long comparison, and at last 4 bytes byte-by-byte comparison
     int result2 = binaryComparator.compare(arr3, arrayOffset, 8, arr4, arrayOffset, 8);
 
