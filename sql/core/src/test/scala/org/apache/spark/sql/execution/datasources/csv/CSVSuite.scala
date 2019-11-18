@@ -41,6 +41,7 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
+
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -66,13 +67,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   /** Verifies data and schema. */
   private def verifyCars(
-      df: DataFrame,
-      withHeader: Boolean,
-      numCars: Int = 3,
-      numFields: Int = 5,
-      checkHeader: Boolean = true,
-      checkValues: Boolean = true,
-      checkTypes: Boolean = false): Unit = {
+    df: DataFrame,
+    withHeader: Boolean,
+    numCars: Int = 3,
+    numFields: Int = 5,
+    checkHeader: Boolean = true,
+    checkValues: Boolean = true,
+    checkTypes: Boolean = false): Unit = {
 
     val numColumns = numFields
     val numRows = if (withHeader) numCars else numCars + 1
@@ -212,9 +213,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       // scalastyle:off
       spark.sql(
         s"""
-          |CREATE TEMPORARY VIEW carsTable USING csv
-          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
-          |charset "iso-8859-1", delimiter "þ")
+           |CREATE TEMPORARY VIEW carsTable USING csv
+           |OPTIONS (path "${testFile(carsFile8859)}", header "true",
+           |charset "iso-8859-1", delimiter "þ")
          """.stripMargin.replaceAll("\n", " "))
       // scalastyle:on
       verifyCars(spark.table("carsTable"), withHeader = true)
@@ -239,8 +240,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     withView("carsTable") {
       spark.sql(
         s"""
-          |CREATE TEMPORARY VIEW carsTable USING csv
-          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+           |CREATE TEMPORARY VIEW carsTable USING csv
+           |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
          """.stripMargin.replaceAll("\n", " "))
 
       verifyCars(spark.table("carsTable"), numFields = 6, withHeader = true, checkHeader = false)
@@ -251,11 +252,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     withView("carsTable") {
       spark.sql(
         s"""
-          |CREATE TEMPORARY VIEW carsTable
-          |(yearMade double, makeName string, modelName string, priceTag decimal,
-          | comments string, grp string)
-          |USING csv
-          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+           |CREATE TEMPORARY VIEW carsTable
+           |(yearMade double, makeName string, modelName string, priceTag decimal,
+           | comments string, grp string)
+           |USING csv
+           |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
          """.stripMargin.replaceAll("\n", " "))
 
       assert(
@@ -338,10 +339,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     withView("carsTable") {
       spark.sql(
         s"""
-          |CREATE TEMPORARY VIEW carsTable
-          |(yearMade double, makeName string, modelName string, comments string, grp string)
-          |USING csv
-          |OPTIONS (path "${testFile(emptyFile)}", header "false")
+           |CREATE TEMPORARY VIEW carsTable
+           |(yearMade double, makeName string, modelName string, comments string, grp string)
+           |USING csv
+           |OPTIONS (path "${testFile(emptyFile)}", header "false")
          """.stripMargin.replaceAll("\n", " "))
 
       assert(spark.sql("SELECT count(*) FROM carsTable").collect().head(0) === 0)
@@ -352,10 +353,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     withView("carsTable") {
       spark.sql(
         s"""
-          |CREATE TEMPORARY VIEW carsTable
-          |(yearMade double, makeName string, modelName string, comments string, blank string)
-          |USING csv
-          |OPTIONS (path "${testFile(carsFile)}", header "true")
+           |CREATE TEMPORARY VIEW carsTable
+           |(yearMade double, makeName string, modelName string, comments string, blank string)
+           |USING csv
+           |OPTIONS (path "${testFile(carsFile)}", header "true")
          """.stripMargin.replaceAll("\n", " "))
 
       val cars = spark.table("carsTable")
@@ -580,8 +581,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
     val expected =
       Seq(Seq(1, 2, 3, 4, 5.01D, Timestamp.valueOf("2015-08-20 15:57:00")),
-          Seq(6, 7, 8, 9, 0, Timestamp.valueOf("2015-08-21 16:58:01")),
-          Seq(1, 2, 3, 4, 5, Timestamp.valueOf("2015-08-23 18:00:42")))
+        Seq(6, 7, 8, 9, 0, Timestamp.valueOf("2015-08-21 16:58:01")),
+        Seq(1, 2, 3, 4, 5, Timestamp.valueOf("2015-08-23 18:00:42")))
 
     assert(results.toSeq.map(_.toSeq) === expected)
   }
@@ -804,7 +805,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
     assert(
       df.schema.fields.map(field => field.dataType).deep ==
-      Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
+        Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
   }
 
   test("old csv data source name works") {
@@ -1084,7 +1085,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       Seq("1").toDF().write.text(path.getAbsolutePath)
       val schema = StructType(
         StructField("a", IntegerType, true) ::
-        StructField("b", IntegerType, true) :: Nil)
+          StructField("b", IntegerType, true) :: Nil)
       val df = spark.read
         .schema(schema)
         .option("header", "false")
@@ -1106,8 +1107,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .csv(testFile(valueMalformedFile))
       checkAnswer(df1,
         Row(null, null) ::
-        Row(1, java.sql.Date.valueOf("1983-08-04")) ::
-        Nil)
+          Row(1, java.sql.Date.valueOf("1983-08-04")) ::
+          Nil)
 
       // If `schema` has `columnNameOfCorruptRecord`, it should handle corrupt records
       val columnNameOfCorruptRecord = "_unparsed"
@@ -1121,8 +1122,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .csv(testFile(valueMalformedFile))
       checkAnswer(df2,
         Row(null, null, "0,2013-111-11 12:13:14") ::
-        Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
-        Nil)
+          Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
+          Nil)
 
       // We put a `columnNameOfCorruptRecord` field in the middle of a schema
       val schemaWithCorrField2 = new StructType()
@@ -1138,8 +1139,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .csv(testFile(valueMalformedFile))
       checkAnswer(df3,
         Row(null, "0,2013-111-11 12:13:14", null) ::
-        Row(1, null, java.sql.Date.valueOf("1983-08-04")) ::
-        Nil)
+          Row(1, null, java.sql.Date.valueOf("1983-08-04")) ::
+          Nil)
 
       val errMsg = intercept[AnalysisException] {
         spark
@@ -1195,7 +1196,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         "92233720368547758070",
         "\n\n1.7976931348623157E308",
         "true",
-         null)
+        null)
       checkAnswer(df, expected)
     }
   }
@@ -1605,10 +1606,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       odf.write.option("header", false).csv(path.getCanonicalPath)
       val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
       val idf = spark.read
-          .schema(ischema)
-          .option("header", false)
-          .option("enforceSchema", false)
-          .csv(path.getCanonicalPath)
+        .schema(ischema)
+        .option("header", false)
+        .option("enforceSchema", false)
+        .csv(path.getCanonicalPath)
 
       checkAnswer(idf, odf)
     }
@@ -1675,8 +1676,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   test("SPARK-23786: warning should be printed if CSV header doesn't conform to schema") {
     class TestAppender extends AppenderSkeleton {
       var events = new java.util.ArrayList[LoggingEvent]
+
       override def close(): Unit = {}
+
       override def requiresLayout: Boolean = false
+
       protected def append(event: LoggingEvent): Unit = events.add(event)
     }
 
@@ -1795,6 +1799,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
       assert(df.count() == expected)
     }
+
     def checkCount(expected: Long): Unit = {
       val validRec = "1"
       val inputs = Seq(
@@ -1885,6 +1890,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .csv(path.getAbsolutePath)
       checkAnswer(readback, Row(Timestamp.valueOf(t)))
+    }
+  }
+
+  test("Roundtrip in reading and writing timestamps in microsecond precision") {
+    withTempPath { path =>
+      val timestamp = Timestamp.valueOf("2019-11-18 11:56:00.123456")
+      Seq(timestamp).toDF("t")
+        .write
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+        .csv(path.getAbsolutePath)
+      val readback = spark.read
+        .schema("t timestamp")
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+        .csv(path.getAbsolutePath)
+      checkAnswer(readback, Row(timestamp))
     }
   }
 }
