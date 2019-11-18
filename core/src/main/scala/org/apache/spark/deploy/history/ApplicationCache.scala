@@ -31,7 +31,7 @@ import org.eclipse.jetty.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{JettyUtils, SparkUI}
 import org.apache.spark.util.Clock
 
 /**
@@ -394,7 +394,7 @@ private[history] class ApplicationCacheCheckFilter(
     }
     val httpRequest = request.asInstanceOf[HttpServletRequest]
     val httpResponse = response.asInstanceOf[HttpServletResponse]
-    val requestURI = httpRequest.getRequestURI
+    val requestURL = httpRequest.getRequestURL.toString
     val operation = httpRequest.getMethod
 
     // if the request is for an attempt, check to see if it is in need of delete/refresh
@@ -410,8 +410,8 @@ private[history] class ApplicationCacheCheckFilter(
       loadedUI.lock.readLock.unlock()
       cache.invalidate(key)
       val queryStr = Option(httpRequest.getQueryString).map("?" + _).getOrElse("")
-      val redirectUrl = httpResponse.encodeRedirectURL(requestURI + queryStr)
-      httpResponse.sendRedirect(redirectUrl)
+      val redirectUrl = httpResponse.encodeRedirectURL(requestURL + queryStr)
+      httpResponse.sendRedirect(JettyUtils.updateProtocolFromHeader(httpRequest, redirectUrl))
     }
   }
 
