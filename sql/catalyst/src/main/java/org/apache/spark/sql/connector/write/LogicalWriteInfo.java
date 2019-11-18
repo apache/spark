@@ -27,14 +27,14 @@ import org.apache.spark.sql.types.StructType;
 @Evolving
 public interface LogicalWriteInfo {
   /**
-   * @return `queryId` is a unique string of the query. It's possible that there are many queries
+   * `queryId` is a unique string of the query. It's possible that there are many queries
    * running at the same time, or a query is restarted and resumed. {@link BatchWrite} can use
    * this id to identify the query.
    */
   String queryId();
 
   /**
-   * @return the schema of the input data from Spark to data source.
+   * the schema of the input data from Spark to data source.
    */
   StructType schema();
 }

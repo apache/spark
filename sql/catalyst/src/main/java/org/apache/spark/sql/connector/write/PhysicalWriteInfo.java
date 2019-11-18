@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory
 @Evolving
 public interface PhysicalWriteInfo {
   /**
-   * @return  The number of partitions of the input data that is going to be written.
+   * The number of partitions of the input data that is going to be written.
    */
   int numPartitions();
 }
