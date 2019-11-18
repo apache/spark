@@ -41,14 +41,14 @@ trait AvroLogicalTypeCatalystMapper extends Serializable {
 
   /**
    * Given Avro logical type and a [[org.apache.spark.sql.avro.DataDeserializer]] deserialize
-   * de given Avro data to Catalyst data using the catalyst updater.
+   * the given Avro data to Catalyst data using the catalyst updater.
    * @return Avro deserialization mappings
    */
   def deserialize: PartialFunction[LogicalType, DataDeserializer => Unit]
 
   /**
    * Given Avro logical type and a [[org.apache.spark.sql.avro.DataSerializer]] serialize
-   * de given Catalyst data to Avro data.
+   * the given Catalyst data to Avro data.
    * @return Avro serialization mappings
    */
   def serialize: PartialFunction[LogicalType, DataSerializer => Any]
