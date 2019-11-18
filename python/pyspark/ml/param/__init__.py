@@ -489,8 +489,8 @@ class Params(Identifiable):
                 if isinstance(param, Param):
                     paramMap[param] = value
                 else:
-                    raise ValueError("Expecting a valid instance of Param, but received: {}"
-                                     .format(param))
+                    raise TypeError("Expecting a valid instance of Param, but received: {}"
+                                    .format(param))
         elif extra is not None:
             raise TypeError("Expecting a dict, but received an object of type {}."
                             .format(type(extra)))

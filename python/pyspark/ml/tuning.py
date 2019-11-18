@@ -95,7 +95,7 @@ class ParamGridBuilder(object):
         if isinstance(param, Param):
             self._param_grid[param] = values
         else:
-            raise ValueError("param must be an instance of Param")
+            raise TypeError("param must be an instance of Param")
 
         return self
 
