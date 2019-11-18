@@ -334,10 +334,6 @@ object IntervalUtils {
 
   def toMultiUnitsString(interval: CalendarInterval): String = interval.toString
 
-  private def appendUnit(sb: StringBuilder, value: Long, unit: String): Unit = {
-    if (value != 0) sb.append(value).append(' ').append(unit).append(' ')
-  }
-
   def toSqlStandardString(interval: CalendarInterval): String = {
     val yearMonthPart = if (interval.months < 0) {
       val ma = math.abs(interval.months)
