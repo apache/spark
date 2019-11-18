@@ -196,15 +196,14 @@ private[sql] class SharedState(
 object SharedState extends Logging {
   private def setFsUrlStreamHandlerFactory(conf: SparkConf): Unit = {
     if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED) && factory.isEmpty) {
-      factory.synchronized {
+      synchronized {
         if (factory.isEmpty) {
           try {
             URL.setURLStreamHandlerFactory(defaultFactory)
             factory = Some(defaultFactory)
           } catch {
-            case NonFatal(e) =>
-              logWarning("URL.setURLStreamHandlerFactory failed to set " +
-                "FsUrlStreamHandlerFactory", e)
+            case NonFatal(_) =>
+              logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
           }
         }
       }
