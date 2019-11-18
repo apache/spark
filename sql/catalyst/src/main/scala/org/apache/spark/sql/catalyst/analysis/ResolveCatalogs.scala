@@ -94,7 +94,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
           s"because view support in catalog has not been implemented yet")
 
     case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
-      AlterNamespaceSetProperties(catalog, nameParts, properties)
+      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, properties)
 
     case AlterNamespaceSetLocationStatement(NonSessionCatalog(catalog, nameParts), location) =>
       AlterNamespaceSetLocation(catalog.asNamespaceCatalog, nameParts, location)
@@ -179,7 +179,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       DropNamespace(catalog, nameParts, ifExists, cascade)
 
     case DescribeNamespaceStatement(NonSessionCatalog(catalog, nameParts), extended) =>
-      DescribeNamespace(catalog, nameParts, extended)
+      DescribeNamespace(catalog.asNamespaceCatalog, nameParts, extended)
 
     case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, namespace)), pattern) =>
       ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)

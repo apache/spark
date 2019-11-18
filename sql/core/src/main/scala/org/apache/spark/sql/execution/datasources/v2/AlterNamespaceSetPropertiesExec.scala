@@ -19,16 +19,15 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, NamespaceChange}
+import org.apache.spark.sql.connector.catalog.{NamespaceChange, SupportsNamespaces}
 
 /**
  * Physical plan node for setting properties of namespace.
  */
 case class AlterNamespaceSetPropertiesExec(
-    catalog: CatalogPlugin,
+    catalog: SupportsNamespaces,
     namespace: Seq[String],
-    props: Map[String, String])
-  extends V2CommandExec {
+    props: Map[String, String]) extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
