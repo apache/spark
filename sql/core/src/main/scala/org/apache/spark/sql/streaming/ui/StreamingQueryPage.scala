@@ -120,8 +120,6 @@ class StreamingQueryPage(parent: SQLTab, store: Option[StreamQueryStore])
       <td> {withNoProgress(query,
         { query.getQuerySummary.getMetric(QuerySummary.TOTAL_INPUT_RECORDS, 0L) }, "NaN")} </td>
       <td> {withNoProgress(query, { query.lastProgress.batchId }, "NaN")} </td>
-      {details(withNoProgress(query, {
-      s"== JSON representation of this progress ==\n${query.lastProgress.prettyJson}" }, "-"))}
       {details(withNoProgress(query, { query.exception.map(_.message).getOrElse("-") }, "-"))}
     </tr>
   }

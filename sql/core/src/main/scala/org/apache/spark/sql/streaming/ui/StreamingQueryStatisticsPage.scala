@@ -149,29 +149,28 @@ class StreamingQueryStatisticsPage(
     val maxBatchDuration = withNoProgress(query, query.recentProgress.map(_.batchDuration).max, 0L)
     val minBatchDuration = 0L
 
-    val inputRateData = withNoProgress(query, query.recentProgress.map(p =>
-      (df.parse(p.timestamp).getTime, withNumberInvalid { p.inputRowsPerSecond })),
-      Array.empty[(Long, Double)])
-    val processRateData = withNoProgress(query, query.recentProgress.map(p =>
-      (df.parse(p.timestamp).getTime, withNumberInvalid { p.processedRowsPerSecond })),
-      Array.empty[(Long, Double)])
-    val inputRowsData = withNoProgress(query, query.recentProgress.map(p =>
-      (df.parse(p.timestamp).getTime, withNumberInvalid { p.numInputRows })),
-      Array.empty[(Long, Double)])
-    val batchDurations = withNoProgress(query, query.recentProgress.map(p =>
-      (df.parse(p.timestamp).getTime, withNumberInvalid { p.batchDuration })),
-      Array.empty[(Long, Double)])
-    val operationDurationData = withNoProgress(query, query.recentProgress.map { case p =>
+    val inputRateData = withNoProgress(query,
+      query.recentProgress.map(p => (df.parse(p.timestamp).getTime,
+        withNumberInvalid { p.inputRowsPerSecond })), Array.empty[(Long, Double)])
+    val processRateData = withNoProgress(query,
+      query.recentProgress.map(p => (df.parse(p.timestamp).getTime,
+        withNumberInvalid { p.processedRowsPerSecond })), Array.empty[(Long, Double)])
+    val inputRowsData = withNoProgress(query,
+      query.recentProgress.map(p => (df.parse(p.timestamp).getTime,
+        withNumberInvalid { p.numInputRows })), Array.empty[(Long, Double)])
+    val batchDurations = withNoProgress(query,
+      query.recentProgress.map(p => (df.parse(p.timestamp).getTime,
+        withNumberInvalid { p.batchDuration })), Array.empty[(Long, Double)])
+    val operationDurationData = withNoProgress(query, query.recentProgress.map { p =>
       val durationMs = p.durationMs
+      // remove "triggerExecution" as it count the other operation duration.
       durationMs.remove("triggerExecution")
-      (df.parse(p.timestamp).getTime, durationMs)},
-      Array.empty[(Long, ju.Map[String, JLong])])
+      (df.parse(p.timestamp).getTime, durationMs)}, Array.empty[(Long, ju.Map[String, JLong])])
     val operationLabels = withNoProgress(query, {
-        val durationKeys = query.lastProgress.durationMs.keySet()
-        // remove "triggerExecution" as it count the other operation duration.
-        durationKeys.remove("triggerExecution")
-        durationKeys.asScala.toSeq.sorted
-      }, Seq.empty[String])
+      val durationKeys = query.lastProgress.durationMs.keySet()
+      // remove "triggerExecution" as it count the other operation duration.
+      durationKeys.remove("triggerExecution")
+      durationKeys.asScala.toSeq.sorted}, Seq.empty[String])
 
     val jsCollector = new JsCollector
     val graphUIDataForInputRate =
