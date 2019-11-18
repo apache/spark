@@ -199,7 +199,7 @@ object SharedState extends Logging {
 
   private def setFsUrlStreamHandlerFactory(conf: SparkConf): Unit = {
     if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED) &&
-        fsUrlStreamHandlerFactoryInitialized.compareAndSet(false, true)) {
+        !fsUrlStreamHandlerFactoryInitialized.getAndSet(true)) {
       try {
         URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
       } catch {
