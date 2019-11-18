@@ -764,7 +764,7 @@ primaryExpression
 constant
     : NULL                                                                                     #nullLiteral
     | interval                                                                                 #intervalLiteral
-    | negativeSign=MINUS? identifier STRING                                                    #typeConstructor
+    | identifier STRING                                                                        #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | STRING+                                                                                  #stringLiteral
@@ -787,7 +787,7 @@ booleanValue
     ;
 
 interval
-    : negativeSign=MINUS? INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
+    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
     | {ansi}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
