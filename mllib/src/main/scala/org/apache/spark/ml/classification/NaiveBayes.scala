@@ -344,7 +344,7 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   private[classification] val supportedModelTypes =
     Set(Multinomial, Bernoulli, Gaussian, Complement)
 
-  private[NaiveBayes] def requireNonnegativeValues(v: Vector): Unit = {
+  private[ml] def requireNonnegativeValues(v: Vector): Unit = {
     val values = v match {
       case sv: SparseVector => sv.values
       case dv: DenseVector => dv.values
@@ -354,7 +354,7 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
       s"Naive Bayes requires nonnegative feature values but found $v.")
   }
 
-  private[NaiveBayes] def requireZeroOneBernoulliValues(v: Vector): Unit = {
+  private[ml] def requireZeroOneBernoulliValues(v: Vector): Unit = {
     val values = v match {
       case sv: SparseVector => sv.values
       case dv: DenseVector => dv.values
@@ -446,22 +446,21 @@ class NaiveBayesModel private[ml] (
   override val numClasses: Int = pi.size
 
   private def multinomialCalculation(features: Vector) = {
+    NaiveBayes.requireNonnegativeValues(features)
     val prob = theta.multiply(features)
     BLAS.axpy(1.0, pi, prob)
     prob
   }
 
   private def complementCalculation(features: Vector) = {
+    NaiveBayes.requireNonnegativeValues(features)
     val prob = theta.multiply(features)
     BLAS.scal(-1, prob)
     prob
   }
 
   private def bernoulliCalculation(features: Vector) = {
-    features.foreachActive((_, value) =>
-      require(value == 0.0 || value == 1.0,
-        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
-    )
+    NaiveBayes.requireNonnegativeValues(features)
     val prob = thetaMinusNegTheta.multiply(features)
     BLAS.axpy(1.0, pi, prob)
     BLAS.axpy(1.0, negThetaSum, prob)
