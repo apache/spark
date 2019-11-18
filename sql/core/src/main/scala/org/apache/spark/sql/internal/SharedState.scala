@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import java.net.URL
 import java.util.{Locale, UUID}
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.reflect.ClassTag
@@ -194,25 +195,19 @@ private[sql] class SharedState(
 }
 
 object SharedState extends Logging {
+  private val fsUrlStreamHandlerFactoryInitialized = new AtomicBoolean(false)
+
   private def setFsUrlStreamHandlerFactory(conf: SparkConf): Unit = {
-    if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED) && factory.isEmpty) {
-      synchronized {
-        if (factory.isEmpty) {
-          try {
-            URL.setURLStreamHandlerFactory(defaultFactory)
-            factory = Some(defaultFactory)
-          } catch {
-            case NonFatal(_) =>
-              logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
-          }
-        }
+    if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED) &&
+        fsUrlStreamHandlerFactoryInitialized.compareAndSet(false, true)) {
+      try {
+        URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+      } catch {
+        case NonFatal(_) =>
+          logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
       }
     }
   }
-
-  @volatile private var factory: Option[FsUrlStreamHandlerFactory] = None
-
-  private lazy val defaultFactory = new FsUrlStreamHandlerFactory()
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
 
