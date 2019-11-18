@@ -20,13 +20,12 @@ package org.apache.spark.sql.execution;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 
+import java.nio.ByteOrder;
+
 public final class RecordBinaryComparator extends RecordComparator {
 
-  boolean isLittlenEndian;
-
-  public RecordBinaryComparator(boolean isLittlenEndian) {
-    this.isLittlenEndian = isLittlenEndian;
-  }
+  private static final boolean LITTLE_ENDIAN =
+      ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN);
 
   @Override
   public int compare(
@@ -58,7 +57,7 @@ public final class RecordBinaryComparator extends RecordComparator {
         long v1 = Platform.getLong(leftObj, leftOff + i);
         long v2 = Platform.getLong(rightObj, rightOff + i);
         if (v1 != v2) {
-          if (isLittlenEndian) {
+          if (LITTLE_ENDIAN) {
             // if read as little-endian, we have to reverse bytes so that the long comparison result
             // is equivalent to byte-by-byte comparison result.
             // See discussion in https://github.com/apache/spark/pull/26548#issuecomment-554645859

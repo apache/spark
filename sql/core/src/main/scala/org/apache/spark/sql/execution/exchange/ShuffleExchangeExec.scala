@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import java.nio.ByteOrder
 import java.util.Random
 import java.util.function.Supplier
 
@@ -244,8 +243,7 @@ object ShuffleExchangeExec {
       val newRdd = if (isRoundRobin && SQLConf.get.sortBeforeRepartition) {
         rdd.mapPartitionsInternal { iter =>
           val recordComparatorSupplier = new Supplier[RecordComparator] {
-            val isLittlenEndian = ByteOrder.nativeOrder.equals(ByteOrder.LITTLE_ENDIAN)
-            override def get: RecordComparator = new RecordBinaryComparator(isLittlenEndian)
+            override def get: RecordComparator = new RecordBinaryComparator()
           }
           // The comparator for comparing row hashcode, which should always be Integer.
           val prefixComparator = PrefixComparators.LONG
