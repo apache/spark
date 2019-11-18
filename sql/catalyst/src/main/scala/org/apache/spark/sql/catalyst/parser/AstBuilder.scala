@@ -102,10 +102,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  override def visitSingleInterval(ctx: SingleIntervalContext): CalendarInterval = {
-    withOrigin(ctx)(visitMultiUnitsInterval(ctx.multiUnitsInterval))
-  }
-
   /* ********************************************************************************************
    * Plan parsing
    * ******************************************************************************************** */
@@ -1870,7 +1866,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
           val interval = try {
-            IntervalUtils.fromString(value)
+            IntervalUtils.stringToInterval(UTF8String.fromString(value))
           } catch {
             case e: IllegalArgumentException =>
               val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
@@ -2069,22 +2065,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val units = ctx.intervalUnit().asScala.map { unit =>
-        val u = unit.getText.toLowerCase(Locale.ROOT)
-        // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
-        if (u.endsWith("s")) u.substring(0, u.length - 1) else u
-      }.map(IntervalUtils.IntervalUnit.withName).toArray
-
-      val values = ctx.intervalValue().asScala.map { value =>
-        if (value.STRING() != null) {
-          string(value.STRING())
-        } else {
-          value.getText
-        }
-      }.toArray
-
+      val units = ctx.intervalUnit().asScala
+      val values = ctx.intervalValue().asScala
       try {
-        IntervalUtils.fromUnitStrings(units, values)
+        assert(units.length == values.length)
+        val kvs = units.indices.map { i =>
+          val u = units(i).getText
+          val v = if (values(i).STRING() != null) {
+            string(values(i).STRING())
+          } else {
+            values(i).getText
+          }
+          UTF8String.fromString(" " + v + " " + u)
+        }
+        IntervalUtils.stringToInterval(UTF8String.concat(kvs: _*))
       } catch {
         case i: IllegalArgumentException =>
           val e = new ParseException(i.getMessage, ctx)

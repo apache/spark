@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Test basic expression parsing.
@@ -42,6 +42,8 @@ import org.apache.spark.unsafe.types.CalendarInterval
 class ExpressionParserSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
+
+  implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
 
   val defaultParser = CatalystSqlParser
 
@@ -434,13 +436,13 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
     // Interval.
-    val intervalLiteral = Literal(IntervalUtils.fromString("interval 3 month 1 hour"))
+    val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
     intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
     assertEqual(
       "-interval '3 month 1 hour'",
-      Literal(IntervalUtils.fromString("interval -3 month -1 hour")))
+      Literal(IntervalUtils.stringToInterval("interval -3 month -1 hour")))
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
@@ -602,7 +604,7 @@ class ExpressionParserSuite extends AnalysisTest {
     MICROSECOND)
 
   def intervalLiteral(u: IntervalUnit, s: String): Literal = {
-    Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
+    Literal(IntervalUtils.stringToInterval(s + " " + u.toString))
   }
 
   test("intervals") {
@@ -651,7 +653,8 @@ class ExpressionParserSuite extends AnalysisTest {
         0,
         0,
         13 * MICROS_PER_SECOND + 123 * MICROS_PER_MILLIS + 456)))
-    checkIntervals("1.001 second", Literal(IntervalUtils.fromString("1 second 1 millisecond")))
+    checkIntervals("1.001 second",
+      Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
 
     // Non Existing unit
     intercept("interval 10 nanoseconds",
