@@ -184,6 +184,7 @@ class QueryExecution(
       optimizedPlan.stats
     } catch {
       case e: AnalysisException => concat.append(e.toString + "\n")
+      case e: IllegalArgumentException => concat.append(e.toString + "\n")
     }
     // only show optimized logical plan and physical plan
     concat.append("== Optimized Logical Plan ==\n")

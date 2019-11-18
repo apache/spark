@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.expressions.postgreSQL
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{CastBase, Expression, TimeZoneAwareExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -49,7 +48,7 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
         } else if (StringUtils.isFalseString(s)) {
           false
         } else {
-          throw new AnalysisException(s"invalid input syntax for type boolean: $s")
+          throw new IllegalArgumentException(s"invalid input syntax for type boolean: $s")
         }
       })
     case IntegerType =>
@@ -66,7 +65,7 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
           } else if ($stringUtils.isFalseString($c.trim().toLowerCase())) {
             $evPrim = false;
           } else {
-            throw new AnalysisException("invalid input syntax for type boolean: $c");
+            throw new IllegalArgumentException("invalid input syntax for type boolean: $c");
           }
         """
 
