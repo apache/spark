@@ -284,7 +284,7 @@ case class AlterNamespaceSetProperties(
  * command that works for v2 catalogs.
  */
 case class AlterNamespaceSetLocation(
-    catalog: CatalogPlugin,
+    catalog: SupportsNamespaces,
     namespace: Seq[String],
     location: String) extends Command
 
