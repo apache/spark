@@ -1576,16 +1576,6 @@ object SQLConf {
         "turning the flag on provides a way for these sources to see these partitionBy columns.")
       .booleanConf
       .createWithDefault(false)
-
-  val OPTIMIZE_STRING_COPY_IN_JSON_TUPLE =
-    buildConf("spark.sql.optimizeStringCopyInJsonTuple.enabled")
-      .internal()
-      .doc("If this config is enabled, the json_tuple function uses the underlying array of " +
-        "characters while copying the requested string field. Note: Jackson Core 2.6.7 has " +
-        "a bug which may causes truncation of the result. If it is set to `false`, `json_tuple` " +
-        "allocates a string while copying the requested field.")
-      .booleanConf
-      .createWithDefault(false)
 }
 
 /**
