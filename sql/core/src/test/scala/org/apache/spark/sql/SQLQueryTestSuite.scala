@@ -286,6 +286,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     // When we are regenerating the golden files for test cases without '--IMPORT' specified, or
     // running test cases against [[ThriftServerQueryTestSuite], we don't need to set any config as
     // they all need to return the same result.
+    // When we use '--SET' and '--IMPORT' together for those import queries, we want to run the
+    // same queries from the original file but with different settings and save the answers. So the
+    // `--SET` will be respected in this case.
     if ((regenerateGoldenFiles && importedTestCaseName.isEmpty) || !isTestWithConfigSets) {
       runQueries(queries, testCase, None)
     } else {
