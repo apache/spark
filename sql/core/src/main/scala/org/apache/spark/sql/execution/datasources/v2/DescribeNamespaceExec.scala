@@ -40,12 +40,9 @@ case class DescribeNamespaceExec(
   private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
 
   override protected def run(): Seq[InternalRow] = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
     val rows = new ArrayBuffer[InternalRow]()
-    val nsCatalog = catalog.asNamespaceCatalog
     val ns = namespace.toArray
-    val metadata = nsCatalog.loadNamespaceMetadata(ns)
+    val metadata = catalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Namespace Name", ns.last)
     rows += toCatalystRow("Description", metadata.get(COMMENT_TABLE_PROP))

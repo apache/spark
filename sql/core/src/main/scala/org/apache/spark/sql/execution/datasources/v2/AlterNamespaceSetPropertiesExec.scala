@@ -29,12 +29,10 @@ case class AlterNamespaceSetPropertiesExec(
     namespace: Seq[String],
     props: Map[String, String]) extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
     val changes = props.map{ case (k, v) =>
       NamespaceChange.setProperty(k, v)
     }.toSeq
-    catalog.asNamespaceCatalog.alterNamespace(namespace.toArray, changes: _*)
+    catalog.alterNamespace(namespace.toArray, changes: _*)
     Seq.empty
   }
 
