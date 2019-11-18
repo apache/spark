@@ -402,7 +402,7 @@ class BlockManagerMasterEndpoint(
       topologyMapper.getTopologyForHost(idWithoutTopologyInfo.host))
 
     val time = System.currentTimeMillis()
-    executorIdToLocalDirs.get(id.executorId, () => localDirs)
+    executorIdToLocalDirs.put(id.executorId, localDirs)
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>

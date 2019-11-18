@@ -22,10 +22,9 @@ import io.netty.buffer.ByteBuf;
 import org.apache.spark.network.protocol.Encoders;
 
 import java.util.*;
-import java.util.Map.Entry;
 
 // Needed by ScalaDoc. See SPARK-7726
-
+import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /** The reply to get local dirs giving back the dirs for each of the requested executors. */
 public class LocalDirsForExecutors extends BlockTransferMessage {
@@ -38,7 +37,7 @@ public class LocalDirsForExecutors extends BlockTransferMessage {
     this.numLocalDirsByExec = new int[localDirsByExec.size()];
     ArrayList<String> localDirs = new ArrayList<>();
     int index = 0;
-    for (Entry<String, String[]> e: localDirsByExec.entrySet()) {
+    for (Map.Entry<String, String[]> e: localDirsByExec.entrySet()) {
       execIds[index] = e.getKey();
       numLocalDirsByExec[index] = e.getValue().length;
       Collections.addAll(localDirs, e.getValue());

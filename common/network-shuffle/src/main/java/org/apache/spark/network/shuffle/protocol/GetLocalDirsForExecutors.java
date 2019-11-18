@@ -24,7 +24,7 @@ import org.apache.spark.network.protocol.Encoders;
 import java.util.Arrays;
 
 // Needed by ScalaDoc. See SPARK-7726
-
+import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /** Request to get the local dirs for the given executors. */
 public class GetLocalDirsForExecutors extends BlockTransferMessage {

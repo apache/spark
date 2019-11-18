@@ -44,7 +44,7 @@ import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
@@ -2890,7 +2890,7 @@ object SparkContext extends Logging {
         // testing of the remote fetching would be secondary as setting this config explicitly to
         // false would be required in most of the unit test (despite the fact that remote fetching
         // is much more frequent in production).
-        sc.conf.setIfMissing(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
+        sc.conf.setIfMissing(SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
 
         val scheduler = new TaskSchedulerImpl(sc)
         val localCluster = new LocalSparkCluster(

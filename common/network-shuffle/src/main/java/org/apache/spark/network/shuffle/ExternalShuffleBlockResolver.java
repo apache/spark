@@ -373,7 +373,11 @@ public class ExternalShuffleBlockResolver {
 
   public Map<String, String[]> getLocalDirs(String appId, String[] execIds) {
     return Arrays.stream(execIds)
-      .map(exec -> Pair.of(exec, executors.get(new AppExecId(appId, exec)).localDirs))
+      .map(exec -> {
+        ExecutorShuffleInfo info = executors.get(new AppExecId(appId, exec));
+        return Pair.of(exec, (info != null) ? info.localDirs : null);
+      })
+      .filter(pair -> pair.getValue() != null)
       .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
   }
 

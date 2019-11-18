@@ -61,10 +61,7 @@ private[spark] class IndexShuffleBlockResolver(
    * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
    * read from the specified directories.
    */
-   def getDataFile(
-      shuffleId: Int,
-      mapId: Long,
-      dirs: Option[Array[String]]): File = {
+   def getDataFile(shuffleId: Int, mapId: Long, dirs: Option[Array[String]]): File = {
     val blockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     dirs
       .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
@@ -218,8 +215,9 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
-  override def getBlockData(blockId: BlockId, dirs: Option[Array[String]])
-    : ManagedBuffer = {
+  override def getBlockData(
+      blockId: BlockId,
+      dirs: Option[Array[String]]): ManagedBuffer = {
     val (shuffleId, mapId, startReduceId, endReduceId) = blockId match {
       case id: ShuffleBlockId =>
         (id.shuffleId, id.mapId, id.reduceId, id.reduceId + 1)

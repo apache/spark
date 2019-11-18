@@ -34,6 +34,8 @@ import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.google.common.cache.CacheBuilder
+import com.google.common.util.concurrent.FutureCallback
+import java.util
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
@@ -128,24 +130,30 @@ private[spark] class HostLocalDirManager(
       .build[String, Array[String]]()
 
   private[spark] def getCachedHostLocalDirs()
-    : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
+      : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
     import scala.collection.JavaConverters._
     return executorIdToLocalDirsCache.asMap().asScala
   }
 
   private[spark] def getHostLocalDirs(
       executorIds: Array[String],
-      hostLocalDirsCompletable: CompletableFuture[java.util.Map[String, Array[String]]]): Unit = {
-    Future {
-      externalBlockStoreClient.getHostLocalDirs(
-        host,
-        externalShuffleServicePort,
-        executorIds,
-        hostLocalDirsCompletable)
-      hostLocalDirsCompletable.thenAccept(hostLocalDirs => executorIdToLocalDirsCache.synchronized {
-        executorIdToLocalDirsCache.putAll(hostLocalDirs)
-      }).get()
-    }(futureExecutionContext)
+      callback: FutureCallback[java.util.Map[String, Array[String]]]): Unit = {
+    val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
+    externalBlockStoreClient.getHostLocalDirs(
+      host,
+      externalShuffleServicePort,
+      executorIds,
+      hostLocalDirsCompletable)
+    hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
+      if (hostLocalDirs != null) {
+        callback.onSuccess(hostLocalDirs)
+        executorIdToLocalDirsCache.synchronized {
+          executorIdToLocalDirsCache.putAll(hostLocalDirs)
+        }
+      } else {
+        callback.onFailure(throwable)
+      }
+    }
   }
 }
 

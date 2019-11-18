@@ -209,7 +209,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
               ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
           } catch (Throwable t) {
             logger.warn("Error trying to get the host local dirs for " +
-            Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
+              Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
               t.getCause());
             hostLocalDirsCompletable.completeExceptionally(t);
           } finally {
