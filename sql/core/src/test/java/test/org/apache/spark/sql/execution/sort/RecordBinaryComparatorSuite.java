@@ -323,7 +323,8 @@ public class RecordBinaryComparatorSuite {
   }
 
   @Test
-  public void testBinaryComparatorGenerateSameResultBetweenComparedByteByByteAndComparedByLong() throws Exception {
+  public void testBinaryComparatorGiveSameResultWhenComparedByteByByteAndComparedByLong()
+      throws Exception {
     int numFields = 1;
 
     UnsafeRow row1 = new UnsafeRow(numFields);
