@@ -493,7 +493,8 @@ private[spark] object HiveUtils extends Logging {
       val hiveTable = HiveClientImpl.toHiveTable(table)
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
-      val partCols = hiveTable.getPartCols.asScala.map(c => HiveClientImpl.fromHiveColumn(c, hiveTable))
+      val partCols = hiveTable.getPartCols.asScala.map(c =>
+        HiveClientImpl.fromHiveColumn(c, hiveTable))
       val dataCols = hiveTable.getCols.asScala.map(c => HiveClientImpl.fromHiveColumn(c, hiveTable))
       table.copy(schema = StructType(dataCols ++ partCols))
     }
