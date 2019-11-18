@@ -65,8 +65,7 @@ CREATE TABLE J1_TBL (
 -- !query 5 schema
 struct<>
 -- !query 5 output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`j1_tbl`'). The associated location('file:/Users/Kent/Documents/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/j1_tbl') already exists.;
+
 
 
 -- !query 6
@@ -77,8 +76,7 @@ CREATE TABLE J2_TBL (
 -- !query 6 schema
 struct<>
 -- !query 6 output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`j2_tbl`'). The associated location('file:/Users/Kent/Documents/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/j2_tbl') already exists.;
+
 
 
 -- !query 7
@@ -86,8 +84,7 @@ INSERT INTO J1_TBL VALUES (1, 4, 'one')
 -- !query 7 schema
 struct<>
 -- !query 7 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 8
@@ -95,8 +92,7 @@ INSERT INTO J1_TBL VALUES (2, 3, 'two')
 -- !query 8 schema
 struct<>
 -- !query 8 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 9
@@ -104,8 +100,7 @@ INSERT INTO J1_TBL VALUES (3, 2, 'three')
 -- !query 9 schema
 struct<>
 -- !query 9 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 10
@@ -113,8 +108,7 @@ INSERT INTO J1_TBL VALUES (4, 1, 'four')
 -- !query 10 schema
 struct<>
 -- !query 10 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 11
@@ -122,8 +116,7 @@ INSERT INTO J1_TBL VALUES (5, 0, 'five')
 -- !query 11 schema
 struct<>
 -- !query 11 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 12
@@ -131,8 +124,7 @@ INSERT INTO J1_TBL VALUES (6, 6, 'six')
 -- !query 12 schema
 struct<>
 -- !query 12 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 13
@@ -140,8 +132,7 @@ INSERT INTO J1_TBL VALUES (7, 7, 'seven')
 -- !query 13 schema
 struct<>
 -- !query 13 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 14
@@ -149,8 +140,7 @@ INSERT INTO J1_TBL VALUES (8, 8, 'eight')
 -- !query 14 schema
 struct<>
 -- !query 14 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 15
@@ -158,8 +148,7 @@ INSERT INTO J1_TBL VALUES (0, NULL, 'zero')
 -- !query 15 schema
 struct<>
 -- !query 15 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 16
@@ -167,8 +156,7 @@ INSERT INTO J1_TBL VALUES (NULL, NULL, 'null')
 -- !query 16 schema
 struct<>
 -- !query 16 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 17
@@ -176,8 +164,7 @@ INSERT INTO J1_TBL VALUES (NULL, 0, 'zero')
 -- !query 17 schema
 struct<>
 -- !query 17 output
-org.apache.spark.sql.AnalysisException
-Table not found: J1_TBL;
+
 
 
 -- !query 18
@@ -185,8 +172,7 @@ INSERT INTO J2_TBL VALUES (1, -1)
 -- !query 18 schema
 struct<>
 -- !query 18 output
-org.apache.spark.sql.AnalysisException
-Table not found: J2_TBL;
+
 
 
 -- !query 19
@@ -194,8 +180,7 @@ INSERT INTO J2_TBL VALUES (2, 2)
 -- !query 19 schema
 struct<>
 -- !query 19 output
-org.apache.spark.sql.AnalysisException
-Table not found: J2_TBL;
+
 
 
 -- !query 20
@@ -203,8 +188,7 @@ INSERT INTO J2_TBL VALUES (3, -3)
 -- !query 20 schema
 struct<>
 -- !query 20 output
-org.apache.spark.sql.AnalysisException
-Table not found: J2_TBL;
+
 
 
 -- !query 21
@@ -212,8 +196,7 @@ INSERT INTO J2_TBL VALUES (2, 4)
 -- !query 21 schema
 struct<>
 -- !query 21 output
-org.apache.spark.sql.AnalysisException
-Table not found: J2_TBL;
+
 
 
 -- !query 22
@@ -221,8 +204,7 @@ INSERT INTO J2_TBL VALUES (5, -5)
 -- !query 22 schema
 struct<>
 -- !query 22 output
-org.apache.spark.sql.AnalysisException
-Table not found: J2_TBL;
+
 
 
 -- !query 23
@@ -230,8 +212,7 @@ INSERT INTO J2_TBL VALUES (5, -5)
 -- !query 23 schema
 struct<>
 -- !query 23 output
-org.apache.spark.sql.AnalysisException
-Table not found: J2_TBL;
+
 
 
 -- !query 24
@@ -239,8 +220,7 @@ INSERT INTO J2_TBL VALUES (0, NULL)
 -- !query 24 schema
 struct<>
 -- !query 24 output
-org.apache.spark.sql.AnalysisException
-Table not found: J2_TBL;
+
 
 
 -- !query 25
@@ -248,8 +228,7 @@ INSERT INTO J2_TBL VALUES (NULL, NULL)
 -- !query 25 schema
 struct<>
 -- !query 25 output
-org.apache.spark.sql.AnalysisException
-Table not found: J2_TBL;
+
 
 
 -- !query 26
@@ -257,68 +236,297 @@ INSERT INTO J2_TBL VALUES (NULL, 0)
 -- !query 26 schema
 struct<>
 -- !query 26 output
-org.apache.spark.sql.AnalysisException
-Table not found: J2_TBL;
+
 
 
 -- !query 27
 SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t)
   FROM J1_TBL AS tx
 -- !query 27 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
 -- !query 27 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero
+	1	4	one
+	2	3	two
+	3	2	three
+	4	1	four
+	5	0	five
+	6	6	six
+	7	7	seven
+	8	8	eight
+	NULL	0	zero
+	NULL	NULL	null
 
 
 -- !query 28
 SELECT udf(udf('')) AS `xxx`, udf(udf(i)), udf(j), udf(t)
   FROM J1_TBL tx
 -- !query 28 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(i as string)) as int) as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
 -- !query 28 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero
+	1	4	one
+	2	3	two
+	3	2	three
+	4	1	four
+	5	0	five
+	6	6	six
+	7	7	seven
+	8	8	eight
+	NULL	0	zero
+	NULL	NULL	null
 
 
 -- !query 29
 SELECT udf('') AS `xxx`, a, udf(udf(b)), c
   FROM J1_TBL AS t1 (a, b, c)
 -- !query 29 schema
-struct<>
+struct<xxx:string,a:int,CAST(udf(cast(cast(udf(cast(b as string)) as int) as string)) AS INT):int,c:string>
 -- !query 29 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero
+	1	4	one
+	2	3	two
+	3	2	three
+	4	1	four
+	5	0	five
+	6	6	six
+	7	7	seven
+	8	8	eight
+	NULL	0	zero
+	NULL	NULL	null
 
 
 -- !query 30
 SELECT udf('') AS `xxx`, udf(a), udf(b), udf(udf(c))
   FROM J1_TBL t1 (a, b, c)
 -- !query 30 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(c as string)) as string) as string)) AS STRING):string>
 -- !query 30 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero
+	1	4	one
+	2	3	two
+	3	2	three
+	4	1	four
+	5	0	five
+	6	6	six
+	7	7	seven
+	8	8	eight
+	NULL	0	zero
+	NULL	NULL	null
 
 
 -- !query 31
 SELECT udf('') AS `xxx`, udf(a), b, udf(c), udf(d), e
   FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e)
 -- !query 31 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,b:int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int,e:int>
 -- !query 31 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	0	NULL
+	0	NULL	zero	1	-1
+	0	NULL	zero	2	2
+	0	NULL	zero	2	4
+	0	NULL	zero	3	-3
+	0	NULL	zero	5	-5
+	0	NULL	zero	5	-5
+	0	NULL	zero	NULL	0
+	0	NULL	zero	NULL	NULL
+	1	4	one	0	NULL
+	1	4	one	1	-1
+	1	4	one	2	2
+	1	4	one	2	4
+	1	4	one	3	-3
+	1	4	one	5	-5
+	1	4	one	5	-5
+	1	4	one	NULL	0
+	1	4	one	NULL	NULL
+	2	3	two	0	NULL
+	2	3	two	1	-1
+	2	3	two	2	2
+	2	3	two	2	4
+	2	3	two	3	-3
+	2	3	two	5	-5
+	2	3	two	5	-5
+	2	3	two	NULL	0
+	2	3	two	NULL	NULL
+	3	2	three	0	NULL
+	3	2	three	1	-1
+	3	2	three	2	2
+	3	2	three	2	4
+	3	2	three	3	-3
+	3	2	three	5	-5
+	3	2	three	5	-5
+	3	2	three	NULL	0
+	3	2	three	NULL	NULL
+	4	1	four	0	NULL
+	4	1	four	1	-1
+	4	1	four	2	2
+	4	1	four	2	4
+	4	1	four	3	-3
+	4	1	four	5	-5
+	4	1	four	5	-5
+	4	1	four	NULL	0
+	4	1	four	NULL	NULL
+	5	0	five	0	NULL
+	5	0	five	1	-1
+	5	0	five	2	2
+	5	0	five	2	4
+	5	0	five	3	-3
+	5	0	five	5	-5
+	5	0	five	5	-5
+	5	0	five	NULL	0
+	5	0	five	NULL	NULL
+	6	6	six	0	NULL
+	6	6	six	1	-1
+	6	6	six	2	2
+	6	6	six	2	4
+	6	6	six	3	-3
+	6	6	six	5	-5
+	6	6	six	5	-5
+	6	6	six	NULL	0
+	6	6	six	NULL	NULL
+	7	7	seven	0	NULL
+	7	7	seven	1	-1
+	7	7	seven	2	2
+	7	7	seven	2	4
+	7	7	seven	3	-3
+	7	7	seven	5	-5
+	7	7	seven	5	-5
+	7	7	seven	NULL	0
+	7	7	seven	NULL	NULL
+	8	8	eight	0	NULL
+	8	8	eight	1	-1
+	8	8	eight	2	2
+	8	8	eight	2	4
+	8	8	eight	3	-3
+	8	8	eight	5	-5
+	8	8	eight	5	-5
+	8	8	eight	NULL	0
+	8	8	eight	NULL	NULL
+	NULL	0	zero	0	NULL
+	NULL	0	zero	1	-1
+	NULL	0	zero	2	2
+	NULL	0	zero	2	4
+	NULL	0	zero	3	-3
+	NULL	0	zero	5	-5
+	NULL	0	zero	5	-5
+	NULL	0	zero	NULL	0
+	NULL	0	zero	NULL	NULL
+	NULL	NULL	null	0	NULL
+	NULL	NULL	null	1	-1
+	NULL	NULL	null	2	2
+	NULL	NULL	null	2	4
+	NULL	NULL	null	3	-3
+	NULL	NULL	null	5	-5
+	NULL	NULL	null	5	-5
+	NULL	NULL	null	NULL	0
+	NULL	NULL	null	NULL	NULL
 
 
 -- !query 32
 SELECT udf('') AS `xxx`, *
   FROM J1_TBL CROSS JOIN J2_TBL
 -- !query 32 schema
-struct<>
+struct<xxx:string,i:int,j:int,t:string,i:int,k:int>
 -- !query 32 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	0	NULL
+	0	NULL	zero	1	-1
+	0	NULL	zero	2	2
+	0	NULL	zero	2	4
+	0	NULL	zero	3	-3
+	0	NULL	zero	5	-5
+	0	NULL	zero	5	-5
+	0	NULL	zero	NULL	0
+	0	NULL	zero	NULL	NULL
+	1	4	one	0	NULL
+	1	4	one	1	-1
+	1	4	one	2	2
+	1	4	one	2	4
+	1	4	one	3	-3
+	1	4	one	5	-5
+	1	4	one	5	-5
+	1	4	one	NULL	0
+	1	4	one	NULL	NULL
+	2	3	two	0	NULL
+	2	3	two	1	-1
+	2	3	two	2	2
+	2	3	two	2	4
+	2	3	two	3	-3
+	2	3	two	5	-5
+	2	3	two	5	-5
+	2	3	two	NULL	0
+	2	3	two	NULL	NULL
+	3	2	three	0	NULL
+	3	2	three	1	-1
+	3	2	three	2	2
+	3	2	three	2	4
+	3	2	three	3	-3
+	3	2	three	5	-5
+	3	2	three	5	-5
+	3	2	three	NULL	0
+	3	2	three	NULL	NULL
+	4	1	four	0	NULL
+	4	1	four	1	-1
+	4	1	four	2	2
+	4	1	four	2	4
+	4	1	four	3	-3
+	4	1	four	5	-5
+	4	1	four	5	-5
+	4	1	four	NULL	0
+	4	1	four	NULL	NULL
+	5	0	five	0	NULL
+	5	0	five	1	-1
+	5	0	five	2	2
+	5	0	five	2	4
+	5	0	five	3	-3
+	5	0	five	5	-5
+	5	0	five	5	-5
+	5	0	five	NULL	0
+	5	0	five	NULL	NULL
+	6	6	six	0	NULL
+	6	6	six	1	-1
+	6	6	six	2	2
+	6	6	six	2	4
+	6	6	six	3	-3
+	6	6	six	5	-5
+	6	6	six	5	-5
+	6	6	six	NULL	0
+	6	6	six	NULL	NULL
+	7	7	seven	0	NULL
+	7	7	seven	1	-1
+	7	7	seven	2	2
+	7	7	seven	2	4
+	7	7	seven	3	-3
+	7	7	seven	5	-5
+	7	7	seven	5	-5
+	7	7	seven	NULL	0
+	7	7	seven	NULL	NULL
+	8	8	eight	0	NULL
+	8	8	eight	1	-1
+	8	8	eight	2	2
+	8	8	eight	2	4
+	8	8	eight	3	-3
+	8	8	eight	5	-5
+	8	8	eight	5	-5
+	8	8	eight	NULL	0
+	8	8	eight	NULL	NULL
+	NULL	0	zero	0	NULL
+	NULL	0	zero	1	-1
+	NULL	0	zero	2	2
+	NULL	0	zero	2	4
+	NULL	0	zero	3	-3
+	NULL	0	zero	5	-5
+	NULL	0	zero	5	-5
+	NULL	0	zero	NULL	0
+	NULL	0	zero	NULL	NULL
+	NULL	NULL	null	0	NULL
+	NULL	NULL	null	1	-1
+	NULL	NULL	null	2	2
+	NULL	NULL	null	2	4
+	NULL	NULL	null	3	-3
+	NULL	NULL	null	5	-5
+	NULL	NULL	null	5	-5
+	NULL	NULL	null	NULL	0
+	NULL	NULL	null	NULL	NULL
 
 
 -- !query 33
@@ -328,17 +536,114 @@ SELECT udf('') AS `xxx`, udf(i) AS i, udf(k), udf(t) AS t
 struct<>
 -- !query 33 output
 org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+Reference 'i' is ambiguous, could be: default.j1_tbl.i, default.j2_tbl.i.; line 1 pos 29
 
 
 -- !query 34
 SELECT udf('') AS `xxx`, udf(t1.i) AS i, udf(k), udf(t)
   FROM J1_TBL t1 CROSS JOIN J2_TBL t2
 -- !query 34 schema
-struct<>
+struct<xxx:string,i:int,CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
 -- !query 34 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	-1	zero
+	0	-3	zero
+	0	-5	zero
+	0	-5	zero
+	0	0	zero
+	0	2	zero
+	0	4	zero
+	0	NULL	zero
+	0	NULL	zero
+	1	-1	one
+	1	-3	one
+	1	-5	one
+	1	-5	one
+	1	0	one
+	1	2	one
+	1	4	one
+	1	NULL	one
+	1	NULL	one
+	2	-1	two
+	2	-3	two
+	2	-5	two
+	2	-5	two
+	2	0	two
+	2	2	two
+	2	4	two
+	2	NULL	two
+	2	NULL	two
+	3	-1	three
+	3	-3	three
+	3	-5	three
+	3	-5	three
+	3	0	three
+	3	2	three
+	3	4	three
+	3	NULL	three
+	3	NULL	three
+	4	-1	four
+	4	-3	four
+	4	-5	four
+	4	-5	four
+	4	0	four
+	4	2	four
+	4	4	four
+	4	NULL	four
+	4	NULL	four
+	5	-1	five
+	5	-3	five
+	5	-5	five
+	5	-5	five
+	5	0	five
+	5	2	five
+	5	4	five
+	5	NULL	five
+	5	NULL	five
+	6	-1	six
+	6	-3	six
+	6	-5	six
+	6	-5	six
+	6	0	six
+	6	2	six
+	6	4	six
+	6	NULL	six
+	6	NULL	six
+	7	-1	seven
+	7	-3	seven
+	7	-5	seven
+	7	-5	seven
+	7	0	seven
+	7	2	seven
+	7	4	seven
+	7	NULL	seven
+	7	NULL	seven
+	8	-1	eight
+	8	-3	eight
+	8	-5	eight
+	8	-5	eight
+	8	0	eight
+	8	2	eight
+	8	4	eight
+	8	NULL	eight
+	8	NULL	eight
+	NULL	-1	null
+	NULL	-1	zero
+	NULL	-3	null
+	NULL	-3	zero
+	NULL	-5	null
+	NULL	-5	null
+	NULL	-5	zero
+	NULL	-5	zero
+	NULL	0	null
+	NULL	0	zero
+	NULL	2	null
+	NULL	2	zero
+	NULL	4	null
+	NULL	4	zero
+	NULL	NULL	null
+	NULL	NULL	null
+	NULL	NULL	zero
+	NULL	NULL	zero
 
 
 -- !query 35
@@ -346,40 +651,1036 @@ SELECT udf(udf('')) AS `xxx`, udf(udf(ii)) AS ii, udf(udf(tt)) AS tt, udf(udf(kk
   FROM (J1_TBL CROSS JOIN J2_TBL)
     AS tx (ii, jj, tt, ii2, kk)
 -- !query 35 schema
-struct<>
+struct<xxx:string,ii:int,tt:string,CAST(udf(cast(cast(udf(cast(kk as string)) as int) as string)) AS INT):int>
 -- !query 35 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 8
+	0	zero	-1
+	0	zero	-3
+	0	zero	-5
+	0	zero	-5
+	0	zero	0
+	0	zero	2
+	0	zero	4
+	0	zero	NULL
+	0	zero	NULL
+	1	one	-1
+	1	one	-3
+	1	one	-5
+	1	one	-5
+	1	one	0
+	1	one	2
+	1	one	4
+	1	one	NULL
+	1	one	NULL
+	2	two	-1
+	2	two	-3
+	2	two	-5
+	2	two	-5
+	2	two	0
+	2	two	2
+	2	two	4
+	2	two	NULL
+	2	two	NULL
+	3	three	-1
+	3	three	-3
+	3	three	-5
+	3	three	-5
+	3	three	0
+	3	three	2
+	3	three	4
+	3	three	NULL
+	3	three	NULL
+	4	four	-1
+	4	four	-3
+	4	four	-5
+	4	four	-5
+	4	four	0
+	4	four	2
+	4	four	4
+	4	four	NULL
+	4	four	NULL
+	5	five	-1
+	5	five	-3
+	5	five	-5
+	5	five	-5
+	5	five	0
+	5	five	2
+	5	five	4
+	5	five	NULL
+	5	five	NULL
+	6	six	-1
+	6	six	-3
+	6	six	-5
+	6	six	-5
+	6	six	0
+	6	six	2
+	6	six	4
+	6	six	NULL
+	6	six	NULL
+	7	seven	-1
+	7	seven	-3
+	7	seven	-5
+	7	seven	-5
+	7	seven	0
+	7	seven	2
+	7	seven	4
+	7	seven	NULL
+	7	seven	NULL
+	8	eight	-1
+	8	eight	-3
+	8	eight	-5
+	8	eight	-5
+	8	eight	0
+	8	eight	2
+	8	eight	4
+	8	eight	NULL
+	8	eight	NULL
+	NULL	null	-1
+	NULL	null	-3
+	NULL	null	-5
+	NULL	null	-5
+	NULL	null	0
+	NULL	null	2
+	NULL	null	4
+	NULL	null	NULL
+	NULL	null	NULL
+	NULL	zero	-1
+	NULL	zero	-3
+	NULL	zero	-5
+	NULL	zero	-5
+	NULL	zero	0
+	NULL	zero	2
+	NULL	zero	4
+	NULL	zero	NULL
+	NULL	zero	NULL
 
 
 -- !query 36
 SELECT udf('') AS `xxx`, udf(udf(j1_tbl.i)), udf(j), udf(t), udf(a.i), udf(a.k), udf(b.i),  udf(b.k)
   FROM J1_TBL CROSS JOIN J2_TBL a CROSS JOIN J2_TBL b
 -- !query 36 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(i as string)) as int) as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 36 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	0	NULL	0	NULL
+	0	NULL	zero	0	NULL	1	-1
+	0	NULL	zero	0	NULL	2	2
+	0	NULL	zero	0	NULL	2	4
+	0	NULL	zero	0	NULL	3	-3
+	0	NULL	zero	0	NULL	5	-5
+	0	NULL	zero	0	NULL	5	-5
+	0	NULL	zero	0	NULL	NULL	0
+	0	NULL	zero	0	NULL	NULL	NULL
+	0	NULL	zero	1	-1	0	NULL
+	0	NULL	zero	1	-1	1	-1
+	0	NULL	zero	1	-1	2	2
+	0	NULL	zero	1	-1	2	4
+	0	NULL	zero	1	-1	3	-3
+	0	NULL	zero	1	-1	5	-5
+	0	NULL	zero	1	-1	5	-5
+	0	NULL	zero	1	-1	NULL	0
+	0	NULL	zero	1	-1	NULL	NULL
+	0	NULL	zero	2	2	0	NULL
+	0	NULL	zero	2	2	1	-1
+	0	NULL	zero	2	2	2	2
+	0	NULL	zero	2	2	2	4
+	0	NULL	zero	2	2	3	-3
+	0	NULL	zero	2	2	5	-5
+	0	NULL	zero	2	2	5	-5
+	0	NULL	zero	2	2	NULL	0
+	0	NULL	zero	2	2	NULL	NULL
+	0	NULL	zero	2	4	0	NULL
+	0	NULL	zero	2	4	1	-1
+	0	NULL	zero	2	4	2	2
+	0	NULL	zero	2	4	2	4
+	0	NULL	zero	2	4	3	-3
+	0	NULL	zero	2	4	5	-5
+	0	NULL	zero	2	4	5	-5
+	0	NULL	zero	2	4	NULL	0
+	0	NULL	zero	2	4	NULL	NULL
+	0	NULL	zero	3	-3	0	NULL
+	0	NULL	zero	3	-3	1	-1
+	0	NULL	zero	3	-3	2	2
+	0	NULL	zero	3	-3	2	4
+	0	NULL	zero	3	-3	3	-3
+	0	NULL	zero	3	-3	5	-5
+	0	NULL	zero	3	-3	5	-5
+	0	NULL	zero	3	-3	NULL	0
+	0	NULL	zero	3	-3	NULL	NULL
+	0	NULL	zero	5	-5	0	NULL
+	0	NULL	zero	5	-5	0	NULL
+	0	NULL	zero	5	-5	1	-1
+	0	NULL	zero	5	-5	1	-1
+	0	NULL	zero	5	-5	2	2
+	0	NULL	zero	5	-5	2	2
+	0	NULL	zero	5	-5	2	4
+	0	NULL	zero	5	-5	2	4
+	0	NULL	zero	5	-5	3	-3
+	0	NULL	zero	5	-5	3	-3
+	0	NULL	zero	5	-5	5	-5
+	0	NULL	zero	5	-5	5	-5
+	0	NULL	zero	5	-5	5	-5
+	0	NULL	zero	5	-5	5	-5
+	0	NULL	zero	5	-5	NULL	0
+	0	NULL	zero	5	-5	NULL	0
+	0	NULL	zero	5	-5	NULL	NULL
+	0	NULL	zero	5	-5	NULL	NULL
+	0	NULL	zero	NULL	0	0	NULL
+	0	NULL	zero	NULL	0	1	-1
+	0	NULL	zero	NULL	0	2	2
+	0	NULL	zero	NULL	0	2	4
+	0	NULL	zero	NULL	0	3	-3
+	0	NULL	zero	NULL	0	5	-5
+	0	NULL	zero	NULL	0	5	-5
+	0	NULL	zero	NULL	0	NULL	0
+	0	NULL	zero	NULL	0	NULL	NULL
+	0	NULL	zero	NULL	NULL	0	NULL
+	0	NULL	zero	NULL	NULL	1	-1
+	0	NULL	zero	NULL	NULL	2	2
+	0	NULL	zero	NULL	NULL	2	4
+	0	NULL	zero	NULL	NULL	3	-3
+	0	NULL	zero	NULL	NULL	5	-5
+	0	NULL	zero	NULL	NULL	5	-5
+	0	NULL	zero	NULL	NULL	NULL	0
+	0	NULL	zero	NULL	NULL	NULL	NULL
+	1	4	one	0	NULL	0	NULL
+	1	4	one	0	NULL	1	-1
+	1	4	one	0	NULL	2	2
+	1	4	one	0	NULL	2	4
+	1	4	one	0	NULL	3	-3
+	1	4	one	0	NULL	5	-5
+	1	4	one	0	NULL	5	-5
+	1	4	one	0	NULL	NULL	0
+	1	4	one	0	NULL	NULL	NULL
+	1	4	one	1	-1	0	NULL
+	1	4	one	1	-1	1	-1
+	1	4	one	1	-1	2	2
+	1	4	one	1	-1	2	4
+	1	4	one	1	-1	3	-3
+	1	4	one	1	-1	5	-5
+	1	4	one	1	-1	5	-5
+	1	4	one	1	-1	NULL	0
+	1	4	one	1	-1	NULL	NULL
+	1	4	one	2	2	0	NULL
+	1	4	one	2	2	1	-1
+	1	4	one	2	2	2	2
+	1	4	one	2	2	2	4
+	1	4	one	2	2	3	-3
+	1	4	one	2	2	5	-5
+	1	4	one	2	2	5	-5
+	1	4	one	2	2	NULL	0
+	1	4	one	2	2	NULL	NULL
+	1	4	one	2	4	0	NULL
+	1	4	one	2	4	1	-1
+	1	4	one	2	4	2	2
+	1	4	one	2	4	2	4
+	1	4	one	2	4	3	-3
+	1	4	one	2	4	5	-5
+	1	4	one	2	4	5	-5
+	1	4	one	2	4	NULL	0
+	1	4	one	2	4	NULL	NULL
+	1	4	one	3	-3	0	NULL
+	1	4	one	3	-3	1	-1
+	1	4	one	3	-3	2	2
+	1	4	one	3	-3	2	4
+	1	4	one	3	-3	3	-3
+	1	4	one	3	-3	5	-5
+	1	4	one	3	-3	5	-5
+	1	4	one	3	-3	NULL	0
+	1	4	one	3	-3	NULL	NULL
+	1	4	one	5	-5	0	NULL
+	1	4	one	5	-5	0	NULL
+	1	4	one	5	-5	1	-1
+	1	4	one	5	-5	1	-1
+	1	4	one	5	-5	2	2
+	1	4	one	5	-5	2	2
+	1	4	one	5	-5	2	4
+	1	4	one	5	-5	2	4
+	1	4	one	5	-5	3	-3
+	1	4	one	5	-5	3	-3
+	1	4	one	5	-5	5	-5
+	1	4	one	5	-5	5	-5
+	1	4	one	5	-5	5	-5
+	1	4	one	5	-5	5	-5
+	1	4	one	5	-5	NULL	0
+	1	4	one	5	-5	NULL	0
+	1	4	one	5	-5	NULL	NULL
+	1	4	one	5	-5	NULL	NULL
+	1	4	one	NULL	0	0	NULL
+	1	4	one	NULL	0	1	-1
+	1	4	one	NULL	0	2	2
+	1	4	one	NULL	0	2	4
+	1	4	one	NULL	0	3	-3
+	1	4	one	NULL	0	5	-5
+	1	4	one	NULL	0	5	-5
+	1	4	one	NULL	0	NULL	0
+	1	4	one	NULL	0	NULL	NULL
+	1	4	one	NULL	NULL	0	NULL
+	1	4	one	NULL	NULL	1	-1
+	1	4	one	NULL	NULL	2	2
+	1	4	one	NULL	NULL	2	4
+	1	4	one	NULL	NULL	3	-3
+	1	4	one	NULL	NULL	5	-5
+	1	4	one	NULL	NULL	5	-5
+	1	4	one	NULL	NULL	NULL	0
+	1	4	one	NULL	NULL	NULL	NULL
+	2	3	two	0	NULL	0	NULL
+	2	3	two	0	NULL	1	-1
+	2	3	two	0	NULL	2	2
+	2	3	two	0	NULL	2	4
+	2	3	two	0	NULL	3	-3
+	2	3	two	0	NULL	5	-5
+	2	3	two	0	NULL	5	-5
+	2	3	two	0	NULL	NULL	0
+	2	3	two	0	NULL	NULL	NULL
+	2	3	two	1	-1	0	NULL
+	2	3	two	1	-1	1	-1
+	2	3	two	1	-1	2	2
+	2	3	two	1	-1	2	4
+	2	3	two	1	-1	3	-3
+	2	3	two	1	-1	5	-5
+	2	3	two	1	-1	5	-5
+	2	3	two	1	-1	NULL	0
+	2	3	two	1	-1	NULL	NULL
+	2	3	two	2	2	0	NULL
+	2	3	two	2	2	1	-1
+	2	3	two	2	2	2	2
+	2	3	two	2	2	2	4
+	2	3	two	2	2	3	-3
+	2	3	two	2	2	5	-5
+	2	3	two	2	2	5	-5
+	2	3	two	2	2	NULL	0
+	2	3	two	2	2	NULL	NULL
+	2	3	two	2	4	0	NULL
+	2	3	two	2	4	1	-1
+	2	3	two	2	4	2	2
+	2	3	two	2	4	2	4
+	2	3	two	2	4	3	-3
+	2	3	two	2	4	5	-5
+	2	3	two	2	4	5	-5
+	2	3	two	2	4	NULL	0
+	2	3	two	2	4	NULL	NULL
+	2	3	two	3	-3	0	NULL
+	2	3	two	3	-3	1	-1
+	2	3	two	3	-3	2	2
+	2	3	two	3	-3	2	4
+	2	3	two	3	-3	3	-3
+	2	3	two	3	-3	5	-5
+	2	3	two	3	-3	5	-5
+	2	3	two	3	-3	NULL	0
+	2	3	two	3	-3	NULL	NULL
+	2	3	two	5	-5	0	NULL
+	2	3	two	5	-5	0	NULL
+	2	3	two	5	-5	1	-1
+	2	3	two	5	-5	1	-1
+	2	3	two	5	-5	2	2
+	2	3	two	5	-5	2	2
+	2	3	two	5	-5	2	4
+	2	3	two	5	-5	2	4
+	2	3	two	5	-5	3	-3
+	2	3	two	5	-5	3	-3
+	2	3	two	5	-5	5	-5
+	2	3	two	5	-5	5	-5
+	2	3	two	5	-5	5	-5
+	2	3	two	5	-5	5	-5
+	2	3	two	5	-5	NULL	0
+	2	3	two	5	-5	NULL	0
+	2	3	two	5	-5	NULL	NULL
+	2	3	two	5	-5	NULL	NULL
+	2	3	two	NULL	0	0	NULL
+	2	3	two	NULL	0	1	-1
+	2	3	two	NULL	0	2	2
+	2	3	two	NULL	0	2	4
+	2	3	two	NULL	0	3	-3
+	2	3	two	NULL	0	5	-5
+	2	3	two	NULL	0	5	-5
+	2	3	two	NULL	0	NULL	0
+	2	3	two	NULL	0	NULL	NULL
+	2	3	two	NULL	NULL	0	NULL
+	2	3	two	NULL	NULL	1	-1
+	2	3	two	NULL	NULL	2	2
+	2	3	two	NULL	NULL	2	4
+	2	3	two	NULL	NULL	3	-3
+	2	3	two	NULL	NULL	5	-5
+	2	3	two	NULL	NULL	5	-5
+	2	3	two	NULL	NULL	NULL	0
+	2	3	two	NULL	NULL	NULL	NULL
+	3	2	three	0	NULL	0	NULL
+	3	2	three	0	NULL	1	-1
+	3	2	three	0	NULL	2	2
+	3	2	three	0	NULL	2	4
+	3	2	three	0	NULL	3	-3
+	3	2	three	0	NULL	5	-5
+	3	2	three	0	NULL	5	-5
+	3	2	three	0	NULL	NULL	0
+	3	2	three	0	NULL	NULL	NULL
+	3	2	three	1	-1	0	NULL
+	3	2	three	1	-1	1	-1
+	3	2	three	1	-1	2	2
+	3	2	three	1	-1	2	4
+	3	2	three	1	-1	3	-3
+	3	2	three	1	-1	5	-5
+	3	2	three	1	-1	5	-5
+	3	2	three	1	-1	NULL	0
+	3	2	three	1	-1	NULL	NULL
+	3	2	three	2	2	0	NULL
+	3	2	three	2	2	1	-1
+	3	2	three	2	2	2	2
+	3	2	three	2	2	2	4
+	3	2	three	2	2	3	-3
+	3	2	three	2	2	5	-5
+	3	2	three	2	2	5	-5
+	3	2	three	2	2	NULL	0
+	3	2	three	2	2	NULL	NULL
+	3	2	three	2	4	0	NULL
+	3	2	three	2	4	1	-1
+	3	2	three	2	4	2	2
+	3	2	three	2	4	2	4
+	3	2	three	2	4	3	-3
+	3	2	three	2	4	5	-5
+	3	2	three	2	4	5	-5
+	3	2	three	2	4	NULL	0
+	3	2	three	2	4	NULL	NULL
+	3	2	three	3	-3	0	NULL
+	3	2	three	3	-3	1	-1
+	3	2	three	3	-3	2	2
+	3	2	three	3	-3	2	4
+	3	2	three	3	-3	3	-3
+	3	2	three	3	-3	5	-5
+	3	2	three	3	-3	5	-5
+	3	2	three	3	-3	NULL	0
+	3	2	three	3	-3	NULL	NULL
+	3	2	three	5	-5	0	NULL
+	3	2	three	5	-5	0	NULL
+	3	2	three	5	-5	1	-1
+	3	2	three	5	-5	1	-1
+	3	2	three	5	-5	2	2
+	3	2	three	5	-5	2	2
+	3	2	three	5	-5	2	4
+	3	2	three	5	-5	2	4
+	3	2	three	5	-5	3	-3
+	3	2	three	5	-5	3	-3
+	3	2	three	5	-5	5	-5
+	3	2	three	5	-5	5	-5
+	3	2	three	5	-5	5	-5
+	3	2	three	5	-5	5	-5
+	3	2	three	5	-5	NULL	0
+	3	2	three	5	-5	NULL	0
+	3	2	three	5	-5	NULL	NULL
+	3	2	three	5	-5	NULL	NULL
+	3	2	three	NULL	0	0	NULL
+	3	2	three	NULL	0	1	-1
+	3	2	three	NULL	0	2	2
+	3	2	three	NULL	0	2	4
+	3	2	three	NULL	0	3	-3
+	3	2	three	NULL	0	5	-5
+	3	2	three	NULL	0	5	-5
+	3	2	three	NULL	0	NULL	0
+	3	2	three	NULL	0	NULL	NULL
+	3	2	three	NULL	NULL	0	NULL
+	3	2	three	NULL	NULL	1	-1
+	3	2	three	NULL	NULL	2	2
+	3	2	three	NULL	NULL	2	4
+	3	2	three	NULL	NULL	3	-3
+	3	2	three	NULL	NULL	5	-5
+	3	2	three	NULL	NULL	5	-5
+	3	2	three	NULL	NULL	NULL	0
+	3	2	three	NULL	NULL	NULL	NULL
+	4	1	four	0	NULL	0	NULL
+	4	1	four	0	NULL	1	-1
+	4	1	four	0	NULL	2	2
+	4	1	four	0	NULL	2	4
+	4	1	four	0	NULL	3	-3
+	4	1	four	0	NULL	5	-5
+	4	1	four	0	NULL	5	-5
+	4	1	four	0	NULL	NULL	0
+	4	1	four	0	NULL	NULL	NULL
+	4	1	four	1	-1	0	NULL
+	4	1	four	1	-1	1	-1
+	4	1	four	1	-1	2	2
+	4	1	four	1	-1	2	4
+	4	1	four	1	-1	3	-3
+	4	1	four	1	-1	5	-5
+	4	1	four	1	-1	5	-5
+	4	1	four	1	-1	NULL	0
+	4	1	four	1	-1	NULL	NULL
+	4	1	four	2	2	0	NULL
+	4	1	four	2	2	1	-1
+	4	1	four	2	2	2	2
+	4	1	four	2	2	2	4
+	4	1	four	2	2	3	-3
+	4	1	four	2	2	5	-5
+	4	1	four	2	2	5	-5
+	4	1	four	2	2	NULL	0
+	4	1	four	2	2	NULL	NULL
+	4	1	four	2	4	0	NULL
+	4	1	four	2	4	1	-1
+	4	1	four	2	4	2	2
+	4	1	four	2	4	2	4
+	4	1	four	2	4	3	-3
+	4	1	four	2	4	5	-5
+	4	1	four	2	4	5	-5
+	4	1	four	2	4	NULL	0
+	4	1	four	2	4	NULL	NULL
+	4	1	four	3	-3	0	NULL
+	4	1	four	3	-3	1	-1
+	4	1	four	3	-3	2	2
+	4	1	four	3	-3	2	4
+	4	1	four	3	-3	3	-3
+	4	1	four	3	-3	5	-5
+	4	1	four	3	-3	5	-5
+	4	1	four	3	-3	NULL	0
+	4	1	four	3	-3	NULL	NULL
+	4	1	four	5	-5	0	NULL
+	4	1	four	5	-5	0	NULL
+	4	1	four	5	-5	1	-1
+	4	1	four	5	-5	1	-1
+	4	1	four	5	-5	2	2
+	4	1	four	5	-5	2	2
+	4	1	four	5	-5	2	4
+	4	1	four	5	-5	2	4
+	4	1	four	5	-5	3	-3
+	4	1	four	5	-5	3	-3
+	4	1	four	5	-5	5	-5
+	4	1	four	5	-5	5	-5
+	4	1	four	5	-5	5	-5
+	4	1	four	5	-5	5	-5
+	4	1	four	5	-5	NULL	0
+	4	1	four	5	-5	NULL	0
+	4	1	four	5	-5	NULL	NULL
+	4	1	four	5	-5	NULL	NULL
+	4	1	four	NULL	0	0	NULL
+	4	1	four	NULL	0	1	-1
+	4	1	four	NULL	0	2	2
+	4	1	four	NULL	0	2	4
+	4	1	four	NULL	0	3	-3
+	4	1	four	NULL	0	5	-5
+	4	1	four	NULL	0	5	-5
+	4	1	four	NULL	0	NULL	0
+	4	1	four	NULL	0	NULL	NULL
+	4	1	four	NULL	NULL	0	NULL
+	4	1	four	NULL	NULL	1	-1
+	4	1	four	NULL	NULL	2	2
+	4	1	four	NULL	NULL	2	4
+	4	1	four	NULL	NULL	3	-3
+	4	1	four	NULL	NULL	5	-5
+	4	1	four	NULL	NULL	5	-5
+	4	1	four	NULL	NULL	NULL	0
+	4	1	four	NULL	NULL	NULL	NULL
+	5	0	five	0	NULL	0	NULL
+	5	0	five	0	NULL	1	-1
+	5	0	five	0	NULL	2	2
+	5	0	five	0	NULL	2	4
+	5	0	five	0	NULL	3	-3
+	5	0	five	0	NULL	5	-5
+	5	0	five	0	NULL	5	-5
+	5	0	five	0	NULL	NULL	0
+	5	0	five	0	NULL	NULL	NULL
+	5	0	five	1	-1	0	NULL
+	5	0	five	1	-1	1	-1
+	5	0	five	1	-1	2	2
+	5	0	five	1	-1	2	4
+	5	0	five	1	-1	3	-3
+	5	0	five	1	-1	5	-5
+	5	0	five	1	-1	5	-5
+	5	0	five	1	-1	NULL	0
+	5	0	five	1	-1	NULL	NULL
+	5	0	five	2	2	0	NULL
+	5	0	five	2	2	1	-1
+	5	0	five	2	2	2	2
+	5	0	five	2	2	2	4
+	5	0	five	2	2	3	-3
+	5	0	five	2	2	5	-5
+	5	0	five	2	2	5	-5
+	5	0	five	2	2	NULL	0
+	5	0	five	2	2	NULL	NULL
+	5	0	five	2	4	0	NULL
+	5	0	five	2	4	1	-1
+	5	0	five	2	4	2	2
+	5	0	five	2	4	2	4
+	5	0	five	2	4	3	-3
+	5	0	five	2	4	5	-5
+	5	0	five	2	4	5	-5
+	5	0	five	2	4	NULL	0
+	5	0	five	2	4	NULL	NULL
+	5	0	five	3	-3	0	NULL
+	5	0	five	3	-3	1	-1
+	5	0	five	3	-3	2	2
+	5	0	five	3	-3	2	4
+	5	0	five	3	-3	3	-3
+	5	0	five	3	-3	5	-5
+	5	0	five	3	-3	5	-5
+	5	0	five	3	-3	NULL	0
+	5	0	five	3	-3	NULL	NULL
+	5	0	five	5	-5	0	NULL
+	5	0	five	5	-5	0	NULL
+	5	0	five	5	-5	1	-1
+	5	0	five	5	-5	1	-1
+	5	0	five	5	-5	2	2
+	5	0	five	5	-5	2	2
+	5	0	five	5	-5	2	4
+	5	0	five	5	-5	2	4
+	5	0	five	5	-5	3	-3
+	5	0	five	5	-5	3	-3
+	5	0	five	5	-5	5	-5
+	5	0	five	5	-5	5	-5
+	5	0	five	5	-5	5	-5
+	5	0	five	5	-5	5	-5
+	5	0	five	5	-5	NULL	0
+	5	0	five	5	-5	NULL	0
+	5	0	five	5	-5	NULL	NULL
+	5	0	five	5	-5	NULL	NULL
+	5	0	five	NULL	0	0	NULL
+	5	0	five	NULL	0	1	-1
+	5	0	five	NULL	0	2	2
+	5	0	five	NULL	0	2	4
+	5	0	five	NULL	0	3	-3
+	5	0	five	NULL	0	5	-5
+	5	0	five	NULL	0	5	-5
+	5	0	five	NULL	0	NULL	0
+	5	0	five	NULL	0	NULL	NULL
+	5	0	five	NULL	NULL	0	NULL
+	5	0	five	NULL	NULL	1	-1
+	5	0	five	NULL	NULL	2	2
+	5	0	five	NULL	NULL	2	4
+	5	0	five	NULL	NULL	3	-3
+	5	0	five	NULL	NULL	5	-5
+	5	0	five	NULL	NULL	5	-5
+	5	0	five	NULL	NULL	NULL	0
+	5	0	five	NULL	NULL	NULL	NULL
+	6	6	six	0	NULL	0	NULL
+	6	6	six	0	NULL	1	-1
+	6	6	six	0	NULL	2	2
+	6	6	six	0	NULL	2	4
+	6	6	six	0	NULL	3	-3
+	6	6	six	0	NULL	5	-5
+	6	6	six	0	NULL	5	-5
+	6	6	six	0	NULL	NULL	0
+	6	6	six	0	NULL	NULL	NULL
+	6	6	six	1	-1	0	NULL
+	6	6	six	1	-1	1	-1
+	6	6	six	1	-1	2	2
+	6	6	six	1	-1	2	4
+	6	6	six	1	-1	3	-3
+	6	6	six	1	-1	5	-5
+	6	6	six	1	-1	5	-5
+	6	6	six	1	-1	NULL	0
+	6	6	six	1	-1	NULL	NULL
+	6	6	six	2	2	0	NULL
+	6	6	six	2	2	1	-1
+	6	6	six	2	2	2	2
+	6	6	six	2	2	2	4
+	6	6	six	2	2	3	-3
+	6	6	six	2	2	5	-5
+	6	6	six	2	2	5	-5
+	6	6	six	2	2	NULL	0
+	6	6	six	2	2	NULL	NULL
+	6	6	six	2	4	0	NULL
+	6	6	six	2	4	1	-1
+	6	6	six	2	4	2	2
+	6	6	six	2	4	2	4
+	6	6	six	2	4	3	-3
+	6	6	six	2	4	5	-5
+	6	6	six	2	4	5	-5
+	6	6	six	2	4	NULL	0
+	6	6	six	2	4	NULL	NULL
+	6	6	six	3	-3	0	NULL
+	6	6	six	3	-3	1	-1
+	6	6	six	3	-3	2	2
+	6	6	six	3	-3	2	4
+	6	6	six	3	-3	3	-3
+	6	6	six	3	-3	5	-5
+	6	6	six	3	-3	5	-5
+	6	6	six	3	-3	NULL	0
+	6	6	six	3	-3	NULL	NULL
+	6	6	six	5	-5	0	NULL
+	6	6	six	5	-5	0	NULL
+	6	6	six	5	-5	1	-1
+	6	6	six	5	-5	1	-1
+	6	6	six	5	-5	2	2
+	6	6	six	5	-5	2	2
+	6	6	six	5	-5	2	4
+	6	6	six	5	-5	2	4
+	6	6	six	5	-5	3	-3
+	6	6	six	5	-5	3	-3
+	6	6	six	5	-5	5	-5
+	6	6	six	5	-5	5	-5
+	6	6	six	5	-5	5	-5
+	6	6	six	5	-5	5	-5
+	6	6	six	5	-5	NULL	0
+	6	6	six	5	-5	NULL	0
+	6	6	six	5	-5	NULL	NULL
+	6	6	six	5	-5	NULL	NULL
+	6	6	six	NULL	0	0	NULL
+	6	6	six	NULL	0	1	-1
+	6	6	six	NULL	0	2	2
+	6	6	six	NULL	0	2	4
+	6	6	six	NULL	0	3	-3
+	6	6	six	NULL	0	5	-5
+	6	6	six	NULL	0	5	-5
+	6	6	six	NULL	0	NULL	0
+	6	6	six	NULL	0	NULL	NULL
+	6	6	six	NULL	NULL	0	NULL
+	6	6	six	NULL	NULL	1	-1
+	6	6	six	NULL	NULL	2	2
+	6	6	six	NULL	NULL	2	4
+	6	6	six	NULL	NULL	3	-3
+	6	6	six	NULL	NULL	5	-5
+	6	6	six	NULL	NULL	5	-5
+	6	6	six	NULL	NULL	NULL	0
+	6	6	six	NULL	NULL	NULL	NULL
+	7	7	seven	0	NULL	0	NULL
+	7	7	seven	0	NULL	1	-1
+	7	7	seven	0	NULL	2	2
+	7	7	seven	0	NULL	2	4
+	7	7	seven	0	NULL	3	-3
+	7	7	seven	0	NULL	5	-5
+	7	7	seven	0	NULL	5	-5
+	7	7	seven	0	NULL	NULL	0
+	7	7	seven	0	NULL	NULL	NULL
+	7	7	seven	1	-1	0	NULL
+	7	7	seven	1	-1	1	-1
+	7	7	seven	1	-1	2	2
+	7	7	seven	1	-1	2	4
+	7	7	seven	1	-1	3	-3
+	7	7	seven	1	-1	5	-5
+	7	7	seven	1	-1	5	-5
+	7	7	seven	1	-1	NULL	0
+	7	7	seven	1	-1	NULL	NULL
+	7	7	seven	2	2	0	NULL
+	7	7	seven	2	2	1	-1
+	7	7	seven	2	2	2	2
+	7	7	seven	2	2	2	4
+	7	7	seven	2	2	3	-3
+	7	7	seven	2	2	5	-5
+	7	7	seven	2	2	5	-5
+	7	7	seven	2	2	NULL	0
+	7	7	seven	2	2	NULL	NULL
+	7	7	seven	2	4	0	NULL
+	7	7	seven	2	4	1	-1
+	7	7	seven	2	4	2	2
+	7	7	seven	2	4	2	4
+	7	7	seven	2	4	3	-3
+	7	7	seven	2	4	5	-5
+	7	7	seven	2	4	5	-5
+	7	7	seven	2	4	NULL	0
+	7	7	seven	2	4	NULL	NULL
+	7	7	seven	3	-3	0	NULL
+	7	7	seven	3	-3	1	-1
+	7	7	seven	3	-3	2	2
+	7	7	seven	3	-3	2	4
+	7	7	seven	3	-3	3	-3
+	7	7	seven	3	-3	5	-5
+	7	7	seven	3	-3	5	-5
+	7	7	seven	3	-3	NULL	0
+	7	7	seven	3	-3	NULL	NULL
+	7	7	seven	5	-5	0	NULL
+	7	7	seven	5	-5	0	NULL
+	7	7	seven	5	-5	1	-1
+	7	7	seven	5	-5	1	-1
+	7	7	seven	5	-5	2	2
+	7	7	seven	5	-5	2	2
+	7	7	seven	5	-5	2	4
+	7	7	seven	5	-5	2	4
+	7	7	seven	5	-5	3	-3
+	7	7	seven	5	-5	3	-3
+	7	7	seven	5	-5	5	-5
+	7	7	seven	5	-5	5	-5
+	7	7	seven	5	-5	5	-5
+	7	7	seven	5	-5	5	-5
+	7	7	seven	5	-5	NULL	0
+	7	7	seven	5	-5	NULL	0
+	7	7	seven	5	-5	NULL	NULL
+	7	7	seven	5	-5	NULL	NULL
+	7	7	seven	NULL	0	0	NULL
+	7	7	seven	NULL	0	1	-1
+	7	7	seven	NULL	0	2	2
+	7	7	seven	NULL	0	2	4
+	7	7	seven	NULL	0	3	-3
+	7	7	seven	NULL	0	5	-5
+	7	7	seven	NULL	0	5	-5
+	7	7	seven	NULL	0	NULL	0
+	7	7	seven	NULL	0	NULL	NULL
+	7	7	seven	NULL	NULL	0	NULL
+	7	7	seven	NULL	NULL	1	-1
+	7	7	seven	NULL	NULL	2	2
+	7	7	seven	NULL	NULL	2	4
+	7	7	seven	NULL	NULL	3	-3
+	7	7	seven	NULL	NULL	5	-5
+	7	7	seven	NULL	NULL	5	-5
+	7	7	seven	NULL	NULL	NULL	0
+	7	7	seven	NULL	NULL	NULL	NULL
+	8	8	eight	0	NULL	0	NULL
+	8	8	eight	0	NULL	1	-1
+	8	8	eight	0	NULL	2	2
+	8	8	eight	0	NULL	2	4
+	8	8	eight	0	NULL	3	-3
+	8	8	eight	0	NULL	5	-5
+	8	8	eight	0	NULL	5	-5
+	8	8	eight	0	NULL	NULL	0
+	8	8	eight	0	NULL	NULL	NULL
+	8	8	eight	1	-1	0	NULL
+	8	8	eight	1	-1	1	-1
+	8	8	eight	1	-1	2	2
+	8	8	eight	1	-1	2	4
+	8	8	eight	1	-1	3	-3
+	8	8	eight	1	-1	5	-5
+	8	8	eight	1	-1	5	-5
+	8	8	eight	1	-1	NULL	0
+	8	8	eight	1	-1	NULL	NULL
+	8	8	eight	2	2	0	NULL
+	8	8	eight	2	2	1	-1
+	8	8	eight	2	2	2	2
+	8	8	eight	2	2	2	4
+	8	8	eight	2	2	3	-3
+	8	8	eight	2	2	5	-5
+	8	8	eight	2	2	5	-5
+	8	8	eight	2	2	NULL	0
+	8	8	eight	2	2	NULL	NULL
+	8	8	eight	2	4	0	NULL
+	8	8	eight	2	4	1	-1
+	8	8	eight	2	4	2	2
+	8	8	eight	2	4	2	4
+	8	8	eight	2	4	3	-3
+	8	8	eight	2	4	5	-5
+	8	8	eight	2	4	5	-5
+	8	8	eight	2	4	NULL	0
+	8	8	eight	2	4	NULL	NULL
+	8	8	eight	3	-3	0	NULL
+	8	8	eight	3	-3	1	-1
+	8	8	eight	3	-3	2	2
+	8	8	eight	3	-3	2	4
+	8	8	eight	3	-3	3	-3
+	8	8	eight	3	-3	5	-5
+	8	8	eight	3	-3	5	-5
+	8	8	eight	3	-3	NULL	0
+	8	8	eight	3	-3	NULL	NULL
+	8	8	eight	5	-5	0	NULL
+	8	8	eight	5	-5	0	NULL
+	8	8	eight	5	-5	1	-1
+	8	8	eight	5	-5	1	-1
+	8	8	eight	5	-5	2	2
+	8	8	eight	5	-5	2	2
+	8	8	eight	5	-5	2	4
+	8	8	eight	5	-5	2	4
+	8	8	eight	5	-5	3	-3
+	8	8	eight	5	-5	3	-3
+	8	8	eight	5	-5	5	-5
+	8	8	eight	5	-5	5	-5
+	8	8	eight	5	-5	5	-5
+	8	8	eight	5	-5	5	-5
+	8	8	eight	5	-5	NULL	0
+	8	8	eight	5	-5	NULL	0
+	8	8	eight	5	-5	NULL	NULL
+	8	8	eight	5	-5	NULL	NULL
+	8	8	eight	NULL	0	0	NULL
+	8	8	eight	NULL	0	1	-1
+	8	8	eight	NULL	0	2	2
+	8	8	eight	NULL	0	2	4
+	8	8	eight	NULL	0	3	-3
+	8	8	eight	NULL	0	5	-5
+	8	8	eight	NULL	0	5	-5
+	8	8	eight	NULL	0	NULL	0
+	8	8	eight	NULL	0	NULL	NULL
+	8	8	eight	NULL	NULL	0	NULL
+	8	8	eight	NULL	NULL	1	-1
+	8	8	eight	NULL	NULL	2	2
+	8	8	eight	NULL	NULL	2	4
+	8	8	eight	NULL	NULL	3	-3
+	8	8	eight	NULL	NULL	5	-5
+	8	8	eight	NULL	NULL	5	-5
+	8	8	eight	NULL	NULL	NULL	0
+	8	8	eight	NULL	NULL	NULL	NULL
+	NULL	0	zero	0	NULL	0	NULL
+	NULL	0	zero	0	NULL	1	-1
+	NULL	0	zero	0	NULL	2	2
+	NULL	0	zero	0	NULL	2	4
+	NULL	0	zero	0	NULL	3	-3
+	NULL	0	zero	0	NULL	5	-5
+	NULL	0	zero	0	NULL	5	-5
+	NULL	0	zero	0	NULL	NULL	0
+	NULL	0	zero	0	NULL	NULL	NULL
+	NULL	0	zero	1	-1	0	NULL
+	NULL	0	zero	1	-1	1	-1
+	NULL	0	zero	1	-1	2	2
+	NULL	0	zero	1	-1	2	4
+	NULL	0	zero	1	-1	3	-3
+	NULL	0	zero	1	-1	5	-5
+	NULL	0	zero	1	-1	5	-5
+	NULL	0	zero	1	-1	NULL	0
+	NULL	0	zero	1	-1	NULL	NULL
+	NULL	0	zero	2	2	0	NULL
+	NULL	0	zero	2	2	1	-1
+	NULL	0	zero	2	2	2	2
+	NULL	0	zero	2	2	2	4
+	NULL	0	zero	2	2	3	-3
+	NULL	0	zero	2	2	5	-5
+	NULL	0	zero	2	2	5	-5
+	NULL	0	zero	2	2	NULL	0
+	NULL	0	zero	2	2	NULL	NULL
+	NULL	0	zero	2	4	0	NULL
+	NULL	0	zero	2	4	1	-1
+	NULL	0	zero	2	4	2	2
+	NULL	0	zero	2	4	2	4
+	NULL	0	zero	2	4	3	-3
+	NULL	0	zero	2	4	5	-5
+	NULL	0	zero	2	4	5	-5
+	NULL	0	zero	2	4	NULL	0
+	NULL	0	zero	2	4	NULL	NULL
+	NULL	0	zero	3	-3	0	NULL
+	NULL	0	zero	3	-3	1	-1
+	NULL	0	zero	3	-3	2	2
+	NULL	0	zero	3	-3	2	4
+	NULL	0	zero	3	-3	3	-3
+	NULL	0	zero	3	-3	5	-5
+	NULL	0	zero	3	-3	5	-5
+	NULL	0	zero	3	-3	NULL	0
+	NULL	0	zero	3	-3	NULL	NULL
+	NULL	0	zero	5	-5	0	NULL
+	NULL	0	zero	5	-5	0	NULL
+	NULL	0	zero	5	-5	1	-1
+	NULL	0	zero	5	-5	1	-1
+	NULL	0	zero	5	-5	2	2
+	NULL	0	zero	5	-5	2	2
+	NULL	0	zero	5	-5	2	4
+	NULL	0	zero	5	-5	2	4
+	NULL	0	zero	5	-5	3	-3
+	NULL	0	zero	5	-5	3	-3
+	NULL	0	zero	5	-5	5	-5
+	NULL	0	zero	5	-5	5	-5
+	NULL	0	zero	5	-5	5	-5
+	NULL	0	zero	5	-5	5	-5
+	NULL	0	zero	5	-5	NULL	0
+	NULL	0	zero	5	-5	NULL	0
+	NULL	0	zero	5	-5	NULL	NULL
+	NULL	0	zero	5	-5	NULL	NULL
+	NULL	0	zero	NULL	0	0	NULL
+	NULL	0	zero	NULL	0	1	-1
+	NULL	0	zero	NULL	0	2	2
+	NULL	0	zero	NULL	0	2	4
+	NULL	0	zero	NULL	0	3	-3
+	NULL	0	zero	NULL	0	5	-5
+	NULL	0	zero	NULL	0	5	-5
+	NULL	0	zero	NULL	0	NULL	0
+	NULL	0	zero	NULL	0	NULL	NULL
+	NULL	0	zero	NULL	NULL	0	NULL
+	NULL	0	zero	NULL	NULL	1	-1
+	NULL	0	zero	NULL	NULL	2	2
+	NULL	0	zero	NULL	NULL	2	4
+	NULL	0	zero	NULL	NULL	3	-3
+	NULL	0	zero	NULL	NULL	5	-5
+	NULL	0	zero	NULL	NULL	5	-5
+	NULL	0	zero	NULL	NULL	NULL	0
+	NULL	0	zero	NULL	NULL	NULL	NULL
+	NULL	NULL	null	0	NULL	0	NULL
+	NULL	NULL	null	0	NULL	1	-1
+	NULL	NULL	null	0	NULL	2	2
+	NULL	NULL	null	0	NULL	2	4
+	NULL	NULL	null	0	NULL	3	-3
+	NULL	NULL	null	0	NULL	5	-5
+	NULL	NULL	null	0	NULL	5	-5
+	NULL	NULL	null	0	NULL	NULL	0
+	NULL	NULL	null	0	NULL	NULL	NULL
+	NULL	NULL	null	1	-1	0	NULL
+	NULL	NULL	null	1	-1	1	-1
+	NULL	NULL	null	1	-1	2	2
+	NULL	NULL	null	1	-1	2	4
+	NULL	NULL	null	1	-1	3	-3
+	NULL	NULL	null	1	-1	5	-5
+	NULL	NULL	null	1	-1	5	-5
+	NULL	NULL	null	1	-1	NULL	0
+	NULL	NULL	null	1	-1	NULL	NULL
+	NULL	NULL	null	2	2	0	NULL
+	NULL	NULL	null	2	2	1	-1
+	NULL	NULL	null	2	2	2	2
+	NULL	NULL	null	2	2	2	4
+	NULL	NULL	null	2	2	3	-3
+	NULL	NULL	null	2	2	5	-5
+	NULL	NULL	null	2	2	5	-5
+	NULL	NULL	null	2	2	NULL	0
+	NULL	NULL	null	2	2	NULL	NULL
+	NULL	NULL	null	2	4	0	NULL
+	NULL	NULL	null	2	4	1	-1
+	NULL	NULL	null	2	4	2	2
+	NULL	NULL	null	2	4	2	4
+	NULL	NULL	null	2	4	3	-3
+	NULL	NULL	null	2	4	5	-5
+	NULL	NULL	null	2	4	5	-5
+	NULL	NULL	null	2	4	NULL	0
+	NULL	NULL	null	2	4	NULL	NULL
+	NULL	NULL	null	3	-3	0	NULL
+	NULL	NULL	null	3	-3	1	-1
+	NULL	NULL	null	3	-3	2	2
+	NULL	NULL	null	3	-3	2	4
+	NULL	NULL	null	3	-3	3	-3
+	NULL	NULL	null	3	-3	5	-5
+	NULL	NULL	null	3	-3	5	-5
+	NULL	NULL	null	3	-3	NULL	0
+	NULL	NULL	null	3	-3	NULL	NULL
+	NULL	NULL	null	5	-5	0	NULL
+	NULL	NULL	null	5	-5	0	NULL
+	NULL	NULL	null	5	-5	1	-1
+	NULL	NULL	null	5	-5	1	-1
+	NULL	NULL	null	5	-5	2	2
+	NULL	NULL	null	5	-5	2	2
+	NULL	NULL	null	5	-5	2	4
+	NULL	NULL	null	5	-5	2	4
+	NULL	NULL	null	5	-5	3	-3
+	NULL	NULL	null	5	-5	3	-3
+	NULL	NULL	null	5	-5	5	-5
+	NULL	NULL	null	5	-5	5	-5
+	NULL	NULL	null	5	-5	5	-5
+	NULL	NULL	null	5	-5	5	-5
+	NULL	NULL	null	5	-5	NULL	0
+	NULL	NULL	null	5	-5	NULL	0
+	NULL	NULL	null	5	-5	NULL	NULL
+	NULL	NULL	null	5	-5	NULL	NULL
+	NULL	NULL	null	NULL	0	0	NULL
+	NULL	NULL	null	NULL	0	1	-1
+	NULL	NULL	null	NULL	0	2	2
+	NULL	NULL	null	NULL	0	2	4
+	NULL	NULL	null	NULL	0	3	-3
+	NULL	NULL	null	NULL	0	5	-5
+	NULL	NULL	null	NULL	0	5	-5
+	NULL	NULL	null	NULL	0	NULL	0
+	NULL	NULL	null	NULL	0	NULL	NULL
+	NULL	NULL	null	NULL	NULL	0	NULL
+	NULL	NULL	null	NULL	NULL	1	-1
+	NULL	NULL	null	NULL	NULL	2	2
+	NULL	NULL	null	NULL	NULL	2	4
+	NULL	NULL	null	NULL	NULL	3	-3
+	NULL	NULL	null	NULL	NULL	5	-5
+	NULL	NULL	null	NULL	NULL	5	-5
+	NULL	NULL	null	NULL	NULL	NULL	0
+	NULL	NULL	null	NULL	NULL	NULL	NULL
 
 
 -- !query 37
 SELECT udf('') AS `xxx`, udf(i) AS i, udf(j), udf(t) AS t, udf(k)
   FROM J1_TBL INNER JOIN J2_TBL USING (i)
 -- !query 37 schema
-struct<>
+struct<xxx:string,i:int,CAST(udf(cast(j as string)) AS INT):int,t:string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 37 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	5	0	five	-5
+	5	0	five	-5
 
 
 -- !query 38
 SELECT udf(udf('')) AS `xxx`, udf(i), udf(j) AS j, udf(t), udf(k) AS k
   FROM J1_TBL JOIN J2_TBL USING (i)
 -- !query 38 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,j:int,CAST(udf(cast(t as string)) AS STRING):string,k:int>
 -- !query 38 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	5	0	five	-5
+	5	0	five	-5
 
 
 -- !query 39
@@ -387,70 +1688,99 @@ SELECT udf('') AS `xxx`, *
   FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, d) USING (a)
   ORDER BY udf(udf(a)), udf(d)
 -- !query 39 schema
-struct<>
+struct<xxx:string,a:int,b:int,c:string,d:int>
 -- !query 39 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	5	0	five	-5
+	5	0	five	-5
 
 
 -- !query 40
 SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL NATURAL JOIN J2_TBL
 -- !query 40 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 40 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	5	0	five	-5
+	5	0	five	-5
 
 
 -- !query 41
 SELECT udf('') AS `xxx`, udf(udf(udf(a))) AS a, udf(b), udf(c), udf(d)
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (a, d)
 -- !query 41 schema
-struct<>
+struct<xxx:string,a:int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int>
 -- !query 41 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	5	0	five	-5
+	5	0	five	-5
 
 
 -- !query 42
 SELECT udf('') AS `xxx`, udf(udf(a)), udf(udf(b)), udf(udf(c)) AS c, udf(udf(udf(d))) AS d
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (d, a)
 -- !query 42 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(b as string)) as int) as string)) AS INT):int,c:string,d:int>
 -- !query 42 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	NULL
+	2	3	two	2
+	4	1	four	2
 
 
 -- !query 43
 SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(udf(J1_TBL.j)), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
   FROM J1_TBL JOIN J2_TBL ON (udf(J1_TBL.i) = J2_TBL.i)
 -- !query 43 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(j as string)) as int) as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 43 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	0	NULL
+	1	4	one	1	-1
+	2	3	two	2	2
+	2	3	two	2	4
+	3	2	three	3	-3
+	5	0	five	5	-5
+	5	0	five	5	-5
 
 
 -- !query 44
 SELECT udf('') AS `xxx`, udf(udf(J1_TBL.i)), udf(udf(J1_TBL.j)), udf(udf(J1_TBL.t)), J2_TBL.i, J2_TBL.k
   FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = udf(J2_TBL.k))
 -- !query 44 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(i as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(j as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(t as string)) as string) as string)) AS STRING):string,i:int,k:int>
 -- !query 44 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	NULL	0
+	2	3	two	2	2
+	4	1	four	2	4
 
 
 -- !query 45
 SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
   FROM J1_TBL JOIN J2_TBL ON (udf(J1_TBL.i) <= udf(udf(J2_TBL.k)))
 -- !query 45 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 45 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	2	2
+	0	NULL	zero	2	4
+	0	NULL	zero	NULL	0
+	1	4	one	2	2
+	1	4	one	2	4
+	2	3	two	2	2
+	2	3	two	2	4
+	3	2	three	2	4
+	4	1	four	2	4
 
 
 -- !query 46
@@ -458,10 +1788,21 @@ SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL LEFT OUTER JOIN J2_TBL USING (i)
   ORDER BY udf(udf(i)), udf(k), udf(t)
 -- !query 46 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 46 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	NULL	NULL	null	NULL
+	NULL	0	zero	NULL
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	4	1	four	NULL
+	5	0	five	-5
+	5	0	five	-5
+	6	6	six	NULL
+	7	7	seven	NULL
+	8	8	eight	NULL
 
 
 -- !query 47
@@ -469,30 +1810,55 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL LEFT JOIN J2_TBL USING (i)
   ORDER BY udf(i), udf(udf(k)), udf(t)
 -- !query 47 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 47 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	NULL	NULL	null	NULL
+	NULL	0	zero	NULL
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	4	1	four	NULL
+	5	0	five	-5
+	5	0	five	-5
+	6	6	six	NULL
+	7	7	seven	NULL
+	8	8	eight	NULL
 
 
 -- !query 48
 SELECT udf('') AS `xxx`, udf(udf(i)), udf(j), udf(t), udf(k)
   FROM J1_TBL RIGHT OUTER JOIN J2_TBL USING (i)
 -- !query 48 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(i as string)) as int) as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 48 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	5	0	five	-5
+	5	0	five	-5
+	NULL	NULL	NULL	0
+	NULL	NULL	NULL	NULL
 
 
 -- !query 49
 SELECT udf('') AS `xxx`, udf(i), udf(udf(j)), udf(t), udf(k)
   FROM J1_TBL RIGHT JOIN J2_TBL USING (i)
 -- !query 49 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(j as string)) as int) as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 49 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	5	0	five	-5
+	5	0	five	-5
+	NULL	NULL	NULL	0
+	NULL	NULL	NULL	NULL
 
 
 -- !query 50
@@ -500,10 +1866,23 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(udf(t)), udf(k)
   FROM J1_TBL FULL OUTER JOIN J2_TBL USING (i)
   ORDER BY udf(udf(i)), udf(k), udf(t)
 -- !query 50 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(t as string)) as string) as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 50 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	NULL	NULL	NULL	NULL
+	NULL	NULL	null	NULL
+	NULL	0	zero	NULL
+	NULL	NULL	NULL	0
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	4	1	four	NULL
+	5	0	five	-5
+	5	0	five	-5
+	6	6	six	NULL
+	7	7	seven	NULL
+	8	8	eight	NULL
 
 
 -- !query 51
@@ -511,30 +1890,41 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), t, udf(udf(k))
   FROM J1_TBL FULL JOIN J2_TBL USING (i)
   ORDER BY udf(udf(i)), udf(k), udf(udf(t))
 -- !query 51 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,t:string,CAST(udf(cast(cast(udf(cast(k as string)) as int) as string)) AS INT):int>
 -- !query 51 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	NULL	NULL	NULL	NULL
+	NULL	NULL	null	NULL
+	NULL	0	zero	NULL
+	NULL	NULL	NULL	0
+	0	NULL	zero	NULL
+	1	4	one	-1
+	2	3	two	2
+	2	3	two	4
+	3	2	three	-3
+	4	1	four	NULL
+	5	0	five	-5
+	5	0	five	-5
+	6	6	six	NULL
+	7	7	seven	NULL
+	8	8	eight	NULL
 
 
 -- !query 52
 SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(udf(k))
   FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (udf(k) = 1)
 -- !query 52 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(cast(udf(cast(k as string)) as int) as string)) AS INT):int>
 -- !query 52 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+
 
 
 -- !query 53
 SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (udf(udf(i)) = udf(1))
 -- !query 53 schema
-struct<>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 53 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL; line 2 pos 7
+	1	4	one	-1
 
 
 -- !query 54
@@ -542,8 +1932,7 @@ CREATE TABLE t1 (name STRING, n INTEGER) USING parquet
 -- !query 54 schema
 struct<>
 -- !query 54 output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`t1`'). The associated location('file:/Users/Kent/Documents/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t1') already exists.;
+
 
 
 -- !query 55
@@ -551,8 +1940,7 @@ CREATE TABLE t2 (name STRING, n INTEGER) USING parquet
 -- !query 55 schema
 struct<>
 -- !query 55 output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`t2`'). The associated location('file:/Users/Kent/Documents/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t2') already exists.;
+
 
 
 -- !query 56
@@ -560,8 +1948,7 @@ CREATE TABLE t3 (name STRING, n INTEGER) USING parquet
 -- !query 56 schema
 struct<>
 -- !query 56 output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`t3`'). The associated location('file:/Users/Kent/Documents/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t3') already exists.;
+
 
 
 -- !query 57
@@ -569,8 +1956,7 @@ INSERT INTO t1 VALUES ( 'bb', 11 )
 -- !query 57 schema
 struct<>
 -- !query 57 output
-org.apache.spark.sql.AnalysisException
-Table not found: t1;
+
 
 
 -- !query 58
@@ -578,8 +1964,7 @@ INSERT INTO t2 VALUES ( 'bb', 12 )
 -- !query 58 schema
 struct<>
 -- !query 58 output
-org.apache.spark.sql.AnalysisException
-Table not found: t2;
+
 
 
 -- !query 59
@@ -587,8 +1972,7 @@ INSERT INTO t2 VALUES ( 'cc', 22 )
 -- !query 59 schema
 struct<>
 -- !query 59 output
-org.apache.spark.sql.AnalysisException
-Table not found: t2;
+
 
 
 -- !query 60
@@ -596,8 +1980,7 @@ INSERT INTO t2 VALUES ( 'ee', 42 )
 -- !query 60 schema
 struct<>
 -- !query 60 output
-org.apache.spark.sql.AnalysisException
-Table not found: t2;
+
 
 
 -- !query 61
@@ -605,8 +1988,7 @@ INSERT INTO t3 VALUES ( 'bb', 13 )
 -- !query 61 schema
 struct<>
 -- !query 61 output
-org.apache.spark.sql.AnalysisException
-Table not found: t3;
+
 
 
 -- !query 62
@@ -614,8 +1996,7 @@ INSERT INTO t3 VALUES ( 'cc', 23 )
 -- !query 62 schema
 struct<>
 -- !query 62 output
-org.apache.spark.sql.AnalysisException
-Table not found: t3;
+
 
 
 -- !query 63
@@ -623,17 +2004,18 @@ INSERT INTO t3 VALUES ( 'dd', 33 )
 -- !query 63 schema
 struct<>
 -- !query 63 output
-org.apache.spark.sql.AnalysisException
-Table not found: t3;
+
 
 
 -- !query 64
 SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name)
 -- !query 64 schema
-struct<>
+struct<name:string,n:int,n:int,n:int>
 -- !query 64 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t1; line 1 pos 14
+bb	11	12	13
+cc	NULL	22	23
+dd	NULL	NULL	33
+ee	NULL	42	NULL
 
 
 -- !query 65
@@ -643,10 +2025,10 @@ INNER JOIN
 (SELECT udf(udf(name)) as name, t3.n FROM t3) s3
 USING (name)
 -- !query 65 schema
-struct<>
+struct<name:string,n:int,n:int>
 -- !query 65 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t2; line 2 pos 37
+bb	12	13
+cc	22	23
 
 
 -- !query 66
@@ -656,10 +2038,11 @@ LEFT JOIN
 (SELECT udf(name) as name, t3.n FROM t3) s3
 USING (name)
 -- !query 66 schema
-struct<>
+struct<name:string,n:int,n:int>
 -- !query 66 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t2; line 2 pos 42
+bb	12	13
+cc	22	23
+ee	42	NULL
 
 
 -- !query 67
@@ -669,10 +2052,12 @@ FULL JOIN
 (SELECT * FROM t3) s3
 USING (name)
 -- !query 67 schema
-struct<>
+struct<CAST(udf(cast(name as string)) AS STRING):string,CAST(udf(cast(cast(udf(cast(n as string)) as int) as string)) AS INT):int,CAST(udf(cast(n as string)) AS INT):int>
 -- !query 67 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t2; line 2 pos 15
+bb	12	13
+cc	22	23
+dd	NULL	33
+ee	42	NULL
 
 
 -- !query 68
@@ -681,10 +2066,10 @@ SELECT * FROM
 NATURAL INNER JOIN
 (SELECT udf(name) as name, udf(udf(n)) as s3_n, udf(3) as s3_2 FROM t3) s3
 -- !query 68 schema
-struct<>
+struct<name:string,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 68 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t2; line 2 pos 68
+bb	12	2	13	3
+cc	22	2	23	3
 
 
 -- !query 69
@@ -693,10 +2078,11 @@ SELECT * FROM
 NATURAL LEFT JOIN
 (SELECT udf(udf(name)) as name, udf(n) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query 69 schema
-struct<>
+struct<name:string,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 69 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t2; line 2 pos 63
+bb	12	2	13	3
+cc	22	2	23	3
+ee	42	2	NULL	NULL
 
 
 -- !query 70
@@ -705,10 +2091,12 @@ SELECT * FROM
 NATURAL FULL JOIN
 (SELECT udf(udf(name)) as name, udf(udf(n)) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query 70 schema
-struct<>
+struct<name:string,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 70 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t2; line 2 pos 58
+bb	12	2	13	3
+cc	22	2	23	3
+dd	NULL	NULL	33	3
+ee	42	2	NULL	NULL
 
 
 -- !query 71
@@ -719,10 +2107,9 @@ NATURAL INNER JOIN
 NATURAL INNER JOIN
 (SELECT udf(udf(udf(name))) as name, udf(n) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query 71 schema
-struct<>
+struct<name:string,s1_n:int,s1_1:int,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 71 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t1; line 2 pos 63
+bb	11	1	12	2	13	3
 
 
 -- !query 72
@@ -733,10 +2120,12 @@ NATURAL FULL JOIN
 NATURAL FULL JOIN
 (SELECT udf(udf(name)) as name, udf(n) as s3_n, udf(3) as s3_2 FROM t3) s3
 -- !query 72 schema
-struct<>
+struct<name:string,s1_n:int,s1_1:int,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 72 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t1; line 2 pos 68
+bb	11	1	12	2	13	3
+cc	NULL	NULL	22	2	23	3
+dd	NULL	NULL	NULL	NULL	33	3
+ee	NULL	NULL	42	2	NULL	NULL
 
 
 -- !query 73
@@ -749,10 +2138,12 @@ NATURAL FULL JOIN
     (SELECT name, udf(udf(n)) as s3_n FROM t3) as s3
   ) ss2
 -- !query 73 schema
-struct<>
+struct<name:string,CAST(udf(cast(cast(udf(cast(s1_n as string)) as int) as string)) AS INT):int,CAST(udf(cast(s2_n as string)) AS INT):int,CAST(udf(cast(s3_n as string)) AS INT):int>
 -- !query 73 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t1; line 2 pos 39
+bb	11	12	13
+cc	NULL	22	23
+dd	NULL	NULL	33
+ee	NULL	42	NULL
 
 
 -- !query 74
@@ -765,10 +2156,12 @@ NATURAL FULL JOIN
     (SELECT name, udf(n) as s3_n FROM t3) as s3
   ) ss2
 -- !query 74 schema
-struct<>
+struct<name:string,s1_n:int,s2_n:int,s2_2:int,s3_n:int>
 -- !query 74 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t1; line 2 pos 29
+bb	11	12	2	13
+cc	NULL	22	2	23
+dd	NULL	NULL	NULL	33
+ee	NULL	42	2	NULL
 
 
 -- !query 75
@@ -778,10 +2171,12 @@ FULL JOIN
   (SELECT name, 2 as s2_n FROM t2) as s2
 ON (udf(udf(s1_n)) = udf(s2_n))
 -- !query 75 schema
-struct<>
+struct<name:string,CAST(udf(cast(s1_n as string)) AS INT):int,name:string,CAST(udf(cast(cast(udf(cast(s2_n as string)) as int) as string)) AS INT):int>
 -- !query 75 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t1; line 2 pos 36
+NULL	NULL	bb	2
+NULL	NULL	cc	2
+NULL	NULL	ee	2
+bb	11	NULL	NULL
 
 
 -- !query 76
@@ -1016,10 +2411,27 @@ select * from
   (select * from j2_tbl order by udf(udf(j2_tbl.i)) desc, udf(j2_tbl.k) asc) j2_tbl
   on udf(j1_tbl.i) = udf(j2_tbl.i) and udf(j1_tbl.i) = udf(j2_tbl.k)
 -- !query 95 schema
-struct<>
+struct<i:int,j:int,t:string,i:int,k:int>
 -- !query 95 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: j1_tbl; line 2 pos 2
+0	NULL	zero	NULL	NULL
+1	4	one	NULL	NULL
+2	3	two	2	2
+3	2	three	NULL	NULL
+4	1	four	NULL	NULL
+5	0	five	NULL	NULL
+6	6	six	NULL	NULL
+7	7	seven	NULL	NULL
+8	8	eight	NULL	NULL
+NULL	0	zero	NULL	NULL
+NULL	NULL	NULL	0	NULL
+NULL	NULL	NULL	1	-1
+NULL	NULL	NULL	2	4
+NULL	NULL	NULL	3	-3
+NULL	NULL	NULL	5	-5
+NULL	NULL	NULL	5	-5
+NULL	NULL	NULL	NULL	0
+NULL	NULL	NULL	NULL	NULL
+NULL	NULL	null	NULL	NULL
 
 
 -- !query 96
@@ -1039,8 +2451,7 @@ DROP TABLE t1
 -- !query 97 schema
 struct<>
 -- !query 97 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t1;
+
 
 
 -- !query 98
@@ -1048,8 +2459,7 @@ DROP TABLE t2
 -- !query 98 schema
 struct<>
 -- !query 98 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t2;
+
 
 
 -- !query 99
@@ -1057,8 +2467,7 @@ DROP TABLE t3
 -- !query 99 schema
 struct<>
 -- !query 99 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t3;
+
 
 
 -- !query 100
@@ -1066,8 +2475,7 @@ DROP TABLE J1_TBL
 -- !query 100 schema
 struct<>
 -- !query 100 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J1_TBL;
+
 
 
 -- !query 101
@@ -1075,8 +2483,7 @@ DROP TABLE J2_TBL
 -- !query 101 schema
 struct<>
 -- !query 101 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: J2_TBL;
+
 
 
 -- !query 102
@@ -1141,8 +2548,7 @@ CREATE TABLE tt3(f1 int, f2 string) USING parquet
 -- !query 108 schema
 struct<>
 -- !query 108 output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`tt3`'). The associated location('file:/Users/Kent/Documents/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/tt3') already exists.;
+
 
 
 -- !query 109
@@ -1150,8 +2556,7 @@ INSERT INTO tt3 SELECT x.id, repeat('xyzzy', 100) FROM range(1,10001) x
 -- !query 109 schema
 struct<>
 -- !query 109 output
-org.apache.spark.sql.AnalysisException
-Table not found: tt3;
+
 
 
 -- !query 110
@@ -1167,8 +2572,7 @@ CREATE TABLE tt4(f1 int) USING parquet
 -- !query 111 schema
 struct<>
 -- !query 111 output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`tt4`'). The associated location('file:/Users/Kent/Documents/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/tt4') already exists.;
+
 
 
 -- !query 112
@@ -1176,8 +2580,7 @@ INSERT INTO tt4 VALUES (0),(1),(9999)
 -- !query 112 schema
 struct<>
 -- !query 112 output
-org.apache.spark.sql.AnalysisException
-Table not found: tt4;
+
 
 
 -- !query 113
@@ -1190,10 +2593,11 @@ LEFT JOIN (
 ) AS d ON udf(a.f1) = d.f1
 WHERE udf(udf(d.f1)) IS NULL
 -- !query 113 schema
-struct<>
+struct<f1:int>
 -- !query 113 output
-org.apache.spark.sql.AnalysisException
-Table or view not found: tt4; line 2 pos 5
+0
+1
+9999
 
 
 -- !query 114

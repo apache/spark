@@ -53,6 +53,7 @@
 -- from generate_series(1,6) x;
 
 -- [SPARK-27980] Ordered-Set Aggregate Functions
+-- [SPARK-28382] Array Functions: unnest
 -- select ten, mode() within group (order by string4) from tenk1 group by ten;
 
 -- select percentile_disc(array[0.25,0.5,0.75]) within group (order by x)
