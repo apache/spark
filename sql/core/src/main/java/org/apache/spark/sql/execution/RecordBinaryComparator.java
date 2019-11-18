@@ -20,9 +20,13 @@ package org.apache.spark.sql.execution;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 
-import java.nio.ByteOrder;
-
 public final class RecordBinaryComparator extends RecordComparator {
+
+  boolean isLittlenEndian;
+
+  public RecordBinaryComparator(boolean isLittlenEndian) {
+    this.isLittlenEndian = isLittlenEndian;
+  }
 
   @Override
   public int compare(
@@ -40,10 +44,10 @@ public final class RecordBinaryComparator extends RecordComparator {
     // check if stars align and we can get both offsets to be aligned
     if ((leftOff % 8) == (rightOff % 8)) {
       while ((leftOff + i) % 8 != 0 && i < leftLen) {
-        final int v1 = Platform.getByte(leftObj, leftOff + i) & 0xff;
-        final int v2 = Platform.getByte(rightObj, rightOff + i) & 0xff;
+        final int v1 = Platform.getByte(leftObj, leftOff + i);
+        final int v2 = Platform.getByte(rightObj, rightOff + i);
         if (v1 != v2) {
-          return v1 > v2 ? 1 : -1;
+          return (v1 & 0xff) > (v2 & 0xff) ? 1 : -1;
         }
         i += 1;
       }
@@ -54,11 +58,14 @@ public final class RecordBinaryComparator extends RecordComparator {
         long v1 = Platform.getLong(leftObj, leftOff + i);
         long v2 = Platform.getLong(rightObj, rightOff + i);
         if (v1 != v2) {
-          if (ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN)) {
+          if (isLittlenEndian) {
+            // if read as little-endian, we have to reverse bytes so that the long comparison result
+            // is equivalent to byte-by-byte comparison result.
+            // See discussion in https://github.com/apache/spark/pull/26548#issuecomment-554645859
             v1 = Long.reverseBytes(v1);
             v2 = Long.reverseBytes(v2);
           }
-          return v1 > v2 ? 1 : -1;
+          return Long.compareUnsigned(v1, v2);
         }
         i += 8;
       }
@@ -66,10 +73,10 @@ public final class RecordBinaryComparator extends RecordComparator {
     // this will finish off the unaligned comparisons, or do the entire aligned comparison
     // whichever is needed.
     while (i < leftLen) {
-      final int v1 = Platform.getByte(leftObj, leftOff + i) & 0xff;
-      final int v2 = Platform.getByte(rightObj, rightOff + i) & 0xff;
+      final int v1 = Platform.getByte(leftObj, leftOff + i);
+      final int v2 = Platform.getByte(rightObj, rightOff + i);
       if (v1 != v2) {
-        return v1 > v2 ? 1 : -1;
+        return (v1 & 0xff) > (v2 & 0xff) ? 1 : -1;
       }
       i += 1;
     }

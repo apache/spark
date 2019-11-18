@@ -56,8 +56,8 @@ public class RecordBinaryComparatorSuite {
 
   @Before
   public void beforeEach() {
-    // Only compare between two input rows.
-    array = consumer.allocateArray(2);
+    // At most three input rows
+    array = consumer.allocateArray(3);
     pos = 0;
 
     dataPage = memoryManager.allocatePage(4096, consumer);
@@ -88,7 +88,7 @@ public class RecordBinaryComparatorSuite {
     Platform.copyMemory(recordBase, recordOffset, baseObject, pageCursor, recordLength);
     pageCursor += recordLength;
 
-    assert(pos < 2);
+    assert(pos < 3);
     array.set(pos, recordAddress);
     pos++;
   }
@@ -108,7 +108,7 @@ public class RecordBinaryComparatorSuite {
         baseOffset2, recordLength2);
   }
 
-  private final RecordComparator binaryComparator = new RecordBinaryComparator();
+  private final RecordComparator binaryComparator = new RecordBinaryComparator(true);
 
   // Compute the most compact size for UnsafeRow's backing data.
   private int computeSizeInBytes(int originalSize) {
@@ -320,5 +320,69 @@ public class RecordBinaryComparatorSuite {
     insertRow(row2);
 
     assert(compare(0, 1) < 0);
+  }
+
+  @Test
+  public void testBinaryComparatorGenerateSameResultBetweenComparedByteByByteAndComparedByLong() throws Exception {
+    int numFields = 1;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
+    byte[] data1 = new byte[100];
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
+    row1.setLong(0, 0x0800000000000000L);
+
+    UnsafeRow row2 = new UnsafeRow(numFields);
+    byte[] data2 = new byte[100];
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
+    row2.setLong(0, 0x0000008000000000L);
+
+    UnsafeRow row3 = new UnsafeRow(numFields);
+    byte[] data3 = new byte[100];
+    row3.pointTo(data3, computeSizeInBytes(numFields * 8));
+    row3.setLong(0, 0x0000008000000000L);
+
+    insertRow(row1);
+    insertRow(row2);
+    insertRow(row3);
+
+    // the bytes in row2 and row3 are the same.
+    // the base offset of row1 is 20, row2 is 40, row3 is 60
+    // so the RecordBinaryComparator will compare row1 and row2 with two long comparison directly,
+    // while the comparison between row1 and row3 is started with 4 bytes byte-by-byte comparison,
+    // followed by a long comparison, and lastly 4 bytes byte-by-byte comparison.
+    assert(compare(0, 1) < 0);
+    assert(compare(0, 2) < 0);
+  }
+
+  @Test
+  public void testBinaryComparatorShouldComparedWithUnsignedLong() throws Exception {
+    int numFields = 1;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
+    byte[] data1 = new byte[100];
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
+    row1.setLong(0, 0xa000000000000000L);
+
+    UnsafeRow row2 = new UnsafeRow(numFields);
+    byte[] data2 = new byte[100];
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
+    row2.setLong(0, 0x0000000000000000L);
+
+    UnsafeRow row3 = new UnsafeRow(numFields);
+    byte[] data3 = new byte[100];
+    row3.pointTo(data3, computeSizeInBytes(numFields * 8));
+    row3.setLong(0, 0x0000000000000000L);
+
+    insertRow(row1);
+    insertRow(row2);
+    insertRow(row3);
+
+    // the bytes in row2 and row3 are the same.
+    // the base offset of row1 is 20, row2 is 40, row3 is 60
+    // so the RecordBinaryComparator will compare row1 and row2 with two long comparison directly,
+    // while the comparison between row1 and row3 is started with 4 bytes byte-by-byte comparison,
+    // followed by a long comparison, and lastly 4 bytes byte-by-byte comparison.
+    assert(compare(0, 1) > 0);
+    assert(compare(0, 2) > 0);
   }
 }
