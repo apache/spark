@@ -187,7 +187,7 @@ case class FileSourceScanExec(
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf)
 
-  lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
+  private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
 
   /**
    * Send the driver-side metrics. Before calling this function, selectedPartitions has
