@@ -298,4 +298,68 @@ class IntervalUtilsSuite extends SparkFunSuite {
       new CalendarInterval(-2, 0, -1 * MICROS_PER_HOUR))
     intercept[ArithmeticException](justifyInterval(new CalendarInterval(2, 0, Long.MaxValue)))
   }
+
+  test("to ansi sql standard string") {
+    val i1 = new CalendarInterval(0, 0, 0)
+    assert(IntervalUtils.toSqlStandardString(i1) === "0")
+    val i2 = new CalendarInterval(34, 0, 0)
+    assert(IntervalUtils.toSqlStandardString(i2) === "+2-10")
+    val i3 = new CalendarInterval(-34, 0, 0)
+    assert(IntervalUtils.toSqlStandardString(i3) === "-2-10")
+    val i4 = new CalendarInterval(0, 31, 0)
+    assert(IntervalUtils.toSqlStandardString(i4) === "+31")
+    val i5 = new CalendarInterval(0, -31, 0)
+    assert(IntervalUtils.toSqlStandardString(i5) === "-31")
+    val i6 = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toSqlStandardString(i6) === "+3:13:00.000123")
+    val i7 = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123)
+    assert(IntervalUtils.toSqlStandardString(i7) === "-3:13:00.000123")
+    val i8 = new CalendarInterval(-34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toSqlStandardString(i8) === "-2-10 +31 +3:13:00.000123")
+    val i9 = new CalendarInterval(0, 0, -3000 * MICROS_PER_HOUR)
+    assert(IntervalUtils.toSqlStandardString(i9) === "-3000:00:00")
+  }
+
+  test("to iso 8601 string") {
+    val i1 = new CalendarInterval(0, 0, 0)
+    assert(IntervalUtils.toIso8601String(i1) === "PT0S")
+    val i2 = new CalendarInterval(34, 0, 0)
+    assert(IntervalUtils.toIso8601String(i2) === "P2Y10M")
+    val i3 = new CalendarInterval(-34, 0, 0)
+    assert(IntervalUtils.toIso8601String(i3) === "P-2Y-10M")
+    val i4 = new CalendarInterval(0, 31, 0)
+    assert(IntervalUtils.toIso8601String(i4) === "P31D")
+    val i5 = new CalendarInterval(0, -31, 0)
+    assert(IntervalUtils.toIso8601String(i5) === "P-31D")
+    val i6 = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toIso8601String(i6) === "PT3H13M0.000123S")
+    val i7 = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123)
+    assert(IntervalUtils.toIso8601String(i7) === "PT-3H-13M-0.000123S")
+    val i8 = new CalendarInterval(-34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toIso8601String(i8) === "P-2Y-10M31DT3H13M0.000123S")
+    val i9 = new CalendarInterval(0, 0, -3000 * MICROS_PER_HOUR)
+    assert(IntervalUtils.toIso8601String(i9) === "PT-3000H")
+  }
+
+  test("to multi units string") {
+    val i1 = new CalendarInterval(0, 0, 0)
+    assert(IntervalUtils.toMultiUnitsString(i1) === "0 seconds")
+    val i2 = new CalendarInterval(34, 0, 0)
+    assert(IntervalUtils.toMultiUnitsString(i2) === "2 years 10 months")
+    val i3 = new CalendarInterval(-34, 0, 0)
+    assert(IntervalUtils.toMultiUnitsString(i3) === "-2 years -10 months")
+    val i4 = new CalendarInterval(0, 31, 0)
+    assert(IntervalUtils.toMultiUnitsString(i4) === "31 days")
+    val i5 = new CalendarInterval(0, -31, 0)
+    assert(IntervalUtils.toMultiUnitsString(i5) === "-31 days")
+    val i6 = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toMultiUnitsString(i6) === "3 hours 13 minutes 0.000123 seconds")
+    val i7 = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123)
+    assert(IntervalUtils.toMultiUnitsString(i7) === "-3 hours -13 minutes -0.000123 seconds")
+    val i8 = new CalendarInterval(-34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toMultiUnitsString(i8) ===
+      "-2 years -10 months 31 days 3 hours 13 minutes 0.000123 seconds")
+    val i9 = new CalendarInterval(0, 0, -3000 * MICROS_PER_HOUR)
+    assert(IntervalUtils.toMultiUnitsString(i9) === "-3000 hours")
+  }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -422,6 +423,111 @@ object IntervalUtils {
   def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
     if (num == 0) throw new java.lang.ArithmeticException("divide by zero")
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
+  }
+
+  def toMultiUnitsString(interval: CalendarInterval): String = {
+    if (interval.months == 0 && interval.days == 0 && interval.microseconds == 0) {
+      return "0 seconds"
+    }
+    val sb = new StringBuilder
+    if (interval.months != 0) {
+      appendUnit(sb, interval.months / 12, "years")
+      appendUnit(sb, interval.months % 12, "months")
+    }
+    appendUnit(sb, interval.days, "days")
+    if (interval.microseconds != 0) {
+      var rest = interval.microseconds
+      appendUnit(sb, rest / MICROS_PER_HOUR, "hours")
+      rest %= MICROS_PER_HOUR
+      appendUnit(sb, rest / MICROS_PER_MINUTE, "minutes")
+      rest %= MICROS_PER_MINUTE
+      if (rest != 0) {
+        val s = BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString
+        sb.append(s).append(" seconds ")
+      }
+    }
+    sb.setLength(sb.length - 1)
+    sb.toString
+  }
+
+  private def appendUnit(sb: StringBuilder, value: Long, unit: String): Unit = {
+    if (value != 0) sb.append(value).append(' ').append(unit).append(' ')
+  }
+
+  def toSqlStandardString(interval: CalendarInterval): String = {
+    val yearMonthPart = if (interval.months < 0) {
+      val ma = math.abs(interval.months)
+      "-" + ma / 12 + "-" + ma % 12
+    } else if (interval.months > 0) {
+      "+" + interval.months / 12 + "-" + interval.months % 12
+    } else {
+      ""
+    }
+
+    val dayPart = if (interval.days < 0) {
+      interval.days.toString
+    } else if (interval.days > 0) {
+      "+" + interval.days
+    } else {
+      ""
+    }
+
+    val timePart = if (interval.microseconds != 0) {
+      val sign = if (interval.microseconds > 0) "+" else "-"
+      val sb = new StringBuilder(sign)
+      var rest = math.abs(interval.microseconds)
+      sb.append(rest / MICROS_PER_HOUR)
+      sb.append(':')
+      rest %= MICROS_PER_HOUR
+      val minutes = rest / MICROS_PER_MINUTE;
+      if (minutes < 10) {
+        sb.append(0)
+      }
+      sb.append(minutes)
+      sb.append(':')
+      rest %= MICROS_PER_MINUTE
+      val bd = BigDecimal.valueOf(rest, 6)
+      if (bd.compareTo(new BigDecimal(10)) < 0) {
+        sb.append(0)
+      }
+      val s = bd.stripTrailingZeros().toPlainString
+      sb.append(s)
+      sb.toString()
+    } else {
+      ""
+    }
+
+    val intervalList = Seq(yearMonthPart, dayPart, timePart).filter(_.nonEmpty)
+    if (intervalList.nonEmpty) intervalList.mkString(" ") else "0"
+  }
+
+  def toIso8601String(interval: CalendarInterval): String = {
+    val sb = new StringBuilder("P")
+
+    val year = interval.months / 12
+    if (year != 0) sb.append(year + "Y")
+    val month = interval.months % 12
+    if (month != 0) sb.append(month + "M")
+
+    if (interval.days != 0) sb.append(interval.days + "D")
+
+    if (interval.microseconds != 0) {
+      sb.append('T')
+      var rest = interval.microseconds
+      val hour = rest / MICROS_PER_HOUR
+      if (hour != 0) sb.append(hour + "H")
+      rest %= MICROS_PER_HOUR
+      val minute = rest / MICROS_PER_MINUTE
+      if (minute != 0) sb.append(minute + "M")
+      rest %= MICROS_PER_MINUTE
+      if (rest != 0) {
+        val bd = BigDecimal.valueOf(rest, 6)
+        sb.append(bd.stripTrailingZeros().toPlainString + "S")
+      }
+    } else if (interval.days == 0 && interval.months == 0) {
+      sb.append("T0S")
+    }
+    sb.toString()
   }
 
   private object ParseState extends Enumeration {
