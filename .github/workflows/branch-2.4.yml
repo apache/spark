@@ -50,7 +50,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    name: Linters
+    name: Linters (Java/Scala/Python), licenses, dependencies
     steps:
     - uses: actions/checkout@master
     - uses: actions/setup-java@v1
@@ -72,3 +72,26 @@ jobs:
       run: ./dev/check-license
     - name: Dependencies
       run: ./dev/test-dependencies.sh
+
+  lintr:
+    runs-on: ubuntu-latest
+    name: Linter (R)
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions/setup-java@v1
+      with:
+        java-version: '1.8'
+    - name: install R
+      run: |
+        echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/' | sudo tee -a /etc/apt/sources.list
+        sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E298A3A825C0D65DFD57CBB651716619E084DAB9
+        sudo apt-get update
+        sudo apt-get install -y r-base r-base-dev libcurl4-openssl-dev
+    - name: install R packages
+      run: |
+        sudo Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
+        sudo Rscript -e "devtools::install_github('jimhester/lintr@v2.0.0')"
+    - name: package and install SparkR
+      run: ./R/install-dev.sh
+    - name: lint-r
+      run: ./dev/lint-r
