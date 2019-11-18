@@ -259,7 +259,7 @@ case class DropNamespace(
  * The logical plan of the DESCRIBE NAMESPACE command that works for v2 catalogs.
  */
 case class DescribeNamespace(
-    catalog: CatalogPlugin,
+    catalog: SupportsNamespaces,
     namespace: Seq[String],
     extended: Boolean) extends Command {
 
@@ -275,7 +275,7 @@ case class DescribeNamespace(
  * command that works for v2 catalogs.
  */
 case class AlterNamespaceSetProperties(
-    catalog: CatalogPlugin,
+    catalog: SupportsNamespaces,
     namespace: Seq[String],
     properties: Map[String, String]) extends Command
 

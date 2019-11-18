@@ -358,6 +358,13 @@ case class AlterNamespaceSetPropertiesStatement(
     properties: Map[String, String]) extends ParsedStatement
 
 /**
+ * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command, as parsed from SQL.
+ */
+case class AlterNamespaceSetLocationStatement(
+    namespace: Seq[String],
+    location: String) extends ParsedStatement
+
+/**
  * A SHOW NAMESPACES statement, as parsed from SQL.
  */
 case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
