@@ -187,7 +187,7 @@ case class FileSourceScanExec(
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf)
 
-  val driverMetrics: HashMap[String, Long] = HashMap.empty
+  lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
 
   /**
    * Send the driver-side metrics. Before calling this function, selectedPartitions has
@@ -325,8 +325,7 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
-  logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
+  private lazy val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
