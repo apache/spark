@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -240,7 +241,7 @@ class IsotonicRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>
         udf { feature: Double => oldModel.predict(feature) }
@@ -248,12 +249,19 @@ class IsotonicRegressionModel private[ml] (
         val idx = $(featureIndex)
         udf { features: Vector => oldModel.predict(features(idx)) }
     }
-    dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
+    dataset.withColumn($(predictionCol), predict(col($(featuresCol))),
+      outputSchema($(predictionCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false)
+    if ($(predictionCol).nonEmpty) {
+      val attr = NumericAttribute.defaultAttr
+        .withName($(predictionCol))
+      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+    }
+    outputSchema
   }
 
   @Since("1.6.0")

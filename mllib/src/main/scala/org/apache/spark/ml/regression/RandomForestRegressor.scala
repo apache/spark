@@ -214,6 +214,7 @@ class RandomForestRegressionModel private[ml] (
       val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
+        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if ($(leafCol).nonEmpty) {

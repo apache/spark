@@ -245,7 +245,8 @@ class RobustScalerModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), median.size)
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), median.size)
     }
     outputSchema
   }

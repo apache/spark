@@ -157,7 +157,8 @@ class IDFModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), idf.size)
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), idf.size)
     }
     outputSchema
   }

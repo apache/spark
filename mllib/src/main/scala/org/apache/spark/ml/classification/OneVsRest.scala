@@ -175,7 +175,7 @@ final class OneVsRestModel private[ml] (
       outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
     }
     if ($(rawPredictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(schema,
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
         $(rawPredictionCol), numClasses)
     }
     outputSchema

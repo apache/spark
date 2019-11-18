@@ -505,13 +505,13 @@ abstract class LDAModel private[ml] (
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = validateAndTransformSchema(schema)
     val k = oldLocalModel.k
-    val outputSchema = validateAndTransformSchema(schema)
     if ($(topicDistributionCol).nonEmpty) {
-      SchemaUtils.updateAttributeGroupSize(outputSchema, $(topicDistributionCol), k)
-    } else {
-      outputSchema
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(topicDistributionCol), k)
     }
+    outputSchema
   }
 
   /**

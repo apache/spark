@@ -85,7 +85,8 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), $(scalingVec).size)
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), $(scalingVec).size)
     }
     outputSchema
   }

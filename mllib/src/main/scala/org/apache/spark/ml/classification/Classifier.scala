@@ -230,7 +230,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
       numColsOutput += 1
     }
     if (getPredictionCol != "") {
-      val predUDF = if (getRawPredictionCol != "") {
+      val predCol = if (getRawPredictionCol != "") {
         udf(raw2prediction _).apply(col(getRawPredictionCol))
       } else {
         val predictUDF = udf { features: Any =>
@@ -238,7 +238,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
         }
         predictUDF(col(getFeaturesCol))
       }
-      outputData = outputData.withColumn(getPredictionCol, predUDF,
+      outputData = outputData.withColumn(getPredictionCol, predCol,
         outputSchema($(predictionCol)).metadata)
       numColsOutput += 1
     }

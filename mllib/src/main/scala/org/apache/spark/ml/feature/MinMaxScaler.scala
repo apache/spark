@@ -218,7 +218,8 @@ class MinMaxScalerModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), originalMin.size)
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), originalMin.size)
     }
     outputSchema
   }

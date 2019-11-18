@@ -143,9 +143,12 @@ class KMeansModel private[ml] (
     val k = parentModel.k
     if ($(predictionCol).nonEmpty) {
       val attr = if (k == 2) {
-        new BinaryAttribute(name = Some($(predictionCol)))
+        BinaryAttribute.defaultAttr
+          .withName($(predictionCol))
       } else {
-        new NominalAttribute(name = Some($(predictionCol)), numValues = Some(k))
+        NominalAttribute.defaultAttr
+          .withName($(predictionCol))
+          .withNumValues(k)
       }
       outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
     }

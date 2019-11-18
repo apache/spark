@@ -28,6 +28,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -358,6 +359,7 @@ class AFTSurvivalRegressionModel private[ml] (
       val predictUDF = udf { features: Vector => predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
+        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
@@ -379,6 +381,11 @@ class AFTSurvivalRegressionModel private[ml] (
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false)
+    if ($(predictionCol).nonEmpty) {
+      val attr = NumericAttribute.defaultAttr
+        .withName($(predictionCol))
+      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+    }
     if (isDefined(quantilesCol) && $(quantilesCol).nonEmpty) {
       outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
         $(quantilesCol), $(quantileProbabilities).length)

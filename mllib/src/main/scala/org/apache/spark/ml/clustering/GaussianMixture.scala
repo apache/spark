@@ -129,7 +129,8 @@ class GaussianMixtureModel private[ml] (
     if ($(predictionCol).nonEmpty) {
       if ($(probabilityCol).nonEmpty) {
         val predUDF = udf((vector: Vector) => vector.argmax)
-        outputData = outputData.withColumn($(predictionCol), predUDF(col($(probabilityCol))))
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(probabilityCol))),
+          outputSchema($(predictionCol)).metadata)
       } else {
         val predUDF = udf((vector: Vector) => predict(vector))
         outputData = outputData.withColumn($(predictionCol), predUDF(vectorCol),
@@ -151,14 +152,18 @@ class GaussianMixtureModel private[ml] (
     val k = weights.length
     if ($(predictionCol).nonEmpty) {
       val attr = if (k == 2) {
-        new BinaryAttribute(name = Some($(predictionCol)))
+        BinaryAttribute.defaultAttr
+          .withName($(predictionCol))
       } else {
-        new NominalAttribute(name = Some($(predictionCol)), numValues = Some(k))
+        NominalAttribute.defaultAttr
+          .withName($(predictionCol))
+          .withNumValues(k)
       }
       outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
     }
     if ($(probabilityCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(schema, $(probabilityCol), k)
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(probabilityCol), k)
     }
     outputSchema
   }

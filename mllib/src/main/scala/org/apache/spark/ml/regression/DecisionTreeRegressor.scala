@@ -23,6 +23,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
@@ -205,6 +206,11 @@ class DecisionTreeRegressionModel private[ml] (
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
+      val attr = NumericAttribute.defaultAttr
+        .withName($(varianceCol))
+      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+    }
     if ($(leafCol).nonEmpty) {
       outputSchema = SchemaUtils.updateMeta(outputSchema, getLeafField($(leafCol)))
     }
@@ -229,6 +235,7 @@ class DecisionTreeRegressionModel private[ml] (
       val predictVarianceUDF = udf { features: Vector => predictVariance(features) }
       predictionColNames :+= $(varianceCol)
       predictionColumns :+= predictVarianceUDF(col($(featuresCol)))
+          .as($(varianceCol), outputSchema($(varianceCol)).metadata)
     }
 
     if ($(leafCol).nonEmpty) {
