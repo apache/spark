@@ -36,8 +36,6 @@ import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.internal.config.DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED
-import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
 
