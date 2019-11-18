@@ -900,54 +900,6 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def prettyName: String = "sort_array"
 }
 
-
-/**
- * Sorts the input array in ascending order according to the natural ordering of
- * the array elements and returns it.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(array) - Sorts the input array in ascending order. The elements of the input array must
-      be orderable. Null elements will be placed at the end of the returned array.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
-       ["a","b","c","d",null]
-  """,
-  since = "2.4.0")
-// scalastyle:on line.size.limit
-case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLike {
-
-  override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
-
-  override def arrayExpression: Expression = child
-  override def nullOrder: NullOrder = NullOrder.Greatest
-
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
-      TypeCheckResult.TypeCheckSuccess
-    case ArrayType(dt, _) =>
-      val dtSimple = dt.catalogString
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
-  }
-
-  override def nullSafeEval(array: Any): Any = {
-    sortEval(array, true)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => sortCodegen(ctx, ev, c, "true"))
-  }
-
-  override def prettyName: String = "array_sort"
-}
-
 /**
  * Returns a random permutation of the given array.
  */

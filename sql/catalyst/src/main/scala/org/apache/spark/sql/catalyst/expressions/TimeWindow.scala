@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class TimeWindow(
     timeColumn: Expression,
@@ -103,7 +104,7 @@ object TimeWindow {
    *         precision.
    */
   private def getIntervalInMicroSeconds(interval: String): Long = {
-    val cal = IntervalUtils.fromString(interval)
+    val cal = IntervalUtils.stringToInterval(UTF8String.fromString(interval))
     if (cal.months != 0) {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")

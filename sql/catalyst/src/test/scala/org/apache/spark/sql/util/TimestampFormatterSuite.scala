@@ -26,6 +26,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.unsafe.types.UTF8String
 
 class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers {
 
@@ -152,6 +153,44 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       formatter.parse(" TODAY ") should be(today +- tolerance)
       val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
       formatter.parse("Tomorrow ") should be(tomorrow +- tolerance)
+    }
+  }
+
+  test("parsing timestamp strings with various seconds fractions") {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      def check(pattern: String, input: String, reference: String): Unit = {
+        val formatter = TimestampFormatter(pattern, zoneId)
+        val expected = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(reference), zoneId).get
+        val actual = formatter.parse(input)
+        assert(actual === expected)
+      }
+
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
+        "2019-10-14T09:39:07.3220000Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+        "2019-10-14T09:39:07.322000", "2019-10-14T09:39:07.322")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.00001Z")
+      check("yyyy HH:mm:ss.SSSSS", "1970 01:02:03.00004", "1970-01-01 01:02:03.00004")
+      check("yyyy HH:mm:ss.SSSS", "2019 00:00:07.0100", "2019-01-01 00:00:07.0100")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSX",
+        "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SS",
+        "2019-10-14T09:39:07.10", "2019-10-14T09:39:07.1")
+      check("yyyy-MM-dd'T'HH:mm:ss.S",
+        "2019-10-14T09:39:07.1", "2019-10-14T09:39:07.1")
+
+      try {
+        TimestampFormatter("yyyy/MM/dd HH_mm_ss.SSSSSS", zoneId)
+          .parse("2019/11/14 20#25#30.123456")
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: java.time.format.DateTimeParseException =>
+          assert(e.getMessage.contains("could not be parsed"))
+      }
     }
   }
 }
