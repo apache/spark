@@ -70,7 +70,7 @@ class ParamGridBuilderTests(SparkSessionTestCase):
             grid = (ParamGridBuilder()
                     .addGrid("must be an instance of Param", ["not", "string"])
                     .build())
-            
+
 
 class CrossValidatorTests(SparkSessionTestCase):
 
