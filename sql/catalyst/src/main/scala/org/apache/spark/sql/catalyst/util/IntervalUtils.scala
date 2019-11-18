@@ -583,7 +583,7 @@ object IntervalUtils {
             case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
               fraction += (b - '0') * fractionScale
               fractionScale /= 10
-            case ' ' if fractionScale != initialFractionScale =>
+            case ' ' if fractionScale < initialFractionScale =>
               fraction /= NANOS_PER_MICROS.toInt
               state = TRIM_BEFORE_UNIT
             case _ if '0' <= b && b <= '9' =>
