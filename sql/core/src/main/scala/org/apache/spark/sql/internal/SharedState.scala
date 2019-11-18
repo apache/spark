@@ -195,15 +195,25 @@ private[sql] class SharedState(
 
 object SharedState extends Logging {
   private def setFsUrlStreamHandlerFactory(conf: SparkConf): Unit = {
-    if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED)) {
-      try {
-        URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
-      } catch {
-        case NonFatal(e) =>
-          logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory", e)
+    if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED) && factory.isEmpty) {
+      factory.synchronized {
+        if (factory.isEmpty) {
+          try {
+            URL.setURLStreamHandlerFactory(defaultFactory)
+            factory = Some(defaultFactory)
+          } catch {
+            case NonFatal(e) =>
+              logWarning("URL.setURLStreamHandlerFactory failed to set " +
+                "FsUrlStreamHandlerFactory", e)
+          }
+        }
       }
     }
   }
+
+  @volatile private var factory: Option[FsUrlStreamHandlerFactory] = None
+
+  private lazy val defaultFactory = new FsUrlStreamHandlerFactory()
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
 
