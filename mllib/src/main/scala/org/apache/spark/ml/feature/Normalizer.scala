@@ -67,6 +67,7 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def outputDataType: DataType = new VectorUDT()
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
     if ($(inputCol).nonEmpty && $(outputCol).nonEmpty) {

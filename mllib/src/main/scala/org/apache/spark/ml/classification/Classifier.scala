@@ -20,7 +20,6 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
@@ -188,15 +187,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
     if ($(predictionCol).nonEmpty) {
-      val attr = if (numClasses == 2) {
-        BinaryAttribute.defaultAttr
-          .withName($(predictionCol))
-      } else {
-        NominalAttribute.defaultAttr
-          .withName($(predictionCol))
-          .withNumValues(numClasses)
-      }
-      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+      outputSchema = SchemaUtils.updateNumValues(schema,
+        $(predictionCol), numClasses)
     }
     if ($(rawPredictionCol).nonEmpty) {
       outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,

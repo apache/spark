@@ -23,7 +23,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.impl.Utils.EPSILON
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
@@ -149,21 +148,13 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
-    val k = weights.length
     if ($(predictionCol).nonEmpty) {
-      val attr = if (k == 2) {
-        BinaryAttribute.defaultAttr
-          .withName($(predictionCol))
-      } else {
-        NominalAttribute.defaultAttr
-          .withName($(predictionCol))
-          .withNumValues(k)
-      }
-      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), weights.length)
     }
     if ($(probabilityCol).nonEmpty) {
       outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
-        $(probabilityCol), k)
+        $(probabilityCol), weights.length)
     }
     outputSchema
   }

@@ -336,7 +336,7 @@ class CountVectorizerModel(
     if ($(outputCol).nonEmpty) {
       val attrs: Array[Attribute] = vocabulary.map(_ => new NumericAttribute)
       val field = new AttributeGroup($(outputCol), attrs).toStructField()
-      outputSchema = SchemaUtils.updateMeta(schema, field)
+      outputSchema = SchemaUtils.updateField(outputSchema, field)
     }
     outputSchema
   }

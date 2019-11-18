@@ -260,7 +260,7 @@ class GBTRegressionModel private[ml](
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
     if ($(leafCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateMeta(outputSchema, getLeafField($(leafCol)))
+      outputSchema = SchemaUtils.updateField(outputSchema, getLeafField($(leafCol)))
     }
     outputSchema
   }

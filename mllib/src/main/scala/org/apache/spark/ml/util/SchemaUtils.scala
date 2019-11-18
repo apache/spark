@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types._
 
@@ -120,18 +120,46 @@ private[spark] object SchemaUtils {
       size: Int): StructType = {
     require(size > 0)
     val attrGroup = new AttributeGroup(colName, size)
-    if (schema.fieldNames.contains(colName)) {
-      val newFields = schema.fields.map { f =>
-        if (f.name == colName) {
-          attrGroup.toStructField(f.metadata)
-        } else {
-          f
-        }
-      }
-      StructType(newFields)
+    val field = attrGroup.toStructField
+    updateField(schema, field, true)
+  }
+
+  /**
+   * Update the number of values of an existing column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param colName column name
+   * @param numValues number of values.
+   * @return new schema
+   */
+  def updateNumValues(
+      schema: StructType,
+      colName: String,
+      numValues: Int): StructType = {
+    val attr = if (numValues == 2) {
+      BinaryAttribute.defaultAttr
+        .withName(colName)
     } else {
-      appendColumn(schema, attrGroup.toStructField)
+      NominalAttribute.defaultAttr
+        .withName(colName)
+        .withNumValues(numValues)
     }
+    val field = attr.toStructField
+    updateField(schema, field, true)
+  }
+
+  /**
+   * Update the numeric meta of an existing column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param colName column name
+   * @return new schema
+   */
+  def updateNumeric(
+      schema: StructType,
+      colName: String): StructType = {
+    val attr = NumericAttribute.defaultAttr
+      .withName(colName)
+    val field = attr.toStructField
+    updateField(schema, field, true)
   }
 
   /**
@@ -140,17 +168,22 @@ private[spark] object SchemaUtils {
    * @param field struct field
    * @return new schema
    */
-  def updateMeta(
+  def updateField(
       schema: StructType,
-      field: StructField): StructType = {
+      field: StructField,
+      overrideMeta: Boolean = true): StructType = {
     if (schema.fieldNames.contains(field.name)) {
       val newFields = schema.fields.map { f =>
         if (f.name == field.name) {
-          val newMeta = new MetadataBuilder()
-            .withMetadata(field.metadata)
-            .withMetadata(f.metadata)
-            .build()
-          StructField(field.name, field.dataType, field.nullable, newMeta)
+          if (overrideMeta) {
+            field
+          } else {
+            val newMeta = new MetadataBuilder()
+              .withMetadata(field.metadata)
+              .withMetadata(f.metadata)
+              .build()
+            StructField(field.name, field.dataType, field.nullable, newMeta)
+          }
         } else {
           f
         }

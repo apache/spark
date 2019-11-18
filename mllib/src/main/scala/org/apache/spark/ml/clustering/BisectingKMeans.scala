@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -121,17 +120,9 @@ class BisectingKMeansModel private[ml] (
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
-    val k = parentModel.k
     if ($(predictionCol).nonEmpty) {
-      val attr = if (k == 2) {
-        BinaryAttribute.defaultAttr
-          .withName($(predictionCol))
-      } else {
-        NominalAttribute.defaultAttr
-          .withName($(predictionCol))
-          .withNumValues(k)
-      }
-      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), parentModel.k)
     }
     outputSchema
   }

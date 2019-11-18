@@ -22,7 +22,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -257,9 +256,7 @@ class IsotonicRegressionModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false)
     if ($(predictionCol).nonEmpty) {
-      val attr = NumericAttribute.defaultAttr
-        .withName($(predictionCol))
-      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
     }
     outputSchema
   }

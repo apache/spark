@@ -18,7 +18,6 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
@@ -226,9 +225,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false, featuresDataType)
     if ($(predictionCol).nonEmpty) {
-      val attr = NumericAttribute.defaultAttr
-        .withName($(predictionCol))
-      outputSchema = SchemaUtils.updateMeta(outputSchema, attr.toStructField)
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
     }
     outputSchema
   }
