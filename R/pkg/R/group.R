@@ -162,7 +162,7 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #' @note pivot since 2.0.0
 setMethod("pivot",
           signature(x = "GroupedData", colname = "character"),
-          function(x, colname, values = list()){
+          function(x, colname, values = list()) {
             stopifnot(length(colname) == 1)
             if (length(values) == 0) {
               result <- callJMethod(x@sgd, "pivot", colname)
