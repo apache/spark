@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.Exchange
@@ -471,6 +472,26 @@ class AdaptiveQueryExecSuite
         assert(bhj.size == 1)
         assert(bhj.head.buildSide == BuildRight)
       }
+    }
+  }
+
+  test("SPARK-29906: AQE should not introduce extra shuffle for outermost limit") {
+    var numStages = 0
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        numStages = jobStart.stageInfos.length
+      }
+    }
+    try {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        spark.sparkContext.addSparkListener(listener)
+        spark.range(0, 100, 1, numPartitions = 10).take(1)
+        spark.sparkContext.listenerBus.waitUntilEmpty()
+        // Should be only one stage since there is no shuffle.
+        assert(numStages == 1)
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
     }
   }
 }
