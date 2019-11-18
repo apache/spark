@@ -143,7 +143,7 @@ structField.jobj <- function(x, ...) {
   obj
 }
 
-checkType <- function(type) { # nolint
+checkType <- function(type) {
   if (!is.null(PRIMITIVE_TYPES[[type]])) {
     return()
   } else {

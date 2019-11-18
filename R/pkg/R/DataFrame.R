@@ -1174,7 +1174,7 @@ setMethod("dim",
 #' firstName <- names(collected)[1]
 #' }
 #' @note collect since 1.4.0
-setMethod("collect", # nolint
+setMethod("collect",
           signature(x = "SparkDataFrame"),
           function(x, stringsAsFactors = FALSE) {
             connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
@@ -2653,7 +2653,7 @@ setMethod("crossJoin",
 #' merge(df1, df2, by = NULL) # Performs a Cartesian join
 #' }
 #' @note merge since 1.5.0
-setMethod("merge", # nolint
+setMethod("merge",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, by = intersect(names(x), names(y)), by.x = by, by.y = by,
                    all = FALSE, all.x = all, all.y = all,
@@ -3865,7 +3865,7 @@ setMethod("isStreaming",
 #' }
 #' @note write.stream since 2.2.0
 #' @note experimental
-setMethod("write.stream", # nolint
+setMethod("write.stream",
           signature(df = "SparkDataFrame"),
           function(df, source = NULL, outputMode = NULL, partitionBy = NULL,
                    trigger.processingTime = NULL, trigger.once = NULL, ...) {

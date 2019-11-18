@@ -89,7 +89,7 @@ sparkR.stop <- function() {
 }
 
 # Internal function to handle creating the SparkContext.
-sparkR.sparkContext <- function( # nolint
+sparkR.sparkContext <- function(
   master = "",
   appName = "SparkR",
   sparkHome = Sys.getenv("SPARK_HOME"),

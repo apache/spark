@@ -899,7 +899,7 @@ setMethod("subtractByKey",
 #' @rdname sampleByKey
 #' @aliases sampleByKey,RDD-method
 #' @noRd
-setMethod("sampleByKey", # nolint
+setMethod("sampleByKey",
           signature(x = "RDD", withReplacement = "logical",
                     fractions = "vector", seed = "integer"),
           function(x, withReplacement, fractions, seed) {

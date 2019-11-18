@@ -160,7 +160,7 @@ isEmpty <- SparkR:::readInt(inputCon)
 computeInputElapsDiff <- 0
 outputComputeElapsDiff <- 0
 
-if (isEmpty != 0) { # nolint
+if (isEmpty != 0) {
   if (numPartitions == -1) {
     if (deserializer == "byte") {
       # Now read as many characters as described in funcLen

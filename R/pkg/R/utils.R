@@ -335,7 +335,7 @@ varargsToEnv <- function(...) {
 
 # Utility function to capture the varargs into environment object but all values are converted
 # into string.
-varargsToStrEnv <- function(...) { # nolint
+varargsToStrEnv <- function(...) {
   pairs <- list(...)
   nameList <- names(pairs)
   env <- new.env()
@@ -404,7 +404,7 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                          "OFF_HEAP" = callJStatic(storageLevelClass, "OFF_HEAP"))
 }
 
-storageLevelToString <- function(levelObj) { # nolint
+storageLevelToString <- function(levelObj) {
   useDisk <- callJMethod(levelObj, "useDisk")
   useMemory <- callJMethod(levelObj, "useMemory")
   useOffHeap <- callJMethod(levelObj, "useOffHeap")
@@ -465,7 +465,7 @@ numToInt <- function(num) {
 #   checkedFunc An environment of function objects examined during cleanClosure. It can
 #               be considered as a "name"-to-"list of functions" mapping.
 #   newEnv A new function environment to store necessary function dependencies, an output argument.
-processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) { # nolint
+processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
   nodeLen <- length(node)
 
   if (nodeLen > 1 && typeof(node) == "language") {

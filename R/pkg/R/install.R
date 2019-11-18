@@ -65,7 +65,7 @@
 #' @note install.spark since 2.1.0
 #' @seealso See available Hadoop versions:
 #'          \href{http://spark.apache.org/downloads.html}{Apache Spark}
-install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL, # nolint
+install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
                           localDir = NULL, overwrite = FALSE) {
   sparkHome <- Sys.getenv("SPARK_HOME")
   if (isSparkRShell()) {
