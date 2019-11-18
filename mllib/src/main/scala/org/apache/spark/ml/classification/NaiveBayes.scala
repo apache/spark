@@ -78,6 +78,11 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
  * (see <a href="http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html">
  * here</a>).
  * The input feature values for Multinomial NB and Bernoulli NB must be nonnegative.
+ * Since 3.0.0, it supports Complement NB which is an adaptation of the Multinomial NB. Specifically,
+ * Complement NB uses statistics from the complement of each class to compute the model's coefficients
+ * The inventors of Complement NB show empirically that the parameter estimates for CNB are more stable
+ * than those for Multinomial NB. Like Multinomial NB, the input feature values for Complement NB must
+ * be nonnegative.
  * Since 3.0.0, it also supports Gaussian NB
  * (see <a href="https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes">
  * here</a>)
@@ -239,9 +244,16 @@ class NaiveBayes @Since("1.5.0") (
     }
 
     val pi = Vectors.dense(piArray)
-    val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
-    new NaiveBayesModel(uid, pi.compressed, theta.compressed, null)
-      .setOldLabels(labelArray)
+    $(modelType) match {
+      case Multinomial | Bernoulli =>
+        val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
+        new NaiveBayesModel(uid, pi.compressed, theta.compressed, null)
+          .setOldLabels(labelArray)
+      case Complement =>
+        // Since the CNB compute the coefficient in a complement way.
+        val theta = new DenseMatrix(numLabels, numFeatures, thetaArray.map(v => -v), true)
+        new NaiveBayesModel(uid, pi.compressed, theta.compressed, null)
+    }
   }
 
   private def trainGaussianImpl(
@@ -446,21 +458,39 @@ class NaiveBayesModel private[ml] (
   override val numClasses: Int = pi.size
 
   private def multinomialCalculation(features: Vector) = {
-    NaiveBayes.requireNonnegativeValues(features)
+    requireNonnegativeValues(features)
     val prob = theta.multiply(features)
     BLAS.axpy(1.0, pi, prob)
     prob
   }
 
   private def complementCalculation(features: Vector) = {
-    NaiveBayes.requireNonnegativeValues(features)
-    val prob = theta.multiply(features)
-    BLAS.scal(-1, prob)
-    prob
+    requireNonnegativeValues(features)
+    val probArray = theta.multiply(features).toArray
+    // the following lines equal to:
+    // val logSumExp = math.log(prob.toArray.map(math.exp).sum)
+    // However, it easily returns Infinity/NaN values.
+    // Here follows 'scipy.special.logsumexp' (which is used in Scikit-Learn's ComplementNB)
+    // to compute the log of the sum of exponentials of elements in a numeric-stable way.
+    val maxProb = probArray.max
+    var sumExp = 0.0
+    var j = 0
+    while (j < probArray.length) {
+      sumExp += math.exp(probArray(j) - maxProb)
+      j += 1
+    }
+    val logSumExp = math.log(sumExp) + maxProb
+
+    j = 0
+    while (j < probArray.length) {
+      probArray(j) = probArray(j) - logSumExp
+      j += 1
+    }
+    Vectors.dense(probArray)
   }
 
   private def bernoulliCalculation(features: Vector) = {
-    NaiveBayes.requireNonnegativeValues(features)
+    requireZeroOneBernoulliValues(features)
     val prob = thetaMinusNegTheta.multiply(features)
     BLAS.axpy(1.0, pi, prob)
     BLAS.axpy(1.0, negThetaSum, prob)

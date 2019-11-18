@@ -1909,6 +1909,11 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     binary (0/1) data, it can also be used as `Bernoulli NB
     <http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html>`_.
     The input feature values for Multinomial NB and Bernoulli NB must be nonnegative.
+    Since 3.0.0, it supports Complement NB which is an adaptation of the Multinomial NB.
+    Specifically, Complement NB uses statistics from the complement of each class to compute
+    the model's coefficients. The inventors of Complement NB show empirically that the parameter
+    estimates for CNB are more stable than those for Multinomial NB. Like Multinomial NB, the
+    input feature values for Complement NB must be nonnegative.
     Since 3.0.0, it also supports Gaussian NB
     <https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes>`_.
     which can handle continuous data.
