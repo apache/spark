@@ -20,7 +20,6 @@ package org.apache.spark.sql.internal
 import java.net.URL
 import java.util.{Locale, UUID}
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.reflect.ClassTag
@@ -195,16 +194,21 @@ private[sql] class SharedState(
 }
 
 object SharedState extends Logging {
-  private val fsUrlStreamHandlerFactoryInitialized = new AtomicBoolean(false)
+  @volatile private var fsUrlStreamHandlerFactoryInitialized = false
 
   private def setFsUrlStreamHandlerFactory(conf: SparkConf): Unit = {
-    if (conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED) &&
-        !fsUrlStreamHandlerFactoryInitialized.getAndSet(true)) {
-      try {
-        URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
-      } catch {
-        case NonFatal(_) =>
-          logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+    if (!fsUrlStreamHandlerFactoryInitialized &&
+        conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED)) {
+      synchronized {
+        if (!fsUrlStreamHandlerFactoryInitialized) {
+          try {
+            URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+            fsUrlStreamHandlerFactoryInitialized = true
+          } catch {
+            case NonFatal(_) =>
+              logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+          }
+        }
       }
     }
   }
