@@ -93,7 +93,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "subquery/in-subquery/in-group-by.sql",
     "subquery/in-subquery/simple-in.sql",
     "subquery/in-subquery/in-order-by.sql",
-    "subquery/in-subquery/in-set-operations.sql"
+    "subquery/in-subquery/in-set-operations.sql",
+    // SPARK-29783: need to set conf
+    "interval-display-iso_8601.sql",
+    "interval-display-sql_standard.sql"
   )
 
   override def runQueries(
@@ -107,10 +110,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
       testCase match {
         case _: PgSQLTest =>
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
+          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
         case _: AnsiTest =>
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
+          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
         case _ =>
       }
 

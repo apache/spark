@@ -15,25 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver.ui
+package org.apache.spark.sql.internal
 
-private[ui] object ToolTips {
-  val THRIFT_SERVER_FINISH_TIME =
-    "Execution finish time, before fetching the results"
+import org.apache.spark.internal.config.ConfigBuilder
 
-  val THRIFT_SERVER_CLOSE_TIME =
-    "Operation close time after fetching the results"
+package object config {
 
-  val THRIFT_SERVER_EXECUTION =
-    "Difference between start time and finish time"
-
-  val THRIFT_SERVER_DURATION =
-    "Difference between start time and close time"
-
-  val THRIFT_SESSION_TOTAL_EXECUTE =
-    "Number of operations submitted in this session"
-
-  val THRIFT_SESSION_DURATION =
-    "Elapsed time since session start, or until closed if the session was closed"
-
+  private[spark] val DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED =
+    ConfigBuilder("spark.sql.defaultUrlStreamHandlerFactory.enabled")
+      .doc("When true, set FsUrlStreamHandlerFactory to support ADD JAR against HDFS locations")
+      .booleanConf
+      .createWithDefault(true)
 }
