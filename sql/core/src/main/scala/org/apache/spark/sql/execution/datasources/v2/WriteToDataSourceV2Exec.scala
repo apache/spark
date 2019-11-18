@@ -21,7 +21,6 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
-
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
@@ -30,9 +29,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, TableCatalog}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.connector.catalog.{Identifier, RequiresTableWriteDistribution, StagedTable, StagingTableCatalog, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.read.partitioning.{SparkHashClusteredDistribution, Distribution => V2Distribution}
+import org.apache.spark.sql.connector.write.{BatchWrite, BatchWriteRequiresDistribution, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -70,19 +71,26 @@ case class CreateTableAsSelectExec(
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
-  override protected def doExecute(): RDD[InternalRow] = {
-    if (catalog.tableExists(ident)) {
-      if (ifNotExists) {
-        return sparkContext.parallelize(Seq.empty, 1)
-      }
-
+  val table: Table = if (catalog.tableExists(ident)) {
+    if (!ifNotExists) {
       throw new TableAlreadyExistsException(ident)
     }
-
+    catalog.loadTable(ident)
+  } else {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       val schema = query.schema.asNullable
       catalog.createTable(
-        ident, schema, partitioning.toArray, properties.asJava) match {
+        ident, schema, partitioning.toArray, properties.asJava)
+    })(catchBlock = {
+      catalog.dropTable(ident)
+    })
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+
+    Utils.tryWithSafeFinallyAndFailureCallbacks({
+      val schema = query.schema.asNullable
+      table match {
         case table: SupportsWrite =>
           val writeBuilder = table.newWriteBuilder(writeOptions)
             .withInputDataSchema(schema)
@@ -101,6 +109,12 @@ case class CreateTableAsSelectExec(
     })(catchBlock = {
       catalog.dropTable(ident)
     })
+  }
+
+
+  override val requiredDistribution: Option[V2Distribution] = table match {
+    case table: RequiresTableWriteDistribution => Option(table.requiredDistribution())
+    case _ => None
   }
 }
 
@@ -122,18 +136,19 @@ case class AtomicCreateTableAsSelectExec(
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends AtomicTableWriteExec {
+  if (catalog.tableExists(ident) && !ifNotExists) {
+    throw new TableAlreadyExistsException(ident)
+  }
+  val stagedTable = catalog.stageCreate(
+    ident, query.schema.asNullable, partitioning.toArray, properties.asJava)
 
   override protected def doExecute(): RDD[InternalRow] = {
-    if (catalog.tableExists(ident)) {
-      if (ifNotExists) {
-        return sparkContext.parallelize(Seq.empty, 1)
-      }
-
-      throw new TableAlreadyExistsException(ident)
-    }
-    val stagedTable = catalog.stageCreate(
-      ident, query.schema.asNullable, partitioning.toArray, properties.asJava)
     writeToStagedTable(stagedTable, writeOptions, ident)
+  }
+
+  override val requiredDistribution = stagedTable  match {
+    case rd: RequiresTableWriteDistribution => Option(rd.requiredDistribution())
+    case _ => None
   }
 }
 
@@ -159,6 +174,14 @@ case class ReplaceTableAsSelectExec(
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
+  if (catalog.tableExists(ident)) {
+    catalog.dropTable(ident)
+  } else if (!orCreate) {
+    throw new CannotReplaceMissingTableException(ident)
+  }
+  val createdTable = catalog.createTable(
+    ident, query.schema.asNullable, partitioning.toArray, properties.asJava)
+
   override protected def doExecute(): RDD[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
     // RTAS if the catalog does not support atomic operations.
@@ -168,14 +191,7 @@ case class ReplaceTableAsSelectExec(
     // 1. Creating the new table fails,
     // 2. Writing to the new table fails,
     // 3. The table returned by catalog.createTable doesn't support writing.
-    if (catalog.tableExists(ident)) {
-      catalog.dropTable(ident)
-    } else if (!orCreate) {
-      throw new CannotReplaceMissingTableException(ident)
-    }
-    val schema = query.schema.asNullable
-    val createdTable = catalog.createTable(
-      ident, schema, partitioning.toArray, properties.asJava)
+
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       createdTable match {
         case table: SupportsWrite =>
@@ -196,6 +212,11 @@ case class ReplaceTableAsSelectExec(
     })(catchBlock = {
       catalog.dropTable(ident)
     })
+  }
+
+  override val requiredDistribution: Option[V2Distribution] = createdTable match {
+    case table: RequiresTableWriteDistribution => Option(table.requiredDistribution())
+    case _ => None
   }
 }
 
@@ -221,23 +242,29 @@ case class AtomicReplaceTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     orCreate: Boolean) extends AtomicTableWriteExec {
 
-  override protected def doExecute(): RDD[InternalRow] = {
-    val schema = query.schema.asNullable
-    val staged = if (orCreate) {
-      catalog.stageCreateOrReplace(
-        ident, schema, partitioning.toArray, properties.asJava)
-    } else if (catalog.tableExists(ident)) {
-      try {
-        catalog.stageReplace(
-          ident, schema, partitioning.toArray, properties.asJava)
-      } catch {
-        case e: NoSuchTableException =>
-          throw new CannotReplaceMissingTableException(ident, Some(e))
-      }
-    } else {
-      throw new CannotReplaceMissingTableException(ident)
+  val querySchema = query.schema.asNullable
+  val staged = if (orCreate) {
+    catalog.stageCreateOrReplace(
+      ident, querySchema, partitioning.toArray, properties.asJava)
+  } else if (catalog.tableExists(ident)) {
+    try {
+      catalog.stageReplace(
+        ident, querySchema, partitioning.toArray, properties.asJava)
+    } catch {
+      case e: NoSuchTableException =>
+        throw new CannotReplaceMissingTableException(ident, Some(e))
     }
+  } else {
+    throw new CannotReplaceMissingTableException(ident)
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
     writeToStagedTable(staged, writeOptions, ident)
+  }
+
+  override val requiredDistribution = staged match {
+    case table: RequiresTableWriteDistribution => Option(table.requiredDistribution())
+    case _ => None
   }
 }
 
@@ -253,6 +280,11 @@ case class AppendDataExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     writeWithV2(newWriteBuilder().buildForBatch())
+  }
+
+  override val requiredDistribution = table  match {
+    case rd: RequiresTableWriteDistribution => Option(rd.requiredDistribution())
+    case _ => None
   }
 }
 
@@ -288,6 +320,11 @@ case class OverwriteByExpressionExec(
         throw new SparkException(s"Table does not support overwrite by expression: $table")
     }
   }
+
+  override val requiredDistribution = table  match {
+    case rd: RequiresTableWriteDistribution => Option(rd.requiredDistribution())
+    case _ => None
+  }
 }
 
 /**
@@ -313,6 +350,11 @@ case class OverwritePartitionsDynamicExec(
         throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
     }
   }
+
+  override val requiredDistribution = table.newWriteBuilder(writeOptions) match {
+    case rd: BatchWriteRequiresDistribution => Option(rd.requiredDistribution())
+    case _ => None
+  }
 }
 
 case class WriteToDataSourceV2Exec(
@@ -323,6 +365,11 @@ case class WriteToDataSourceV2Exec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     writeWithV2(batchWrite)
+  }
+
+  override val requiredDistribution: Option[V2Distribution] = batchWrite match {
+    case rd: BatchWriteRequiresDistribution => Option(rd.requiredDistribution())
+    case _ => None
   }
 }
 
@@ -349,11 +396,23 @@ trait V2TableWriteExec extends UnaryExecNode {
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
 
+  val requiredDistribution: Option[V2Distribution]
+
   override def child: SparkPlan = query
+  override def requiredChildDistribution: Seq[Distribution] = requiredDistribution match {
+    case Some(shd: SparkHashClusteredDistribution) =>
+      Seq(HashClusteredDistribution(
+        shd.clusteredColumns
+          .map(c => query.output.resolve(Seq(c), conf.resolver)
+            .getOrElse(throw new Exception("unable to resolve required distribution column"))
+          ),
+        Option(shd.numberOfPartitions)))
+    case _ => Seq(UnspecifiedDistribution)
+  }
   override def output: Seq[Attribute] = Nil
 
   protected def writeWithV2(batchWrite: BatchWrite): RDD[InternalRow] = {
-    val writerFactory = batchWrite.createBatchWriterFactory()
+    val writerFactory: DataWriterFactory = batchWrite.createBatchWriterFactory()
     val useCommitCoordinator = batchWrite.useCommitCoordinator
     val rdd = query.execute()
     // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single

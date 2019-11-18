@@ -12,3 +12,4 @@ org.apache.spark.sql.streaming.sources.FakeReadNeitherMode
 org.apache.spark.sql.streaming.sources.FakeWriteOnly
 org.apache.spark.sql.streaming.sources.FakeNoWrite
 org.apache.spark.sql.streaming.sources.FakeWriteSupportProviderV1Fallback
+org.apache.spark.sql.connector.InsertWithDistributionTableProvider
