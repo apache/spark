@@ -82,14 +82,14 @@ public class RecordBinaryComparatorSuite {
     int recordLength = row.getSizeInBytes();
 
     Object baseObject = dataPage.getBaseObject();
-    assert(pageCursor + recordLength <= dataPage.getBaseOffset() + dataPage.size());
+    Assert.assertTrue(pageCursor + recordLength <= dataPage.getBaseOffset() + dataPage.size());
     long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, pageCursor);
     UnsafeAlignedOffset.putSize(baseObject, pageCursor, recordLength);
     pageCursor += uaoSize;
     Platform.copyMemory(recordBase, recordOffset, baseObject, pageCursor, recordLength);
     pageCursor += recordLength;
 
-    assert(pos < 2);
+    Assert.assertTrue(pos < 2);
     array.set(pos, recordAddress);
     pos++;
   }
@@ -142,8 +142,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) < 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -167,8 +167,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) < 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -194,8 +194,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) > 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -227,8 +227,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) > 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -253,8 +253,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) > 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -274,7 +274,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 1) > 0);
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -294,7 +294,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 1) < 0);
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -320,7 +320,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 1) < 0);
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
