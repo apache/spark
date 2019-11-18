@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetLocation, AlterNamespaceSetProperties, AlterTable, AppendData, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetProperties, AlterTable, AppendData, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
 import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
@@ -206,9 +206,6 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case AlterNamespaceSetProperties(catalog, namespace, properties) =>
       AlterNamespaceSetPropertiesExec(catalog, namespace, properties) :: Nil
-
-    case AlterNamespaceSetLocation(catalog, namespace, location) =>
-      AlterNamespaceSetLocationExec(catalog, namespace, location) :: Nil
 
     case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
       CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil

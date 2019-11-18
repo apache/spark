@@ -280,15 +280,6 @@ case class AlterNamespaceSetProperties(
     properties: Map[String, String]) extends Command
 
 /**
- * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION
- * command that works for v2 catalogs.
- */
-case class AlterNamespaceSetLocation(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
-    location: String) extends Command
-
-/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
