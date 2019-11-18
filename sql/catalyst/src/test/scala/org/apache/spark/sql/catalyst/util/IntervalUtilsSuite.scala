@@ -28,20 +28,31 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 class IntervalUtilsSuite extends SparkFunSuite {
 
   private def checkFromString(input: String, expected: CalendarInterval): Unit = {
-    assert(fromString(input) === expected)
     assert(stringToInterval(UTF8String.fromString(input)) === expected)
+    assert(safeStringToInterval(UTF8String.fromString(input)) === expected)
+  }
+
+  private def checkFromStringWithFunc(
+      input: String,
+      months: Int,
+      days: Int,
+      us: Long,
+      func: CalendarInterval => CalendarInterval): Unit = {
+    val expected = new CalendarInterval(months, days, us)
+    assert(func(stringToInterval(UTF8String.fromString(input))) === expected)
+    assert(func(safeStringToInterval(UTF8String.fromString(input))) === expected)
   }
 
   private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
     try {
-      fromString(input)
+      stringToInterval(UTF8String.fromString(input))
       fail("Expected to throw an exception for the invalid input")
     } catch {
       case e: IllegalArgumentException =>
         val msg = e.getMessage
         assert(msg.contains(errorMsg))
     }
-    assert(stringToInterval(UTF8String.fromString(input)) === null)
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
   private def testSingleUnit(
@@ -69,7 +80,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromInvalidString(null, "cannot be null")
 
     for (input <- Seq("", " ", "interval", "interval1 day", "foo", "foo 1 day")) {
-      checkFromInvalidString(input, "Invalid interval string")
+      checkFromInvalidString(input, "Error parsing")
     }
   }
 
@@ -93,8 +104,18 @@ class IntervalUtilsSuite extends SparkFunSuite {
     // Allow duplicated units and summarize their values
     checkFromString("1 day 10 day", new CalendarInterval(0, 11, 0))
     // Only the seconds units can have the fractional part
-    checkFromInvalidString("1.5 days", "Error parsing interval string")
-    checkFromInvalidString("1. hour", "Error parsing interval string")
+    checkFromInvalidString("1.5 days", "'days' cannot have fractional part")
+    checkFromInvalidString("1. hour", "'hour' cannot have fractional part")
+    checkFromInvalidString("1 hourX", "invalid unit 'hourx'")
+    checkFromInvalidString("~1 hour", "unrecognized number '~1'")
+    checkFromInvalidString("1 Mour", "invalid unit 'mour'")
+    checkFromInvalidString("1 aour", "invalid unit 'aour'")
+    checkFromInvalidString("1a1 hour", "invalid value '1a1'")
+    checkFromInvalidString("1.1a1 seconds", "invalid value '1.1a1'")
+    checkFromInvalidString("2234567890 days", "integer overflow")
+    checkFromInvalidString("\n", "Error parsing '\n' to interval")
+    checkFromInvalidString("\t", "Error parsing '\t' to interval")
+
   }
 
   test("string to interval: seconds with fractional part") {
@@ -107,7 +128,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     // truncate nanoseconds to microseconds
     checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 999999))
     checkFromString(".999999999 seconds", new CalendarInterval(0, 0, 999999))
-    checkFromInvalidString("0.123456789123 seconds", "Error parsing interval string")
+    checkFromInvalidString("0.123456789123 seconds", "'0.123456789123' is out of range")
   }
 
   test("from year-month string") {
@@ -174,7 +195,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   test("interval duration") {
     def duration(s: String, unit: TimeUnit, daysPerMonth: Int): Long = {
-      IntervalUtils.getDuration(fromString(s), unit, daysPerMonth)
+      IntervalUtils.getDuration(stringToInterval(UTF8String.fromString(s)), unit, daysPerMonth)
     }
 
     assert(duration("0 seconds", TimeUnit.MILLISECONDS, 31) === 0)
@@ -193,7 +214,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   test("negative interval") {
     def isNegative(s: String, daysPerMonth: Int): Boolean = {
-      IntervalUtils.isNegative(fromString(s), daysPerMonth)
+      IntervalUtils.isNegative(stringToInterval(UTF8String.fromString(s)), daysPerMonth)
     }
 
     assert(isNegative("-1 months", 28))
@@ -269,33 +290,27 @@ class IntervalUtilsSuite extends SparkFunSuite {
   }
 
   test("justify days") {
-    assert(justifyDays(fromString("1 month 35 day")) === new CalendarInterval(2, 5, 0))
-    assert(justifyDays(fromString("-1 month 35 day")) === new CalendarInterval(0, 5, 0))
-    assert(justifyDays(fromString("1 month -35 day")) === new CalendarInterval(0, -5, 0))
-    assert(justifyDays(fromString("-1 month -35 day")) === new CalendarInterval(-2, -5, 0))
-    assert(justifyDays(fromString("-1 month 2 day")) === new CalendarInterval(0, -28, 0))
+    checkFromStringWithFunc("1 month 35 day", 2, 5, 0, justifyDays)
+    checkFromStringWithFunc("-1 month 35 day", 0, 5, 0, justifyDays)
+    checkFromStringWithFunc("1 month -35 day", 0, -5, 0, justifyDays)
+    checkFromStringWithFunc("-1 month -35 day", -2, -5, 0, justifyDays)
+    checkFromStringWithFunc("-1 month 2 day", 0, -28, 0, justifyDays)
   }
 
   test("justify hours") {
-    assert(justifyHours(fromString("29 day 25 hour")) ===
-      new CalendarInterval(0, 30, 1 * MICROS_PER_HOUR))
-    assert(justifyHours(fromString("29 day -25 hour")) ===
-      new CalendarInterval(0, 27, 23 * MICROS_PER_HOUR))
-    assert(justifyHours(fromString("-29 day 25 hour")) ===
-      new CalendarInterval(0, -27, -23 * MICROS_PER_HOUR))
-    assert(justifyHours(fromString("-29 day -25 hour")) ===
-      new CalendarInterval(0, -30, -1 * MICROS_PER_HOUR))
+    checkFromStringWithFunc("29 day 25 hour", 0, 30, 1 * MICROS_PER_HOUR, justifyHours)
+    checkFromStringWithFunc("29 day -25 hour", 0, 27, 23 * MICROS_PER_HOUR, justifyHours)
+    checkFromStringWithFunc("-29 day 25 hour", 0, -27, -23 * MICROS_PER_HOUR, justifyHours)
+    checkFromStringWithFunc("-29 day -25 hour", 0, -30, -1 * MICROS_PER_HOUR, justifyHours)
   }
 
   test("justify interval") {
-    assert(justifyInterval(fromString("1 month 29 day 25 hour")) ===
-      new CalendarInterval(2, 0, 1 * MICROS_PER_HOUR))
-    assert(justifyInterval(fromString("-1 month 29 day -25 hour")) ===
-      new CalendarInterval(0, -2, -1 * MICROS_PER_HOUR))
-    assert(justifyInterval(fromString("1 month -29 day -25 hour")) ===
-      new CalendarInterval(0, 0, -1 * MICROS_PER_HOUR))
-    assert(justifyInterval(fromString("-1 month -29 day -25 hour")) ===
-      new CalendarInterval(-2, 0, -1 * MICROS_PER_HOUR))
+    checkFromStringWithFunc("1 month 29 day 25 hour", 2, 0, 1 * MICROS_PER_HOUR, justifyInterval)
+    checkFromStringWithFunc("-1 month 29 day -25 hour", 0, -2, -1 * MICROS_PER_HOUR,
+      justifyInterval)
+    checkFromStringWithFunc("1 month -29 day -25 hour", 0, 0, -1 * MICROS_PER_HOUR, justifyInterval)
+    checkFromStringWithFunc("-1 month -29 day -25 hour", -2, 0, -1 * MICROS_PER_HOUR,
+      justifyInterval)
     intercept[ArithmeticException](justifyInterval(new CalendarInterval(2, 0, Long.MaxValue)))
   }
 

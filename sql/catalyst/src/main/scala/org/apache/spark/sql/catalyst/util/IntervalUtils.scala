@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -100,34 +99,6 @@ object IntervalUtils {
     result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
     result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
     Decimal(result, 18, 6)
-  }
-
-  /**
-   * Converts a string to [[CalendarInterval]] case-insensitively.
-   *
-   * @throws IllegalArgumentException if the input string is not in valid interval format.
-   */
-  def fromString(str: String): CalendarInterval = {
-    if (str == null) throw new IllegalArgumentException("Interval string cannot be null")
-    try {
-      CatalystSqlParser.parseInterval(str)
-    } catch {
-      case e: ParseException =>
-        val ex = new IllegalArgumentException(s"Invalid interval string: $str\n" + e.message)
-        ex.setStackTrace(e.getStackTrace)
-        throw ex
-    }
-  }
-
-  /**
-   * A safe version of `fromString`. It returns null for invalid input string.
-   */
-  def safeFromString(str: String): CalendarInterval = {
-    try {
-      fromString(str)
-    } catch {
-      case _: IllegalArgumentException => null
-    }
   }
 
   private def toLongWithRange(
@@ -251,46 +222,6 @@ object IntervalUtils {
     }
   }
 
-  def fromUnitStrings(units: Array[IntervalUnit], values: Array[String]): CalendarInterval = {
-    assert(units.length == values.length)
-    var months: Int = 0
-    var days: Int = 0
-    var microseconds: Long = 0
-    var i = 0
-    while (i < units.length) {
-      try {
-        units(i) match {
-          case YEAR =>
-            months = Math.addExact(months, Math.multiplyExact(values(i).toInt, 12))
-          case MONTH =>
-            months = Math.addExact(months, values(i).toInt)
-          case WEEK =>
-            days = Math.addExact(days, Math.multiplyExact(values(i).toInt, 7))
-          case DAY =>
-            days = Math.addExact(days, values(i).toInt)
-          case HOUR =>
-            val hoursUs = Math.multiplyExact(values(i).toLong, MICROS_PER_HOUR)
-            microseconds = Math.addExact(microseconds, hoursUs)
-          case MINUTE =>
-            val minutesUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MINUTE)
-            microseconds = Math.addExact(microseconds, minutesUs)
-          case SECOND =>
-            microseconds = Math.addExact(microseconds, parseSecondNano(values(i)))
-          case MILLISECOND =>
-            val millisUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MILLIS)
-            microseconds = Math.addExact(microseconds, millisUs)
-          case MICROSECOND =>
-            microseconds = Math.addExact(microseconds, values(i).toLong)
-        }
-      } catch {
-        case e: Exception =>
-          throw new IllegalArgumentException(s"Error parsing interval string: ${e.getMessage}", e)
-      }
-      i += 1
-    }
-    new CalendarInterval(months, days, microseconds)
-  }
-
   // Parses a string with nanoseconds, truncates the result and returns microseconds
   private def parseNanos(nanosStr: String, isNegative: Boolean): Long = {
     if (nanosStr != null) {
@@ -303,30 +234,6 @@ object IntervalUtils {
       if (isNegative) -micros else micros
     } else {
       0L
-    }
-  }
-
-  /**
-   * Parse second_nano string in ss.nnnnnnnnn format to microseconds
-   */
-  private def parseSecondNano(secondNano: String): Long = {
-    def parseSeconds(secondsStr: String): Long = {
-      toLongWithRange(
-        SECOND,
-        secondsStr,
-        Long.MinValue / MICROS_PER_SECOND,
-        Long.MaxValue / MICROS_PER_SECOND) * MICROS_PER_SECOND
-    }
-
-    secondNano.split("\\.") match {
-      case Array(secondsStr) => parseSeconds(secondsStr)
-      case Array("", nanosStr) => parseNanos(nanosStr, false)
-      case Array(secondsStr, nanosStr) =>
-        val seconds = parseSeconds(secondsStr)
-        Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
-      case _ =>
-        throw new IllegalArgumentException(
-          "Interval string does not match second-nano format of ss.nnnnnnnnn")
     }
   }
 
@@ -558,18 +465,37 @@ object IntervalUtils {
   private final val millisStr = unitToUtf8(MILLISECOND)
   private final val microsStr = unitToUtf8(MICROSECOND)
 
+  /**
+   * A safe version of `stringToInterval`. It returns null for invalid input string.
+   */
+  def safeStringToInterval(input: UTF8String): CalendarInterval = {
+    try {
+      stringToInterval(input)
+    } catch {
+      case _: IllegalArgumentException => null
+    }
+  }
+
+  /**
+   * Converts a string to [[CalendarInterval]] case-insensitively.
+   *
+   * @throws IllegalArgumentException if the input string is not in valid interval format.
+   */
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
+    def throwIAE(msg: String, e: Exception = null) = {
+      throw new IllegalArgumentException(s"Error parsing '$input' to interval, $msg", e)
+    }
 
     if (input == null) {
-      return null
+      throwIAE("interval string cannot be null")
     }
     // scalastyle:off caselocale .toLowerCase
     val s = input.trim.toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
     if (bytes.isEmpty) {
-      return null
+      throwIAE("interval string cannot be empty")
     }
     var state = PREFIX
     var i = 0
@@ -588,13 +514,19 @@ object IntervalUtils {
       }
     }
 
+    def currentWord: UTF8String = {
+      val strings = s.split(UTF8String.blankString(1), -1)
+      val lenRight = s.substring(i, s.numBytes()).split(UTF8String.blankString(1), -1).length
+      strings(strings.length - lenRight)
+    }
+
     while (i < bytes.length) {
       val b = bytes(i)
       state match {
         case PREFIX =>
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
-              return null
+              throwIAE("interval string cannot be empty")
             } else {
               i += intervalStr.numBytes()
             }
@@ -627,7 +559,7 @@ object IntervalUtils {
               fractionScale = (NANOS_PER_SECOND / 10).toInt
               i += 1
               state = VALUE_FRACTIONAL_PART
-            case _ => return null
+            case _ => throwIAE( s"unrecognized number '$currentWord'")
           }
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
@@ -636,13 +568,13 @@ object IntervalUtils {
               try {
                 currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
               } catch {
-                case _: ArithmeticException => return null
+                case e: ArithmeticException => throwIAE(e.getMessage, e)
               }
             case ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = (NANOS_PER_SECOND / 10).toInt
               state = VALUE_FRACTIONAL_PART
-            case _ => return null
+            case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
@@ -653,14 +585,17 @@ object IntervalUtils {
             case ' ' =>
               fraction /= NANOS_PER_MICROS.toInt
               state = TRIM_BEFORE_UNIT
-            case _ => return null
+            case _ if '0' <= b && b <= '9' =>
+              throwIAE(s"interval can only support nanosecond precision, '$currentWord' is out" +
+                s" of range")
+            case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
         case UNIT_BEGIN =>
           // Checks that only seconds can have the fractional part
           if (b != 's' && fractionScale >= 0) {
-            return null
+            throwIAE(s"'$currentWord' cannot have fractional part")
           }
           if (isNegative) {
             currentValue = -currentValue
@@ -704,18 +639,18 @@ object IntervalUtils {
                 } else if (s.matchAt(microsStr, i)) {
                   microseconds = Math.addExact(microseconds, currentValue)
                   i += microsStr.numBytes()
-                } else return null
-              case _ => return null
+                } else throwIAE(s"invalid unit '$currentWord'")
+              case _ => throwIAE(s"invalid unit '$currentWord'")
             }
           } catch {
-            case _: ArithmeticException => return null
+            case e: ArithmeticException => throwIAE(e.getMessage, e)
           }
           state = UNIT_SUFFIX
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
             case ' ' => state = TRIM_BEFORE_SIGN
-            case _ => return null
+            case _ => throwIAE(s"invalid unit '$currentWord'")
           }
           i += 1
         case UNIT_END =>
@@ -723,7 +658,7 @@ object IntervalUtils {
             case ' ' =>
               i += 1
               state = TRIM_BEFORE_SIGN
-            case _ => return null
+            case _ => throwIAE(s"invalid unit '$currentWord'")
           }
       }
     }
