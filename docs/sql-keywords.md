@@ -115,7 +115,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>FALSE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FETCH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FIELDS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>FILTER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>FILTER</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FILEFORMAT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FIRST</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FIRST_VALUE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
