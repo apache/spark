@@ -269,6 +269,13 @@ abstract class SchemaPruningSuite
     checkAnswer(query, Row("Y.", 1) :: Row("X.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
   }
 
+  testSchemaPruning("select explode of nested field of array of struct") {
+    val query = spark.table("contacts")
+      .select(explode(col("friends.first")))
+    checkScan(query, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query, Row("Susan") :: Nil)
+  }
+
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {
     test(s"Spark vectorized reader - without partition data column - $testName") {
       withSQLConf(vectorizedReaderEnabledKey -> "true") {

@@ -155,6 +155,55 @@ object NestedColumnAliasing {
     case MapType(keyType, valueType, _) => totalFieldNum(keyType) + totalFieldNum(valueType)
     case _ => 1 // UDT and others
   }
+}
+
+/**
+ * This prunes unnessary nested columns from `Generate` and optional `Project` on top
+ * of it.
+ */
+object GeneratorNestedColumnAliasing {
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    case p @ Project(_, g: Generate) if SQLConf.get.nestedPruningOnExpressions &&
+        canPruneGenerator(g.generator) =>
+      Some(p)
+    case g: Generate if SQLConf.get.nestedPruningOnExpressions &&
+        canPruneGenerator(g.generator) =>
+      Some(g)
+    case _ => None
+  }
+
+  private def pruneGenerate(
+      g: Generate,
+      nestedFieldToAlias: Map[ExtractValue, Alias],
+      attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
+    val newGenerator = g.generator.transform {
+      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
+        nestedFieldToAlias(f).toAttribute
+    }.asInstanceOf[Generator]
+
+    // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
+    val newGenerate = g.copy(generator = newGenerator)
+
+    NestedColumnAliasing.replaceChildrenWithAliases(newGenerate, attrToAliases)
+  }
+
+  // Prunes unnecessary nested columns from `Generate`.
+  def prune(plan: LogicalPlan): LogicalPlan = plan match {
+    case p @ Project(projectList, g: Generate) =>
+      // On top on `Generate`, a `Project` that might have nested column accessors.
+      // We try to get alias maps for both project list and generator's children expressions.
+      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          val newChild = pruneGenerate(g, nestedFieldToAlias, attrToAliases)
+          Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
+      }.getOrElse(p)
+
+    case g: Generate =>
+      NestedColumnAliasing.getAliasSubMap(g.generator.children).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          pruneGenerate(g, nestedFieldToAlias, attrToAliases)
+      }.getOrElse(g)
+  }
 
   /**
    * This is a while-list for pruning nested fields at `Generator`.
