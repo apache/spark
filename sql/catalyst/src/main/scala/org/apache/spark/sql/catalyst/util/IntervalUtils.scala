@@ -505,7 +505,7 @@ object IntervalUtils {
     var days: Int = 0
     var microseconds: Long = 0
     var fractionScale: Int = 0
-    val validOriginFractionScale = (NANOS_PER_SECOND / 10).toInt
+    val initialFractionScale = (NANOS_PER_SECOND / 10).toInt
     var fraction: Int = 0
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
@@ -557,7 +557,7 @@ object IntervalUtils {
               isNegative = false
             case '.' =>
               isNegative = false
-              fractionScale = validOriginFractionScale
+              fractionScale = initialFractionScale
               i += 1
               state = VALUE_FRACTIONAL_PART
             case _ => throwIAE( s"unrecognized number '$currentWord'")
@@ -573,7 +573,7 @@ object IntervalUtils {
               }
             case ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
-              fractionScale = validOriginFractionScale
+              fractionScale = initialFractionScale
               state = VALUE_FRACTIONAL_PART
             case _ => throwIAE(s"invalid value '$currentWord'")
           }
@@ -583,7 +583,7 @@ object IntervalUtils {
             case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
               fraction += (b - '0') * fractionScale
               fractionScale /= 10
-            case ' ' if fractionScale != validOriginFractionScale =>
+            case ' ' if fractionScale != initialFractionScale =>
               fraction /= NANOS_PER_MICROS.toInt
               state = TRIM_BEFORE_UNIT
             case _ if '0' <= b && b <= '9' =>
