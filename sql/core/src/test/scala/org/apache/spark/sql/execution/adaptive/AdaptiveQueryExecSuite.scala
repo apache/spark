@@ -135,9 +135,7 @@ class AdaptiveQueryExecSuite
   }
 
   test("multiple joins") {
-    withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+    def runMultipleJoins(): Unit = {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
           |WITH t4 AS (
@@ -176,6 +174,18 @@ class AdaptiveQueryExecSuite
       // For the top level 'BroadcastHashJoin', the probe side is not shuffle query stage
       // and the build side shuffle query stage is also converted to local shuffle reader.
       checkNumLocalShuffleReaders(adaptivePlan)
+    }
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+     runMultipleJoins()
+    }
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "false") {
+    runMultipleJoins()
     }
   }
 

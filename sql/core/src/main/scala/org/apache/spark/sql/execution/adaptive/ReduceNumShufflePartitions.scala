@@ -195,8 +195,7 @@ case class CoalescedShuffleReaderExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning =
-    child.outputPartitioning.changePartitionNumber(child.outputPartitioning,
-      partitionStartIndices.length)
+    child.outputPartitioning.changeNumPartitions(partitionStartIndices.length)
 
   private var cachedShuffleRDD: ShuffledRowRDD = null
 

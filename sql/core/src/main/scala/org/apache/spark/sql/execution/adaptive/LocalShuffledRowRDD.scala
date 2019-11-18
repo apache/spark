@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark._
-import org.apache.spark.rdd.{RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
 
@@ -28,7 +30,10 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsRe
  * (`startPostShufflePartitionIndex` to `endPostShufflePartitionIndex - 1`, inclusive).
  */
 private final class LocalShuffledRowRDDPartition(
-    val preShufflePartitionIndex: Int) extends Partition {
+    val mapIndex: Int,
+    val preShufflePartitionIndex: Int,
+    val startPreShufflePartitionIndex: Int,
+    val endPreShufflePartitionIndex: Int) extends Partition {
   override val index: Int = preShufflePartitionIndex
 }
 
@@ -52,7 +57,7 @@ private final class LocalShuffledRowRDDPartition(
 class LocalShuffledRowRDD(
      var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
      metrics: Map[String, SQLMetric],
-     specifiedPartitionStartIndices: Option[Array[Int]] = None)
+     advisoryParallelism : Option[Int] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   private[this] val numReducers = dependency.partitioner.numPartitions
@@ -73,15 +78,12 @@ class LocalShuffledRowRDD(
       (remaining until numBuckets).map(i => splitPoint + (i - remaining) * elementsPerBucket)
   }
 
-  private[this] val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
-    case Some(indices) => indices
-    case None =>
-      if (numReducers > numMappers) {
-        val numBuckets = numReducers / numMappers
-        equallyDivide(numReducers, numBuckets).toArray
-      } else {
-        Array(0)
-      }
+  private[this] val partitionStartIndices: Array[Int] = {
+    val parallelism = advisoryParallelism match {
+      case Some(p) => p
+      case None => math.min(1, numReducers / numMappers)
+    }
+    equallyDivide(numReducers, parallelism).toArray
   }
 
   private[this] val partitionEndIndices: Array[Int] =
@@ -93,9 +95,15 @@ class LocalShuffledRowRDD(
 
   override def getPartitions: Array[Partition] = {
     assert(partitionStartIndices.length == partitionEndIndices.length)
-    Array.tabulate[Partition](numMappers) { i =>
-      new LocalShuffledRowRDDPartition(i)
+    val partitions = ArrayBuffer[LocalShuffledRowRDDPartition]()
+    var j = 0
+    for (i <- 0 to numMappers - 1) {
+      partitionStartIndices.zip(partitionEndIndices).map { case (start, end) =>
+        partitions += new LocalShuffledRowRDDPartition(i, j, start, end)
+          j = j + 1
+      }
     }
+   partitions.toArray
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
@@ -105,36 +113,19 @@ class LocalShuffledRowRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val localRowPartition = split.asInstanceOf[LocalShuffledRowRDDPartition]
-    val mapIndex = localRowPartition.index
+    val mapIndex = localRowPartition.mapIndex
     val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
     // `SQLShuffleReadMetricsReporter` will update its own metrics for SQL exchange operator,
     // as well as the `tempMetrics` for basic shuffle metrics.
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
-
-    new Iterator[InternalRow] {
-      val readers = partitionStartIndices.zip(partitionEndIndices).map { case (start, end) =>
-        SparkEnv.get.shuffleManager.getReaderForRange(
-          dependency.shuffleHandle,
-          mapIndex,
-          start,
-          end,
-          context,
-          sqlMetricsReporter)
-      }
-
-      var i = 0
-      var iter = readers(i).read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
-
-      override def hasNext = {
-        while (iter.hasNext == false && i + 1 <= readers.length - 1) {
-          i += 1
-          iter = readers(i).read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
-        }
-        iter.hasNext
-      }
-
-      override def next() = iter.next()
-    }
+    val reader = SparkEnv.get.shuffleManager.getReaderForOneMapper(
+      dependency.shuffleHandle,
+      mapIndex,
+      localRowPartition.startPreShufflePartitionIndex,
+      localRowPartition.endPreShufflePartitionIndex,
+      context,
+      sqlMetricsReporter)
+    reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
   }
 
   override def clearDependencies() {

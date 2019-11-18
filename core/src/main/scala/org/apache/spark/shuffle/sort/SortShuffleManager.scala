@@ -131,7 +131,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
   }
 
-  override def getReaderForRange[K, C](
+  override def getReaderForOneMapper[K, C](
       handle: ShuffleHandle,
       mapIndex: Int,
       startPartition: Int,

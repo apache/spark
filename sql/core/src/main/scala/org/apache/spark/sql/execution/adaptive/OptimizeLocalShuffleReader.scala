@@ -68,14 +68,14 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
       case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildRight) =>
         val localReader = shuffleStage match {
           case c: CoalescedShuffleReaderExec => LocalShuffleReaderExec(
-            c.child, partitionStartIndices = Some(c.partitionStartIndices))
+            c.child, advisoryParallelism = Some(c.partitionStartIndices.length))
           case q: QueryStageExec => LocalShuffleReaderExec(shuffleStage)
         }
         join.asInstanceOf[BroadcastHashJoinExec].copy(left = localReader)
       case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildLeft) =>
         val localReader = shuffleStage match {
           case c: CoalescedShuffleReaderExec => LocalShuffleReaderExec(
-            c.child, partitionStartIndices = Some(c.partitionStartIndices))
+            c.child, advisoryParallelism = Some(c.partitionStartIndices.length))
           case q: QueryStageExec => LocalShuffleReaderExec(shuffleStage)
         }
         join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
@@ -106,8 +106,8 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
       case c: CoalescedShuffleReaderExec =>
         LocalShuffleReaderExec(
           child.asInstanceOf[CoalescedShuffleReaderExec].child,
-          partitionStartIndices = Some(child.asInstanceOf[CoalescedShuffleReaderExec].
-            partitionStartIndices))
+          advisoryParallelism = Some(child.asInstanceOf[CoalescedShuffleReaderExec].
+            partitionStartIndices.length))
       case s: QueryStageExec => LocalShuffleReaderExec(child)
       case _ => null
     }
@@ -161,7 +161,7 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
  */
 case class LocalShuffleReaderExec(
     child: SparkPlan,
-    partitionStartIndices: Option[Array[Int]] = None) extends UnaryExecNode {
+    advisoryParallelism: Option[Int] = None) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -178,9 +178,9 @@ case class LocalShuffleReaderExec(
     if (cachedShuffleRDD == null) {
       cachedShuffleRDD = child match {
         case stage: ShuffleQueryStageExec =>
-          stage.plan.createLocalShuffleRDD(partitionStartIndices)
+          stage.plan.createLocalShuffleRDD(advisoryParallelism)
         case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-          stage.plan.createLocalShuffleRDD(partitionStartIndices)
+          stage.plan.createLocalShuffleRDD(advisoryParallelism)
       }
     }
     cachedShuffleRDD
