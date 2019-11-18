@@ -50,6 +50,13 @@ private[ui] class EnvironmentPage(
       classPathHeaders, classPathRow, appEnv.classpathEntries.sorted, fixedWidth = true)
     val content =
       <span>
+        {
+        // scalastyle:off
+        <div class="input-group">
+          Search: <input type="text" class="form-control" id="search" oninput="onSearchStringEnvPage()"></input>
+        </div>
+        // scalastyle:on
+        }
         <span class="collapse-aggregated-runtimeInformation collapse-table"
             onClick="collapseTable('collapse-aggregated-runtimeInformation',
             'aggregated-runtimeInformation')">

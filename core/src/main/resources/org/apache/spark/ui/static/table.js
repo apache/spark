@@ -103,3 +103,27 @@ function onSearchStringChange() {
         });
     }
 }
+
+function onSearchStringEnvPage() {
+    var searchString = $('#search').val().toLowerCase();
+    if (searchString.length == 0) {
+        $('tr').each(function() {
+            $(this).removeClass('hidden')
+        })
+    } else {
+        $('tr').each(function(){
+            var children = $(this).children()
+            var found = false
+            for (var i = 0; i < children.length; i++) {
+                if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
+                    found = true
+                }
+            }
+            if (found) {
+                $(this).removeClass('hidden')
+            } else {
+                $(this).addClass('hidden')
+            }
+        });
+    }
+}
