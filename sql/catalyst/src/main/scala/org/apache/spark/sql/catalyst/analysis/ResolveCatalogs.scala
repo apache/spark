@@ -104,17 +104,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       if (isView) {
         throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
       }
-      newNameParts match {
-        case NonSessionCatalog(newCatalog, newName) =>
-          if (catalog.name == newCatalog.name) {
-            RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newName.asIdentifier)
-          } else {
-            throw new AnalysisException(
-              s"Cannot rename table in different catalogs: ${catalog.name} and ${newCatalog.name}")
-          }
-        case _ => throw new AnalysisException(
-          "Renaming table cannot be performed across the session and non-session catalogs.")
-      }
+      RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
 
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>

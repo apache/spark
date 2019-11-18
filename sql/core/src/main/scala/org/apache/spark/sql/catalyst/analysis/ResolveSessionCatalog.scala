@@ -180,12 +180,7 @@ class ResolveSessionCatalog(
       AlterDatabaseSetLocationCommand(nameParts.head, location)
 
     case RenameTableStatement(SessionCatalog(_, oldName), newNameParts, isView) =>
-      newNameParts match {
-        case SessionCatalog(_, newName) =>
-          AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
-        case _ => throw new AnalysisException(
-          "Renaming table cannot be performed across the session and non-session catalogs.")
-      }
+      AlterTableRenameCommand(oldName.asTableIdentifier, newNameParts.asTableIdentifier, isView)
 
     case DescribeTableStatement(
          nameParts @ SessionCatalog(catalog, tableName), partitionSpec, isExtended) =>

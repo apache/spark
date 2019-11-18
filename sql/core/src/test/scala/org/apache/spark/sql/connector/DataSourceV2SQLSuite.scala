@@ -1536,50 +1536,21 @@ class DataSourceV2SQLSuite
   }
 
   test("AlterTable: rename table basic test") {
-    val t1 = "testcat.ns1.ns2.old"
-    val t2 = "testcat.ns1.new"
-    withTable(t1, t2) {
-      sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
+    withTable("testcat.ns1.new") {
+      sql(s"CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old")))
 
-      sql(s"ALTER TABLE $t1 RENAME TO $t2")
+      sql(s"ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new")))
     }
   }
 
-  test("AlterTable: rename table fails when different v2 catalogs are used") {
-    val t1 = "testcat.ns1.ns2.t1"
-    val t2 = "testcat2.ns1.ns2.t2"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
-
-      val exception = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t1 RENAME TO $t2")
-      }
-      assert(exception.getMessage.contains(
-        "Cannot rename table in different catalogs: testcat and testcat2"))
+  test("AlterTable: renaming views are not supported") {
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
-  }
-
-  test("AlterTable: rename table fails across session and non-session catalogs") {
-    val t1 = "t1"
-    val t2 = "testcat2.ns1.ns2.t2"
-    withTable(t1, t2) {
-      sql(s"CREATE TABLE $t1 USING csv AS SELECT id, data FROM source")
-      sql(s"CREATE TABLE $t2 USING foo AS SELECT id, data FROM source")
-
-      def assertFailure(oldTable: String, newTable: String) {
-        val exception = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldTable RENAME TO $newTable")
-        }
-        assert(exception.getMessage.contains(
-          "Renaming table cannot be performed across the session and non-session catalogs."))
-      }
-
-      assertFailure(t1, t2) // session catalog to non-session catalog.
-      assertFailure(t2, t1) // non-session catalog to session catalog.
-    }
+    assert(e.getMessage.contains("Renaming view is not supported in v2 catalogs"))
   }
 
   test("ANALYZE TABLE") {
