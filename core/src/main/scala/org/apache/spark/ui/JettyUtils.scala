@@ -147,7 +147,7 @@ private[spark] object JettyUtils extends Logging {
         beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
         val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
-        response.sendRedirect(newUrl)
+        response.sendRedirect(updateProtocolFromHeader(request, newUrl))
       }
       // SPARK-5983 ensure TRACE is not supported
       protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
@@ -155,6 +155,14 @@ private[spark] object JettyUtils extends Logging {
       }
     }
     createServletHandler(srcPath, servlet, basePath)
+  }
+
+  // SPARK-27996 update protocol from X-Forwarded-Proto if present
+  def updateProtocolFromHeader(request: HttpServletRequest, url: String): String = {
+    Option(request.getHeader("X-Forwarded-Proto")) match {
+      case Some(protocol) => protocol + url.drop(url.indexOf(":"))
+      case _ => url
+    }
   }
 
   /** Create a handler for serving files from a static directory */
