@@ -1,4 +1,4 @@
---import interval.sql
+--IMPORT interval.sql
 
 -- the `interval` keyword can be omitted with ansi mode
 select 1 year 2 days;
