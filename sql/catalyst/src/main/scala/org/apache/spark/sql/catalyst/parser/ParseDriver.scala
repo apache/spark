@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import scala.collection.JavaConverters._
-
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
