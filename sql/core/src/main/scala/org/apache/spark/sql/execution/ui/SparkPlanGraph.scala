@@ -77,8 +77,9 @@ object SparkPlanGraph {
       parent: SparkPlanGraphNode,
       subgraph: SparkPlanGraphCluster,
       exchanges: mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]): Unit = {
+    val WholeStageCodegenPattern = "(WholeStageCodegen.*)".r
     planInfo.nodeName match {
-      case "WholeStageCodegen" =>
+      case WholeStageCodegenPattern(_) =>
         val metrics = planInfo.metrics.map { metric =>
           SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
         }
@@ -88,8 +89,7 @@ object SparkPlanGraph {
           planInfo.nodeName,
           planInfo.simpleString,
           mutable.ArrayBuffer[SparkPlanGraphNode](),
-          metrics,
-          planInfo.codegenStageId)
+          metrics)
         nodes += cluster
 
         buildSparkPlanGraphNode(
@@ -158,8 +158,7 @@ private[ui] class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
-    val metrics: Seq[SQLPlanMetric],
-    val codegenStageId: Option[Int] = None) {
+    val metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
     val builder = new mutable.StringBuilder(name)
@@ -191,9 +190,8 @@ private[ui] class SparkPlanGraphCluster(
     name: String,
     desc: String,
     val nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
-    metrics: Seq[SQLPlanMetric],
-    codegenStageId: Option[Int] = None)
-  extends SparkPlanGraphNode(id, name, desc, metrics, codegenStageId) {
+    metrics: Seq[SQLPlanMetric])
+  extends SparkPlanGraphNode(id, name, desc, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
@@ -201,9 +199,9 @@ private[ui] class SparkPlanGraphCluster(
       require(duration.length == 1)
       val id = duration(0).accumulatorId
       if (metricsValue.contains(duration(0).accumulatorId)) {
-        s"$name (${codegenStageId.getOrElse(0)})\n\n${metricsValue(id)}"
+        name + "\n\n" + metricsValue(id)
       } else {
-        s"$name (${codegenStageId.getOrElse(0)})"
+        name
       }
     } else {
       name

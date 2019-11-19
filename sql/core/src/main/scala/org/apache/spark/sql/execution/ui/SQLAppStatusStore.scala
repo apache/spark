@@ -117,13 +117,12 @@ class SparkPlanGraphClusterWrapper(
     val name: String,
     val desc: String,
     val nodes: Seq[SparkPlanGraphNodeWrapper],
-    val metrics: Seq[SQLPlanMetric],
-    val codegenStageId: Option[Int] = None) {
+    val metrics: Seq[SQLPlanMetric]) {
 
   def toSparkPlanGraphCluster(): SparkPlanGraphCluster = {
     new SparkPlanGraphCluster(id, name, desc,
       new ArrayBuffer() ++ nodes.map(_.toSparkPlanGraphNode()),
-      metrics, codegenStageId)
+      metrics)
   }
 
 }

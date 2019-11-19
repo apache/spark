@@ -265,8 +265,7 @@ class SQLAppStatusListener(
           cluster.name,
           cluster.desc,
           toStoredNodes(cluster.nodes),
-          cluster.metrics,
-          cluster.codegenStageId)
+          cluster.metrics)
         new SparkPlanGraphNodeWrapper(null, storedCluster)
 
       case node =>

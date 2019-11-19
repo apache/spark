@@ -621,7 +621,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   test("SPARK-29894 test Codegen Stage Id in SparkPlanInfo") {
     val df = createTestDataFrame.select(count("*"))
     val sparkPlanInfo = SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)
-    assert(sparkPlanInfo.codegenStageId === Some(2))
+    assert(sparkPlanInfo.nodeName === "WholeStageCodegen (2)")
   }
 }
 
