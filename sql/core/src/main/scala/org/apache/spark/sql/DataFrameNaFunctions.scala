@@ -130,20 +130,20 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 2.2.0
    */
-  def fill(value: Long): DataFrame = fillValue(value, df.queryExecution.analyzed.output)
+  def fill(value: Long): DataFrame = fillValue(value, outputAttributes)
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in numeric columns with `value`.
    * @since 1.3.1
    */
-  def fill(value: Double): DataFrame = fillValue(value, df.queryExecution.analyzed.output)
+  def fill(value: Double): DataFrame = fillValue(value, outputAttributes)
 
   /**
    * Returns a new `DataFrame` that replaces null values in string columns with `value`.
    *
    * @since 1.3.1
    */
-  def fill(value: String): DataFrame = fillValue(value, df.queryExecution.analyzed.output)
+  def fill(value: String): DataFrame = fillValue(value, outputAttributes)
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
@@ -199,7 +199,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 2.3.0
    */
-  def fill(value: Boolean): DataFrame = fillValue(value, df.queryExecution.analyzed.output)
+  def fill(value: Boolean): DataFrame = fillValue(value, outputAttributes)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified
@@ -349,7 +349,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
    *   df.na.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed"));
-   * }}}
+   * }}}outputAttributes
    *
    * @param cols list of columns to apply the value replacement. If `col` is "*",
    *             replacement is applied on all string, numeric or boolean columns.
@@ -481,6 +481,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     cols.map(df.col(_).named.toAttribute)
   }
 
+  private def outputAttributes: Seq[Attribute] = {
+    df.queryExecution.analyzed.output
+  }
+
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in specified
    * numeric, string columns. If a specified column is not a numeric, string
@@ -501,7 +505,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         s"Unsupported value type ${value.getClass.getName} ($value).")
     }
 
-    val projections = df.queryExecution.analyzed.output.map { col =>
+    val projections = outputAttributes.map { col =>
       val typeMatches = (targetType, col.dataType) match {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
         case (StringType, dt) => dt == StringType
