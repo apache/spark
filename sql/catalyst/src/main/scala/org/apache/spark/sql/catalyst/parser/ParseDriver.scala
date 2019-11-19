@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.collection.JavaConverters._
+
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
@@ -92,6 +94,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    lexer.legacy_exponent_literal_to_decimal_enabled = conf.exponentLiteralToDecimalEnabled
     lexer.ansi = conf.dialectSparkAnsiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
@@ -100,6 +103,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    parser.legacy_exponent_literal_to_decimal_enabled = conf.exponentLiteralToDecimalEnabled
     parser.ansi = conf.dialectSparkAnsiEnabled
 
     try {

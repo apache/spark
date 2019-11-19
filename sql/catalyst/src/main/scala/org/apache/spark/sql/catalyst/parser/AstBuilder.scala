@@ -1939,11 +1939,32 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     Literal(BigDecimal(ctx.getText).underlying())
   }
 
+  /**
+   * Create a decimal literal for a regular decimal number.
+   */
+  override def visitLegacyDecimalLiteral(ctx: LegacyDecimalLiteralContext)
+    : Literal = withOrigin(ctx) {
+    Literal(BigDecimal(ctx.getText).underlying())
+  }
+
+  /**
+   * Create a double literal for number with an exponent, e.g. 1E-30
+   */
+  override def visitExponentLiteral(ctx: ExponentLiteralContext): Literal = {
+    numericLiteral(ctx, Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
+  }
+
   /** Create a numeric literal expression. */
   private def numericLiteral
       (ctx: NumberContext, minValue: BigDecimal, maxValue: BigDecimal, typeName: String)
       (converter: String => Any): Literal = withOrigin(ctx) {
-    val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
+    val text = ctx.getText
+    val rawStrippedQualifier = if (text.toUpperCase(Locale.ROOT).contains("E")) {
+      // exponent values don't have a suffix but contain 'E'
+      text
+    } else {
+      text.substring(0, ctx.getText.length - 1)
+    }
     try {
       val rawBigDecimal = BigDecimal(rawStrippedQualifier)
       if (rawBigDecimal < minValue || rawBigDecimal > maxValue) {
