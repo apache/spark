@@ -82,7 +82,6 @@ case class AdaptiveSparkPlanExec(
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    // OptimizeLocalShuffleReaderInBuildSide(conf),
     ensureRequirements
   )
 
@@ -91,9 +90,9 @@ case class AdaptiveSparkPlanExec(
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, subqueryCache),
     ReduceNumShufflePartitions(conf),
-    // The rule of 'OptimizeLocalShuffleReader' need make use of the 'partitionStartIndices'
+    // The rule of 'OptimizeLocalShuffleReader' need to make use of the 'partitionStartIndices'
     // in 'ReduceNumShufflePartitions' rule. So it must be after 'ReduceNumShufflePartitions' rule.
-    OptimizeLocalShuffleReaderInProbeSide(conf),
+    OptimizeLocalShuffleReader(conf),
     ApplyColumnarRulesAndInsertTransitions(session.sessionState.conf,
       session.sessionState.columnarRules),
     CollapseCodegenStages(conf)

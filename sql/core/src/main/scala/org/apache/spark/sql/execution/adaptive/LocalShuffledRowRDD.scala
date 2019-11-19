@@ -84,24 +84,16 @@ class LocalShuffledRowRDD(
     equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
   }
 
-  private[this] val partitionEndIndices: Array[Int] =
-    Array.tabulate[Int](partitionStartIndices.length) { i =>
-      if (i < partitionStartIndices.length -1) {
-        partitionStartIndices(i + 1)
-      } else numReducers
-  }
-
   override def getPartitions: Array[Partition] = {
-    assert(partitionStartIndices.length == partitionEndIndices.length)
     val partitions = ArrayBuffer[LocalShuffledRowRDDPartition]()
-    var j = 0
+    var partitionIndex = 0
     for (mapIndex <- 0 until numMappers) {
-      partitionStartIndices.zip(partitionEndIndices).map { case (start, end) =>
-        partitions += new LocalShuffledRowRDDPartition(j, mapIndex, start, end)
-          j = j + 1
+      (partitionStartIndices :+ numReducers).sliding(2, 1).foreach { case Array(start, end) =>
+        partitions += new LocalShuffledRowRDDPartition(partitionIndex, mapIndex, start, end)
+        partitionIndex += 1
       }
     }
-   partitions.toArray
+    partitions.toArray
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
