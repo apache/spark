@@ -375,36 +375,32 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
   test("Database Ownership") {
     val catalog = spark.sessionState.catalog
-    val databaseNames = Seq("db1", "`database`")
+    try {
+      val dbName = "SPARK_29425"
+      val location = getDBPath(dbName)
 
-    databaseNames.foreach { dbName =>
-      try {
-        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-        val location = getDBPath(dbNameWithoutBackTicks)
+      sql(s"CREATE DATABASE $dbName")
 
-        sql(s"CREATE DATABASE $dbName")
+      checkAnswer(
+        sql(s"DESCRIBE DATABASE $dbName"),
+        Row("Database Name", dbName) ::
+          Row("Description", "") ::
+          Row("Location", CatalogUtils.URIToString(location)) ::
+          Row("Owner Name", Utils.getCurrentUserName()) ::
+          Row("Owner Type", "USER") :: Nil)
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", CatalogUtils.URIToString(location)) ::
-            Row("Owner", Utils.getCurrentUserName()) ::
-            Row("Owner Type", "USER") :: Nil)
+      sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", CatalogUtils.URIToString(location)) ::
-            Row("Owner", Utils.getCurrentUserName()) ::
-            Row("Owner Type", "USER") ::
-            Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
-      } finally {
-        catalog.reset()
-      }
+      checkAnswer(
+        sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+        Row("Database Name", dbName) ::
+          Row("Description", "") ::
+          Row("Location", CatalogUtils.URIToString(location)) ::
+          Row("Owner Name", Utils.getCurrentUserName()) ::
+          Row("Owner Type", "USER") ::
+          Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+    } finally {
+      catalog.reset()
     }
   }
 }

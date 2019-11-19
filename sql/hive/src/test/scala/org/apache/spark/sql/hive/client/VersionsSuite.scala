@@ -172,16 +172,26 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: create/get/alter database should pick right user name as owner") {
+      val currentUser = UserGroupInformation.getCurrentUser.getUserName
       val ownerName = "SPARK_29425"
-      val dbName = "SPARK_29425"
-      val originalDb =
-        CatalogDatabase(dbName, "desc", Utils.createTempDir().toURI, Map("ownerName" -> ownerName))
-      client.createDatabase(originalDb, ignoreIfExists = true)
-      val db1 = client.getDatabase(dbName)
-      if (version != "0.12") assert(db1.properties("ownerName") === ownerName)
-      client.alterDatabase(db1.copy(properties = Map()))
-      val db2 = client.getDatabase(dbName)
-      assert(db2.properties("ownerName") === UserGroupInformation.getCurrentUser.getUserName)
+      val dbNameWithOwner = "SPARK_29425_1"
+      val dbNameWithoutOwner = "SPARK_29425_2"
+      val dbWithOwner = CatalogDatabase(
+        dbNameWithOwner, "desc", Utils.createTempDir().toURI, Map("ownerName" -> ownerName))
+      val dbWithoutOwner =
+        CatalogDatabase(dbNameWithoutOwner, "desc", Utils.createTempDir().toURI, Map())
+      client.createDatabase(dbWithOwner, ignoreIfExists = true)
+      client.createDatabase(dbWithoutOwner, ignoreIfExists = true)
+      val getDbWith = client.getDatabase(dbNameWithOwner)
+      val getDbWithOut = client.getDatabase(dbNameWithoutOwner)
+      if (version != "0.12") assert(getDbWith.properties("ownerName") === ownerName)
+      if (version != "0.12") assert(getDbWithOut.properties("ownerName") === currentUser)
+      client.alterDatabase(getDbWith.copy(properties = Map()))
+      client.alterDatabase(getDbWithOut.copy(properties = Map("ownerName" -> ownerName)))
+      val dbOwnerRemoved = client.getDatabase(dbNameWithOwner)
+      val dbOwnerAdded = client.getDatabase(dbNameWithoutOwner)
+      if (version != "0.12") assert(dbOwnerRemoved.properties("ownerName") === currentUser)
+      if (version != "0.12") assert(dbOwnerAdded.properties("ownerName") === ownerName)
     }
 
     test(s"$version: createDatabase with null description") {

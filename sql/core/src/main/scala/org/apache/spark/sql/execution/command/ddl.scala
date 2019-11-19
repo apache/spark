@@ -177,7 +177,7 @@ case class DescribeDatabaseCommand(
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
         Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
-        Row("Owner", allDbProperties.getOrElse("ownerName", "")) ::
+        Row("Owner Name", allDbProperties.getOrElse("ownerName", "")) ::
         Row("Owner Type", allDbProperties.getOrElse("ownerType", "")) :: Nil
 
     if (extended) {
