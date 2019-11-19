@@ -128,7 +128,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     registerTest(s"$name - std only w/o weight") {
       val (df, c, _) = wrappedInit()
       val expected1 = Vectors.dense(summarizerWithoutWeight.variance.toArray.map(math.sqrt))
-      val expected2 = Vectors.dense(summarizerWithoutWeight.variance.toArray.map(math.sqrt))
+      val expected2 = Vectors.dense(expWithoutWeight.variance.toArray.map(math.sqrt))
       compareRow(df.select(metrics("std").summary(c), std(c)).first(),
         Row(Row(expected1), expected2))
     }
