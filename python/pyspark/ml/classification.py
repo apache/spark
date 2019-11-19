@@ -1974,7 +1974,7 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     DenseMatrix(2, 2, [0.0, 0.25, 0.0, 0.0], 1)
     >>> nb5 = NaiveBayes(smoothing=1.0, modelType="complement", weightCol="weight")
     >>> model5 = nb5.fit(df)
-    >>> model5.getModelType
+    >>> model5.getModelType()
     'complement'
     >>> model5.theta
     DenseMatrix(2, 2, [...], 1)
