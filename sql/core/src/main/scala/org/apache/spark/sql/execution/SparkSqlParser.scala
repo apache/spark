@@ -563,9 +563,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
     val targetTable = visitTableIdentifier(ctx.target)
     val sourceTable = visitTableIdentifier(ctx.source)
-    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
-    val hiveFormat = Option(ctx.createFileFormat).map(visitCreateFileFormat)
-    val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    checkDuplicateClauses(ctx.tableProvider, "PROVIDER", ctx)
+    checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
+    val hiveFormat = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
+    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     CreateTableLikeCommand(
       targetTable, sourceTable, provider, hiveFormat, location, properties, ctx.EXISTS != null)
