@@ -1937,8 +1937,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_EXPONENT_LITERAL_TO_DECIMAL_ENABLED =
-    buildConf("spark.sql.legacy.exponentLiteralToDecimal.enabled")
+  val LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED =
+    buildConf("spark.sql.legacy.exponentLiteralAsDecimal.enabled")
       .internal()
       .doc("When set to true, a literal with an exponent (e.g. 1E-30) would be converted into" +
         "Decimal type rather than Double type.")
@@ -2555,8 +2555,8 @@ class SQLConf extends Serializable with Logging {
 
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
-  def exponentLiteralToDecimalEnabled: Boolean =
-    getConf(SQLConf.LEGACY_EXPONENT_LITERAL_TO_DECIMAL_ENABLED)
+  def exponentLiteralAsDecimalEnabled: Boolean =
+    getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
 
