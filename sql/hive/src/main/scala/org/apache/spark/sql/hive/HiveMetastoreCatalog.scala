@@ -265,7 +265,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         s"or recreate table ${relation.tableMeta.identifier} to workaround.")
     }
     if (!result.output.zip(relation.output).forall {
-          case (a1, a2) => a1.dataType.sameType(a2.dataType) }) {
+          case (a1, a2) => a1.dataType == a2.dataType }) {
       throw new AnalysisException(
         s"Column in converted table has different data type with source Hive table's. " +
           s"Set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false, " +
