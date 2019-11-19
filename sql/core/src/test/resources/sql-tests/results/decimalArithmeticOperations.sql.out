@@ -122,19 +122,19 @@ struct<(2.35E10 * CAST(1.0 AS DOUBLE)):double>
 
 
 -- !query 14
-select (5e36 + 0.1) + 5e36
+select (5e36BD + 0.1) + 5e36BD
 -- !query 14 schema
-struct<((5.0E36 + CAST(0.1 AS DOUBLE)) + 5.0E36):double>
+struct<(CAST((CAST(5E+36 AS DECIMAL(38,1)) + CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) + CAST(5E+36 AS DECIMAL(38,1))):decimal(38,1)>
 -- !query 14 output
-1.0E37
+NULL
 
 
 -- !query 15
-select (-4e36 - 0.1) - 7e36
+select (-4e36BD - 0.1) - 7e36BD
 -- !query 15 schema
-struct<((-4.0E36 - CAST(0.1 AS DOUBLE)) - 7.0E36):double>
+struct<(CAST((CAST(-4E+36 AS DECIMAL(38,1)) - CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) - CAST(7E+36 AS DECIMAL(38,1))):decimal(38,1)>
 -- !query 15 output
--1.1E37
+NULL
 
 
 -- !query 16
@@ -146,19 +146,19 @@ NULL
 
 
 -- !query 17
-select 1e35 / 0.1
+select 1e35BD / 0.1
 -- !query 17 schema
-struct<(1.0E35 / CAST(0.1 AS DOUBLE)):double>
+struct<(CAST(1E+35 AS DECIMAL(37,1)) / CAST(0.1 AS DECIMAL(37,1))):decimal(38,6)>
 -- !query 17 output
-9.999999999999999E35
+NULL
 
 
 -- !query 18
-select 1.2345678901234567890E30 * 1.2345678901234567890E25
+select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD
 -- !query 18 schema
-struct<(1.2345678901234568E30 * 1.2345678901234568E25):double>
+struct<(CAST(1.2345678901234567890E+30 AS DECIMAL(25,-6)) * CAST(1.2345678901234567890E+25 AS DECIMAL(25,-6))):decimal(38,-17)>
 -- !query 18 output
-1.5241578753238838E55
+NULL
 
 
 -- !query 19
@@ -264,19 +264,19 @@ struct<(2.35E10 * CAST(1.0 AS DOUBLE)):double>
 
 
 -- !query 31
-select (5e36 + 0.1) + 5e36
+select (5e36BD + 0.1) + 5e36BD
 -- !query 31 schema
-struct<((5.0E36 + CAST(0.1 AS DOUBLE)) + 5.0E36):double>
+struct<(CAST((CAST(5E+36 AS DECIMAL(38,1)) + CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) + CAST(5E+36 AS DECIMAL(38,1))):decimal(38,1)>
 -- !query 31 output
-1.0E37
+NULL
 
 
 -- !query 32
-select (-4e36 - 0.1) - 7e36
+select (-4e36BD - 0.1) - 7e36BD
 -- !query 32 schema
-struct<((-4.0E36 - CAST(0.1 AS DOUBLE)) - 7.0E36):double>
+struct<(CAST((CAST(-4E+36 AS DECIMAL(38,1)) - CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) - CAST(7E+36 AS DECIMAL(38,1))):decimal(38,1)>
 -- !query 32 output
--1.1E37
+NULL
 
 
 -- !query 33
@@ -288,19 +288,27 @@ NULL
 
 
 -- !query 34
-select 1e35 / 0.1
+select 1e35BD / 0.1
 -- !query 34 schema
-struct<(1.0E35 / CAST(0.1 AS DOUBLE)):double>
+struct<(CAST(1E+35 AS DECIMAL(37,1)) / CAST(0.1 AS DECIMAL(37,1))):decimal(38,3)>
 -- !query 34 output
-9.999999999999999E35
+NULL
 
 
 -- !query 35
-select 1.2345678901234567890E30 * 1.2345678901234567890E25
+``
+select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD
 -- !query 35 schema
-struct<(1.2345678901234568E30 * 1.2345678901234568E25):double>
+struct<>
 -- !query 35 output
-1.5241578753238838E55
+org.apache.spark.sql.catalyst.parser.ParseException
+
+extraneous input '``' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
+
+== SQL ==
+``
+^^^
+select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD
 
 
 -- !query 36
