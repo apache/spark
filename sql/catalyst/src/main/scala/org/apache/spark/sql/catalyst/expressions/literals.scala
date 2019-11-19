@@ -409,7 +409,6 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       s"TIMESTAMP('${formatter.format(v)}')"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
-    case (v: CalendarInterval, CalendarIntervalType) => IntervalUtils.toMultiUnitsString(v)
     case _ => value.toString
   }
 }

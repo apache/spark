@@ -119,10 +119,6 @@ private[sql] class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeNumber(row.getDouble(ordinal))
 
-    case CalendarIntervalType =>
-      (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeString(IntervalUtils.toMultiUnitsString(row.getInterval(ordinal)))
-
     case StringType =>
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeString(row.getUTF8String(ordinal).toString)
@@ -218,15 +214,10 @@ private[sql] class JacksonGenerator(
   private def writeMapData(
       map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
-    val keyString = mapType.keyType match {
-      case CalendarIntervalType =>
-        (i: Int) => IntervalUtils.toMultiUnitsString(keyArray.getInterval(i))
-      case _ => (i: Int) => keyArray.get(i, mapType.keyType).toString
-    }
     val valueArray = map.valueArray()
     var i = 0
     while (i < map.numElements()) {
-      gen.writeFieldName(keyString(i))
+      gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
       if (!valueArray.isNullAt(i)) {
         fieldWriter.apply(valueArray, i)
       } else {
