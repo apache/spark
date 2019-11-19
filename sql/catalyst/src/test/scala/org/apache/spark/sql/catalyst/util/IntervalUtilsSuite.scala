@@ -105,7 +105,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromString("1 day 10 day", new CalendarInterval(0, 11, 0))
     // Only the seconds units can have the fractional part
     checkFromInvalidString("1.5 days", "'days' cannot have fractional part")
-    checkFromInvalidString("1. hour", "invalid value '1.'")
+    checkFromInvalidString("1. hour", "'hour' cannot have fractional part")
     checkFromInvalidString("1 hourX", "invalid unit 'hourx'")
     checkFromInvalidString("~1 hour", "unrecognized number '~1'")
     checkFromInvalidString("1 Mour", "invalid unit 'mour'")
@@ -115,12 +115,12 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromInvalidString("2234567890 days", "integer overflow")
     checkFromInvalidString("\n", "Error parsing '\n' to interval")
     checkFromInvalidString("\t", "Error parsing '\t' to interval")
-    checkFromInvalidString("1. seconds", "invalid value '1.'")
     checkFromInvalidString(". seconds", "invalid value '.'")
   }
 
   test("string to interval: seconds with fractional part") {
     checkFromString("0.1 seconds", new CalendarInterval(0, 0, 100000))
+    checkFromString("1. seconds", new CalendarInterval(0, 0, 1000000))
     checkFromString("123.001 seconds", new CalendarInterval(0, 0, 123001000))
     checkFromString("1.001001 seconds", new CalendarInterval(0, 0, 1001001))
     checkFromString("1 minute 1.001001 seconds", new CalendarInterval(0, 0, 61001001))
