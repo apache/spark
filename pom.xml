@@ -1024,7 +1024,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-minikdc</artifactId>
-        <version>${hadoop.version}</version>
+        <version>3.2.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
