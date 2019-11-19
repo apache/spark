@@ -103,6 +103,67 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("Reuse the parallelism of CoalescedShuffleReaderExec in LocalShuffleReaderExec") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "10") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      val localReaders = collect(adaptivePlan) {
+        case reader: LocalShuffleReaderExec => reader
+      }
+      assert(localReaders.length == 2)
+      // The pre-shuffle partition size is [0, 0, 0, 72, 0]
+      // And the partitionStartIndices is [0, 3, 4]
+      assert(localReaders(0).advisoryParallelism.get == 3)
+      // The pre-shuffle partition size is [0, 72, 0, 72, 126]
+      // And the partitionStartIndices is [0, 1, 2, 3, 4]
+      assert(localReaders(1).advisoryParallelism.get == 5)
+
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      // the final parallelism is
+      // math.max(1, advisoryParallelism / numMappers): math.max(1, 3/2) = 1
+      // and the partitions length is 1 * numMappers = 2
+      assert(localShuffleRDD0.getPartitions.length == 2)
+      // the final parallelism is
+      // math.max(1, advisoryParallelism / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD1.getPartitions.length == 4)
+    }
+  }
+
+  test("Reuse the default parallelism in LocalShuffleReaderExec") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "false") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      val localReaders = collect(adaptivePlan) {
+        case reader: LocalShuffleReaderExec => reader
+      }
+      assert(localReaders.length == 2)
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD0.getPartitions.length == 4)
+      // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD1.getPartitions.length == 4)
+    }
+  }
+
   test("Scalar subquery") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",

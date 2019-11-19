@@ -17,20 +17,24 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
 
-
 /**
- * The [[Partition]] used by [[LocalShuffledRowRDD]]. A pre-shuffle partition
- * (identified by `preShufflePartitionIndex`) contains a range of post-shuffle partitions
- * (`startPostShufflePartitionIndex` to `endPostShufflePartitionIndex - 1`, inclusive).
+ * The [[Partition]] used by [[LocalShuffledRowRDD]].
+ * @param mapIndex the index of mapper.
+ * @param startPartition the start partition ID in mapIndex mapper.
+ * @param endPartition the end partition ID in mapIndex mapper.
  */
 private final class LocalShuffledRowRDDPartition(
-    val preShufflePartitionIndex: Int) extends Partition {
-  override val index: Int = preShufflePartitionIndex
+    override val index: Int,
+    val mapIndex: Int,
+    val startPartition: Int,
+    val endPartition: Int) extends Partition {
 }
 
 /**
@@ -52,7 +56,8 @@ private final class LocalShuffledRowRDDPartition(
  */
 class LocalShuffledRowRDD(
      var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
-     metrics: Map[String, SQLMetric])
+     metrics: Map[String, SQLMetric],
+     advisoryParallelism : Option[Int] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   private[this] val numReducers = dependency.partitioner.numPartitions
@@ -60,11 +65,33 @@ class LocalShuffledRowRDD(
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
-  override def getPartitions: Array[Partition] = {
+  /**
+   * To equally divide n elements into m buckets, basically each bucket should have n/m elements,
+   * for the remaining n%m elements, add one more element to the first n%m buckets each. Returns
+   * a sequence with length numBuckets and each value represents the start index of each bucket.
+   */
+  private def equallyDivide(numElements: Int, numBuckets: Int): Seq[Int] = {
+    val elementsPerBucket = numElements / numBuckets
+    val remaining = numElements % numBuckets
+    val splitPoint = (elementsPerBucket + 1) * remaining
+    (0 until remaining).map(_ * (elementsPerBucket + 1)) ++
+      (remaining until numBuckets).map(i => splitPoint + (i - remaining) * elementsPerBucket)
+  }
 
-    Array.tabulate[Partition](numMappers) { i =>
-      new LocalShuffledRowRDDPartition(i)
+  override def getPartitions: Array[Partition] = {
+    val partitionStartIndices: Array[Int] = {
+      val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
+      // TODO split by data size in the future.
+      equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
     }
+
+    val partitions = ArrayBuffer[LocalShuffledRowRDDPartition]()
+    for (mapIndex <- 0 until numMappers) {
+      (partitionStartIndices :+ numReducers).sliding(2, 1).foreach { case Array(start, end) =>
+        partitions += new LocalShuffledRowRDDPartition(partitions.length, mapIndex, start, end)
+      }
+    }
+    partitions.toArray
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
@@ -74,17 +101,16 @@ class LocalShuffledRowRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val localRowPartition = split.asInstanceOf[LocalShuffledRowRDDPartition]
-    val mapIndex = localRowPartition.index
+    val mapIndex = localRowPartition.mapIndex
     val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
     // `SQLShuffleReadMetricsReporter` will update its own metrics for SQL exchange operator,
     // as well as the `tempMetrics` for basic shuffle metrics.
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
-
     val reader = SparkEnv.get.shuffleManager.getReaderForOneMapper(
       dependency.shuffleHandle,
       mapIndex,
-      0,
-      numReducers,
+      localRowPartition.startPartition,
+      localRowPartition.endPartition,
       context,
       sqlMetricsReporter)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
