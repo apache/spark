@@ -529,6 +529,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.123456"))))
   }
 
+  test("to_json - timestamp in micros") {
+    val s = "2019-11-18 11:56:00.123456"
+    val df = Seq(java.sql.Timestamp.valueOf(s)).toDF("t").select(
+      to_json(struct($"t"), Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss.SSSSSS")))
+    checkAnswer(df, Row(s"""{"t":"$s"}"""))
+  }
+
   test("json_tuple - do not truncate results") {
     val len = 2800
     val str = Array.tabulate(len)(_ => "a").mkString
