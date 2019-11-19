@@ -957,8 +957,7 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// When we use PostgreSQL dialect or use Spark dialect with
-// `spark.sql.dialect.spark.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
+// When `use_SQL_standard_keywords=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
 //     function, alias, etc.
@@ -1158,10 +1157,9 @@ ansiNonReserved
     | YEARS
     ;
 
-// When we use Spark dialect with `spark.sql.dialect.spark.ansi.enabled=false`,
-// there are 2 kinds of keywords in Spark SQL.
+// When `use_SQL_standard_keywords=false`, there are 2 kinds of keywords in Spark SQL.
 // - Non-reserved keywords:
-//     Same definition as the one when the ANSI mode enabled.
+//     Same definition as the one when `use_SQL_standard_keywords=true`.
 // - Strict-non-reserved keywords:
 //     A strict version of non-reserved keywords, which can not be used as table alias.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.

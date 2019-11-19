@@ -89,7 +89,9 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
-    val useSQLStandardKeywords = Dialect.withName(conf.dialect) match {
+    // When we use PostgreSQL dialect or use Spark dialect with setting
+    // `spark.sql.dialect.spark.ansi.enabled=true`, the parser will use ANSI SQL standard keywords.
+    val useSQLStandardKeywords = conf.dialect match {
       case Dialect.POSTGRESQL => true
       case Dialect.SPARK => conf.dialectSparkAnsiEnabled
     }
