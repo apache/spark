@@ -46,9 +46,9 @@ grammar SqlBase;
   }
 
   /**
-   * When true, ANSI SQL parsing mode is enabled.
+   * When true, use ANSI SQL standard keywords.
    */
-  public boolean ansi = false;
+  public boolean use_SQL_standard_keywords = false;
 }
 
 singleStatement
@@ -744,7 +744,7 @@ primaryExpression
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
-    | functionCallName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
+    | functionName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
     | identifier '->' expression                                                               #lambda
     | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
@@ -788,7 +788,7 @@ booleanValue
 
 interval
     : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
-    | {ansi}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
+    | {use_SQL_standard_keywords}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
 errorCapturingMultiUnitsInterval
@@ -908,7 +908,7 @@ qualifiedNameList
     : qualifiedName (',' qualifiedName)*
     ;
 
-functionCallName
+functionName
     : qualifiedName
     | LEFT
     | RIGHT
@@ -933,14 +933,14 @@ errorCapturingIdentifierExtra
 
 identifier
     : strictIdentifier
-    | {!ansi}? strictNonReserved
+    | {!use_SQL_standard_keywords}? strictNonReserved
     ;
 
 strictIdentifier
     : IDENTIFIER              #unquotedIdentifier
     | quotedIdentifier        #quotedIdentifierAlternative
-    | {ansi}? ansiNonReserved #unquotedIdentifier
-    | {!ansi}? nonReserved    #unquotedIdentifier
+    | {use_SQL_standard_keywords}? ansiNonReserved #unquotedIdentifier
+    | {!use_SQL_standard_keywords}? nonReserved    #unquotedIdentifier
     ;
 
 quotedIdentifier
@@ -957,7 +957,8 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// When `spark.sql.dialect.spark.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
+// When we use PostgreSQL dialect or use Spark dialect with
+// `spark.sql.dialect.spark.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
 //     function, alias, etc.
@@ -1157,9 +1158,10 @@ ansiNonReserved
     | YEARS
     ;
 
-// When `spark.sql.dialect.spark.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
+// When we use Spark dialect with `spark.sql.dialect.spark.ansi.enabled=false`,
+// there are 2 kinds of keywords in Spark SQL.
 // - Non-reserved keywords:
-//     Same definition as the one when `spark.sql.dialect.spark.ansi.enabled=true`.
+//     Same definition as the one when the ANSI mode enabled.
 // - Strict-non-reserved keywords:
 //     A strict version of non-reserved keywords, which can not be used as table alias.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.

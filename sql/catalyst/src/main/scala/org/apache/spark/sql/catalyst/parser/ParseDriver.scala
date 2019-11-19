@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.Dialect
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -88,11 +89,16 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
+    val useSQLStandardKeywords = Dialect.withName(conf.dialect) match {
+      case Dialect.POSTGRESQL => true
+      case Dialect.SPARK => conf.dialectSparkAnsiEnabled
+    }
+
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.ansi = conf.ansiEnabled
+    lexer.use_SQL_standard_keywords = useSQLStandardKeywords
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -100,7 +106,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    parser.ansi = conf.ansiEnabled
+    parser.use_SQL_standard_keywords = useSQLStandardKeywords
 
     try {
       try {
