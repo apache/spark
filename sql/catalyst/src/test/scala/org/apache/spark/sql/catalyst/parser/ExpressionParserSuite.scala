@@ -646,7 +646,7 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(new CalendarInterval(
         0,
         0,
-        -13 * MICROS_PER_SECOND - 123 * MICROS_PER_MILLIS - 456)))
+        -13 * MICROS_PER_SECOND - 123 * MICROS_PER_MILLIS - 457)))
     checkIntervals(
       "13.123456 second",
       Literal(new CalendarInterval(
