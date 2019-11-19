@@ -257,3 +257,13 @@ select
   interval '99 11:22:33.123456789' day to second + interval '10 9:8:7.123456789' day to second,
   interval '99 11:22:33.123456789' day to second - interval '10 9:8:7.123456789' day to second
 from interval_arithmetic;
+
+select interval '1.41666666666666 year';
+select interval '1.41666666666667 year';
+select interval '1.1333333333301 months';
+select interval '1.133333333330 months';
+select interval '2.13333333 week';
+select interval '2.13333334 week';
+select interval '0.1 seconds';
+select interval '0.49 microseconds';
+select interval '0.50 microseconds';

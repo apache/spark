@@ -503,9 +503,8 @@ object IntervalUtils {
     var isNegative: Boolean = false
     var months: Int = 0
     var days: Int = 0
-    var microseconds: Long = 0
-    var fractionScale: Int = 0
-    var fraction: Int = 0
+    var microseconds: Double = 0
+    val fractionSb = new StringBuilder("0.")
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
       b match {
@@ -535,28 +534,20 @@ object IntervalUtils {
         case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
         case SIGN =>
           currentValue = 0
-          fraction = 0
+          isNegative = false
           // We preset next state from SIGN to TRIM_BEFORE_VALUE. If we meet '.' in the SIGN state,
           // it means that the interval value we deal with here is a numeric with only fractional
           // part, such as '.11 second', which can be parsed to 0.11 seconds. In this case, we need
           // to reset next state to `VALUE_FRACTIONAL_PART` to go parse the fraction part of the
           // interval value.
           state = TRIM_BEFORE_VALUE
-          // We preset the scale to an invalid value to track fraction presence in the UNIT_BEGIN
-          // state. If we meet '.', the scale become valid for the VALUE_FRACTIONAL_PART state.
-          fractionScale = -1
           b match {
             case '-' =>
               isNegative = true
               i += 1
-            case '+' =>
-              isNegative = false
-              i += 1
+            case '+' => i += 1
             case _ if '0' <= b && b <= '9' =>
-              isNegative = false
             case '.' =>
-              isNegative = false
-              fractionScale = (NANOS_PER_SECOND / 10).toInt
               i += 1
               state = VALUE_FRACTIONAL_PART
             case _ => throwIAE( s"unrecognized number '$currentWord'")
@@ -571,32 +562,21 @@ object IntervalUtils {
                 case e: ArithmeticException => throwIAE(e.getMessage, e)
               }
             case ' ' => state = TRIM_BEFORE_UNIT
-            case '.' =>
-              fractionScale = (NANOS_PER_SECOND / 10).toInt
-              state = VALUE_FRACTIONAL_PART
+            case '.' => state = VALUE_FRACTIONAL_PART
             case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
           b match {
-            case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
-              fraction += (b - '0') * fractionScale
-              fractionScale /= 10
-            case ' ' =>
-              fraction /= NANOS_PER_MICROS.toInt
-              state = TRIM_BEFORE_UNIT
-            case _ if '0' <= b && b <= '9' =>
-              throwIAE(s"interval can only support nanosecond precision, '$currentWord' is out" +
-                s" of range")
+            case _ if '0' <= b && b <= '9' => fractionSb.append(b - '0')
+            case ' ' => state = TRIM_BEFORE_UNIT
             case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
         case UNIT_BEGIN =>
-          // Checks that only seconds can have the fractional part
-          if (b != 's' && fractionScale >= 0) {
-            throwIAE(s"'$currentWord' cannot have fractional part")
-          }
+          var fraction = if (fractionSb.length == 2) 0 else fractionSb.toDouble
+          fractionSb.setLength(2)
           if (isNegative) {
             currentValue = -currentValue
             fraction = -fraction
@@ -604,40 +584,42 @@ object IntervalUtils {
           try {
             b match {
               case 'y' if s.matchAt(yearStr, i) =>
-                val monthsInYears = Math.multiplyExact(MONTHS_PER_YEAR, currentValue)
-                months = Math.toIntExact(Math.addExact(months, monthsInYears))
+                val monthsInYears =
+                  Math.toIntExact(((currentValue + fraction) * MONTHS_PER_YEAR).toLong)
+                months = Math.addExact(months, monthsInYears)
                 i += yearStr.numBytes()
               case 'w' if s.matchAt(weekStr, i) =>
-                val daysInWeeks = Math.multiplyExact(DAYS_PER_WEEK, currentValue)
-                days = Math.toIntExact(Math.addExact(days, daysInWeeks))
+                val daysInWeeks = (currentValue + fraction) * DAYS_PER_WEEK
+                val daysTrimmed = Math.toIntExact(daysInWeeks.toLong)
+                days = Math.addExact(days, daysTrimmed)
+                microseconds += (daysInWeeks - daysTrimmed) * MICROS_PER_DAY
                 i += weekStr.numBytes()
               case 'd' if s.matchAt(dayStr, i) =>
                 days = Math.addExact(days, Math.toIntExact(currentValue))
+                microseconds += fraction * MICROS_PER_DAY
                 i += dayStr.numBytes()
               case 'h' if s.matchAt(hourStr, i) =>
-                val hoursUs = Math.multiplyExact(currentValue, MICROS_PER_HOUR)
-                microseconds = Math.addExact(microseconds, hoursUs)
+                microseconds += (currentValue + fraction) * MICROS_PER_HOUR
                 i += hourStr.numBytes()
               case 's' if s.matchAt(secondStr, i) =>
-                val secondsUs = Math.multiplyExact(currentValue, MICROS_PER_SECOND)
-                microseconds = Math.addExact(Math.addExact(microseconds, secondsUs), fraction)
+                microseconds += (currentValue + fraction) * MICROS_PER_SECOND
                 i += secondStr.numBytes()
               case 'm' =>
                 if (s.matchAt(monthStr, i)) {
                   months = Math.addExact(months, Math.toIntExact(currentValue))
+                  val dayLeftover = fraction * DAYS_PER_MONTH
+                  val daysTrimmed = Math.toIntExact(dayLeftover.toLong)
+                  days = Math.addExact(days, daysTrimmed)
+                  microseconds += (dayLeftover - daysTrimmed) * MICROS_PER_DAY
                   i += monthStr.numBytes()
                 } else if (s.matchAt(minuteStr, i)) {
-                  val minutesUs = Math.multiplyExact(currentValue, MICROS_PER_MINUTE)
-                  microseconds = Math.addExact(microseconds, minutesUs)
+                  microseconds += (currentValue + fraction) * MICROS_PER_MINUTE
                   i += minuteStr.numBytes()
                 } else if (s.matchAt(millisStr, i)) {
-                  val millisUs = Math.multiplyExact(
-                    currentValue,
-                    MICROS_PER_MILLIS)
-                  microseconds = Math.addExact(microseconds, millisUs)
+                  microseconds += (currentValue + fraction) * MICROS_PER_MILLIS
                   i += millisStr.numBytes()
                 } else if (s.matchAt(microsStr, i)) {
-                  microseconds = Math.addExact(microseconds, currentValue)
+                  microseconds += currentValue + fraction
                   i += microsStr.numBytes()
                 } else throwIAE(s"invalid unit '$currentWord'")
               case _ => throwIAE(s"invalid unit '$currentWord'")
@@ -665,7 +647,7 @@ object IntervalUtils {
 
     val result = state match {
       case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
-        new CalendarInterval(months, days, microseconds)
+        new CalendarInterval(months, days, microseconds.round)
       case _ => null
     }
 

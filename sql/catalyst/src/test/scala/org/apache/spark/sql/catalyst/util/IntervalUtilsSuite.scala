@@ -104,8 +104,6 @@ class IntervalUtilsSuite extends SparkFunSuite {
     // Allow duplicated units and summarize their values
     checkFromString("1 day 10 day", new CalendarInterval(0, 11, 0))
     // Only the seconds units can have the fractional part
-    checkFromInvalidString("1.5 days", "'days' cannot have fractional part")
-    checkFromInvalidString("1. hour", "'hour' cannot have fractional part")
     checkFromInvalidString("1 hourX", "invalid unit 'hourx'")
     checkFromInvalidString("~1 hour", "unrecognized number '~1'")
     checkFromInvalidString("1 Mour", "invalid unit 'mour'")
@@ -118,7 +116,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   }
 
-  test("string to interval: seconds with fractional part") {
+  test("string to interval: interval with fractional part") {
     checkFromString("0.1 seconds", new CalendarInterval(0, 0, 100000))
     checkFromString("1. seconds", new CalendarInterval(0, 0, 1000000))
     checkFromString("123.001 seconds", new CalendarInterval(0, 0, 123001000))
@@ -126,9 +124,10 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromString("1 minute 1.001001 seconds", new CalendarInterval(0, 0, 61001001))
     checkFromString("-1.5 seconds", new CalendarInterval(0, 0, -1500000))
     // truncate nanoseconds to microseconds
-    checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 999999))
-    checkFromString(".999999999 seconds", new CalendarInterval(0, 0, 999999))
-    checkFromInvalidString("0.123456789123 seconds", "'0.123456789123' is out of range")
+    checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 1000000))
+    checkFromString(".999999 seconds", new CalendarInterval(0, 0, 999999))
+    checkFromString("0.123456789123 seconds", new CalendarInterval(0, 0, 123457))
+    checkFromString("1.5 days", new CalendarInterval(0, 1, 12 * MICROS_PER_HOUR))
   }
 
   test("from year-month string") {
