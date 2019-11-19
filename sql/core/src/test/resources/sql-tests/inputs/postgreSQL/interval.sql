@@ -198,6 +198,8 @@ SELECT interval '6' second;
 SELECT interval '1-2' year to month;
 -- [SPARK-29391] Default year-month units
 -- SELECT interval '1 2' day to hour;
+-- SPARK-29933: ThriftServerQueryTestSuite runs tests with wrong settings
+set spark.sql.dialect=PostgreSQL;
 SELECT interval '1 2:03' day to hour;
 SELECT interval '1 2:03:04' day to hour;
 -- SELECT interval '1 2' day to minute;

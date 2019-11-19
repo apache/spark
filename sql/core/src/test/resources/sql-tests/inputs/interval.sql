@@ -97,6 +97,8 @@ select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisec
 select interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second;
 select interval '0 0:0:0.1' day to second;
 select interval '10-9' year to month;
+-- SPARK-29933: ThriftServerQueryTestSuite runs tests with wrong settings
+set spark.sql.dialect=Spark;
 select interval '20 15' day to hour;
 select interval '20 15:40' day to minute;
 select interval '20 15:40:32.99899999' day to second;
