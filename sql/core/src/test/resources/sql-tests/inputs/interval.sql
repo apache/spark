@@ -267,3 +267,4 @@ select interval '2.13333334 week';
 select interval '0.1 seconds';
 select interval '0.49 microseconds';
 select interval '0.50 microseconds';
+select interval '87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds';

@@ -503,7 +503,7 @@ object IntervalUtils {
     var isNegative: Boolean = false
     var months: Int = 0
     var days: Int = 0
-    var microseconds: Double = 0
+    var microseconds: Long = 0
     var fractionScale: Double = 0
     var fraction: Double = 0
 
@@ -595,17 +595,17 @@ object IntervalUtils {
                 val daysInWeeks = (currentValue + fraction) * DAYS_PER_WEEK
                 val daysTrimmed = Math.toIntExact(daysInWeeks.toLong)
                 days = Math.addExact(days, daysTrimmed)
-                microseconds += (daysInWeeks - daysTrimmed) * MICROS_PER_DAY
+                microseconds += ((daysInWeeks - daysTrimmed) * MICROS_PER_DAY).round
                 i += weekStr.numBytes()
               case 'd' if s.matchAt(dayStr, i) =>
                 days = Math.addExact(days, Math.toIntExact(currentValue))
-                microseconds += fraction * MICROS_PER_DAY
+                microseconds += (fraction * MICROS_PER_DAY).round
                 i += dayStr.numBytes()
               case 'h' if s.matchAt(hourStr, i) =>
-                microseconds += (currentValue + fraction) * MICROS_PER_HOUR
+                microseconds += ((currentValue + fraction) * MICROS_PER_HOUR).round
                 i += hourStr.numBytes()
               case 's' if s.matchAt(secondStr, i) =>
-                microseconds += (currentValue + fraction) * MICROS_PER_SECOND
+                microseconds += ((currentValue + fraction) * MICROS_PER_SECOND).round
                 i += secondStr.numBytes()
               case 'm' =>
                 if (s.matchAt(monthStr, i)) {
@@ -613,16 +613,16 @@ object IntervalUtils {
                   val dayLeftover = fraction * DAYS_PER_MONTH
                   val daysTrimmed = Math.toIntExact(dayLeftover.toLong)
                   days = Math.addExact(days, daysTrimmed)
-                  microseconds += (dayLeftover - daysTrimmed) * MICROS_PER_DAY
+                  microseconds += ((dayLeftover - daysTrimmed) * MICROS_PER_DAY).round
                   i += monthStr.numBytes()
                 } else if (s.matchAt(minuteStr, i)) {
-                  microseconds += (currentValue + fraction) * MICROS_PER_MINUTE
+                  microseconds += ((currentValue + fraction) * MICROS_PER_MINUTE).round
                   i += minuteStr.numBytes()
                 } else if (s.matchAt(millisStr, i)) {
-                  microseconds += (currentValue + fraction) * MICROS_PER_MILLIS
+                  microseconds += ((currentValue + fraction) * MICROS_PER_MILLIS).round
                   i += millisStr.numBytes()
                 } else if (s.matchAt(microsStr, i)) {
-                  microseconds += currentValue + fraction
+                  microseconds += (currentValue + fraction).round
                   i += microsStr.numBytes()
                 } else throwIAE(s"invalid unit '$currentWord'")
               case _ => throwIAE(s"invalid unit '$currentWord'")
@@ -650,7 +650,7 @@ object IntervalUtils {
 
     val result = state match {
       case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
-        new CalendarInterval(months, days, microseconds.round)
+        new CalendarInterval(months, days, microseconds)
       case _ => null
     }
 
