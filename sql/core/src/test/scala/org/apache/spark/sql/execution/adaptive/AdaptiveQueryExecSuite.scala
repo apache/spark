@@ -119,8 +119,10 @@ class AdaptiveQueryExecSuite
       }
       assert(localReaders.length == 2)
       // The pre-shuffle partition size is [0, 0, 0, 72, 0]
+      // And the partitionStartIndices is [0, 3, 4]
       assert(localReaders(0).advisoryParallelism.get == 3)
       // The pre-shuffle partition size is [0, 72, 0, 72, 126]
+      // And the partitionStartIndices is [0, 1, 2, 3, 4]
       assert(localReaders(1).advisoryParallelism.get == 5)
 
       val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]

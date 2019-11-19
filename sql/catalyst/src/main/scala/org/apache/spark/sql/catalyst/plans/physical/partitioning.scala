@@ -197,6 +197,7 @@ case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning
 
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
+
   override def satisfies0(required: Distribution): Boolean = required match {
     case _: BroadcastDistribution => false
     case _ => true

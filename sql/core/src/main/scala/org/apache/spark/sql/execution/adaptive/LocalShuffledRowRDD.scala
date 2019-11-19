@@ -86,11 +86,9 @@ class LocalShuffledRowRDD(
 
   override def getPartitions: Array[Partition] = {
     val partitions = ArrayBuffer[LocalShuffledRowRDDPartition]()
-    var partitionIndex = 0
     for (mapIndex <- 0 until numMappers) {
       (partitionStartIndices :+ numReducers).sliding(2, 1).foreach { case Array(start, end) =>
-        partitions += new LocalShuffledRowRDDPartition(partitionIndex, mapIndex, start, end)
-        partitionIndex += 1
+        partitions += new LocalShuffledRowRDDPartition(partitions.length, mapIndex, start, end)
       }
     }
     partitions.toArray
