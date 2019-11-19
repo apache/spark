@@ -70,7 +70,7 @@ class LocalShuffledRowRDD(
    * for the remaining n%m elements, add one more element to the first n%m buckets each. Returns
    * a sequence with length numBuckets and each value represents the start index of each bucket.
    */
-  def equallyDivide(numElements: Int, numBuckets: Int): Seq[Int] = {
+  private def equallyDivide(numElements: Int, numBuckets: Int): Seq[Int] = {
     val elementsPerBucket = numElements / numBuckets
     val remaining = numElements % numBuckets
     val splitPoint = (elementsPerBucket + 1) * remaining
@@ -78,13 +78,13 @@ class LocalShuffledRowRDD(
       (remaining until numBuckets).map(i => splitPoint + (i - remaining) * elementsPerBucket)
   }
 
-  private[this] val partitionStartIndices: Array[Int] = {
-    val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
-    // TODO split by data size in the future.
-    equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
-  }
-
   override def getPartitions: Array[Partition] = {
+    val partitionStartIndices: Array[Int] = {
+      val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
+      // TODO split by data size in the future.
+      equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
+    }
+
     val partitions = ArrayBuffer[LocalShuffledRowRDDPartition]()
     for (mapIndex <- 0 until numMappers) {
       (partitionStartIndices :+ numReducers).sliding(2, 1).foreach { case Array(start, end) =>

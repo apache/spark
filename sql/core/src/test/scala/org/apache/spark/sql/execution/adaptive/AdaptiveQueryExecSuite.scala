@@ -132,7 +132,7 @@ class AdaptiveQueryExecSuite
       // and the partitions length is 1 * numMappers = 2
       assert(localShuffleRDD0.getPartitions.length == 2)
       // the final parallelism is
-      // math.max(1, advisoryParallelism / numMappers): math.max(1, 5/2) =2
+      // math.max(1, advisoryParallelism / numMappers): math.max(1, 5/2) = 2
       // and the partitions length is 2 * numMappers = 4
       assert(localShuffleRDD1.getPartitions.length == 4)
     }

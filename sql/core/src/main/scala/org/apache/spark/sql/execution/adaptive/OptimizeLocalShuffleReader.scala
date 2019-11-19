@@ -37,15 +37,14 @@ import org.apache.spark.sql.internal.SQLConf
  * If introduced, we will revert all the local readers.
  */
 case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
+  import OptimizeLocalShuffleReader._
 
   def withProbeSideLocalReader(plan: SparkPlan): SparkPlan = {
     plan.transformDown {
-      case join @ OptimizeLocalShuffleReader.BroadcastJoinWithShuffleLeft(
-      shuffleStage, BuildRight) =>
+      case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildRight) =>
         val localReader = createLocalReader(shuffleStage)
         join.asInstanceOf[BroadcastHashJoinExec].copy(left = localReader)
-      case join @ OptimizeLocalShuffleReader.BroadcastJoinWithShuffleRight(
-      shuffleStage, BuildLeft) =>
+      case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildLeft) =>
         val localReader = createLocalReader(shuffleStage)
         join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
     }
@@ -65,7 +64,7 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     }
 
     val optimizedPlan = plan match {
-      case s: SparkPlan if OptimizeLocalShuffleReader.canUseLocalShuffleReader(s) =>
+      case s: SparkPlan if canUseLocalShuffleReader(s) =>
         createLocalReader(s)
       case s: SparkPlan => withProbeSideLocalReader(s)
     }
@@ -90,8 +89,7 @@ object OptimizeLocalShuffleReader {
 
   object BroadcastJoinWithShuffleLeft {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if OptimizeLocalShuffleReader.
-        canUseLocalShuffleReader(join.left) =>
+      case join: BroadcastHashJoinExec if canUseLocalShuffleReader(join.left) =>
         Some((join.left, join.buildSide))
       case _ => None
     }
@@ -99,8 +97,7 @@ object OptimizeLocalShuffleReader {
 
   object BroadcastJoinWithShuffleRight {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if OptimizeLocalShuffleReader.
-        canUseLocalShuffleReader(join.right) =>
+      case join: BroadcastHashJoinExec if canUseLocalShuffleReader(join.right) =>
         Some((join.right, join.buildSide))
       case _ => None
     }
