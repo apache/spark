@@ -77,9 +77,8 @@ object SparkPlanGraph {
       parent: SparkPlanGraphNode,
       subgraph: SparkPlanGraphCluster,
       exchanges: mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]): Unit = {
-    val WholeStageCodegenPattern = "(WholeStageCodegen.*)".r
     planInfo.nodeName match {
-      case WholeStageCodegenPattern(_) =>
+      case name if name.startsWith("WholeStageCodegen") =>
         val metrics = planInfo.metrics.map { metric =>
           SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
         }
