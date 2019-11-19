@@ -130,20 +130,20 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 2.2.0
    */
-  def fill(value: Long): DataFrame = fill(value, Seq.empty)
+  def fill(value: Long): DataFrame = fillValue(value, df.queryExecution.analyzed.output)
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in numeric columns with `value`.
    * @since 1.3.1
    */
-  def fill(value: Double): DataFrame = fill(value, Seq.empty)
+  def fill(value: Double): DataFrame = fillValue(value, df.queryExecution.analyzed.output)
 
   /**
    * Returns a new `DataFrame` that replaces null values in string columns with `value`.
    *
    * @since 1.3.1
    */
-  def fill(value: String): DataFrame = fill(value, Seq.empty)
+  def fill(value: String): DataFrame = fillValue(value, df.queryExecution.analyzed.output)
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
@@ -199,7 +199,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 2.3.0
    */
-  def fill(value: Boolean): DataFrame = fill(value, Seq.empty)
+  def fill(value: Boolean): DataFrame = fillValue(value, df.queryExecution.analyzed.output)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified
@@ -510,7 +510,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
           throw new IllegalArgumentException(s"$targetType is not matched at fillValue")
       }
       // Only fill if the column is part of the cols list.
-      if (typeMatches && (cols.isEmpty || cols.exists(_.semanticEquals(col)))) {
+      if (typeMatches && cols.exists(_.semanticEquals(col))) {
         fillCol(col.dataType, col.name, Column(col), value)
       } else {
         Column(col)
