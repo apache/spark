@@ -27,7 +27,7 @@ grammar SqlBase;
    * When false, a literal with an exponent would be converted into
    * double type rather than decimal type.
    */
-  public boolean legacy_exponent_literal_to_decimal_enabled = false;
+  public boolean legacy_exponent_literal_as_decimal_enabled = false;
 
   /**
    * Verify whether current token is a valid decimal token (which contains dot).
@@ -948,9 +948,9 @@ quotedIdentifier
     ;
 
 number
-    : {!legacy_exponent_literal_to_decimal_enabled}? MINUS? EXPONENT_VALUE #exponentLiteral
-    | {!legacy_exponent_literal_to_decimal_enabled}? MINUS? DECIMAL_VALUE  #decimalLiteral
-    | {legacy_exponent_literal_to_decimal_enabled}? MINUS? (EXPONENT_VALUE | DECIMAL_VALUE) #legacyDecimalLiteral
+    : {!legacy_exponent_literal_as_decimal_enabled}? MINUS? EXPONENT_VALUE #exponentLiteral
+    | {!legacy_exponent_literal_as_decimal_enabled}? MINUS? DECIMAL_VALUE  #decimalLiteral
+    | {legacy_exponent_literal_as_decimal_enabled}? MINUS? (EXPONENT_VALUE | DECIMAL_VALUE) #legacyDecimalLiteral
     | MINUS? INTEGER_VALUE            #integerLiteral
     | MINUS? BIGINT_LITERAL           #bigIntLiteral
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
