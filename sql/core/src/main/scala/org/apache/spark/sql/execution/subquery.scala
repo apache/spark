@@ -104,6 +104,10 @@ case class ScalarSubquery(
     require(updated, s"$this has not finished")
     Literal.create(result, dataType).doGenCode(ctx, ev)
   }
+
+  override lazy val canonicalized: ScalarSubquery = {
+    copy(plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec], exprId = ExprId(0))
+  }
 }
 
 /**
