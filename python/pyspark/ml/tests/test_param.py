@@ -307,7 +307,7 @@ class ParamTests(SparkSessionTestCase):
                 copied_no_extra[k] = v
         self.assertEqual(tp._paramMap, copied_no_extra)
         self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             tp.copy(extra={"unknown_parameter": None})
         with self.assertRaises(TypeError):
             tp.copy(extra=["must be a dict"])
