@@ -187,7 +187,7 @@ private class LiveTask(
     val hasMetrics = metrics.executorDeserializeTime >= 0
 
     /**
-     * SPARK-26260: For non successful tasks, store the metrics as negetive to avoid
+     * SPARK-26260: For non successful tasks, store the metrics as negative to avoid
      * the calculation in the task summary. `toApi` method in the `TaskDataWrapper` will make
      * it actual value.
      */
