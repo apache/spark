@@ -186,16 +186,12 @@ class NaiveBayes @Since("1.5.0") (
     }
 
     // Aggregates term frequencies per label.
-    // TODO: Summarizer directly returns sum vector.
     val aggregated = dataset.groupBy(col($(labelCol)))
-      .agg(sum(w).as("weightSum"), Summarizer.metrics("mean", "count")
+      .agg(Summarizer.metrics("weightSum", "sum", "count")
         .summary(validateUDF(col($(featuresCol))), w).as("summary"))
-      .select($(labelCol), "weightSum", "summary.mean", "summary.count")
+      .select($(labelCol), "summary.weightSum", "summary.sum", "summary.count")
       .as[(Double, Double, Vector, Long)]
-      .map { case (label, weightSum, mean, count) =>
-        BLAS.scal(weightSum, mean)
-        (label, weightSum, mean, count)
-      }.collect().sortBy(_._1)
+      .collect().sortBy(_._1)
 
     val numFeatures = aggregated.head._3.size
     instr.logNumFeatures(numFeatures)
@@ -269,15 +265,12 @@ class NaiveBayes @Since("1.5.0") (
     }
 
     // Aggregates mean vector and square-sum vector per label.
-    // TODO: Summarizer directly returns square-sum vector.
     val aggregated = dataset.groupBy(col($(labelCol)))
-      .agg(sum(w).as("weightSum"), Summarizer.metrics("mean", "normL2")
+      .agg(Summarizer.metrics("weightSum", "mean", "sumL2")
         .summary(col($(featuresCol)), w).as("summary"))
-      .select($(labelCol), "weightSum", "summary.mean", "summary.normL2")
+      .select($(labelCol), "summary.weightSum", "summary.mean", "summary.sumL2")
       .as[(Double, Double, Vector, Vector)]
-      .map { case (label, weightSum, mean, normL2) =>
-        (label, weightSum, mean, Vectors.dense(normL2.toArray.map(v => v * v)))
-      }.collect().sortBy(_._1)
+      .collect().sortBy(_._1)
 
     val numFeatures = aggregated.head._3.size
     instr.logNumFeatures(numFeatures)

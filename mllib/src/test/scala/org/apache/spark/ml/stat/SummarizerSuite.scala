@@ -18,7 +18,7 @@
 package org.apache.spark.ml.stat
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, Statistics}
@@ -529,6 +529,42 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer2.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
     assert(summarizer3.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
+  }
+
+  test("support new metrics: sum, std, numFeatures, sumL2, weightSum") {
+    val summarizer1 = new SummarizerBuffer()
+      .add(Vectors.dense(10.0, -10.0), 1e10)
+      .add(Vectors.dense(0.0, 0.0), 1e-7)
+
+    val summarizer2 = new SummarizerBuffer()
+    summarizer2.add(Vectors.dense(10.0, -10.0), 1e10)
+    for (i <- 1 to 100) {
+      summarizer2.add(Vectors.dense(0.0, 0.0), 1e-7)
+    }
+
+    val summarizer3 = new SummarizerBuffer()
+    for (i <- 1 to 100) {
+      summarizer3.add(Vectors.dense(0.0, 0.0), 1e-7)
+    }
+    summarizer3.add(Vectors.dense(10.0, -10.0), 1e10)
+
+    Seq(summarizer1, summarizer2, summarizer3).foreach { summarizer =>
+      val weightSum = summarizer.weightSum
+      val mean = summarizer.mean
+      BLAS.scal(weightSum, mean)
+      assert(summarizer.sum ~== mean relTol 1e-14)
+
+      val expectedNumFeatures = mean.size
+      assert(summarizer.numFeatures === expectedNumFeatures)
+
+      val variance = summarizer.variance
+      val expectedStd = Vectors.dense(variance.toArray.map(math.sqrt))
+      assert(summarizer.std ~== expectedStd relTol 1e-14)
+
+      val normL2 = summarizer.normL2
+      val expectedSumL2 = Vectors.dense(normL2.toArray.map(v => v * v))
+      assert(summarizer.sumL2 ~== expectedSumL2 relTol 1e-14)
+    }
   }
 
   ignore("performance test") {

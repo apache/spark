@@ -170,7 +170,7 @@ class LinearSVC @Since("2.2.0") (
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(
-      (createSummarizerBuffer("mean", "variance", "count"), new MultiClassSummarizer))(
+      (createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
       seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
       combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
@@ -207,7 +207,7 @@ class LinearSVC @Since("2.2.0") (
         throw new SparkException(msg)
       }
 
-      val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+      val featuresStd = summarizer.std.toArray
       val getFeaturesStd = (j: Int) => featuresStd(j)
       val regParamL2 = $(regParam)
       val bcFeaturesStd = instances.context.broadcast(featuresStd)

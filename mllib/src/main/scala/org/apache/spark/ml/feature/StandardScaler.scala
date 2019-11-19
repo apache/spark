@@ -108,12 +108,10 @@ class StandardScaler @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val Row(mean: Vector, variance: Vector) = dataset
-      .select(Summarizer.metrics("mean", "variance").summary(col($(inputCol))).as("summary"))
-      .select("summary.mean", "summary.variance")
+    val Row(mean: Vector, std: Vector) = dataset
+      .select(Summarizer.metrics("mean", "std").summary(col($(inputCol))).as("summary"))
+      .select("summary.mean", "summary.std")
       .first()
-
-    val std = Vectors.dense(variance.toArray.map(math.sqrt))
 
     copyValues(new StandardScalerModel(uid, std.compressed, mean.compressed).setParent(this))
   }

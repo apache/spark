@@ -215,13 +215,13 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val featuresSummarizer = instances.treeAggregate(
-      createSummarizerBuffer("mean", "variance", "count"))(
+      createSummarizerBuffer("mean", "std", "count"))(
       seqOp = (c: SummarizerBuffer, v: AFTPoint) => c.add(v.features),
       combOp = (c1: SummarizerBuffer, c2: SummarizerBuffer) => c1.merge(c2),
       depth = $(aggregationDepth)
     )
 
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val featuresStd = featuresSummarizer.std.toArray
     val numFeatures = featuresStd.size
 
     instr.logPipelineStage(this)
