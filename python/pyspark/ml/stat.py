@@ -200,21 +200,21 @@ class Summarizer(object):
     >>> from pyspark.ml.stat import Summarizer
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> summarizer = Summarizer.metrics("mean", "count")
+    >>> summarizer = Summarizer.metrics("mean", "count", "numFeatures")
     >>> df = sc.parallelize([Row(weight=1.0, features=Vectors.dense(1.0, 1.0, 1.0)),
     ...                      Row(weight=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
     >>> df.select(summarizer.summary(df.features, df.weight)).show(truncate=False)
     +-----------------------------------+
     |aggregate_metrics(features, weight)|
     +-----------------------------------+
-    |[[1.0,1.0,1.0], 1]                 |
+    |[[1.0,1.0,1.0], 1, 3]              |
     +-----------------------------------+
     <BLANKLINE>
     >>> df.select(summarizer.summary(df.features)).show(truncate=False)
     +--------------------------------+
     |aggregate_metrics(features, 1.0)|
     +--------------------------------+
-    |[[1.0,1.5,2.0], 2]              |
+    |[[1.0,1.5,2.0], 2, 3]           |
     +--------------------------------+
     <BLANKLINE>
     >>> df.select(Summarizer.mean(df.features, df.weight)).show(truncate=False)
@@ -231,6 +231,13 @@ class Summarizer(object):
     |[1.0,1.5,2.0] |
     +--------------+
     <BLANKLINE>
+    >>> df.select(Summarizer.sum(df.features), Summarizer.sumL2(df.features)).show(truncate=False)
+    +-------------+---------------+
+    |sum(features)|sumL2(features)|
+    +-------------+---------------+
+    |[2.0,3.0,4.0]|[2.0,5.0,10.0] |
+    +-------------+---------------+
+    <BLANKLINE>
 
     .. versionadded:: 2.4.0
 
@@ -244,6 +251,14 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "mean")
 
     @staticmethod
+    @since("3.0.0")
+    def sum(col, weightCol=None):
+        """
+        return a column of sum summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "sum")
+
+    @staticmethod
     @since("2.4.0")
     def variance(col, weightCol=None):
         """
@@ -252,12 +267,36 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "variance")
 
     @staticmethod
+    @since("3.0.0")
+    def std(col, weightCol=None):
+        """
+        return a column of std summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "std")
+
+    @staticmethod
     @since("2.4.0")
     def count(col, weightCol=None):
         """
         return a column of count summary
         """
         return Summarizer._get_single_metric(col, weightCol, "count")
+
+    @staticmethod
+    @since("3.0.0")
+    def weightSum(col, weightCol=None):
+        """
+        return a column of weightSum summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "weightSum")
+
+    @staticmethod
+    @since("3.0.0")
+    def numFeatures(col, weightCol=None):
+        """
+        return a column of numFeatures summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "numFeatures")
 
     @staticmethod
     @since("2.4.0")
@@ -300,6 +339,14 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "normL2")
 
     @staticmethod
+    @since("3.0.0")
+    def sumL2(col, weightCol=None):
+        """
+        return a column of sumL2 summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "sumL2")
+
+    @staticmethod
     def _check_param(featuresCol, weightCol):
         if weightCol is None:
             weightCol = lit(1.0)
@@ -323,12 +370,17 @@ class Summarizer(object):
 
         The following metrics are accepted (case sensitive):
          - mean: a vector that contains the coefficient-wise mean.
+         - sum: a vector that contains the coefficient-wise sum.
          - variance: a vector tha contains the coefficient-wise variance.
+         - std: a vector tha contains the coefficient-wise standard deviation.
          - count: the count of all vectors seen.
+         - weightSum: the sum of all weights seen.
+         - numFeatures: the size of vectors.
          - numNonzeros: a vector with the number of non-zeros for each coefficients
          - max: the maximum for each coefficient.
          - min: the minimum for each coefficient.
          - normL2: the Euclidean norm for each coefficient.
+         - sumL2: a vector that contains the coefficient-wise squared sum.
          - normL1: the L1 norm of each coefficient (sum of the absolute values).
 
         :param metrics:
