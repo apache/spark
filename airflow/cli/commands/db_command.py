@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -16,23 +14,31 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""
-API Client that allows interact with Airflow API
-"""
-from importlib import import_module
-from typing import Any
-
-from airflow import api, conf
-from airflow.api.client.api_client import Client
+"""Database sub-commands"""
+from airflow import settings
+from airflow.utils import cli as cli_utils, db
 
 
-def get_current_api_client() -> Client:
-    """
-    Return current API Client depends on current Airflow configuration
-    """
-    api_module = import_module(conf.get('cli', 'api_client'))  # type: Any
-    api_client = api_module.Client(
-        api_base_url=conf.get('cli', 'endpoint_url'),
-        auth=api.API_AUTH.api_auth.CLIENT_AUTH
-    )
-    return api_client
+def initdb(args):
+    """Initializes the metadata database"""
+    print("DB: " + repr(settings.engine.url))
+    db.initdb()
+    print("Done.")
+
+
+def resetdb(args):
+    """Resets the metadata database"""
+    print("DB: " + repr(settings.engine.url))
+    if args.yes or input("This will drop existing tables "
+                         "if they exist. Proceed? "
+                         "(y/n)").upper() == "Y":
+        db.resetdb()
+    else:
+        print("Bail.")
+
+
+@cli_utils.action_logging
+def upgradedb(args):
+    """Upgrades the metadata database"""
+    print("DB: " + repr(settings.engine.url))
+    db.upgradedb()

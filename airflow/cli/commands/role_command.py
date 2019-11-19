@@ -16,23 +16,29 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""
-API Client that allows interact with Airflow API
-"""
-from importlib import import_module
-from typing import Any
+#
+"""Roles sub-commands"""
+from tabulate import tabulate
 
-from airflow import api, conf
-from airflow.api.client.api_client import Client
+from airflow.utils import cli as cli_utils
+from airflow.www.app import cached_appbuilder
 
 
-def get_current_api_client() -> Client:
-    """
-    Return current API Client depends on current Airflow configuration
-    """
-    api_module = import_module(conf.get('cli', 'api_client'))  # type: Any
-    api_client = api_module.Client(
-        api_base_url=conf.get('cli', 'endpoint_url'),
-        auth=api.API_AUTH.api_auth.CLIENT_AUTH
-    )
-    return api_client
+def roles_list(args):
+    """Lists all existing roles"""
+    appbuilder = cached_appbuilder()
+    roles = appbuilder.sm.get_all_roles()
+    print("Existing roles:\n")
+    role_names = sorted([[r.name] for r in roles])
+    msg = tabulate(role_names,
+                   headers=['Role'],
+                   tablefmt=args.output)
+    print(msg)
+
+
+@cli_utils.action_logging
+def roles_create(args):
+    """Creates new empty role in DB"""
+    appbuilder = cached_appbuilder()
+    for role_name in args.role:
+        appbuilder.sm.add_role(role_name)

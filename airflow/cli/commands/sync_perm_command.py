@@ -16,23 +16,21 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""
-API Client that allows interact with Airflow API
-"""
-from importlib import import_module
-from typing import Any
-
-from airflow import api, conf
-from airflow.api.client.api_client import Client
+"""Sync permission command"""
+from airflow.models import DagBag
+from airflow.utils import cli as cli_utils
+from airflow.www.app import cached_appbuilder
 
 
-def get_current_api_client() -> Client:
-    """
-    Return current API Client depends on current Airflow configuration
-    """
-    api_module = import_module(conf.get('cli', 'api_client'))  # type: Any
-    api_client = api_module.Client(
-        api_base_url=conf.get('cli', 'endpoint_url'),
-        auth=api.API_AUTH.api_auth.CLIENT_AUTH
-    )
-    return api_client
+@cli_utils.action_logging
+def sync_perm(args):
+    """Updates permissions for existing roles and DAGs"""
+    appbuilder = cached_appbuilder()
+    print('Updating permission, view-menu for all existing roles')
+    appbuilder.sm.sync_roles()
+    print('Updating permission on all DAG views')
+    dags = DagBag().dags.values()
+    for dag in dags:
+        appbuilder.sm.sync_perm_for_dag(
+            dag.dag_id,
+            dag.access_control)

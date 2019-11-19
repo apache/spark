@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -16,23 +14,23 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""
-API Client that allows interact with Airflow API
-"""
-from importlib import import_module
-from typing import Any
 
-from airflow import api, conf
-from airflow.api.client.api_client import Client
+import io
+import unittest
+from unittest import mock
+
+import airflow.cli.commands.version_command
+from airflow.bin import cli
+from airflow.version import version
 
 
-def get_current_api_client() -> Client:
-    """
-    Return current API Client depends on current Airflow configuration
-    """
-    api_module = import_module(conf.get('cli', 'api_client'))  # type: Any
-    api_client = api_module.Client(
-        api_base_url=conf.get('cli', 'endpoint_url'),
-        auth=api.API_AUTH.api_auth.CLIENT_AUTH
-    )
-    return api_client
+class TestCliVersion(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.parser = cli.CLIFactory.get_parser()
+
+    def test_cli_version(self):
+        with mock.patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            airflow.cli.commands.version_command.version(self.parser.parse_args(['version']))
+            stdout = mock_stdout.getvalue()
+        self.assertIn(version, stdout)
