@@ -115,7 +115,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromInvalidString("2234567890 days", "integer overflow")
     checkFromInvalidString("\n", "Error parsing '\n' to interval")
     checkFromInvalidString("\t", "Error parsing '\t' to interval")
-
+    checkFromInvalidString(". seconds", "invalid value '.'")
   }
 
   test("string to interval: seconds with fractional part") {
