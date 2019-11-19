@@ -26,17 +26,15 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsRe
 
 /**
  * The [[Partition]] used by [[LocalShuffledRowRDD]].
- * @param indexId the index in the RDD.
- * @param mapIndex the mapper ID.
+ * @param mapIndex the index of mapper.
  * @param startPartition the start partition ID in mapIndex mapper.
- * @param endPartition the end partition ID in mapIndx mapper.
+ * @param endPartition the end partition ID in mapIndex mapper.
  */
 private final class LocalShuffledRowRDDPartition(
-    val indexId: Int,
+    override val index: Int,
     val mapIndex: Int,
     val startPartition: Int,
     val endPartition: Int) extends Partition {
-  override val index: Int = indexId
 }
 
 /**
@@ -81,12 +79,9 @@ class LocalShuffledRowRDD(
   }
 
   private[this] val partitionStartIndices: Array[Int] = {
-    val parallelism = advisoryParallelism match {
-      case Some(p) => math.max(1, p / numMappers)
-      case None => math.max(1, numReducers / numMappers)
-    }
+    val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
     // TODO split by data size in the future.
-    equallyDivide(numReducers, parallelism).toArray
+    equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
   }
 
   private[this] val partitionEndIndices: Array[Int] =
