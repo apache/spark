@@ -140,13 +140,17 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       val hashDistCol = hashDistUDF(col($(outputCol)))
 
       // Compute threshold to get around k elements.
-      var approxQuantile = numNearestNeighbors.toDouble / count + 0.05  // relative error = 0.05
+      // To guarantee to have enough neighbors in one pass, we need (p - err) * N >= M
+      // so we pick quantile p = M / N + err
+      // M: the number of nearest neighbors; N: the number of elements in dataset
+      val relativeError = 0.05
+      val approxQuantile = numNearestNeighbors.toDouble / count + relativeError
       val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
       if (approxQuantile >= 1) {
         modelDatasetWithDist
       } else {
         val hashThreshold = modelDatasetWithDist.stat
-          .approxQuantile(distCol, Array(approxQuantile), 0.05)  // relative error = 0.05
+          .approxQuantile(distCol, Array(approxQuantile), relativeError)
         // Filter the dataset where the hash value is less than the threshold.
         modelDatasetWithDist.filter(hashDistCol <= hashThreshold(0))
       }
