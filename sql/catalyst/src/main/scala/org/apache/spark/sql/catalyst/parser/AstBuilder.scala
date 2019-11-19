@@ -2153,12 +2153,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => TimestampType
       case ("string", Nil) => StringType
-      case ("char", length :: Nil) => CharType(length.getText.toInt)
+      case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
       case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
       case ("binary", Nil) => BinaryType
-      case ("decimal", Nil) => DecimalType.USER_DEFAULT
-      case ("decimal", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
-      case ("decimal", precision :: scale :: Nil) =>
+      case ("decimal" | "dec", Nil) => DecimalType.USER_DEFAULT
+      case ("decimal" | "dec", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
+      case ("decimal" | "dec", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
       case ("interval", Nil) => CalendarIntervalType
       case (dt, params) =>
@@ -2536,6 +2536,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       AlterNamespaceSetPropertiesStatement(
         visitMultipartIdentifier(ctx.multipartIdentifier),
         visitPropertyKeyValues(ctx.tablePropertyList))
+    }
+  }
+
+  /**
+   * Create an [[AlterNamespaceSetLocationStatement]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) namespace SET LOCATION path;
+   * }}}
+   */
+  override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
+    withOrigin(ctx) {
+      AlterNamespaceSetLocationStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        visitLocationSpec(ctx.locationSpec))
     }
   }
 
@@ -3227,6 +3243,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       visitMultipartIdentifier(ctx.multipartIdentifier),
       originalText = source(ctx.query),
       query = plan(ctx.query))
+  }
+
+  /**
+   * Create a [[RenameTableStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name1 RENAME TO multi_part_name2;
+   *   ALTER VIEW multi_part_name1 RENAME TO multi_part_name2;
+   * }}}
+   */
+  override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
+    RenameTableStatement(
+      visitMultipartIdentifier(ctx.from),
+      visitMultipartIdentifier(ctx.to),
+      ctx.VIEW != null)
   }
 
   /**

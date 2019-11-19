@@ -301,7 +301,7 @@ select date 'mar 11 2016'
 -- !query 32
 select tImEstAmp '2016-03-11 20:54:00.000'
 -- !query 32 schema
-struct<TIMESTAMP('2016-03-11 20:54:00'):timestamp>
+struct<TIMESTAMP '2016-03-11 20:54:00':timestamp>
 -- !query 32 output
 2016-03-11 20:54:00
 

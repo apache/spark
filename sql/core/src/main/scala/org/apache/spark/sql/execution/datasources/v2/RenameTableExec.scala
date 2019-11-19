@@ -15,15 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 
-package object config {
+/**
+ * Physical plan node for renaming a table.
+ */
+case class RenameTableExec(
+    catalog: TableCatalog,
+    oldIdent: Identifier,
+    newIdent: Identifier) extends V2CommandExec {
 
-  private[spark] val DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED =
-    ConfigBuilder("spark.sql.defaultUrlStreamHandlerFactory.enabled")
-      .doc("When true, set FsUrlStreamHandlerFactory to support ADD JAR against HDFS locations")
-      .booleanConf
-      .createWithDefault(true)
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def run(): Seq[InternalRow] = {
+    catalog.invalidateTable(oldIdent)
+    catalog.renameTable(oldIdent, newIdent)
+
+    Seq.empty
+  }
 }

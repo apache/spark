@@ -89,8 +89,8 @@ statement
          (WITH (DBPROPERTIES | PROPERTIES) tablePropertyList))*        #createNamespace
     | ALTER (database | NAMESPACE) multipartIdentifier
         SET (DBPROPERTIES | PROPERTIES) tablePropertyList              #setNamespaceProperties
-    | ALTER database db=errorCapturingIdentifier
-        SET locationSpec                                               #setDatabaseLocation
+    | ALTER (database | NAMESPACE) multipartIdentifier
+        SET locationSpec                                               #setNamespaceLocation
     | DROP (database | NAMESPACE) (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
@@ -140,8 +140,8 @@ statement
         '(' columns=multipartIdentifierList ')'                        #dropTableColumns
     | ALTER TABLE multipartIdentifier
         DROP (COLUMN | COLUMNS) columns=multipartIdentifierList        #dropTableColumns
-    | ALTER (TABLE | VIEW) from=tableIdentifier
-        RENAME TO to=tableIdentifier                                   #renameTable
+    | ALTER (TABLE | VIEW) from=multipartIdentifier
+        RENAME TO to=multipartIdentifier                               #renameTable
     | ALTER (TABLE | VIEW) multipartIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
     | ALTER (TABLE | VIEW) multipartIdentifier

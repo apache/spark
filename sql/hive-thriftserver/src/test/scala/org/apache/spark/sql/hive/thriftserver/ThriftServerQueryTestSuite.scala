@@ -37,7 +37,16 @@ import org.apache.spark.sql.types._
 
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
- * Note that this TestSuite does not support maven.
+ *
+ * To run the entire test suite:
+ * {{{
+ *   build/sbt "hive-thriftserver/test-only *ThriftServerQueryTestSuite" -Phive-thriftserver
+ * }}}
+ *
+ * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ * }}}
  *
  * TODO:
  *   1. Support UDF testing.
@@ -74,6 +83,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
+  // We only test this test suite with the default configuration to reduce test time.
   override val isTestWithConfigSets = false
 
   /** List of test cases to ignore, in lower cases. */
