@@ -346,7 +346,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val right = Seq(("1", "2"), ("3", null)).toDF("col1", "col2")
     val df = left.join(right, Seq("col1"))
 
-    // If column names are specified, the following fails due to unambiguity.
+    // If column names are specified, the following fails due to ambiguity.
     val exception = intercept[AnalysisException] {
       df.na.fill("hello", Seq("col2"))
     }
