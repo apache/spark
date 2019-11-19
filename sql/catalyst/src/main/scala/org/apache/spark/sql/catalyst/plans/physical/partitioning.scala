@@ -186,15 +186,6 @@ trait Partitioning {
   }
 }
 
-case class CoalescedPartitioning(numPartitions: Int) extends Partitioning {
-  override def satisfies0(required: Distribution): Boolean = required match {
-    case h: HashClusteredDistribution => true
-    case c: ClusteredDistribution => true
-    case UnspecifiedDistribution => true
-    case _ => false
-  }
-}
-
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning
 
 /**
