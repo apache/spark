@@ -43,11 +43,11 @@ date	timestamp	interval
 
 
 -- !query 5
-select typeof(x'ABCD'), typeof('SPARK'), typeof(cast('SPARK' as char(10))), typeof(cast('SPARK' as varchar(10)))
+select typeof(x'ABCD'), typeof('SPARK')
 -- !query 5 schema
-struct<typeof(X'ABCD'):string,typeof(SPARK):string,typeof(CAST(SPARK AS STRING)):string,typeof(CAST(SPARK AS STRING)):string>
+struct<typeof(X'ABCD'):string,typeof(SPARK):string>
 -- !query 5 output
-binary	string	string	string
+binary	string
 
 
 -- !query 6
