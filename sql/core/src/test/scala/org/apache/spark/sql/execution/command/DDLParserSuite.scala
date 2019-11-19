@@ -74,57 +74,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }.head
   }
 
-  test("alter database set dbproperties") {
-    // ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
-    val sql1 = "ALTER DATABASE database_name SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"
-    val sql2 = "ALTER SCHEMA database_name SET DBPROPERTIES ('a'='a')"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-
-    val expected1 = AlterDatabasePropertiesCommand(
-      "database_name",
-      Map("a" -> "a", "b" -> "b", "c" -> "c"))
-    val expected2 = AlterDatabasePropertiesCommand(
-      "database_name",
-      Map("a" -> "a"))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
   test("alter database - property values must be set") {
     assertUnsupported(
       sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
-  }
-
-  test("alter database set location") {
-    // ALTER (DATABASE|SCHEMA) database_name SET LOCATION
-    val sql1 = "ALTER DATABASE database_name SET LOCATION '/home/user/db'"
-    val parsed1 = parser.parsePlan(sql1)
-
-    val expected1 = AlterDatabaseSetLocationCommand("database_name", "/home/user/db")
-    comparePlans(parsed1, expected1)
-  }
-
-  test("describe database") {
-    // DESCRIBE DATABASE [EXTENDED] db_name;
-    val sql1 = "DESCRIBE DATABASE EXTENDED db_name"
-    val sql2 = "DESCRIBE DATABASE db_name"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-
-    val expected1 = DescribeDatabaseCommand(
-      "db_name",
-      extended = true)
-    val expected2 = DescribeDatabaseCommand(
-      "db_name",
-      extended = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
   }
 
   test("create function") {
@@ -532,15 +485,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  test("show tblproperties") {
-    val parsed1 = parser.parsePlan("SHOW TBLPROPERTIES tab1")
-    val expected1 = ShowTablePropertiesCommand(TableIdentifier("tab1", None), None)
-    val parsed2 = parser.parsePlan("SHOW TBLPROPERTIES tab1('propKey1')")
-    val expected2 = ShowTablePropertiesCommand(TableIdentifier("tab1", None), Some("propKey1"))
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
   test("SPARK-14383: DISTRIBUTE and UNSET as non-keywords") {
     val sql = "SELECT distribute, unset FROM x"
     val parsed = parser.parsePlan(sql)
@@ -798,7 +742,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assertError("select interval '23:61:15' hour to second",
       "minute 61 outside range [0, 59]")
     assertError("select interval '.1111111111' second",
-      "nanosecond 1111111111 outside range")
+      "'.1111111111' is out of range")
   }
 
   test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {

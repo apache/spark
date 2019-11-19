@@ -89,6 +89,9 @@ class GaussianMixtureModel private[ml] (
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable
   with HasTrainingSummary[GaussianMixtureSummary] {
 
+  @Since("3.0.0")
+  lazy val numFeatures: Int = gaussians.head.mean.size
+
   /** @group setParam */
   @Since("2.1.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -185,6 +188,11 @@ class GaussianMixtureModel private[ml] (
    */
   @Since("2.0.0")
   override def write: MLWriter = new GaussianMixtureModel.GaussianMixtureModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"GaussianMixtureModel: uid=$uid, k=${weights.length}, numFeatures=$numFeatures"
+  }
 
   /**
    * Gets summary of model on training set. An exception is

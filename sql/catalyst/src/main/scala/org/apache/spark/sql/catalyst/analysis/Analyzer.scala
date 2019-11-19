@@ -691,6 +691,11 @@ class Analyzer(
             .map(rel => alter.copy(table = rel))
             .getOrElse(alter)
 
+      case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
+        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+          .map(rel => show.copy(table = rel))
+          .getOrElse(show)
+
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
@@ -966,6 +971,18 @@ class Analyzer(
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
           (oldVersion, oldVersion.copy(generatorOutput = newOutput))
+
+        case oldVersion: Expand
+            if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
+          val producedAttributes = oldVersion.producedAttributes
+          val newOutput = oldVersion.output.map { attr =>
+            if (producedAttributes.contains(attr)) {
+              attr.newInstance()
+            } else {
+              attr
+            }
+          }
+          (oldVersion, oldVersion.copy(output = newOutput))
 
         case oldVersion @ Window(windowExpressions, _, _, child)
             if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
