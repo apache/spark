@@ -25,7 +25,7 @@ import scala.language.implicitConversions
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -136,26 +136,28 @@ class RelationalGroupedDataset protected[sql](
    *
    * @since 3.0.0
    */
-  def as[U: Encoder, T: Encoder]: KeyValueGroupedDataset[U, T] = {
-    val keyEncoder = encoderFor[U]
+  def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
+    val keyEncoder = encoderFor[K]
     val valueEncoder = encoderFor[T]
 
-    val aliasedGrps = groupingExprs.map { g =>
-     g.transformDown {
-       case u: UnresolvedAttribute => df.resolve(u.name)
-     }
-    }.map(alias)
-    val additionalCols = aliasedGrps.filter(g => !df.logicalPlan.outputSet.contains(g.toAttribute))
+    // Resolves grouping expressions.
+    val dummyPlan = Project(groupingExprs.map(alias), LocalRelation(df.logicalPlan.output))
+    val analyzedPlan = SimpleAnalyzer.execute(dummyPlan).asInstanceOf[Project]
+    SimpleAnalyzer.checkAnalysis(analyzedPlan)
+    val aliasedGroupings = analyzedPlan.projectList
+
+    // Adds the grouping expressions that are not in base DataFrame into outputs.
+    val addedCols = aliasedGroupings.filter(g => !df.logicalPlan.outputSet.contains(g.toAttribute))
     val qe = Dataset.ofRows(
       df.sparkSession,
-      Project(df.logicalPlan.output ++ additionalCols, df.logicalPlan)).queryExecution
+      Project(df.logicalPlan.output ++ addedCols, df.logicalPlan)).queryExecution
 
     new KeyValueGroupedDataset(
       keyEncoder,
       valueEncoder,
       qe,
       df.logicalPlan.output,
-      aliasedGrps.map(_.toAttribute))
+      aliasedGroupings.map(_.toAttribute))
   }
 
   /**

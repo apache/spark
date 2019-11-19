@@ -2255,17 +2255,28 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
     implicit val valueEncoder = RowEncoder(df1.schema)
 
-    val relationalGroupedDataset1 = df1.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
-    val relationalGroupedDataset2 = df2.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
+    val groupedDataset1 = df1.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
+    val groupedDataset2 = df2.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
 
-    val df3 = relationalGroupedDataset1
-      .cogroup(relationalGroupedDataset2) { case (_, data1, data2) =>
+    val df3 = groupedDataset1
+      .cogroup(groupedDataset2) { case (_, data1, data2) =>
         data1.zip(data2).map { p =>
           p._1.getInt(2) + p._2.getInt(2)
         }
       }.toDF
 
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
+  }
+
+  test("groupBy.keyAs: throw AnalysisException for unresolved grouping expr") {
+    val df = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
+
+    implicit val valueEncoder = RowEncoder(df.schema)
+
+    val err = intercept[AnalysisException] {
+      df.groupBy($"d", $"b").as[GroupByKey, Row]
+    }
+    assert(err.getMessage.contains("cannot resolve '`d`'"))
   }
 }
 
