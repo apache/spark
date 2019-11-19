@@ -332,6 +332,7 @@ object IntervalUtils {
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
+  // `toString` implementation in CalendarInterval is the multi-units format currently.
   def toMultiUnitsString(interval: CalendarInterval): String = interval.toString
 
   def toSqlStandardString(interval: CalendarInterval): String = {
