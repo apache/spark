@@ -126,10 +126,8 @@ case class AdaptiveSparkPlanExec(
 
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
-  override def doExecute(): RDD[InternalRow] = lock.synchronized {
-    if (isFinalPlan) {
-      currentPhysicalPlan.execute()
-    } else {
+  private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
+    if (!isFinalPlan) {
       // Make sure we only update Spark UI if this plan's `QueryExecution` object matches the one
       // retrieved by the `sparkContext`'s current execution ID. Note that sub-queries do not have
       // their own execution IDs and therefore rely on the main query to update UI.
@@ -210,12 +208,21 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       isFinalPlan = true
-
-      val ret = currentPhysicalPlan.execute()
       logDebug(s"Final plan: $currentPhysicalPlan")
-      executionId.foreach(onUpdatePlan)
-      ret
     }
+    currentPhysicalPlan
+  }
+
+  override def executeCollect(): Array[InternalRow] = {
+    getFinalPhysicalPlan().executeCollect()
+  }
+
+  override def executeTake(n: Int): Array[InternalRow] = {
+    getFinalPhysicalPlan().executeTake(n)
+  }
+
+  override def doExecute(): RDD[InternalRow] = {
+    getFinalPhysicalPlan().execute()
   }
 
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
