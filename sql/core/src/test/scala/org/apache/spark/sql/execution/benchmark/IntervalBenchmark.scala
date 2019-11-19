@@ -85,7 +85,8 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     val timeUnits = Seq(
       "13 months", "                      1                     months",
       "100 weeks", "9 days", "12 hours", "-                    3 hours",
-      "5 minutes", "45 seconds", "123 milliseconds", "567 microseconds")
+      "5 minutes", "45.123456 seconds", "123 milliseconds", "567 microseconds",
+      "98.76543210 seconds", "12.34567890 seconds", "99.999999999 seconds")
     val intervalToTest = ListBuffer[String]()
 
     val benchmark = new Benchmark("cast strings to intervals", N, output = output)
@@ -94,9 +95,11 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     addCase(benchmark, N, "prepare string w/o interval", buildString(false, timeUnits))
     addCase(benchmark, N, intervalToTest) // Only years
 
-    for (unit <- timeUnits) {
+    timeUnits.zipWithIndex.foreach { case (unit, i) =>
       intervalToTest.append(unit)
-      addCase(benchmark, N, intervalToTest)
+      if (i % 2 == 0) {
+        addCase(benchmark, N, intervalToTest)
+      }
     }
 
     benchmark.run()
