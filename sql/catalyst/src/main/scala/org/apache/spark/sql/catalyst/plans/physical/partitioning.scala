@@ -171,8 +171,6 @@ trait Partitioning {
     required.requiredNumPartitions.forall(_ == numPartitions) && satisfies0(required)
   }
 
-  def changeNumPartitions(newPartitionNum: Int): Partitioning
-
   /**
    * The actual method that defines whether this [[Partitioning]] can satisfy the given
    * [[Distribution]], after the `numPartitions` check.
@@ -188,30 +186,26 @@ trait Partitioning {
   }
 }
 
-case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
-  override def changeNumPartitions(newPartitionNum: Int): Partitioning = {
-    this.copy(numPartitions = newPartitionNum)
+case class CoalescedPartitioning(numPartitions: Int) extends Partitioning {
+  override def satisfies0(required: Distribution): Boolean = required match {
+    case h: HashClusteredDistribution => true
+    case c: ClusteredDistribution => true
+    case UnspecifiedDistribution => true
+    case _ => false
   }
 }
+
+case class UnknownPartitioning(numPartitions: Int) extends Partitioning
 
 /**
  * Represents a partitioning where rows are distributed evenly across output partitions
  * by starting from a random target partition number and distributing rows in a round-robin
  * fashion. This partitioning is used when implementing the DataFrame.repartition() operator.
  */
-case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning {
-  override def changeNumPartitions(newPartitionNum: Int): Partitioning = {
-    this.copy(numPartitions = newPartitionNum)
-  }
-}
+case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning
 
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
-
-  override def changeNumPartitions(newPartitionNum: Int): Partitioning = {
-    UnknownPartitioning(numPartitions = newPartitionNum)
-  }
-
   override def satisfies0(required: Distribution): Boolean = required match {
     case _: BroadcastDistribution => false
     case _ => true
@@ -229,10 +223,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
-
-  override def changeNumPartitions(newPartitionNum: Int): Partitioning = {
-    this.copy(numPartitions = newPartitionNum)
-  }
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
@@ -273,10 +263,6 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override def children: Seq[SortOrder] = ordering
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
-
-  override def changeNumPartitions(newPartitionNum: Int): Partitioning = {
-    UnknownPartitioning(numPartitions = newPartitionNum)
-  }
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
@@ -348,10 +334,6 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")
   }
-
-  override def changeNumPartitions(newPartitionNum: Int): Partitioning = {
-    UnknownPartitioning(numPartitions = newPartitionNum)
-  }
 }
 
 /**
@@ -364,9 +346,5 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
   override def satisfies0(required: Distribution): Boolean = required match {
     case BroadcastDistribution(m) if m == mode => true
     case _ => false
-  }
-
-  override def changeNumPartitions(newPartitionNum: Int): Partitioning = {
-    UnknownPartitioning(numPartitions = newPartitionNum)
   }
 }

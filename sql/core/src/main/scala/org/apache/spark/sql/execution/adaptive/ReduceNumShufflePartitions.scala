@@ -24,7 +24,7 @@ import org.apache.spark.MapOutputStatistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{CoalescedPartitioning, HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
@@ -194,8 +194,10 @@ case class CoalescedShuffleReaderExec(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputPartitioning: Partitioning =
-    child.outputPartitioning.changeNumPartitions(partitionStartIndices.length)
+  override def outputPartitioning: Partitioning = child.outputPartitioning match {
+    case h: HashPartitioning => CoalescedPartitioning(h.numPartitions)
+    case p: Partitioning => UnknownPartitioning(p.numPartitions)
+  }
 
   private var cachedShuffleRDD: ShuffledRowRDD = null
 

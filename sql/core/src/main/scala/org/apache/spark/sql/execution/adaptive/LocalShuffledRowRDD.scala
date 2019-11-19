@@ -25,16 +25,18 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
 
 /**
- * The [[Partition]] used by [[LocalShuffledRowRDD]]. A pre-shuffle partition
- * (identified by `preShufflePartitionIndex`) contains a range of post-shuffle partitions
- * (`startPostShufflePartitionIndex` to `endPostShufflePartitionIndex - 1`, inclusive).
+ * The [[Partition]] used by [[LocalShuffledRowRDD]].
+ * @param indexId the index in the RDD.
+ * @param mapIndex the mapper ID.
+ * @param startPartition the start partition ID in mapIndex mapper.
+ * @param endPartition the end partition ID in mapIndx mapper.
  */
 private final class LocalShuffledRowRDDPartition(
+    val indexId: Int,
     val mapIndex: Int,
-    val preShufflePartitionIndex: Int,
-    val startPreShufflePartitionIndex: Int,
-    val endPreShufflePartitionIndex: Int) extends Partition {
-  override val index: Int = preShufflePartitionIndex
+    val startPartition: Int,
+    val endPartition: Int) extends Partition {
+  override val index: Int = indexId
 }
 
 /**
@@ -80,9 +82,10 @@ class LocalShuffledRowRDD(
 
   private[this] val partitionStartIndices: Array[Int] = {
     val parallelism = advisoryParallelism match {
-      case Some(p) => p
-      case None => math.min(1, numReducers / numMappers)
+      case Some(p) => math.max(1, p / numMappers)
+      case None => math.max(1, numReducers / numMappers)
     }
+    // TODO split by data size in the future.
     equallyDivide(numReducers, parallelism).toArray
   }
 
@@ -97,9 +100,9 @@ class LocalShuffledRowRDD(
     assert(partitionStartIndices.length == partitionEndIndices.length)
     val partitions = ArrayBuffer[LocalShuffledRowRDDPartition]()
     var j = 0
-    for (i <- 0 to numMappers - 1) {
+    for (mapIndex <- 0 until numMappers) {
       partitionStartIndices.zip(partitionEndIndices).map { case (start, end) =>
-        partitions += new LocalShuffledRowRDDPartition(i, j, start, end)
+        partitions += new LocalShuffledRowRDDPartition(j, mapIndex, start, end)
           j = j + 1
       }
     }
@@ -121,8 +124,8 @@ class LocalShuffledRowRDD(
     val reader = SparkEnv.get.shuffleManager.getReaderForOneMapper(
       dependency.shuffleHandle,
       mapIndex,
-      localRowPartition.startPreShufflePartitionIndex,
-      localRowPartition.endPreShufflePartitionIndex,
+      localRowPartition.startPartition,
+      localRowPartition.endPartition,
       context,
       sqlMetricsReporter)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)

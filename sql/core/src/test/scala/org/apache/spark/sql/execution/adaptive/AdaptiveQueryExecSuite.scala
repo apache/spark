@@ -103,6 +103,64 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("Reuse the parallelism of CoalescedShuffleReaderExec as the tasks" +
+    " of LocalShuffleReaderExec") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "150") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      val localReaders = collect(adaptivePlan) {
+        case reader: LocalShuffleReaderExec => reader
+      }
+      // The pre-shuffle partition size is [0, 0, 0, 72, 0]
+      assert(localReaders(0).advisoryParallelism.get == 1)
+      // The pre-shuffle partition size is [0, 72, 0, 72, 126]
+      assert(localReaders(1).advisoryParallelism.get == 2)
+      val localShuffleRDD0 = localReaders(0).getLocalShuffleRDD().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).getLocalShuffleRDD().asInstanceOf[LocalShuffledRowRDD]
+      // the final parallelism is
+      // math.max(1, advisoryParallelism / numMappers): math.max(1, 1/2) = 1
+      // and the partitions length is 1 * numMappers = 2
+      assert(localShuffleRDD0.getPartitions.length == 2)
+      // the final parallelism is
+      // math.max(1, advisoryParallelism / numMappers): math.max(1, 2 / 2) =1
+      // and the partitions length is 1 * numMappers = 2
+      assert(localShuffleRDD1.getPartitions.length == 2)
+    }
+  }
+
+  test("Use the default parallelism as the tasks" +
+    " of LocalShuffleReaderExec") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "false") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      val localReaders = collect(adaptivePlan) {
+        case reader: LocalShuffleReaderExec => reader
+      }
+      val localShuffleRDD0 = localReaders(0).getLocalShuffleRDD().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).getLocalShuffleRDD().asInstanceOf[LocalShuffledRowRDD]
+      // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD0.getPartitions.length == 4)
+      // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD1.getPartitions.length == 4)
+    }
+  }
+
   test("Scalar subquery") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -135,7 +193,9 @@ class AdaptiveQueryExecSuite
   }
 
   test("multiple joins") {
-    def runMultipleJoins(): Unit = {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
           |WITH t4 AS (
@@ -174,18 +234,6 @@ class AdaptiveQueryExecSuite
       // For the top level 'BroadcastHashJoin', the probe side is not shuffle query stage
       // and the build side shuffle query stage is also converted to local shuffle reader.
       checkNumLocalShuffleReaders(adaptivePlan)
-    }
-    withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
-     runMultipleJoins()
-    }
-
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
-      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "false") {
-    runMultipleJoins()
     }
   }
 

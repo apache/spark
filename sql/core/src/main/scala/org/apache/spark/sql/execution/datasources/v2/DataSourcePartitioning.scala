@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Partitioning}
 
 /**
@@ -53,9 +52,5 @@ class DataSourcePartitioning(
       case a: Attribute => colNames.contains(a)
       case _ => false
     }
-  }
-
-  override def changeNumPartitions(newPartitionNum: Int): physical.Partitioning = {
-    UnknownPartitioning(numPartitions = newPartitionNum)
   }
 }
