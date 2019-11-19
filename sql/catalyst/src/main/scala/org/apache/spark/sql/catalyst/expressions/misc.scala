@@ -177,3 +177,20 @@ case class Version() extends LeafExpression with CodegenFallback {
     UTF8String.fromString(SPARK_VERSION_SHORT + " " + SPARK_REVISION)
   }
 }
+
+@ExpressionDescription(
+  usage = """_FUNC_(expr) - Return readable string representation for the type.""",
+  examples = """
+      Examples:
+      > SELECT _FUNC_(1);
+       int
+      > SELECT _FUNC_(array(1));
+       array<int>
+  """,
+  since = "3.0.0")
+case class TypeOf(child: Expression) extends UnaryExpression with CodegenFallback {
+  override def nullable: Boolean = false
+  override def foldable: Boolean = true
+  override def dataType: DataType = StringType
+  override def eval(input: InternalRow): Any = child.dataType.catalogString
+}
