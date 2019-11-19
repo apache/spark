@@ -1956,10 +1956,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /** Create a numeric literal expression. */
-  private def numericLiteral
-      (ctx: NumberContext, rawStrippedQualifier: String,
-       minValue: BigDecimal, maxValue: BigDecimal, typeName: String)
-      (converter: String => Any): Literal = withOrigin(ctx) {
+  private def numericLiteral(
+      ctx: NumberContext,
+      rawStrippedQualifier: String,
+      minValue: BigDecimal,
+      maxValue: BigDecimal,
+      typeName: String)(converter: String => Any): Literal = withOrigin(ctx) {
     try {
       val rawBigDecimal = BigDecimal(rawStrippedQualifier)
       if (rawBigDecimal < minValue || rawBigDecimal > maxValue) {
