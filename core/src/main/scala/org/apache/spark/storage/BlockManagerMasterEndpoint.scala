@@ -30,7 +30,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
@@ -55,6 +55,12 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from executor ID to block manager ID.
   private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
+
+  // Keep track of which executors are being shut down. Also keep track of their addresses,
+  // so that onDisconnected() can clean up this data, since that address is different from the
+  // block manager's address.
+  private val executorsPendingRemoval = new mutable.HashSet[String]
+  private val addressToExecutorId = new mutable.HashMap[String, String]
 
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
@@ -85,7 +91,7 @@ class BlockManagerMasterEndpoint(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint) =>
-      context.reply(register(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
+      register(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint, context)
 
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
@@ -135,8 +141,8 @@ class BlockManagerMasterEndpoint(
       removeBlockFromWorkers(blockId)
       context.reply(true)
 
-    case RemoveExecutor(execId) =>
-      removeExecutor(execId)
+    case RemoveExecutor(execId, removedFromSpark) =>
+      removeExecutor(execId, removedFromSpark)
       context.reply(true)
 
     case StopBlockManagerMaster =>
@@ -239,14 +245,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId): Unit = {
-    val info = blockManagerInfo(blockManagerId)
-
-    // Remove the block manager from blockManagerIdByExecutor.
-    blockManagerIdByExecutor -= blockManagerId.executorId
-
-    // Remove it from blockManagerInfo and remove all the blocks.
-    blockManagerInfo.remove(blockManagerId)
-
+    val info = blockManagerInfo.remove(blockManagerId).get
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
@@ -280,9 +279,14 @@ class BlockManagerMasterEndpoint(
 
   }
 
-  private def removeExecutor(execId: String): Unit = {
+  private def removeExecutor(execId: String, removedFromSpark: Boolean): Unit = {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
-    blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
+    blockManagerIdByExecutor.remove(execId).foreach { bm =>
+      if (removedFromSpark) {
+        executorsPendingRemoval += execId
+      }
+      removeBlockManager(bm)
+    }
   }
 
   // Remove a block from the slaves that have it. This can only be used to remove
@@ -383,7 +387,15 @@ class BlockManagerMasterEndpoint(
       localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
-      slaveEndpoint: RpcEndpointRef): BlockManagerId = {
+      slaveEndpoint: RpcEndpointRef,
+      context: RpcCallContext): Unit = {
+
+    if (executorsPendingRemoval.contains(idWithoutTopologyInfo.executorId)) {
+      context.sendFailure(
+        new IllegalStateException(s"Executor ${idWithoutTopologyInfo.executorId} being removed."))
+      return
+    }
+
     // the dummy id is not expected to contain the topology information.
     // we get that info here and respond back with a more fleshed out block manager id
     val id = BlockManagerId(
@@ -399,13 +411,14 @@ class BlockManagerMasterEndpoint(
           // A block manager of the same executor already exists, so remove it (assumed dead)
           logError("Got two different block manager registrations on same executor - "
               + s" will replace old one $oldId with new one $id")
-          removeExecutor(id.executorId)
+          removeExecutor(id.executorId, false)
         case None =>
       }
       logInfo("Registering block manager %s with %s RAM, %s".format(
         id.hostPort, Utils.bytesToString(maxOnHeapMemSize + maxOffHeapMemSize), id))
 
       blockManagerIdByExecutor(id.executorId) = id
+      addressToExecutorId(context.senderAddress.hostPort) = id.executorId
 
       val externalShuffleServiceBlockStatus =
         if (externalShuffleServiceRddFetchEnabled) {
@@ -421,7 +434,7 @@ class BlockManagerMasterEndpoint(
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
         Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
-    id
+    context.reply(id)
   }
 
   private def updateBlockInfo(
@@ -437,7 +450,8 @@ class BlockManagerMasterEndpoint(
         // so we should not indicate failure.
         return true
       } else {
-        return false
+        // If the executor is being removed, lie to it and say it does not need to re-register.
+        return executorsPendingRemoval.contains(blockManagerId.executorId)
       }
     }
 
@@ -540,6 +554,15 @@ class BlockManagerMasterEndpoint(
 
   override def onStop(): Unit = {
     askThreadPool.shutdownNow()
+  }
+
+  override def onDisconnected(addr: RpcAddress): Unit = {
+    addressToExecutorId.remove(addr.hostPort).foreach { execId =>
+      if (executorsPendingRemoval.contains(execId)) {
+        logTrace(s"Executor $execId disconnected.")
+        executorsPendingRemoval -= execId
+      }
+    }
   }
 }
 

@@ -117,7 +117,8 @@ private[spark] object BlockManagerMessages {
 
   case class GetExecutorEndpointRef(executorId: String) extends ToBlockManagerMaster
 
-  case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
+  case class RemoveExecutor(execId: String, removedFromSpark: Boolean)
+    extends ToBlockManagerMaster
 
   case object StopBlockManagerMaster extends ToBlockManagerMaster
 

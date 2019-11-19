@@ -275,7 +275,16 @@ private[spark] class DAGScheduler(
    * Called by TaskScheduler implementation when an executor fails.
    */
   def executorLost(execId: String, reason: ExecutorLossReason): Unit = {
-    eventProcessLoop.post(ExecutorLost(execId, reason))
+    // SPARK-29965. We need to let the heartbeat receiver know about the removal before
+    // the scheduler actually removes internal state; otherwise the heartbeat receiver
+    // would call back into the scheduler thinking the executor still existed, and when
+    // being told otherwise, would ask it to re-register.
+    sc.heartbeatReceiver.ask[Boolean](ExecutorRemoved(execId)).onComplete { result =>
+      if (result.isFailure) {
+        logWarning(s"Error removing executor $execId from heartbeat receiver.")
+      }
+      eventProcessLoop.post(ExecutorLost(execId, reason))
+    }(ThreadUtils.sameThread)
   }
 
   /**
@@ -1682,7 +1691,8 @@ private[spark] class DAGScheduler(
               execId = bmAddress.executorId,
               fileLost = true,
               hostToUnregisterOutputs = hostToUnregisterOutputs,
-              maybeEpoch = Some(task.epoch))
+              maybeEpoch = Some(task.epoch),
+              removedFromSpark = false)
           }
         }
 
@@ -1838,12 +1848,13 @@ private[spark] class DAGScheduler(
       execId: String,
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
-      maybeEpoch: Option[Long] = None): Unit = {
+      maybeEpoch: Option[Long] = None,
+      removedFromSpark: Boolean = true): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
-      blockManagerMaster.removeExecutor(execId)
+      blockManagerMaster.removeExecutor(execId, removedFromSpark)
       if (fileLost) {
         hostToUnregisterOutputs match {
           case Some(host) =>

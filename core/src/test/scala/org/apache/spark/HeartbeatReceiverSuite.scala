@@ -24,7 +24,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{mock, spy, verify, when}
+import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -117,23 +117,22 @@ class HeartbeatReceiverSuite
     triggerHeartbeat(executorId1, executorShouldReregister = true)
   }
 
-  test("reregister if heartbeat from unregistered executor") {
+  test("do not reregister if heartbeat from unregistered executor") {
     heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
     // Received heartbeat from unknown executor, so we ask it to re-register
-    triggerHeartbeat(executorId1, executorShouldReregister = true)
+    triggerHeartbeat(executorId1, executorShouldReregister = false, executorIsKnown = false)
     assert(getTrackedExecutors.isEmpty)
   }
 
-  test("reregister if heartbeat from removed executor") {
+  test("do not reregister if heartbeat from removed executor") {
     heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
     addExecutorAndVerify(executorId2)
     // Remove the second executor but not the first
     removeExecutorAndVerify(executorId2)
     // Now trigger the heartbeats
-    // A heartbeat from the second executor should require reregistering
     triggerHeartbeat(executorId1, executorShouldReregister = false)
-    triggerHeartbeat(executorId2, executorShouldReregister = true)
+    triggerHeartbeat(executorId2, executorShouldReregister = false, executorIsKnown = false)
     val trackedExecutors = getTrackedExecutors
     assert(trackedExecutors.size === 1)
     assert(trackedExecutors.contains(executorId1))
@@ -214,7 +213,8 @@ class HeartbeatReceiverSuite
   /** Manually send a heartbeat and return the response. */
   private def triggerHeartbeat(
       executorId: String,
-      executorShouldReregister: Boolean): Unit = {
+      executorShouldReregister: Boolean,
+      executorIsKnown: Boolean = true): Unit = {
     val metrics = TaskMetrics.empty
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val executorMetrics = new ExecutorMetrics(Array(123456L, 543L, 12345L, 1234L, 123L,
@@ -227,7 +227,8 @@ class HeartbeatReceiverSuite
     } else {
       assert(!response.reregisterBlockManager)
       // Additionally verify that the scheduler callback is called with the correct parameters
-      verify(scheduler).executorHeartbeatReceived(
+      val mode = if (executorIsKnown) times(1) else never()
+      verify(scheduler, mode).executorHeartbeatReceived(
         meq(executorId),
         meq(Array(1L -> metrics.accumulators())),
         meq(blockManagerId),

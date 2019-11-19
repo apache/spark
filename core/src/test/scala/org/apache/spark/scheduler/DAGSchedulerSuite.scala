@@ -252,7 +252,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
             getOrElse(Seq())
         }.toIndexedSeq
       }
-      override def removeExecutor(execId: String): Unit = {
+      override def removeExecutor(execId: String, removedFromSpark: Boolean = true): Unit = {
         // don't need to propagate to the driver, which we don't have
       }
     }

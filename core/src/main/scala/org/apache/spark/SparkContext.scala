@@ -326,6 +326,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def shuffleDriverComponents: ShuffleDriverComponents = _shuffleDriverComponents
 
+  private[spark] def heartbeatReceiver: RpcEndpointRef = _heartbeatReceiver
+
   /**
    * A unique identifier for the Spark application.
    * Its format depends on the scheduler implementation.

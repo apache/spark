@@ -469,7 +469,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getSingleAndReleaseLock("a1").isDefined, "a1 was not in store")
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
-    master.removeExecutor(store.blockManagerId.executorId)
+    master.removeExecutor(store.blockManagerId.executorId, removedFromSpark = false)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
     val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
@@ -485,7 +485,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
-    master.removeExecutor(store.blockManagerId.executorId)
+    master.removeExecutor(store.blockManagerId.executorId, removedFromSpark = false)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
@@ -502,7 +502,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // try many times to trigger any deadlocks
     for (i <- 1 to 100) {
-      master.removeExecutor(store.blockManagerId.executorId)
+      master.removeExecutor(store.blockManagerId.executorId, removedFromSpark = false)
       val t1 = new Thread {
         override def run(): Unit = {
           store.putIterator(
@@ -531,6 +531,21 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store.dropFromMemoryIfExists("a2", () => null: Either[Array[Any], ChunkedByteBuffer])
       store.waitForAsyncReregister()
     }
+  }
+
+  test("re-registering a removed block manager should fail") {
+    val store = makeBlockManager(2000)
+    val a1 = new Array[Byte](400)
+
+    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
+
+    master.removeExecutor(store.blockManagerId.executorId, removedFromSpark = true)
+    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
+
+    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
+    store.waitForAsyncReregister()
+    assert(master.getLocations("a1").size == 0, "a1 should not have been re-added")
   }
 
   test("correct BlockResult returned from get() calls") {

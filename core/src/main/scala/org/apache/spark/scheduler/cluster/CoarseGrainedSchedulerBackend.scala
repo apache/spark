@@ -26,7 +26,7 @@ import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.executor.ExecutorLogUrlHandler
@@ -250,11 +250,25 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
             }
           }
-          executorRef.send(RegisteredExecutor)
-          // Note: some tests expect the reply to come after we put the executor in the map
-          context.reply(true)
-          listenerBus.post(
-            SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
+          // SPARK-29965. We need to let the heartbeat receiver know about the executor
+          // before the executor ever has the chance to send a heartbeat back to the driver.
+          // So update it before sending the reply to the executor.
+          scheduler.sc.heartbeatReceiver.ask[Boolean](ExecutorRegistered(executorId))
+            .onComplete { result =>
+              executorRef.send(RegisteredExecutor)
+              // Note: some tests expect the reply to come after we put the executor in the map
+              context.reply(true)
+              listenerBus.post(
+                SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
+
+              if (result.isFailure) {
+                // This should never happen. But, if it does, let's try to kill the executor.
+                logError(
+                  s"Error adding executor $executorId to heartbeat receiver; killing executor.",
+                  result.failed.get)
+                self.send(RemoveExecutor(executorId, ExecutorKilled))
+              }
+            }(ThreadUtils.sameThread)
         }
 
       case StopDriver =>

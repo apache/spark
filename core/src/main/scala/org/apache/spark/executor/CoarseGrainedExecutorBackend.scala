@@ -156,12 +156,6 @@ private[spark] class CoarseGrainedExecutorBackend(
     case StopExecutor =>
       stopping.set(true)
       logInfo("Driver commanded a shutdown")
-      // Cannot shutdown here because an ack may need to be sent back to the caller. So send
-      // a message to self to actually do the shutdown.
-      self.send(Shutdown)
-
-    case Shutdown =>
-      stopping.set(true)
       new Thread("CoarseGrainedExecutorBackend-stop-executor") {
         override def run(): Unit = {
           // executor.stop() will call `SparkEnv.stop()` which waits until RpcEnv stops totally.

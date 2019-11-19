@@ -37,17 +37,23 @@ class BlockManagerMaster(
 
   val timeout = RpcUtils.askRpcTimeout(conf)
 
-  /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
-  def removeExecutor(execId: String): Unit = {
-    tell(RemoveExecutor(execId))
+  /**
+   * Remove a dead executor from the driver endpoint. This is only called on the driver side.
+   * When the executor is being shut down, `removedFromSpark` should be true so that the
+   * block manager knows not to allow the executor to re-register while the executor is
+   * expected to be shutting down.
+   */
+  def removeExecutor(execId: String, removedFromSpark: Boolean = true): Unit = {
+    tell(RemoveExecutor(execId, removedFromSpark))
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
-  /** Request removal of a dead executor from the driver endpoint.
-   *  This is only called on the driver side. Non-blocking
+  /**
+   * Request removal of a dead executor from the driver endpoint.
+   * This is only called on the driver side. Non-blocking
    */
   def removeExecutorAsync(execId: String): Unit = {
-    driverEndpoint.ask[Boolean](RemoveExecutor(execId))
+    driverEndpoint.ask[Boolean](RemoveExecutor(execId, true))
     logInfo("Removal of executor " + execId + " requested")
   }
 
