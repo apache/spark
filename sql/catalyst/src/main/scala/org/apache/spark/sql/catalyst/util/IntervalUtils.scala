@@ -504,7 +504,8 @@ object IntervalUtils {
     var months: Int = 0
     var days: Int = 0
     var microseconds: Double = 0
-    val fractionSb = new StringBuilder("0.")
+    var fractionScale: Double = 0
+    var fraction: Double = 0
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
       b match {
@@ -535,6 +536,8 @@ object IntervalUtils {
         case SIGN =>
           currentValue = 0
           isNegative = false
+          fractionScale = 10
+          fraction = 0
           // We preset next state from SIGN to TRIM_BEFORE_VALUE. If we meet '.' in the SIGN state,
           // it means that the interval value we deal with here is a numeric with only fractional
           // part, such as '.11 second', which can be parsed to 0.11 seconds. In this case, we need
@@ -568,15 +571,15 @@ object IntervalUtils {
           i += 1
         case VALUE_FRACTIONAL_PART =>
           b match {
-            case _ if '0' <= b && b <= '9' => fractionSb.append(b - '0')
+            case _ if '0' <= b && b <= '9' =>
+              fraction += (b - '0') / fractionScale
+              fractionScale *= 10
             case ' ' => state = TRIM_BEFORE_UNIT
             case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
         case UNIT_BEGIN =>
-          var fraction = if (fractionSb.length == 2) 0 else fractionSb.toDouble
-          fractionSb.setLength(2)
           if (isNegative) {
             currentValue = -currentValue
             fraction = -fraction
