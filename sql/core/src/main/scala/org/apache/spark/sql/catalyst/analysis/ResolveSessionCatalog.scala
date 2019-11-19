@@ -179,6 +179,9 @@ class ResolveSessionCatalog(
       }
       AlterDatabaseSetLocationCommand(nameParts.head, location)
 
+    case RenameTableStatement(SessionCatalog(_, oldName), newNameParts, isView) =>
+      AlterTableRenameCommand(oldName.asTableIdentifier, newNameParts.asTableIdentifier, isView)
+
     case DescribeTableStatement(
          nameParts @ SessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       loadTable(catalog, tableName.asIdentifier).collect {

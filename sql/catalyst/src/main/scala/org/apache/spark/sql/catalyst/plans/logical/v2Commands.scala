@@ -401,6 +401,14 @@ case class AlterTable(
 }
 
 /**
+ * The logical plan of the ALTER TABLE RENAME command that works for v2 tables.
+ */
+case class RenameTable(
+    catalog: TableCatalog,
+    oldIdent: Identifier,
+    newIdent: Identifier) extends Command
+
+/**
  * The logical plan of the SHOW TABLE command that works for v2 catalogs.
  */
 case class ShowTables(

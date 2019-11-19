@@ -1535,6 +1535,24 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("AlterTable: rename table basic test") {
+    withTable("testcat.ns1.new") {
+      sql(s"CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old")))
+
+      sql(s"ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new")))
+    }
+  }
+
+  test("AlterTable: renaming views are not supported") {
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
+    }
+    assert(e.getMessage.contains("Renaming view is not supported in v2 catalogs"))
+  }
+
   test("ANALYZE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

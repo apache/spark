@@ -100,6 +100,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       AlterNamespaceSetProperties(
         catalog.asNamespaceCatalog, nameParts, Map("location" -> location))
 
+    case RenameTableStatement(NonSessionCatalog(catalog, oldName), newNameParts, isView) =>
+      if (isView) {
+        throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
+      }
+      RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
+
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
