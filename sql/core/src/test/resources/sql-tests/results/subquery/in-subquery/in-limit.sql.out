@@ -74,10 +74,10 @@ WHERE  t1a IN (SELECT t2a
                WHERE  t1d = t2d)
 LIMIT  2
 -- !query 3 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 3 output
-val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
-val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1b	8	16	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
+val1c	8	16	19	17.0	25.0	2600.0	2014-05-04 01:02:00.001	2014-05-05
 
 
 -- !query 4
@@ -89,12 +89,12 @@ WHERE  t1c IN (SELECT t2c
                LIMIT  2)
 LIMIT 4
 -- !query 4 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 4 output
-val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
-val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
-val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
-val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1a	16	12	10	15.0	20.0	2000.0	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000.0	2014-06-04 01:02:00.001	2014-06-04
+val1b	8	16	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
+val1c	8	16	19	17.0	25.0	2600.0	2014-05-04 01:02:00.001	2014-05-05
 
 
 -- !query 5
@@ -122,12 +122,12 @@ WHERE  t1b NOT IN (SELECT t2b
                    WHERE  t2b > 6
                    LIMIT  2)
 -- !query 6 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 6 output
-val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
-val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
-val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
-val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
+val1a	16	12	10	15.0	20.0	2000.0	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000.0	2014-06-04 01:02:00.001	2014-06-04
+val1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:00:00	2014-04-04
+val1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:02:00.001	2014-04-04
 
 
 -- !query 7

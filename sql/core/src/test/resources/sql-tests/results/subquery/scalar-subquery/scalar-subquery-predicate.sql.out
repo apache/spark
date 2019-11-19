@@ -174,10 +174,10 @@ FROM   t1
 WHERE  t1c + 5 = (SELECT max(t2e)
                   FROM   t2)
 -- !query 11 schema
-struct<t1a:string,t1b:smallint,t1g:decimal(2,-2)>
+struct<t1a:string,t1b:smallint,t1g:double>
 -- !query 11 output
-val1a	16	2000
-val1a	16	2000
+val1a	16	2000.0
+val1a	16	2000.0
 
 
 -- !query 12
@@ -217,11 +217,11 @@ WHERE  t2a = t1a
 AND    max_t1g = (SELECT max(t1g)
                   FROM   t1)
 -- !query 14 schema
-struct<t2a:string,max_t1g:decimal(2,-2)>
+struct<t2a:string,max_t1g:double>
 -- !query 14 output
-val1b	2600
-val1c	2600
-val1e	2600
+val1b	2600.0
+val1c	2600.0
+val1e	2600.0
 
 
 -- !query 15

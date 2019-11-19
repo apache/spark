@@ -116,25 +116,25 @@ struct<(CAST(10.300000000000000000 AS DECIMAL(21,19)) * CAST(3.00000000000000000
 -- !query 13
 select 2.35E10 * 1.0
 -- !query 13 schema
-struct<(CAST(2.35E+10 AS DECIMAL(12,1)) * CAST(1.0 AS DECIMAL(12,1))):decimal(6,-7)>
+struct<(2.35E10 * CAST(1.0 AS DOUBLE)):double>
 -- !query 13 output
-23500000000
+2.35E10
 
 
 -- !query 14
 select (5e36 + 0.1) + 5e36
 -- !query 14 schema
-struct<(CAST((CAST(5E+36 AS DECIMAL(38,1)) + CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) + CAST(5E+36 AS DECIMAL(38,1))):decimal(38,1)>
+struct<((5.0E36 + CAST(0.1 AS DOUBLE)) + 5.0E36):double>
 -- !query 14 output
-NULL
+1.0E37
 
 
 -- !query 15
 select (-4e36 - 0.1) - 7e36
 -- !query 15 schema
-struct<(CAST((CAST(-4E+36 AS DECIMAL(38,1)) - CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) - CAST(7E+36 AS DECIMAL(38,1))):decimal(38,1)>
+struct<((-4.0E36 - CAST(0.1 AS DOUBLE)) - 7.0E36):double>
 -- !query 15 output
-NULL
+-1.1E37
 
 
 -- !query 16
@@ -148,17 +148,17 @@ NULL
 -- !query 17
 select 1e35 / 0.1
 -- !query 17 schema
-struct<(CAST(1E+35 AS DECIMAL(37,1)) / CAST(0.1 AS DECIMAL(37,1))):decimal(38,6)>
+struct<(1.0E35 / CAST(0.1 AS DOUBLE)):double>
 -- !query 17 output
-NULL
+9.999999999999999E35
 
 
 -- !query 18
 select 1.2345678901234567890E30 * 1.2345678901234567890E25
 -- !query 18 schema
-struct<(CAST(1.2345678901234567890E+30 AS DECIMAL(25,-6)) * CAST(1.2345678901234567890E+25 AS DECIMAL(25,-6))):decimal(38,-17)>
+struct<(1.2345678901234568E30 * 1.2345678901234568E25):double>
 -- !query 18 output
-NULL
+1.5241578753238838E55
 
 
 -- !query 19
@@ -258,25 +258,25 @@ NULL
 -- !query 30
 select 2.35E10 * 1.0
 -- !query 30 schema
-struct<(CAST(2.35E+10 AS DECIMAL(12,1)) * CAST(1.0 AS DECIMAL(12,1))):decimal(6,-7)>
+struct<(2.35E10 * CAST(1.0 AS DOUBLE)):double>
 -- !query 30 output
-23500000000
+2.35E10
 
 
 -- !query 31
 select (5e36 + 0.1) + 5e36
 -- !query 31 schema
-struct<(CAST((CAST(5E+36 AS DECIMAL(38,1)) + CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) + CAST(5E+36 AS DECIMAL(38,1))):decimal(38,1)>
+struct<((5.0E36 + CAST(0.1 AS DOUBLE)) + 5.0E36):double>
 -- !query 31 output
-NULL
+1.0E37
 
 
 -- !query 32
 select (-4e36 - 0.1) - 7e36
 -- !query 32 schema
-struct<(CAST((CAST(-4E+36 AS DECIMAL(38,1)) - CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) - CAST(7E+36 AS DECIMAL(38,1))):decimal(38,1)>
+struct<((-4.0E36 - CAST(0.1 AS DOUBLE)) - 7.0E36):double>
 -- !query 32 output
-NULL
+-1.1E37
 
 
 -- !query 33
@@ -290,17 +290,17 @@ NULL
 -- !query 34
 select 1e35 / 0.1
 -- !query 34 schema
-struct<(CAST(1E+35 AS DECIMAL(37,1)) / CAST(0.1 AS DECIMAL(37,1))):decimal(38,3)>
+struct<(1.0E35 / CAST(0.1 AS DOUBLE)):double>
 -- !query 34 output
-NULL
+9.999999999999999E35
 
 
 -- !query 35
 select 1.2345678901234567890E30 * 1.2345678901234567890E25
 -- !query 35 schema
-struct<(CAST(1.2345678901234567890E+30 AS DECIMAL(25,-6)) * CAST(1.2345678901234567890E+25 AS DECIMAL(25,-6))):decimal(38,-17)>
+struct<(1.2345678901234568E30 * 1.2345678901234568E25):double>
 -- !query 35 output
-NULL
+1.5241578753238838E55
 
 
 -- !query 36
