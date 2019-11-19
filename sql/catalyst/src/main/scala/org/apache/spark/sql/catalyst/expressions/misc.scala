@@ -178,8 +178,9 @@ case class Version() extends LeafExpression with CodegenFallback {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_(expr) - Return readable string representation for the type.""",
+  usage = """_FUNC_(expr) - Return readable string representation for the data type of the input.""",
   examples = """
       Examples:
       > SELECT _FUNC_(1);
@@ -188,6 +189,7 @@ case class Version() extends LeafExpression with CodegenFallback {
        array<int>
   """,
   since = "3.0.0")
+// scalastyle:on line.size.limit
 case class TypeOf(child: Expression) extends UnaryExpression with CodegenFallback {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
