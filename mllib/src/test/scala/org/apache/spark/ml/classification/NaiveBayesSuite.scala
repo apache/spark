@@ -471,7 +471,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
             [-37126.4015229 ,      0.        ],
             [-27649.81038619,      0.        ],
             [-28767.84075587,      0.        ]])
-     >>> clf.predict_proba[:, -5:]
+     >>> clf.predict_proba(X[:5])
      array([[1., 0.],
             [0., 1.],
             [0., 1.],

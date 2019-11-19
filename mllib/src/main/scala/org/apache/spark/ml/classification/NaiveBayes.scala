@@ -468,18 +468,18 @@ class NaiveBayesModel private[ml] (
     requireNonnegativeValues(features)
     val probArray = theta.multiply(features).toArray
     // the following lines equal to:
-    // val logSumExp = math.log(prob.toArray.map(math.exp).sum)
+    // val logSumExp = math.log(probArray.map(math.exp).sum)
     // However, it easily returns Infinity/NaN values.
     // Here follows 'scipy.special.logsumexp' (which is used in Scikit-Learn's ComplementNB)
     // to compute the log of the sum of exponentials of elements in a numeric-stable way.
-    val maxProb = probArray.max
+    val max = probArray.max
     var sumExp = 0.0
     var j = 0
     while (j < probArray.length) {
-      sumExp += math.exp(probArray(j) - maxProb)
+      sumExp += math.exp(probArray(j) - max)
       j += 1
     }
-    val logSumExp = math.log(sumExp) + maxProb
+    val logSumExp = math.log(sumExp) + max
 
     j = 0
     while (j < probArray.length) {
