@@ -1024,12 +1024,12 @@ class SparkContext(object):
             Workaround class can be written as below (unofficial way):
 
             >>> class CustomThread(threading.Thread):
-            >>>     def __init__(self, sc, target, *args, **kwargs):
-            >>>         properties = sc._jsc.sc().getLocalProperties()
-            >>>         def copy_local_properties(*a, **k):
-            >>>             sc._jsc.sc().setLocalProperties(properties)
-            >>>             return target(*a, **k)
-            >>>         super(CustomThread, self).__init__(
+            ...     def __init__(self, sc, target, *args, **kwargs):
+            ...         properties = sc._jsc.sc().getLocalProperties()
+            ...         def copy_local_properties(*a, **k):
+            ...             sc._jsc.sc().setLocalProperties(properties)
+            ...             return target(*a, **k)
+            ...         super(CustomThread, self).__init__(
             ...             target=copy_local_properties, *args, **kwargs)
         """
         _warn_pin_thread("setJobGroup")
@@ -1055,12 +1055,12 @@ class SparkContext(object):
             Workaround class can be written as below (unofficial way):
 
             >>> class CustomThread(threading.Thread):
-            >>>     def __init__(self, sc, target, *args, **kwargs):
-            >>>         properties = sc._jsc.sc().getLocalProperties()
-            >>>         def copy_local_properties(*a, **k):
-            >>>             sc._jsc.sc().setLocalProperties(properties)
-            >>>             return target(*a, **k)
-            >>>         super(CustomThread, self).__init__(
+            ...     def __init__(self, sc, target, *args, **kwargs):
+            ...         properties = sc._jsc.sc().getLocalProperties()
+            ...         def copy_local_properties(*a, **k):
+            ...             sc._jsc.sc().setLocalProperties(properties)
+            ...             return target(*a, **k)
+            ...         super(CustomThread, self).__init__(
             ...             target=copy_local_properties, *args, **kwargs)
         """
         _warn_pin_thread("setLocalProperty")
@@ -1092,12 +1092,12 @@ class SparkContext(object):
             Workaround class can be written as below (unofficial way):
 
             >>> class CustomThread(threading.Thread):
-            >>>     def __init__(self, sc, target, *args, **kwargs):
-            >>>         properties = sc._jsc.sc().getLocalProperties()
-            >>>         def copy_local_properties(*a, **k):
-            >>>             sc._jsc.sc().setLocalProperties(properties)
-            >>>             return target(*a, **k)
-            >>>         super(CustomThread, self).__init__(
+            ...     def __init__(self, sc, target, *args, **kwargs):
+            ...         properties = sc._jsc.sc().getLocalProperties()
+            ...         def copy_local_properties(*a, **k):
+            ...             sc._jsc.sc().setLocalProperties(properties)
+            ...             return target(*a, **k)
+            ...         super(CustomThread, self).__init__(
             ...             target=copy_local_properties, *args, **kwargs)
         """
         _warn_pin_thread("setJobDescription")
