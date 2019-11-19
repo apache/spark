@@ -86,7 +86,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     registerTest(s"$name - sum only") {
       val (df, c, w) = wrappedInit()
       val weightSum = summarizer.weightSum
-      val expected1 = summarizer.mean.asML
+      val expected1 = summarizer.mean.asML.copy
       BLAS.scal(weightSum, expected1)
       val expected2 = exp.mean.copy
       BLAS.scal(weightSum, expected2)
@@ -97,7 +97,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     registerTest(s"$name - sum only w/o weight") {
       val (df, c, _) = wrappedInit()
       val weightSum = summarizerWithoutWeight.weightSum
-      val expected1 = summarizerWithoutWeight.mean.asML
+      val expected1 = summarizerWithoutWeight.mean.asML.copy
       BLAS.scal(weightSum, expected1)
       val expected2 = expWithoutWeight.mean.copy
       BLAS.scal(weightSum, expected2)
