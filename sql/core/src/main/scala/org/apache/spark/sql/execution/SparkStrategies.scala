@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
+import org.apache.spark.sql.execution.adaptive.{LogicalQueryStage, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -282,6 +282,25 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
+        def adaptAdaptiveQueryExecution() = {
+          // Convert to BroadcastJoin is getting worse if one side is non-shuffle and
+          // the other side can be broadcast.
+          val isConvertBroadcastJoinWithNonShuffle = (left, right) match {
+            case (l: LogicalQueryStage, r) if !r.isInstanceOf[LogicalQueryStage] =>
+              l.physicalPlan.isInstanceOf[ShuffleQueryStageExec] && canBroadcast(left)
+            case (l, r: LogicalQueryStage) if !l.isInstanceOf[LogicalQueryStage] =>
+              r.physicalPlan.isInstanceOf[ShuffleQueryStageExec] && canBroadcast(right)
+            case _ => false
+          }
+
+          if (isConvertBroadcastJoinWithNonShuffle && RowOrdering.isOrderable(leftKeys)) {
+            Some(Seq(joins.SortMergeJoinExec(
+              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right))))
+          } else {
+            None
+          }
+        }
+
         def createCartesianProduct() = {
           if (joinType.isInstanceOf[InnerLike]) {
             Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
@@ -317,6 +336,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
           .orElse(createShuffleHashJoin(hintToShuffleHashLeft(hint), hintToShuffleHashRight(hint)))
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+          .orElse(adaptAdaptiveQueryExecution())
           .getOrElse(createJoinWithoutHint())
 
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:

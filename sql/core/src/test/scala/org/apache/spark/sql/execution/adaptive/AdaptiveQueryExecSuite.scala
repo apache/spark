@@ -151,7 +151,7 @@ class AdaptiveQueryExecSuite
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
-      assert(bhj.size == 3)
+      assert(bhj.size == 2)
 
       // A possible resulting query plan:
       // BroadcastHashJoin
@@ -198,7 +198,7 @@ class AdaptiveQueryExecSuite
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
-      assert(bhj.size == 3)
+      assert(bhj.size == 2)
 
       // A possible resulting query plan:
       // BroadcastHashJoin
@@ -470,6 +470,38 @@ class AdaptiveQueryExecSuite
         val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
         assert(bhj.size == 1)
         assert(bhj.head.buildSide == BuildRight)
+      }
+    }
+  }
+
+  test("Avoid changing merge join to broadcast join if one side is non-shuffle " +
+    "and the other side can be broadcast") {
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
+      val bucketedTableName = "bucketed_table"
+      val nonBucketedTableName = "non_bucketed_table"
+      withTable(bucketedTableName, nonBucketedTableName) {
+        spark.range(500).selectExpr("id")
+          .write.bucketBy(5, "id").sortBy("id").saveAsTable(bucketedTableName)
+        spark.range(200).selectExpr("id", "id as j")
+          .write.saveAsTable(nonBucketedTableName)
+
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT *
+            |FROM   bucketed_table t1
+            |       JOIN (SELECT *
+            |             FROM   non_bucketed_table
+            |             WHERE  j % 188 = 1) t2
+            |         ON t1.id = t2.id
+            |""".stripMargin)
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.isEmpty)
       }
     }
   }
