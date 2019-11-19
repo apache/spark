@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -258,7 +258,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     // The inferred schema may have different field names as the table schema, we should respect
     // it, but also respect the exprId in table relation output.
     if (result.output.length != relation.output.length) {
-      throw new HiveTableConvertException(
+      throw new AnalysisException(
         s"Converted table has ${result.output.length} columns, " +
         s"but source Hive table has ${relation.output.length} columns. " +
         s"Set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false, " +
@@ -266,7 +266,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
     if (!result.output.zip(relation.output).forall {
           case (a1, a2) => a1.dataType.sameType(a2.dataType) }) {
-      throw new HiveTableConvertException(
+      throw new AnalysisException(
         s"Column in converted table has different data type with source Hive table's. " +
           s"Set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false, " +
           s"or recreate table ${relation.tableMeta.identifier} to workaround.")

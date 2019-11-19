@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -371,8 +371,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
                |CREATE TABLE non_partition_table (id bigint)
                |STORED AS PARQUET LOCATION '$baseDir'
                |""".stripMargin)
-          val e = intercept[HiveTableConvertException](
-            spark.table("non_partition_table"), Seq()).getMessage
+          val e = intercept[AnalysisException](
+            spark.table("non_partition_table")).getMessage
           assert(e.contains("Converted table has 2 columns, but source Hive table has 1 columns."))
         }
       }
