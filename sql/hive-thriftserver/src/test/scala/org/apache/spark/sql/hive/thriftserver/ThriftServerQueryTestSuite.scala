@@ -32,7 +32,6 @@ import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -257,18 +256,25 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
   test("SPARK-29911: Uncache cached tables when session closed") {
     val cacheManager = spark.sharedState.cacheManager
+    val globalTempDB = spark.sharedState.globalTempViewManager.database
     withJdbcStatement { statement =>
-      statement.execute("CACHE TABLE test1 AS SELECT 1")
+      statement.execute("CACHE TABLE tempTbl AS SELECT 1")
     }
     // the cached data of local temporary view should be uncached
     assert(cacheManager.isEmpty)
-    withJdbcStatement { statement =>
-      val globalTempDB = spark.sharedState.globalTempViewManager.database
-      statement.execute("CREATE GLOBAL TEMP VIEW test2 AS SELECT 1, 2")
-      statement.execute(s"CACHE TABLE $globalTempDB.test2")
+    try {
+      withJdbcStatement { statement =>
+        statement.execute("CREATE GLOBAL TEMP VIEW globalTempTbl AS SELECT 1, 2")
+        statement.execute(s"CACHE TABLE $globalTempDB.globalTempTbl")
+      }
+      // the cached data of global temporary view shouldn't be uncached
+      assert(!cacheManager.isEmpty)
+    } finally {
+      withJdbcStatement { statement =>
+        statement.execute(s"UNCACHE TABLE IF EXISTS $globalTempDB.globalTempTbl")
+      }
+      assert(cacheManager.isEmpty)
     }
-    // the cached data of global temporary view shouldn't be uncached
-    assert(!cacheManager.isEmpty)
   }
 
   /** ThriftServer wraps the root exception, so it needs to be extracted. */
