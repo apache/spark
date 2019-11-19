@@ -283,6 +283,6 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
         (pred, label, weight)
       }
     val metrics2 = new MulticlassMetrics(rdd2)
-    assert(metrics2.logLoss() ~== 0.3 relTol delta)
+    assert(metrics2.hammingLoss ~== 0.3 relTol delta)
   }
 }
