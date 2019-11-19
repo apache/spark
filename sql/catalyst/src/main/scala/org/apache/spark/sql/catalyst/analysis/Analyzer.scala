@@ -671,33 +671,41 @@ class Analyzer(
    * [[ResolveRelations]] still resolves v1 tables.
    */
   object ResolveTables extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u: UnresolvedRelation =>
-        lookupV2Relation(u.multipartIdentifier)
-          .getOrElse(u)
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      var dataSourceV2Relations = Map.empty[UnresolvedRelation, Option[DataSourceV2Relation]]
+      plan.resolveOperatorsUp {
+        case u: UnresolvedRelation =>
+          if (dataSourceV2Relations.contains(u)) {
+            dataSourceV2Relations(u).getOrElse(u)
+          } else {
+            val dataSourceV2Relation = lookupV2Relation(u.multipartIdentifier)
+            dataSourceV2Relations += (u -> dataSourceV2Relation)
+            dataSourceV2Relation.getOrElse(u)
+          }
 
-      case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
-        lookupV2Relation(u.multipartIdentifier)
-          .map(v2Relation => i.copy(table = v2Relation))
-          .getOrElse(i)
+        case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
+          lookupV2Relation(u.multipartIdentifier)
+            .map(v2Relation => i.copy(table = v2Relation))
+            .getOrElse(i)
 
-      case desc @ DescribeTable(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+        case desc @ DescribeTable(u: UnresolvedV2Relation, _) =>
+          CatalogV2Util.loadRelation(u.catalog, u.tableName)
             .map(rel => desc.copy(table = rel))
             .getOrElse(desc)
 
-      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+        case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
+          CatalogV2Util.loadRelation(u.catalog, u.tableName)
             .map(rel => alter.copy(table = rel))
             .getOrElse(alter)
 
-      case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-          .map(rel => show.copy(table = rel))
-          .getOrElse(show)
+        case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
+          CatalogV2Util.loadRelation(u.catalog, u.tableName)
+            .map(rel => show.copy(table = rel))
+            .getOrElse(show)
 
-      case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
+        case u: UnresolvedV2Relation =>
+          CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
+      }
     }
   }
 
@@ -767,15 +775,25 @@ class Analyzer(
       case _ => plan
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoStatement(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
-          if child.resolved =>
-        EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
-          case v: View =>
-            u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
-          case other => i.copy(table = other)
-        }
-      case u: UnresolvedRelation => resolveRelation(u)
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      var logicalPlans = Map.empty[UnresolvedRelation, LogicalPlan]
+      plan.resolveOperatorsUp {
+        case i @ InsertIntoStatement(
+            u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _) if child.resolved =>
+          EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
+            case v: View =>
+              u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+            case other => i.copy(table = other)
+          }
+        case u: UnresolvedRelation =>
+          if (logicalPlans.contains(u)) {
+            logicalPlans(u)
+          } else {
+            val relation = resolveRelation(u)
+            logicalPlans += (u -> relation)
+            relation
+          }
+      }
     }
 
     // Look up the table with the given name from catalog. The database we used is decided by the
