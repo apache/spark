@@ -274,7 +274,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertTrue(compare(0, 1) < 0);
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
