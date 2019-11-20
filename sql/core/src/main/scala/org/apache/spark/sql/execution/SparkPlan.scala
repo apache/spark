@@ -21,7 +21,6 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
@@ -33,7 +32,7 @@ import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -469,28 +468,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       useSubexprElimination: Boolean = false): MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
     MutableProjection.create(expressions, inputSchema)
-  }
-
-  private def genInterpretedPredicate(
-      expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate = {
-    val str = expression.toString
-    val logMessage = if (str.length > 256) {
-      str.substring(0, 256 - 3) + "..."
-    } else {
-      str
-    }
-    logWarning(s"Codegen disabled for this expression:\n $logMessage")
-    InterpretedPredicate.create(expression, inputSchema)
-  }
-
-  protected def newPredicate(
-      expression: Expression, inputSchema: Seq[Attribute]): GenPredicate = {
-    try {
-      GeneratePredicate.generate(expression, inputSchema)
-    } catch {
-      case _ @ (_: InternalCompilerException | _: CompileException) if codeGenFallBack =>
-        genInterpretedPredicate(expression, inputSchema)
-    }
   }
 
   protected def newOrdering(

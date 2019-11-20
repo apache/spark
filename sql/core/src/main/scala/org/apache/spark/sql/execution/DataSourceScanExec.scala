@@ -230,7 +230,7 @@ case class FileSourceScanExec(
       // call the file index for the files matching all filters except dynamic partition filters
       val predicate = dynamicPartitionFilters.reduce(And)
       val partitionColumns = relation.partitionSchema
-      val boundPredicate = newPredicate(predicate.transform {
+      val boundPredicate = Predicate.create(predicate.transform {
         case a: AttributeReference =>
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
