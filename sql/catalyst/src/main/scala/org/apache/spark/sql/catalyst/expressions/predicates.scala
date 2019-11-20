@@ -45,13 +45,6 @@ abstract class BasePredicate {
   def initialize(partitionIndex: Int): Unit = {}
 }
 
-object InterpretedPredicate {
-  def create(expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
-    create(BindReferences.bindReference(expression, inputSchema))
-
-  def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
-}
-
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
 
@@ -84,11 +77,16 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
     InterpretedPredicate(in)
   }
 
+  def createInterpretedPredicate(e: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
+    createInterpretedPredicate(BindReferences.bindReference(e, inputSchema))
+
+  def createInterpretedPredicate(e: Expression): InterpretedPredicate = InterpretedPredicate(e)
+
   /**
    * Returns a BasePredicate for an Expression, which will be bound to `inputSchema`.
    */
-  def create(exprs: Expression, inputSchema: Seq[Attribute]): BasePredicate = {
-    createObject(bindReference(exprs, inputSchema))
+  def create(e: Expression, inputSchema: Seq[Attribute]): BasePredicate = {
+    createObject(bindReference(e, inputSchema))
   }
 }
 
