@@ -24,7 +24,6 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -830,7 +829,7 @@ class DataSourceV2SQLSuite
         sql(s"CREATE NAMESPACE testcat.test LOCATION '$path'")
         val metadata =
           catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("test")).asScala
-        val catalogPath = metadata(V2SessionCatalog.LOCATION_TABLE_PROP)
+        val catalogPath = metadata(SupportsNamespaces.NAMESPACE_PROP_LOCATION)
         assert(catalogPath.equals(catalogPath))
       }
     }

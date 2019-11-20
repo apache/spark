@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, Table, TableChange}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -78,7 +78,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         throw new AnalysisException(
           "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
       }
-      val changes = Seq(TableChange.setProperty("location", newLoc))
+      val changes = Seq(TableChange.setProperty(Table.TABLE_PROP_LOCATION, newLoc))
       createAlterTable(nameParts, catalog, tableName, changes)
 
     case AlterViewSetPropertiesStatement(
@@ -97,8 +97,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, properties)
 
     case AlterNamespaceSetLocationStatement(NonSessionCatalog(catalog, nameParts), location) =>
-      AlterNamespaceSetProperties(
-        catalog.asNamespaceCatalog, nameParts, Map("location" -> location))
+      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts,
+        Map(SupportsNamespaces.NAMESPACE_PROP_LOCATION -> location))
 
     case RenameTableStatement(NonSessionCatalog(catalog, oldName), newNameParts, isView) =>
       if (isView) {

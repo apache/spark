@@ -21,6 +21,8 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,6 +40,11 @@ import java.util.Map;
  */
 @Experimental
 public interface SupportsNamespaces extends CatalogPlugin {
+
+  String NAMESPACE_PROP_LOCATION = "location";
+  String NAMESPACE_PROP_COMMENT = "comment";
+  List<String> RESERVED_NAMESPACE_PROPERTIES = Arrays.asList(
+          NAMESPACE_PROP_COMMENT, NAMESPACE_PROP_LOCATION);
 
   /**
    * Return a default namespace for the catalog.

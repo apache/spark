@@ -21,9 +21,7 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * An interface representing a logical structured data set of a data source. For example, the
@@ -39,6 +37,9 @@ import java.util.Set;
  */
 @Evolving
 public interface Table {
+
+  String TABLE_PROP_LOCATION = "location";
+  String TABLE_PROP_COMMENT = "comment";
 
   /**
    * A name to identify this table. Implementations should provide a meaningful name, like the
