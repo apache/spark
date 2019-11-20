@@ -180,7 +180,7 @@ case class Version() extends LeafExpression with CodegenFallback {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_(expr) - Return readable string representation for the data type of the input.""",
+  usage = """_FUNC_(expr) - Return DDL-formatted type string for the data type of the input.""",
   examples = """
       Examples:
       > SELECT _FUNC_(1);
@@ -190,9 +190,13 @@ case class Version() extends LeafExpression with CodegenFallback {
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
-case class TypeOf(child: Expression) extends UnaryExpression with CodegenFallback {
+case class TypeOf(child: Expression) extends UnaryExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
   override def dataType: DataType = StringType
   override def eval(input: InternalRow): Any = child.dataType.catalogString
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, _ => child.dataType.catalogString)
+  }
 }
