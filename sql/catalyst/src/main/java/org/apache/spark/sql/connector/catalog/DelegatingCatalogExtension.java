@@ -52,6 +52,11 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   public final void initialize(String name, CaseInsensitiveStringMap options) {}
 
   @Override
+  public TableVersion version() {
+    return asTableCatalog().version();
+  }
+
+  @Override
   public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
     return asTableCatalog().listTables(namespace);
   }

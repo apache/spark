@@ -38,6 +38,14 @@ import java.util.Map;
 @Experimental
 public interface TableCatalog extends CatalogPlugin {
   /**
+   * Get table catalog version without load table
+   * If implement this interface, user should always set this with V2
+   *
+   * @return TableVersion
+   */
+  TableVersion version();
+
+  /**
    * List the tables in a namespace from the catalog.
    * <p>
    * If the catalog supports views, this must return identifiers for only tables and not views.

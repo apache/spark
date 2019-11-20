@@ -47,6 +47,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   override def name: String = _name.get
 
+  override def version(): TableVersion = TableVersion.V2
+
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     tables.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
   }

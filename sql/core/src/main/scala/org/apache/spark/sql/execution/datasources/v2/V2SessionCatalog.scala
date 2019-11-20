@@ -25,8 +25,8 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -48,6 +48,8 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
   // This class is instantiated by Spark, so `initialize` method will not be called.
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+
+  override def version(): TableVersion = TableVersion.V1
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     namespace match {

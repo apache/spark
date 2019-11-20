@@ -216,6 +216,10 @@ private[sql] object CatalogV2Util {
     new StructType(newFields)
   }
 
+  def getTableVersion(catalog: CatalogPlugin): TableVersion = {
+    catalog.asTableCatalog.version()
+  }
+
   def loadTable(catalog: CatalogPlugin, ident: Identifier): Option[Table] =
     try {
       Option(catalog.asTableCatalog.loadTable(ident))

@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -64,6 +64,7 @@ object SimpleAnalyzer extends Analyzer(
 
 object FakeV2SessionCatalog extends TableCatalog {
   private def fail() = throw new UnsupportedOperationException
+  override def version(): TableVersion = TableVersion.V2
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
   override def loadTable(ident: Identifier): Table = {
     throw new NoSuchTableException(ident.toString)
@@ -2846,11 +2847,14 @@ class Analyzer(
           case None => None
         }
       case CatalogObjectIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
-        CatalogV2Util.loadTable(catalog, ident) match {
-          case Some(_: V1Table) => None
-          case Some(table) =>
-            Some((DataSourceV2Relation.create(table), catalog, ident))
-          case None => None
+        CatalogV2Util.getTableVersion(catalog) match {
+          case TableVersion.V1 => None
+          case _ =>
+            CatalogV2Util.loadTable(catalog, ident) match {
+              case Some(table) =>
+                Some((DataSourceV2Relation.create(table), catalog, ident))
+              case None => None
+            }
         }
       case _ => None
     }
