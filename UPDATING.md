@@ -41,6 +41,10 @@ assists users migrating to a new version.
 
 ## Airflow Master
 
+### Removal of XCom.get_one()
+
+This one is supersede by `XCom.get_many().first()` which will return the same result.
+
 ### Changes to SQLSensor
 
 SQLSensor now consistent with python `bool()` function and the `allow_null` parameter has been removed.
