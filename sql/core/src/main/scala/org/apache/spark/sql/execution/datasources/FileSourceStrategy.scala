@@ -22,7 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.{FileSourceOperation, PhysicalOperation}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.util.collection.BitSet
@@ -139,6 +139,7 @@ object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
+      println("into FileSourceOperation")
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -173,6 +174,7 @@ object FileSourceStrategy extends Strategy with Logging {
 
       val dataColumns =
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
+      println(s"dataColumns: ${dataColumns.toStructType.catalogString}")
 
       // Partition keys are not available in the statistics of the files.
       val dataFilters =
@@ -181,6 +183,7 @@ object FileSourceStrategy extends Strategy with Logging {
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)
       logInfo(s"Post-Scan Filters: ${afterScanFilters.mkString(",")}")
+      println(s"Post-Scan Filters: ${afterScanFilters.mkString(",")}")
 
       val filterAttributes = AttributeSet(afterScanFilters)
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
@@ -192,6 +195,7 @@ object FileSourceStrategy extends Strategy with Logging {
           .filterNot(partitionColumns.contains)
       val outputSchema = readDataColumns.toStructType
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
+      println(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
       val outputAttributes = readDataColumns ++ partitionColumns
 
@@ -215,6 +219,8 @@ object FileSourceStrategy extends Strategy with Logging {
 
       withProjections :: Nil
 
-    case _ => Nil
+    case _ =>
+      println("not into FileSourceOperation")
+      Nil
   }
 }
