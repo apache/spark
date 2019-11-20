@@ -143,6 +143,12 @@ class StreamingQueryStatisticsPage(
     val minRecordRate = 0L
     val maxProcessRate =
       withNoProgress(query, query.recentProgress.map(_.processedRowsPerSecond).max, 0L)
+
+    // scalastyle:off
+    query.recentProgress.foreach(e => println(s"====>1 ${e.inputRowsPerSecond}"))
+    query.recentProgress.foreach(e => println(s"====>2 ${e.processedRowsPerSecond}"))
+    // scalastyle:on
+
     val minProcessRate = 0L
     val maxRows = withNoProgress(query, query.recentProgress.map(_.numInputRows).max, 0L)
     val minRows = 0L

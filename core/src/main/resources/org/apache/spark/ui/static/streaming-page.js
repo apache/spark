@@ -427,7 +427,7 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
         .style("text-anchor", "start")
         .text(function(d, i) {
             var len = labels.length
-            return labels[len - 1 -i]
+            return labels[len - 1 - i]
         });
 
 

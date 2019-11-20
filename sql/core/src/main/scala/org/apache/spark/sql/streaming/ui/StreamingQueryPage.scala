@@ -130,7 +130,7 @@ class StreamingQueryPage(parent: SQLTab, store: Option[StreamQueryStore])
     val activeQueryTables = if (activeQueries.nonEmpty) {
       val headerRow = Seq(
         "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input PerSec",
-        "Avg Process PerSec", s"Total Input Rows", "Last Batch ID", "Last Progress", "Error")
+        "Avg Process PerSec", s"Total Input Rows", "Last Batch ID", "Error")
 
       Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, true), activeQueries,
         true, None, Seq(null), false))
@@ -141,7 +141,7 @@ class StreamingQueryPage(parent: SQLTab, store: Option[StreamQueryStore])
     val inactiveQueryTables = if (inactiveQueries.nonEmpty) {
       val headerRow = Seq(
         "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input PerSec",
-        "Avg Process PerSec", s"Total Input Rows", "Last Batch ID", "Last Progress", "Error")
+        "Avg Process PerSec", s"Total Input Rows", "Last Batch ID", "Error")
 
       Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, false), inactiveQueries,
         true, None, Seq(null), false))
