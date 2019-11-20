@@ -280,7 +280,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     assert(!Cast.canUpCast(udt, StringType))
   }
 
-  test("SPARK-29961 typeof user defined type") {
+  test("typeof user defined type") {
     val schema = new StructType().add("a", new TestUDT.MyDenseVectorUDT())
     val data = Arrays.asList(
       RowFactory.create(new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))))

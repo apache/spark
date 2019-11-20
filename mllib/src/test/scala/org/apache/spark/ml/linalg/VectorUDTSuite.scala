@@ -48,7 +48,7 @@ class VectorUDTSuite extends QueryTest with SharedSparkSession {
       === Seq(new VectorUDT, DoubleType))
   }
 
-  test("SPARK-29961 typeof Vector") {
+  test("typeof Vector") {
     val data = Arrays.asList(Row(Vectors.dense(1.0, 2.0)))
     val schema = new StructType().add("v", new VectorUDT)
     checkAnswer(spark.createDataFrame(data, schema).selectExpr("typeof(v)"),
