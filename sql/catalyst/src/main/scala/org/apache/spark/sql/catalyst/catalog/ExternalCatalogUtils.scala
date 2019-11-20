@@ -147,7 +147,7 @@ object ExternalCatalogUtils {
       }
 
       val boundPredicate =
-        Predicate.createInterpretedPredicate(predicates.reduce(And).transform {
+        Predicate.createInterpreted(predicates.reduce(And).transform {
           case att: AttributeReference =>
             val index = partitionSchema.indexWhere(_.name == att.name)
             BoundReference(index, partitionSchema(index).dataType, nullable = true)

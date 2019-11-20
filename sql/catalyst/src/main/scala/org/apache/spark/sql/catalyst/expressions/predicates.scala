@@ -77,16 +77,23 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
     InterpretedPredicate(in)
   }
 
-  def createInterpretedPredicate(e: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
-    createInterpretedPredicate(BindReferences.bindReference(e, inputSchema))
+  def createInterpreted(e: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
+    createInterpreted(BindReferences.bindReference(e, inputSchema))
 
-  def createInterpretedPredicate(e: Expression): InterpretedPredicate = InterpretedPredicate(e)
+  def createInterpreted(e: Expression): InterpretedPredicate = InterpretedPredicate(e)
 
   /**
    * Returns a BasePredicate for an Expression, which will be bound to `inputSchema`.
    */
   def create(e: Expression, inputSchema: Seq[Attribute]): BasePredicate = {
     createObject(bindReference(e, inputSchema))
+  }
+
+  /**
+   * Returns a BasePredicate for a given bound Expression.
+   */
+  def create(e: Expression): BasePredicate = {
+    createObject(e)
   }
 }
 

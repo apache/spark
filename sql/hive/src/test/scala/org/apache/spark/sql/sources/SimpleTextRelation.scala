@@ -88,7 +88,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
             val attribute = inputAttributes.find(_.name == column).get
             expressions.GreaterThan(attribute, literal)
         }.reduceOption(expressions.And).getOrElse(Literal(true))
-        Predicate.createInterpretedPredicate(filterCondition, inputAttributes)
+        Predicate.create(filterCondition, inputAttributes)
       }
 
       // Uses a simple projection to simulate column pruning

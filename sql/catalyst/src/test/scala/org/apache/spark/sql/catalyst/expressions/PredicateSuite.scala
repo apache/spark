@@ -510,7 +510,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Interpreted Predicate should initialize nondeterministic expressions") {
-    val interpreted = Predicate.createInterpretedPredicate(LessThan(Rand(7), Literal(1.0)))
+    val interpreted = Predicate.create(LessThan(Rand(7), Literal(1.0)))
     interpreted.initialize(0)
     assert(interpreted.eval(new UnsafeRow()))
   }
