@@ -296,19 +296,11 @@ NULL
 
 
 -- !query 35
-``
 select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD
 -- !query 35 schema
-struct<>
+struct<(CAST(1.2345678901234567890E+30 AS DECIMAL(25,-6)) * CAST(1.2345678901234567890E+25 AS DECIMAL(25,-6))):decimal(38,-17)>
 -- !query 35 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-extraneous input '``' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
-
-== SQL ==
-``
-^^^
-select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD
+NULL
 
 
 -- !query 36
