@@ -34,6 +34,7 @@ public final class JavaSparkPi {
     SparkSession spark = SparkSession
       .builder()
       .appName("JavaSparkPi")
+      .config("spark.master", "local")
       .getOrCreate();
 
     JavaSparkContext jsc = new JavaSparkContext(spark.sparkContext());
