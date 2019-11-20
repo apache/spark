@@ -25,7 +25,7 @@ import scala.language.implicitConversions
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -142,8 +142,9 @@ class RelationalGroupedDataset protected[sql](
 
     // Resolves grouping expressions.
     val dummyPlan = Project(groupingExprs.map(alias), LocalRelation(df.logicalPlan.output))
-    val analyzedPlan = SimpleAnalyzer.execute(dummyPlan).asInstanceOf[Project]
-    SimpleAnalyzer.checkAnalysis(analyzedPlan)
+    val analyzedPlan = df.sparkSession.sessionState.analyzer.execute(dummyPlan)
+      .asInstanceOf[Project]
+    df.sparkSession.sessionState.analyzer.checkAnalysis(analyzedPlan)
     val aliasedGroupings = analyzedPlan.projectList
 
     // Adds the grouping expressions that are not in base DataFrame into outputs.

@@ -1861,7 +1861,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("groupBy.keyAs") {
+  test("groupBy.as") {
     val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData( 3, "three")).toDS()
       .repartition($"id").sortWithinPartitions("id")
     val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData( 3, "three")).toDS()

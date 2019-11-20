@@ -2223,7 +2223,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     assert(idTuples.length == idTuples.toSet.size)
   }
 
-  test("groupBy.keyAs") {
+  test("groupBy.as") {
     val df1 = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
       .repartition($"a", $"b").sortWithinPartitions("a", "b")
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a", "b", "c")
@@ -2247,7 +2247,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     assert(exchanges.size == 2)
   }
 
-  test("groupBy.keyAs: custom grouping expressions") {
+  test("groupBy.as: custom grouping expressions") {
     val df1 = Seq((1, 2, 3), (2, 3, 4)).toDF("a1", "b", "c")
       .repartition($"a1", $"b").sortWithinPartitions("a1", "b")
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a1", "b", "c")
@@ -2268,7 +2268,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
   }
 
-  test("groupBy.keyAs: throw AnalysisException for unresolved grouping expr") {
+  test("groupBy.as: throw AnalysisException for unresolved grouping expr") {
     val df = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
 
     implicit val valueEncoder = RowEncoder(df.schema)
