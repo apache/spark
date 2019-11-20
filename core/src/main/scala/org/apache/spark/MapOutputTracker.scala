@@ -944,12 +944,18 @@ private[spark] object MapOutputTracker extends Logging {
     assert (bytes.length > 0)
 
     def deserializeObject(arr: Array[Byte], off: Int, len: Int): AnyRef = {
-      val codec = CompressionCodec.createCodec(conf, "zstd")
+      val shouldCompress = conf.get(MAP_STATUS_COMPRESS)
+      val codec = if (shouldCompress) {
+        Some(CompressionCodec.createCodec(conf, conf.get(IO_COMPRESSION_CODEC.key, "zstd")))
+      } else {
+        None
+      }
       // The ZStd codec is wrapped in a `BufferedInputStream` which avoids overhead excessive
       // of JNI call while trying to decompress small amount of data for each element
       // of `MapStatuses`
-      val objIn = new ObjectInputStream(codec.compressedInputStream(
-        new ByteArrayInputStream(arr, off, len)))
+      val byteIn = new ByteArrayInputStream(arr, off, len)
+      val objIn = new ObjectInputStream(
+        codec.map(_.compressedInputStream(byteIn)).getOrElse(byteIn))
       Utils.tryWithSafeFinally {
         objIn.readObject()
       } {
