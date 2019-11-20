@@ -902,8 +902,13 @@ private[spark] object MapOutputTracker extends Logging {
     // the contents don't have to be copied to the new buffer.
     val out = new ApacheByteArrayOutputStream()
     out.write(DIRECT)
-    val codec = CompressionCodec.createCodec(conf, "zstd")
-    val objOut = new ObjectOutputStream(codec.compressedOutputStream(out))
+    val shouldCompress = conf.get(MAP_STATUS_COMPRESS)
+    val codec = if (shouldCompress) {
+      Some(CompressionCodec.createCodec(conf, conf.get(IO_COMPRESSION_CODEC.key, "zstd")))
+    } else {
+      None
+    }
+    val objOut = new ObjectOutputStream(codec.map(_.compressedOutputStream(out)).getOrElse(out))
     Utils.tryWithSafeFinally {
       // Since statuses can be modified in parallel, sync on it
       statuses.synchronized {
@@ -920,7 +925,7 @@ private[spark] object MapOutputTracker extends Logging {
       // toByteArray creates copy, so we can reuse out
       out.reset()
       out.write(BROADCAST)
-      val oos = new ObjectOutputStream(codec.compressedOutputStream(out))
+      val oos = new ObjectOutputStream(codec.map(_.compressedOutputStream(out)).getOrElse(out))
       Utils.tryWithSafeFinally {
         oos.writeObject(bcast)
       } {
