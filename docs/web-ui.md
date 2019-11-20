@@ -349,8 +349,9 @@ Now the above three dataframe/SQL operators are shown in the list. If we click t
 The query details page displays information about the query execution time, its duration,
 the list of associated jobs, and the query execution DAG.
 The first block 'WholeStageCodegen (1)' compiles multiple operators ('LocalTableScan' and 'HashAggregate') together into a single Java
-function to improve performance, and metrics like number of rows and spill size are listed in
-the block. The second block 'Exchange' shows the metrics on the shuffle exchange, including
+function to improve performance, and metrics like number of rows and spill size are listed in the block.
+The annotation '(1)' in the block name is the code generation id.
+The second block 'Exchange' shows the metrics on the shuffle exchange, including
 number of written shuffle records, total data size, etc.
 
 
@@ -363,8 +364,8 @@ number of written shuffle records, total data size, etc.
 </p>
 Clicking the 'Details' link on the bottom displays the logical plans and the physical plan, which
 illustrate how Spark parses, analyzes, optimizes and performs the query.
-Steps in the physical plan subject to whole stage code generation optimization, are prefixed by a star and
-report the code generation id, for example: "*(1) LocalTableScan"
+Steps in the physical plan subject to whole stage code generation optimization, are prefixed by a star followed by
+the code generation id, for example: '*(1) LocalTableScan'
 
 ### SQL metrics
 
