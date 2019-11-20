@@ -350,7 +350,7 @@ object FileStreamSource {
       SQLConf.get.getConf(SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS)
     )
 
-    def stop(): Unit = cleanThreadPool.shutdown()
+    def stop(): Unit = ThreadUtils.shutdown(cleanThreadPool)
 
     def clean(entry: FileEntry): Unit
   }
