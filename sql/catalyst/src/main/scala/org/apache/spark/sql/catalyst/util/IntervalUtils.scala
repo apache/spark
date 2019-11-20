@@ -480,6 +480,7 @@ object IntervalUtils {
     var microseconds: Long = 0
     var fractionScale: Double = 0
     var fraction: Double = 0
+    var pointPrefixed: Boolean = false
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
       b match {
@@ -518,6 +519,7 @@ object IntervalUtils {
           // to reset next state to `VALUE_FRACTIONAL_PART` to go parse the fraction part of the
           // interval value.
           state = TRIM_BEFORE_VALUE
+          pointPrefixed = false
           b match {
             case '-' =>
               isNegative = true
@@ -525,6 +527,7 @@ object IntervalUtils {
             case '+' => i += 1
             case _ if '0' <= b && b <= '9' =>
             case '.' =>
+              pointPrefixed = true
               i += 1
               state = VALUE_FRACTIONAL_PART
             case _ => throwIAE( s"unrecognized number '$currentWord'")
@@ -548,7 +551,7 @@ object IntervalUtils {
             case _ if '0' <= b && b <= '9' =>
               fraction += (b - '0') / fractionScale
               fractionScale *= 10
-            case ' ' => state = TRIM_BEFORE_UNIT
+            case ' ' if !pointPrefixed || fractionScale > 10 => state = TRIM_BEFORE_UNIT
             case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
