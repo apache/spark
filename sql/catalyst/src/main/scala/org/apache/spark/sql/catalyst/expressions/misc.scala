@@ -192,9 +192,9 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
   override def dataType: DataType = StringType
-  override def eval(input: InternalRow): Any = child.dataType.catalogString
+  override def eval(input: InternalRow): Any = UTF8String.fromString(child.dataType.catalogString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, _ => child.dataType.catalogString)
+    defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
   }
 }
