@@ -248,7 +248,7 @@ case class UnresolvedFunction(
     filter: Option[Expression] = None)
   extends Expression with Unevaluable {
 
-  override def children = filter match {
+  override def children: Seq[Expression] = filter match {
     case Some(expr) => inputs :+ expr
     case _ => inputs
   }
