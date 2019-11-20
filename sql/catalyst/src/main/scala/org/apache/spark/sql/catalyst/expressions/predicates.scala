@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Interface for generated/interpreted predicate
+ * A base class for generated/interpreted predicate
  */
 abstract class BasePredicate {
   def eval(r: InternalRow): Boolean
@@ -43,13 +43,6 @@ abstract class BasePredicate {
    * The default implementation does nothing.
    */
   def initialize(partitionIndex: Int): Unit = {}
-}
-
-object InterpretedPredicate {
-  def create(expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
-    create(BindReferences.bindReference(expression, inputSchema))
-
-  def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
 }
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
@@ -81,14 +74,21 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 
   override protected def createInterpretedObject(in: Expression): BasePredicate = {
-    InterpretedPredicate.create(in)
+    InterpretedPredicate(in)
+  }
+
+  /**
+   * Returns a BasePredicate for a bound Expression.
+   */
+  def create(expr: Expression): BasePredicate = {
+    create(expr)
   }
 
   /**
    * Returns a BasePredicate for an Expression, which will be bound to `inputSchema`.
    */
-  def create(exprs: Expression, inputSchema: Seq[Attribute]): BasePredicate = {
-    createObject(bindReference(exprs, inputSchema))
+  def create(expr: Expression, inputSchema: Seq[Attribute]): BasePredicate = {
+    createObject(bindReference(expr, inputSchema))
   }
 }
 
