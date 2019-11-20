@@ -413,7 +413,6 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       // In this case checkPoint helps a lot
       assert(totalIters == 15)
       assert(iterAfterHalfCheckPoint == 9)
-
     }
   }
 }

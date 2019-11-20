@@ -158,7 +158,7 @@ object PageRank extends Logging {
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
       // Set the weight on the edges based on the degree
-      .mapTriplets(e => 1.0 / e.srcAttr, TripletFields.Src)
+      .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
       // Set the vertex attributes to the initial pagerank values
       .mapVertices { (id, attr) =>
         if (!(id != src && personalized)) 1.0 else 0.0
@@ -234,9 +234,9 @@ object PageRank extends Logging {
       rankGraph.cache()
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
       logInfo(s"PageRank finished iteration $iteration.")
-
       prevRankGraph.vertices.unpersist()
       prevRankGraph.edges.unpersist()
+      
       iteration += 1
     }
 
