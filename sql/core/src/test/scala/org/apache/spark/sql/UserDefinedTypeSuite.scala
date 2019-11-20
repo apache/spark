@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Arrays
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
@@ -276,5 +278,13 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   test("SPARK-28497 Can't up cast UserDefinedType to string") {
     val udt = new TestUDT.MyDenseVectorUDT()
     assert(!Cast.canUpCast(udt, StringType))
+  }
+
+  test("SPARK-29961 typeof user defined type") {
+    val schema = new StructType().add("a", new TestUDT.MyDenseVectorUDT())
+    val data = Arrays.asList(
+      RowFactory.create(new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))))
+    checkAnswer(spark.createDataFrame(data, schema).selectExpr("typeof(a)"),
+      Seq(Row("array<double>")))
   }
 }
