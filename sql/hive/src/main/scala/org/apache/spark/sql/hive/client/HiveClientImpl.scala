@@ -383,8 +383,8 @@ private[hive] class HiveClientImpl(
       }
     }
     val props = database.properties
-    val dbOwner = props.get(DB_OWNER_NAME_PROP).filter(_.isEmpty).getOrElse(userName)
-    val dbOwnerType = props.get(DB_OWNER_TYPE_PROP).filter(_.isEmpty).getOrElse("USER")
+    val dbOwner = props.get(DB_OWNER_NAME_PROP).filter(_.nonEmpty).getOrElse(userName)
+    val dbOwnerType = props.get(DB_OWNER_TYPE_PROP).filter(_.nonEmpty).getOrElse("USER")
 
     val hiveDb = new HiveDatabase(
       database.name,

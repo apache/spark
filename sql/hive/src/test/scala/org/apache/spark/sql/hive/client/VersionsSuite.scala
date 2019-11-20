@@ -172,26 +172,31 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: create/get/alter database should pick right user name as owner") {
-      val currentUser = UserGroupInformation.getCurrentUser.getUserName
-      val ownerName = "SPARK_29425"
-      val dbNameWithOwner = "SPARK_29425_1"
-      val dbNameWithoutOwner = "SPARK_29425_2"
-      val dbWithOwner = CatalogDatabase(
-        dbNameWithOwner, "desc", Utils.createTempDir().toURI, Map("ownerName" -> ownerName))
-      val dbWithoutOwner =
-        CatalogDatabase(dbNameWithoutOwner, "desc", Utils.createTempDir().toURI, Map())
-      client.createDatabase(dbWithOwner, ignoreIfExists = true)
-      client.createDatabase(dbWithoutOwner, ignoreIfExists = true)
-      val getDbWith = client.getDatabase(dbNameWithOwner)
-      val getDbWithOut = client.getDatabase(dbNameWithoutOwner)
-      if (version != "0.12") assert(getDbWith.properties("ownerName") === ownerName)
-      if (version != "0.12") assert(getDbWithOut.properties("ownerName") === currentUser)
-      client.alterDatabase(getDbWith.copy(properties = Map()))
-      client.alterDatabase(getDbWithOut.copy(properties = Map("ownerName" -> ownerName)))
-      val dbOwnerRemoved = client.getDatabase(dbNameWithOwner)
-      val dbOwnerAdded = client.getDatabase(dbNameWithoutOwner)
-      if (version != "0.12") assert(dbOwnerRemoved.properties("ownerName") === currentUser)
-      if (version != "0.12") assert(dbOwnerAdded.properties("ownerName") === ownerName)
+      if (version != "0.12") {
+        val currentUser = UserGroupInformation.getCurrentUser.getUserName
+        val ownerName = "SPARK_29425"
+        val db1 = "SPARK_29425_1"
+        val db2 = "SPARK_29425_2"
+        val ownerProps = Map("ownerName" -> ownerName)
+
+        // create database with owner
+        val dbWithOwner = CatalogDatabase(db1, "desc", Utils.createTempDir().toURI, ownerProps)
+        client.createDatabase(dbWithOwner, ignoreIfExists = true)
+        val getDbWithOwner = client.getDatabase(db1)
+        assert(getDbWithOwner.properties("ownerName") === ownerName)
+        // alter database without owner
+        client.alterDatabase(getDbWithOwner.copy(properties = Map()))
+        assert(client.getDatabase(getDbWithOwner.name).properties("ownerName") === currentUser)
+
+        // create database without owner
+        val dbWithoutOwner = CatalogDatabase(db2, "desc", Utils.createTempDir().toURI, Map())
+        client.createDatabase(dbWithoutOwner, ignoreIfExists = true)
+        val getDbWithoutOwner = client.getDatabase(db2)
+        assert(getDbWithoutOwner.properties("ownerName") === currentUser)
+        // alter database with owner
+        client.alterDatabase(getDbWithoutOwner.copy(properties = ownerProps))
+        assert(client.getDatabase(getDbWithoutOwner.name).properties("ownerName") === ownerName)
+      }
     }
 
     test(s"$version: createDatabase with null description") {

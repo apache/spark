@@ -376,7 +376,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("Database Ownership") {
     val catalog = spark.sessionState.catalog
     try {
-      val dbName = "SPARK_29425"
+      val dbName = "spark_29425"
       val location = getDBPath(dbName)
 
       sql(s"CREATE DATABASE $dbName")
