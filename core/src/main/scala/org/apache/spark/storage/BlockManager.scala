@@ -29,13 +29,11 @@ import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.google.common.cache.CacheBuilder
-import com.google.common.util.concurrent.FutureCallback
-import java.util
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
@@ -137,7 +135,7 @@ private[spark] class HostLocalDirManager(
 
   private[spark] def getHostLocalDirs(
       executorIds: Array[String],
-      callback: FutureCallback[java.util.Map[String, Array[String]]]): Unit = {
+      callback: Try[java.util.Map[String, Array[String]]] => Unit): Unit = {
     val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
     externalBlockStoreClient.getHostLocalDirs(
       host,
@@ -146,12 +144,12 @@ private[spark] class HostLocalDirManager(
       hostLocalDirsCompletable)
     hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
       if (hostLocalDirs != null) {
-        callback.onSuccess(hostLocalDirs)
+        callback(Success(hostLocalDirs))
         executorIdToLocalDirsCache.synchronized {
           executorIdToLocalDirsCache.putAll(hostLocalDirs)
         }
       } else {
-        callback.onFailure(throwable)
+        callback(Failure(throwable))
       }
     }
   }

@@ -24,8 +24,8 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, LinkedHashMap, Queue}
+import scala.util.{Failure, Success}
 
-import com.google.common.util.concurrent.FutureCallback
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -487,10 +487,8 @@ final class ShuffleBlockFetcherIterator(
       logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
         s"${immutableHostLocalBlocksWithoutDirs.mkString(", ")}")
       hostLocalDirManager.getHostLocalDirs(
-        immutableHostLocalBlocksWithoutDirs.keys.map(_.executorId).toArray,
-        new FutureCallback[java.util.Map[String, Array[String]]] {
-
-          override def onSuccess(dirs: java.util.Map[String, Array[String]]): Unit =
+        immutableHostLocalBlocksWithoutDirs.keys.map(_.executorId).toArray, {
+          case Success(dirs) =>
             immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
               blockInfos.takeWhile { case (blockId, _, mapIndex) =>
                 fetchHostLocalBlock(
@@ -501,13 +499,12 @@ final class ShuffleBlockFetcherIterator(
               }
             }
 
-          override def onFailure(throwable: Throwable): Unit = {
+          case Failure(throwable) =>
             logError(s"Error occurred while fetching host local blocks", throwable)
             val (hostLocalBmId, blockInfoSeq) = immutableHostLocalBlocksWithoutDirs.head
             val (blockId, _, mapIndex) = blockInfoSeq.head
             results.put(FailureFetchResult(blockId, mapIndex, hostLocalBmId, throwable))
-          }
-      })
+        })
     }
     if (hostLocalBlocksWithCachedDirs.nonEmpty) {
       logDebug(s"Synchronous fetching host-local blocks with cached executors' dir: " +

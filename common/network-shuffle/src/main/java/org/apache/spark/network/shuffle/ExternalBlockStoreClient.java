@@ -221,8 +221,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         public void onFailure(Throwable t) {
           logger.warn("Error trying to get the host local dirs for " +
             Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
-              t.getCause());
-            hostLocalDirsCompletable.completeExceptionally(t);
+            t.getCause());
+          hostLocalDirsCompletable.completeExceptionally(t);
           client.close();
         }
       });

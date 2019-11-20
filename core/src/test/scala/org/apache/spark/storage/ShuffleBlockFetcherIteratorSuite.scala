@@ -78,12 +78,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     when(blockManager.hostLocalDirManager).thenReturn(Some(hostLocalDirManager))
     when(mockExternalBlockStoreClient.getHostLocalDirs(any(), any(), any(), any()))
-      .thenAnswer((invocation: InvocationOnMock) => {
+      .thenAnswer { invocation =>
         val completableFuture = invocation.getArguments()(3)
           .asInstanceOf[CompletableFuture[java.util.Map[String, Array[String]]]]
         import scala.collection.JavaConverters._
         completableFuture.complete(hostLocalDirs.asJava)
-      })
+      }
 
     blockManager.hostLocalDirManager = Some(hostLocalDirManager)
   }
@@ -223,13 +223,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     when(blockManager.hostLocalDirManager).thenReturn(Some(hostLocalDirManager))
     when(mockExternalBlockStoreClient.getHostLocalDirs(any(), any(), any(), any()))
-      .thenAnswer((invocation: InvocationOnMock) => {
+      .thenAnswer { invocation =>
         val completableFuture = invocation.getArguments()(3)
           .asInstanceOf[CompletableFuture[java.util.Map[String, Array[String]]]]
-        Future {
-          completableFuture.completeExceptionally(new Throwable("failed fetch"))
-        }
-      })
+        completableFuture.completeExceptionally(new Throwable("failed fetch"))
+      }
 
     blockManager.hostLocalDirManager = Some(hostLocalDirManager)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](

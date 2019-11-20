@@ -375,9 +375,12 @@ public class ExternalShuffleBlockResolver {
     return Arrays.stream(execIds)
       .map(exec -> {
         ExecutorShuffleInfo info = executors.get(new AppExecId(appId, exec));
-        return Pair.of(exec, (info != null) ? info.localDirs : null);
+        if (info == null) {
+          throw new RuntimeException(
+            String.format("Executor is not registered (appId=%s, execId=%s)", appId, exec));
+        }
+        return Pair.of(exec, info.localDirs);
       })
-      .filter(pair -> pair.getValue() != null)
       .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
   }
 
