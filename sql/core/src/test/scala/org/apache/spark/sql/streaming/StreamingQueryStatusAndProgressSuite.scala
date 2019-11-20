@@ -24,12 +24,15 @@ import scala.collection.JavaConverters._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
+import org.apache.spark.sql.streaming.StreamingQuerySuite.clock
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
   test("StreamingQueryProgress - prettyJson") {
@@ -212,6 +215,81 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
       } finally {
         query.stop()
       }
+    }
+  }
+
+  test("SPARK-29973: Use nano time to avoid 'NaN'/'Infinity'") {
+    import testImplicits._
+
+    class StreamManualClockInNano extends StreamManualClock {
+      private var timeInNano: Long = 0L
+
+      override def nanoTime(): Long = {
+        val currentNanos = timeInNano
+        // indicate the process time in each batch is less than 1 millis.
+        timeInNano += 1000 * 1000 -1
+        currentNanos
+      }
+
+      override def setTime(timeToSet: Long): Unit = {
+        super.setTime(timeToSet)
+        timeInNano = super.nanoTime()
+      }
+
+      override def advance(timeToAdd: Long): Unit = {
+        super.advance(timeToAdd)
+        timeInNano = super.nanoTime()
+      }
+    }
+
+    clock = new StreamManualClockInNano
+    val inputData = MemoryStream[Int]
+    val query = inputData.toDS()
+
+    testStream(query)(
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
+      AssertStreamExecThreadIsWaitingForTime(1000),
+      AdvanceManualClock(1000),
+      WaitUntilBatchProcessed,
+      AssertOnQuery(query => {
+        assert(query.lastProgress.numInputRows == 0)
+        assert(query.lastProgress.processedRowsPerSecond == 0.0)
+        true
+      }),
+      AddData(inputData, 1, 2),
+      AssertStreamExecThreadIsWaitingForTime(2000),
+      AdvanceManualClock(1000),
+      WaitUntilBatchProcessed,
+      AssertOnQuery(query => {
+        assert(query.lastProgress.numInputRows == 2)
+        assert(query.lastProgress.processedRowsPerSecond.toLong == 2000)
+        true
+      }),
+      StopStream
+    )
+  }
+
+  case class AssertStreamExecThreadIsWaitingForTime(targetTime: Long)
+    extends AssertOnQuery(q => {
+      eventually(Timeout(streamingTimeout)) {
+        if (q.exception.isEmpty) {
+          assert(clock.isStreamWaitingFor(targetTime))
+        }
+      }
+      if (q.exception.isDefined) {
+        throw q.exception.get
+      }
+      true
+    }, "")
+
+  def WaitUntilBatchProcessed: AssertOnQuery = Execute { q =>
+    eventually(Timeout(streamingTimeout)) {
+      if (q.exception.isEmpty) {
+        assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+      }
+    }
+    if (q.exception.isDefined) {
+      throw q.exception.get
     }
   }
 
