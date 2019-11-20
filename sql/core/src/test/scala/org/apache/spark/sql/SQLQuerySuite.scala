@@ -2892,7 +2892,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       case agg : HashAggregateExec => agg.aggregateExpressions
     }
     assert (aggregateExpressions.isDefined)
-    assert (aggregateExpressions.get.size == 8)
+    assert (aggregateExpressions.get.size == 10)
     checkAnswer(df, Row(6, 3, 12, 6, 3, 3, 1, 1, 2, 2) :: Nil)
   }
 
