@@ -1101,10 +1101,6 @@ class Analyzer(
           result
         case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
           ExtractValue(child, fieldExpr, resolver)
-        case f @ UnresolvedFunction(_, children, _, Some(filter)) =>
-          val newChildren = children.map(resolveExpressionTopDown(_, q))
-          val newFilter = filter.mapChildren(resolveExpressionTopDown(_, q))
-          f.copy(children = newChildren, filter = Some(newFilter))
         case _ => e.mapChildren(resolveExpressionTopDown(_, q))
       }
     }
@@ -1287,8 +1283,8 @@ class Analyzer(
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
-        case f1: UnresolvedFunction if containsStar(f1.children) =>
-          f1.copy(children = f1.children.flatMap {
+        case f1: UnresolvedFunction if containsStar(f1.inputs) =>
+          f1.copy(inputs = f1.inputs.flatMap {
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
           })
@@ -1640,9 +1636,9 @@ class Analyzer(
                     s"its class is ${other.getClass.getCanonicalName}, which is not a generator.")
               }
             }
-          case u @ UnresolvedFunction(funcId, children, isDistinct, filter) =>
+          case u @ UnresolvedFunction(funcId, inputs, isDistinct, filter) =>
             withPosition(u) {
-              v1SessionCatalog.lookupFunction(funcId, children) match {
+              v1SessionCatalog.lookupFunction(funcId, inputs) match {
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
