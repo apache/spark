@@ -349,7 +349,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
    *   df.na.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed"));
-   * }}}outputAttributes
+   * }}}
    *
    * @param cols list of columns to apply the value replacement. If `col` is "*",
    *             replacement is applied on all string, numeric or boolean columns.
@@ -478,7 +478,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   private def toAttributes(cols: Seq[String]): Seq[Attribute] = {
-    cols.map(df.col(_).named.toAttribute)
+    def resolve(colName: String) : Attribute = {
+      df.col(colName).named.toAttribute match {
+        case a: Attribute => a
+        case _ => throw new IllegalArgumentException(s"'$colName' is not a top level column.")
+      }
+    }
+    cols.map(resolve)
   }
 
   private def outputAttributes: Seq[Attribute] = {
@@ -486,10 +492,9 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Returns a new `DataFrame` that replaces null or NaN values in specified
-   * numeric, string columns. If a specified column is not a numeric, string
-   * or boolean column it is ignored. If `cols` is empty, fill() is applied to
-   * all the eligible columns.
+   * Returns a new `DataFrame` that replaces null or NaN values in the specified
+   * columns. If a specified column is not a numeric, string or boolean column,
+   * it is ignored.
    */
   private def fillValue[T](value: T, cols: Seq[Attribute]): DataFrame = {
     // the fill[T] which T is  Long/Double,
