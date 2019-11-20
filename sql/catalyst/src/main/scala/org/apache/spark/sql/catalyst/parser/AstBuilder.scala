@@ -1850,7 +1850,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
     val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
-    val isNegative = ctx.negativeSign != null
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
       f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
@@ -1859,9 +1858,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     try {
       valueType match {
-        case "DATE" if !isNegative =>
+        case "DATE" =>
           toLiteral(stringToDate(_, getZoneId(SQLConf.get.sessionLocalTimeZone)), DateType)
-        case "TIMESTAMP" if !isNegative =>
+        case "TIMESTAMP" =>
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
@@ -1873,9 +1872,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          val signedInterval = if (isNegative) IntervalUtils.negate(interval) else interval
-          Literal(signedInterval, CalendarIntervalType)
-        case "X" if !isNegative =>
+          Literal(interval, CalendarIntervalType)
+        case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
         case "INTEGER" =>
@@ -1887,10 +1885,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(if (isNegative) -i else i, IntegerType)
+          Literal(i, IntegerType)
         case other =>
-          val negativeSign: String = if (isNegative) "-" else ""
-          throw new ParseException(s"Literals of type '$negativeSign$other' are currently not" +
+          throw new ParseException(s"Literals of type '$other' are currently not" +
             " supported.", ctx)
       }
     } catch {
@@ -2020,14 +2017,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
-  private def applyNegativeSign(sign: Token, interval: CalendarInterval): CalendarInterval = {
-    if (sign != null) {
-      IntervalUtils.negate(interval)
-    } else {
-      interval
-    }
-  }
-
   /**
    * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
@@ -2041,10 +2030,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           innerCtx.unitToUnitInterval)
       }
-      val interval = applyNegativeSign(
-        ctx.negativeSign,
-        visitMultiUnitsInterval(innerCtx.multiUnitsInterval))
-      Literal(interval, CalendarIntervalType)
+      Literal(visitMultiUnitsInterval(innerCtx.multiUnitsInterval), CalendarIntervalType)
     } else if (ctx.errorCapturingUnitToUnitInterval != null) {
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
@@ -2053,8 +2039,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           errorCtx)
       }
-      val interval = applyNegativeSign(ctx.negativeSign, visitUnitToUnitInterval(innerCtx.body))
-      Literal(interval, CalendarIntervalType)
+      Literal(visitUnitToUnitInterval(innerCtx.body), CalendarIntervalType)
     } else {
       throw new ParseException("at least one time unit should be given for interval literal", ctx)
     }
