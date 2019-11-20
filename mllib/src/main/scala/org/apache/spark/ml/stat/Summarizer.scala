@@ -548,8 +548,23 @@ private[ml] object SummaryBuilderImpl extends Logging {
       require(requestedMetrics.contains(Variance))
       require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
-      val realVariance = Array.ofDim[Double](n)
+      val realVariance = computeVariance
+      Vectors.dense(realVariance)
+    }
 
+    /**
+     * Unbiased estimate of standard deviation of each dimension.
+     */
+    def std: Vector = {
+      require(requestedMetrics.contains(Std))
+      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+
+      val realVariance = computeVariance
+      Vectors.dense(realVariance.map(math.sqrt))
+    }
+
+    private def computeVariance: Array[Double] = {
+      val realVariance = Array.ofDim[Double](n)
       val denominator = totalWeightSum - (weightSquareSum / totalWeightSum)
 
       // Sample variance is computed, if the denominator is less than 0, the variance is just 0.
@@ -564,34 +579,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
           i += 1
         }
       }
-      Vectors.dense(realVariance)
-    }
-
-    /**
-     * Unbiased estimate of standard deviation of each dimension.
-     */
-    def std: Vector = {
-      require(requestedMetrics.contains(Std))
-      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
-
-      val realStd = Array.ofDim[Double](n)
-
-      val denominator = totalWeightSum - (weightSquareSum / totalWeightSum)
-
-      // Sample variance is computed, if the denominator is less than 0, the variance is just 0.
-      if (denominator > 0.0) {
-        val deltaMean = currMean
-        var i = 0
-        val len = currM2n.length
-        while (i < len) {
-          // We prevent variance from negative value caused by numerical error.
-          val variance = math.max((currM2n(i) + deltaMean(i) * deltaMean(i) * currWeightSum(i) *
-            (totalWeightSum - currWeightSum(i)) / totalWeightSum) / denominator, 0.0)
-          realStd(i) = math.sqrt(variance)
-          i += 1
-        }
-      }
-      Vectors.dense(realStd)
+      realVariance
     }
 
     /**
