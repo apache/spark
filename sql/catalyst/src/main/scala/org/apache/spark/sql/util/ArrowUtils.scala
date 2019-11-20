@@ -94,7 +94,7 @@ object ArrowUtils {
         val mapType = new FieldType(valueContainsNull, new ArrowType.Map(false), null)
         // Note: Map Type struct can not be null, Struct Type key field can not be null
         new Field(name, mapType,
-          Seq(toArrowField("entries",
+          Seq(toArrowField(MapVector.DATA_VECTOR_NAME,
             new StructType()
               .add(MapVector.KEY_NAME, keyType, nullable = false)
               .add(MapVector.VALUE_NAME, valueType, nullable = true),

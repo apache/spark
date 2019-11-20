@@ -498,7 +498,7 @@ public final class ArrowColumnVector extends ColumnVector {
     final ColumnarMap getMap(int rowId) {
       int index = rowId * MapVector.OFFSET_WIDTH;
       int offset = accessor.getOffsetBuffer().getInt(index);
-      int length = accessor.getInnerValueCount();
+      int length = accessor.getInnerValueCountAt(rowId);
       return new ColumnarMap(keys, values, offset, length);
     }
   }
