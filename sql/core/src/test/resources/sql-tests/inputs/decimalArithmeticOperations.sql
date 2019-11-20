@@ -75,7 +75,7 @@ select 2.35E10 * 1.0;
 select (5e36BD + 0.1) + 5e36BD;
 select (-4e36BD - 0.1) - 7e36BD;
 select 12345678901234567890.0 * 12345678901234567890.0;
-select 1e35BD / 0.1;``
+select 1e35BD / 0.1;
 select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD;
 
 -- arithmetic operations causing a precision loss return NULL
