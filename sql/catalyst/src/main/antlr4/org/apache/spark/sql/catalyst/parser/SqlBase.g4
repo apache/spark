@@ -48,7 +48,7 @@ grammar SqlBase;
   /**
    * When true, use ANSI SQL standard keywords.
    */
-  public boolean use_SQL_standard_keywords = false;
+  public boolean SQL_standard_keyword_behavior = false;
 }
 
 singleStatement
@@ -788,7 +788,7 @@ booleanValue
 
 interval
     : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
-    | {use_SQL_standard_keywords}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
+    | {SQL_standard_keyword_behavior}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
 errorCapturingMultiUnitsInterval
@@ -933,14 +933,14 @@ errorCapturingIdentifierExtra
 
 identifier
     : strictIdentifier
-    | {!use_SQL_standard_keywords}? strictNonReserved
+    | {!SQL_standard_keyword_behavior}? strictNonReserved
     ;
 
 strictIdentifier
     : IDENTIFIER              #unquotedIdentifier
     | quotedIdentifier        #quotedIdentifierAlternative
-    | {use_SQL_standard_keywords}? ansiNonReserved #unquotedIdentifier
-    | {!use_SQL_standard_keywords}? nonReserved    #unquotedIdentifier
+    | {SQL_standard_keyword_behavior}? ansiNonReserved #unquotedIdentifier
+    | {!SQL_standard_keyword_behavior}? nonReserved    #unquotedIdentifier
     ;
 
 quotedIdentifier
@@ -957,7 +957,7 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// When `use_SQL_standard_keywords=true`, there are 2 kinds of keywords in Spark SQL.
+// When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
 //     function, alias, etc.
@@ -1157,9 +1157,9 @@ ansiNonReserved
     | YEARS
     ;
 
-// When `use_SQL_standard_keywords=false`, there are 2 kinds of keywords in Spark SQL.
+// When `SQL_standard_keyword_behavior=false`, there are 2 kinds of keywords in Spark SQL.
 // - Non-reserved keywords:
-//     Same definition as the one when `use_SQL_standard_keywords=true`.
+//     Same definition as the one when `SQL_standard_keyword_behavior=true`.
 // - Strict-non-reserved keywords:
 //     A strict version of non-reserved keywords, which can not be used as table alias.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.

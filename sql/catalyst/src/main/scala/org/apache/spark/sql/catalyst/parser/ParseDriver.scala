@@ -100,7 +100,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.use_SQL_standard_keywords = useSQLStandardKeywords
+    lexer.SQL_standard_keyword_behavior = useSQLStandardKeywords
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -108,7 +108,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    parser.use_SQL_standard_keywords = useSQLStandardKeywords
+    parser.SQL_standard_keyword_behavior = useSQLStandardKeywords
 
     try {
       try {
