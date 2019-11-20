@@ -176,7 +176,6 @@ object PageRank extends Logging {
       logInfo(s"PageRank finished iteration $iteration.")
       prevRankGraph.vertices.unpersist()
       prevRankGraph.edges.unpersist()
-
       iteration += 1
     }
 
@@ -236,7 +235,6 @@ object PageRank extends Logging {
       logInfo(s"PageRank finished iteration $iteration.")
       prevRankGraph.vertices.unpersist()
       prevRankGraph.edges.unpersist()
-      
       iteration += 1
     }
 
