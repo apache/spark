@@ -2893,12 +2893,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
     assert (aggregateExpressions.isDefined)
     assert (aggregateExpressions.get.size == 8)
-    checkAnswer(df, Row(6, 3, 12, 6, 3, 3, 1, 1) :: Nil)
+    checkAnswer(df, Row(6, 3, 12, 6, 3, 3, 1, 1, 2, 2) :: Nil)
   }
 
   test("SPARK-27986: support filter clause for aggregate function with group") {
     Seq("b = 2", "b = (select 2)").foreach{ predicate =>
-      val query = "SELECT b, MAX(a), MAX(a) FILTER (WHERE $predicate) FROM testData2 GROUP BY b"
+      val query = s"SELECT b, MAX(a), MAX(a) FILTER (WHERE $predicate) FROM testData2 GROUP BY b"
       val df = sql(query)
       val physical = df.queryExecution.sparkPlan
       val aggregateExpressions = physical.collectFirst {
