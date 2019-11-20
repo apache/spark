@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Interface for generated/interpreted predicate
+ * A base class for generated/interpreted predicate
  */
 abstract class BasePredicate {
   def eval(r: InternalRow): Boolean
@@ -81,7 +81,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 
   override protected def createInterpretedObject(in: Expression): BasePredicate = {
-    InterpretedPredicate.create(in)
+    InterpretedPredicate(in)
   }
 
   /**
