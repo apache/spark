@@ -535,4 +535,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       to_json(struct($"t"), Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss.SSSSSS")))
     checkAnswer(df, Row(s"""{"t":"$s"}"""))
   }
+
+  test("json_tuple - do not truncate results") {
+    val len = 2800
+    val str = Array.tabulate(len)(_ => "a").mkString
+    val json_tuple_result = Seq(s"""{"test":"$str"}""").toDF("json")
+      .withColumn("result", json_tuple('json, "test"))
+      .select('result)
+      .as[String].head.length
+    assert(json_tuple_result === len)
+  }
 }
