@@ -376,27 +376,59 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("Database Ownership") {
     val catalog = spark.sessionState.catalog
     try {
-      val dbName = "spark_29425"
-      val location = getDBPath(dbName)
+      val db1 = "spark_29425_1"
+      val db2 = "spark_29425_2"
+      val owner = "spark_29425"
+      val location1 = getDBPath(db1)
+      val location2 = getDBPath(db2)
 
-      sql(s"CREATE DATABASE $dbName")
-
+      sql(s"CREATE DATABASE $db1")
       checkAnswer(
-        sql(s"DESCRIBE DATABASE $dbName"),
-        Row("Database Name", dbName) ::
+        sql(s"DESCRIBE DATABASE $db1"),
+        Row("Database Name", db1) ::
           Row("Description", "") ::
-          Row("Location", CatalogUtils.URIToString(location)) ::
+          Row("Location", CatalogUtils.URIToString(location1)) ::
           Row("Owner Name", Utils.getCurrentUserName()) ::
           Row("Owner Type", "USER") :: Nil)
 
-      sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-
+      // TODO: Specify ownership should be forbidden after we implement `SET OWNER` syntax
+      sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('ownerName'='$owner')")
       checkAnswer(
-        sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-        Row("Database Name", dbName) ::
+        sql(s"DESCRIBE DATABASE $db2"),
+        Row("Database Name", db2) ::
           Row("Description", "") ::
-          Row("Location", CatalogUtils.URIToString(location)) ::
+          Row("Location", CatalogUtils.URIToString(location2)) ::
+          Row("Owner Name", owner) ::
+          Row("Owner Type", "USER") :: Nil)
+
+      sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+      checkAnswer(
+        sql(s"DESCRIBE DATABASE EXTENDED $db1"),
+        Row("Database Name", db1) ::
+          Row("Description", "") ::
+          Row("Location", CatalogUtils.URIToString(location1)) ::
           Row("Owner Name", Utils.getCurrentUserName()) ::
+          Row("Owner Type", "USER") ::
+          Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+
+      sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+      checkAnswer(
+        sql(s"DESCRIBE DATABASE EXTENDED $db2"),
+        Row("Database Name", db2) ::
+          Row("Description", "") ::
+          Row("Location", CatalogUtils.URIToString(location2)) ::
+          Row("Owner Name", owner) ::
+          Row("Owner Type", "USER") ::
+          Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+
+      // TODO: Changing ownership should be forbidden after we implement `SET OWNER` syntax
+      sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('ownerName'='a')")
+      checkAnswer(
+        sql(s"DESCRIBE DATABASE EXTENDED $db2"),
+        Row("Database Name", db2) ::
+          Row("Description", "") ::
+          Row("Location", CatalogUtils.URIToString(location2)) ::
+          Row("Owner Name", "a") ::
           Row("Owner Type", "USER") ::
           Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
     } finally {
