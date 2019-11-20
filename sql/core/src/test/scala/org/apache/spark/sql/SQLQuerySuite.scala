@@ -2883,7 +2883,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
                   | COUNT(a), COUNT(a) FILTER (WHERE b >= 2),
                   | SUM(a), SUM(a) FILTER (WHERE b < 2),
                   | MAX(a), MAX(a) FILTER (WHERE b > 0),
-                  | MIN(a), MIN(a) FILTER (WHERE b = 1) FROM testData2
+                  | MIN(a), MIN(a) FILTER (WHERE b = 1),
+                  | AVG(a), AVG(a) FILTER (WHERE b IN (1, 2)) FROM testData2
                 """.stripMargin
     val df = sql(query)
     val physical = df.queryExecution.sparkPlan
@@ -2897,7 +2898,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-27986: support filter clause for aggregate function with group") {
     Seq("b = 2", "b = (select 2)").foreach{ predicate =>
-      val query = "SELECT b, MAX(a), MAX(a) FILTER (WHERE b = 2) FROM testData2 GROUP BY b"
+      val query = "SELECT b, MAX(a), MAX(a) FILTER (WHERE $predicate) FROM testData2 GROUP BY b"
       val df = sql(query)
       val physical = df.queryExecution.sparkPlan
       val aggregateExpressions = physical.collectFirst {
