@@ -267,7 +267,6 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       // In this case checkPoint does not help but it does not take more iterations
       assert(totalIters == 10)
       assert(iterAfterHalfCheckPoint == 10)
-
     }
   } // end of Grid PageRank
 
@@ -334,7 +333,6 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val ranks = VertexRDD(sc.parallelize(1L to 4L zip igraphPR))
       assert(compareRanks(staticRanks, ranks) < errorTol)
       assert(compareRanks(dynamicRanks, ranks) < errorTol)
-
     }
   }
 
@@ -352,7 +350,6 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       // In this case checkPoint helps a lot
       assert(totalIters == 34)
       assert(iterAfterHalfCheckPoint == 17)
-
     }
   }
 

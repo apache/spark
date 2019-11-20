@@ -95,7 +95,7 @@ object PageRank extends Logging {
    * @param src the source vertex for a Personalized Page Rank
    *
    * @return the graph containing with each vertex containing the PageRank and each edge
-   *         containing the normalized weight.
+   *         containing the normalized weight after a single update step.
    *
    */
   private def runUpdate(rankGraph: Graph[Double, Double], personalized: Boolean,
@@ -140,8 +140,8 @@ object PageRank extends Logging {
    */
   def runWithOptions[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15,
-      srcId: Option[VertexId] = None): Graph[Double, Double] = {
-
+      srcId: Option[VertexId] = None): Graph[Double, Double] =
+  {
     require(numIter > 0, s"Number of iterations must be greater than 0," +
       s" but got ${numIter}")
     require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
@@ -155,18 +155,17 @@ object PageRank extends Logging {
     // When running personalized pagerank, only the source vertex
     // has an attribute 1.0. All others are set to 0.
     var rankGraph: Graph[Double, Double] = graph
-          // Associate the degree with each vertex
-          .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
-          // Set the weight on the edges based on the degree
-          .mapTriplets(e => 1.0 / e.srcAttr, TripletFields.Src)
-          // Set the vertex attributes to the initial pagerank values
-          .mapVertices { (id, attr) =>
-          if (!(id != src && personalized)) 1.0 else 0.0
-          }
+      // Associate the degree with each vertex
+      .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
+      // Set the weight on the edges based on the degree
+      .mapTriplets(e => 1.0 / e.srcAttr, TripletFields.Src)
+      // Set the vertex attributes to the initial pagerank values
+      .mapVertices { (id, attr) =>
+        if (!(id != src && personalized)) 1.0 else 0.0
+      }
 
     var iteration = 0
     var prevRankGraph: Graph[Double, Double] = null
-
     while (iteration < numIter) {
       rankGraph.cache()
       prevRankGraph = rankGraph
@@ -175,9 +174,9 @@ object PageRank extends Logging {
       rankGraph.cache()
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
       logInfo(s"PageRank finished iteration $iteration.")
-
       prevRankGraph.vertices.unpersist()
       prevRankGraph.edges.unpersist()
+
       iteration += 1
     }
 
