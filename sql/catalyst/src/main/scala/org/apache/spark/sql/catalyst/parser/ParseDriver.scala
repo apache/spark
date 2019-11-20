@@ -91,7 +91,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
 
     // When we use PostgreSQL dialect or use Spark dialect with setting
     // `spark.sql.dialect.spark.ansi.enabled=true`, the parser will use ANSI SQL standard keywords.
-    val useSQLStandardKeywords = conf.dialect match {
+    val SQLStandardKeywordBehavior = conf.dialect match {
       case Dialect.POSTGRESQL => true
       case Dialect.SPARK => conf.dialectSparkAnsiEnabled
     }
@@ -100,7 +100,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.SQL_standard_keyword_behavior = useSQLStandardKeywords
+    lexer.SQL_standard_keyword_behavior = SQLStandardKeywordBehavior
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -108,7 +108,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    parser.SQL_standard_keyword_behavior = useSQLStandardKeywords
+    parser.SQL_standard_keyword_behavior = SQLStandardKeywordBehavior
 
     try {
       try {

@@ -46,7 +46,7 @@ grammar SqlBase;
   }
 
   /**
-   * When true, use ANSI SQL standard keywords.
+   * When true, the behavior of keywords follows ANSI SQL standard.
    */
   public boolean SQL_standard_keyword_behavior = false;
 }
