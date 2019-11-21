@@ -33,7 +33,6 @@ import org.apache.spark.benchmark.Benchmark
 object CastBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-
     val title = "Cast String to Integral"
     runBenchmark(title) {
       withTempPath { dir =>
@@ -43,16 +42,16 @@ object CastBenchmark extends SqlBasedBenchmark {
         df.selectExpr(s"concat(id, '${" " * 5}') as str")
           .write.mode("overwrite").parquet(dir.getCanonicalPath)
         val benchmark = new Benchmark(title, N, minNumIters = 5, output = output)
-        Seq(true, false).foreach { c =>
+        Seq(true, false).foreach { trim =>
           types.foreach { t =>
-            val str = if (c) "trim(str)" else "str"
+            val str = if (trim) "trim(str)" else "str"
             val expr = s"cast($str as $t) as c_$t"
             benchmark.addCase(expr) { _ =>
               spark.read.parquet(dir.getCanonicalPath).selectExpr(expr).collect()
             }
           }
-          benchmark.run()
         }
+        benchmark.run()
       }
     }
   }

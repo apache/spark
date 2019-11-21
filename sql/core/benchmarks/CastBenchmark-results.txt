@@ -6,16 +6,9 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.1
 Intel(R) Core(TM) i5-5287U CPU @ 2.90GHz
 Cast String to Integral:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast(trim(str) as int) as c_int                    8489          12451         NaN          1.0        1036.3       1.0X
-cast(trim(str) as long) as c_long                  4556           8087         554          1.8         556.2       1.9X
-
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.1
-Intel(R) Core(TM) i5-5287U CPU @ 2.90GHz
-Cast String to Integral:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------------------------------
-cast(trim(str) as int) as c_int                    4026           7674         NaN          2.0         491.5       1.0X
-cast(trim(str) as long) as c_long                  4022           7887        1345          2.0         491.0       1.0X
-cast(str as int) as c_int                          4390           6453        1009          1.9         535.9       0.9X
-cast(str as long) as c_long                        3759           5388        1413          2.2         458.8       1.1X
+cast(trim(str) as int) as c_int                    6555           8100        1298          1.2         800.1       1.0X
+cast(trim(str) as long) as c_long                  5080           8240         NaN          1.6         620.1       1.3X
+cast(str as int) as c_int                          4178           6277         NaN          2.0         510.0       1.6X
+cast(str as long) as c_long                        4139           5800        1007          2.0         505.2       1.6X
 
 
