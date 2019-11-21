@@ -616,7 +616,9 @@ class ExpressionParserSuite extends AnalysisTest {
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
 
         // Checks if we can make INTERVAL optional
-        withSQLConf(SQLConf.OPTIONAL_INTERVAL.key -> "true") {
+        withSQLConf(
+            SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true",
+            SQLConf.OPTIONAL_INTERVAL_PREFIX.key -> "true") {
           assertEqual(intervalValue, expected)
         }
       }
@@ -703,17 +705,23 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("SPARK-23264 Interval Compatibility tests") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      withSQLConf(SQLConf.OPTIONAL_INTERVAL.key -> "true") {
+      withSQLConf(
+          SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true",
+          SQLConf.OPTIONAL_INTERVAL_PREFIX.key -> "true") {
         assertEqual(intervalValue, expected)
       }
 
       // Compatibility tests: If ANSI SQL disabled, `intervalValue` should be parsed as an alias
-      withSQLConf(SQLConf.OPTIONAL_INTERVAL.key -> "false") {
-        val aliases = defaultParser.parseExpression(intervalValue).collect {
-          case a @ Alias(_: Literal, name)
-            if intervalUnits.exists { unit => name.startsWith(unit.toString) } => a
+      Seq("true", "false").foreach { optionalIntervalPrefix =>
+        withSQLConf(
+            SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false",
+            SQLConf.OPTIONAL_INTERVAL_PREFIX.key -> optionalIntervalPrefix) {
+          val aliases = defaultParser.parseExpression(intervalValue).collect {
+            case a @ Alias(_: Literal, name)
+              if intervalUnits.exists { unit => name.startsWith(unit.toString) } => a
+          }
+          assert(aliases.size === 1)
         }
-        assert(aliases.size === 1)
       }
     }
     val forms = Seq("", "s")

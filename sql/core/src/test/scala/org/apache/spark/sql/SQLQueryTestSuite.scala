@@ -255,8 +255,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
     // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
-    val importedTestCaseName = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
-    val importedCode = importedTestCaseName.flatMap { testCaseName =>
+    val importedTestCaseNames = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
+    val importedCode = importedTestCaseNames.flatMap { testCaseName =>
       listTestCases.find(_.name == testCaseName).map { testCase =>
         val input = fileToString(new File(testCase.inputFile))
         val (_, code) = input.split("\n").partition(_.trim.startsWith("--"))
@@ -277,7 +277,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     // When we use '--SET' and '--IMPORT' together for those import queries, we want to run the
     // same queries from the original file but with different settings and save the answers. So the
     // `--SET` will be respected in this case.
-    if ((regenerateGoldenFiles && importedTestCaseName.isEmpty) || !isTestWithConfigSets) {
+    if ((regenerateGoldenFiles && importedTestCaseNames.isEmpty) || !isTestWithConfigSets) {
       runQueries(queries, testCase, None)
     } else {
       val configSets = {

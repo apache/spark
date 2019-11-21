@@ -1118,43 +1118,25 @@ struct<(INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds' + INTERVAL '10 
 -- !query 118
 select 1 year 2 days
 -- !query 118 schema
-struct<>
+struct<INTERVAL '1 years 2 days':interval>
 -- !query 118 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input '1'(line 1, pos 7)
-
-== SQL ==
-select 1 year 2 days
--------^^^
+1 years 2 days
 
 
 -- !query 119
 select '10-9' year to month
 -- !query 119 schema
-struct<>
+struct<INTERVAL '10 years 9 months':interval>
 -- !query 119 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input ''10-9''(line 1, pos 7)
-
-== SQL ==
-select '10-9' year to month
--------^^^
+10 years 9 months
 
 
 -- !query 120
 select '20 15:40:32.99899999' day to second
 -- !query 120 schema
-struct<>
+struct<INTERVAL '20 days 15 hours 40 minutes 32.998999 seconds':interval>
 -- !query 120 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input ''20 15:40:32.99899999''(line 1, pos 7)
-
-== SQL ==
-select '20 15:40:32.99899999' day to second
--------^^^
+20 days 15 hours 40 minutes 32.998999 seconds
 
 
 -- !query 121
@@ -1164,39 +1146,27 @@ struct<>
 -- !query 121 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input '30'(line 1, pos 7)
+no viable alternative at input 'day'(line 1, pos 14)
 
 == SQL ==
 select 30 day day
--------^^^
+--------------^^^
 
 
 -- !query 122
 select date'2012-01-01' - '2-2' year to month
 -- !query 122 schema
-struct<>
+struct<CAST(CAST(DATE '2012-01-01' AS TIMESTAMP) - INTERVAL '2 years 2 months' AS DATE):date>
 -- !query 122 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input ''2-2''(line 1, pos 26)
-
-== SQL ==
-select date'2012-01-01' - '2-2' year to month
---------------------------^^^
+2009-11-01
 
 
 -- !query 123
 select 1 month - 1 day
 -- !query 123 schema
-struct<>
+struct<INTERVAL '1 months -1 days':interval>
 -- !query 123 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input '1'(line 1, pos 7)
-
-== SQL ==
-select 1 month - 1 day
--------^^^
+1 months -1 days
 
 
 -- !query 124
@@ -1206,7 +1176,7 @@ struct<>
 -- !query 124 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input '1'(line 1, pos 7)
+The value of from-to unit must be a string(line 1, pos 7)
 
 == SQL ==
 select 1 year to month
@@ -1220,7 +1190,7 @@ struct<>
 -- !query 125 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input ''1''(line 1, pos 7)
+Intervals FROM year TO second are not supported.(line 1, pos 7)
 
 == SQL ==
 select '1' year to second
@@ -1234,11 +1204,11 @@ struct<>
 -- !query 126 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input '1'(line 1, pos 7)
+Can only have a single from-to unit in the interval literal syntax(line 1, pos 14)
 
 == SQL ==
 select 1 year '2-1' year to month
--------^^^
+--------------^^^
 
 
 -- !query 127
@@ -1276,8 +1246,8 @@ struct<>
 -- !query 129 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input '30'(line 1, pos 7)
+no viable alternative at input 'day'(line 1, pos 14)
 
 == SQL ==
 select 30 day day day
--------^^^
+--------------^^^

@@ -53,7 +53,7 @@ grammar SqlBase;
   /**
    * When true, an INTERVAL keyword can be optional for interval values in SQL statements.
    */
-  public boolean optional_interval = false;
+  public boolean optional_interval_prefix = false;
 }
 
 singleStatement
@@ -793,7 +793,7 @@ booleanValue
 
 interval
     : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
-    | {optional_interval}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
+    | {optional_interval_prefix}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
 errorCapturingMultiUnitsInterval

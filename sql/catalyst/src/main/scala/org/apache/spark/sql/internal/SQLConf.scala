@@ -1787,8 +1787,8 @@ object SQLConf {
     val SQL_STANDARD, ISO_8601, MULTI_UNITS = Value
   }
 
-  val OPTIONAL_INTERVAL =
-    buildConf("spark.sql.parser.optionalInterval")
+  val OPTIONAL_INTERVAL_PREFIX =
+    buildConf("spark.sql.parser.optionalIntervalPrefix")
       .doc("When true, an INTERVAL keyword can be optional for interval values in SQL statements," +
         " e.g., 'SELECT 1 day'.")
       .booleanConf
@@ -2520,7 +2520,7 @@ class SQLConf extends Serializable with Logging {
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
-  def optionalInterval: Boolean = getConf(OPTIONAL_INTERVAL)
+  def optionalIntervalPrefix: Boolean = getConf(OPTIONAL_INTERVAL_PREFIX)
 
   def intervalOutputStyle: IntervalStyle.Value = IntervalStyle.withName(getConf(INTERVAL_STYLE))
 

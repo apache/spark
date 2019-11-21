@@ -96,12 +96,21 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
       case Dialect.SPARK => conf.dialectSparkAnsiEnabled
     }
 
+    // PostgreSQL cannot make INTERVAL keywords optional.
+    // In Spark dialect with setting `spark.sql.dialect.spark.ansi.enabled=true` and
+    // `spark.sql.parser.optionalIntervalPrefix=true`, the parser can omit
+    // INTERVAL keywords in SQL statements.
+    val optionalIntervalPrefix = conf.dialect match {
+      case Dialect.POSTGRESQL => false
+      case Dialect.SPARK => conf.dialectSparkAnsiEnabled && conf.optionalIntervalPrefix
+    }
+
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
     lexer.SQL_standard_keyword_behavior = SQLStandardKeywordBehavior
-    lexer.optional_interval = conf.optionalInterval
+    lexer.optional_interval_prefix = optionalIntervalPrefix
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -110,7 +119,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
     parser.SQL_standard_keyword_behavior = SQLStandardKeywordBehavior
-    parser.optional_interval = conf.optionalInterval
+    parser.optional_interval_prefix = optionalIntervalPrefix
 
     try {
       try {
