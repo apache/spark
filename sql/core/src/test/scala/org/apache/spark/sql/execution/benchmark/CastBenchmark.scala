@@ -37,7 +37,7 @@ object CastBenchmark extends SqlBasedBenchmark {
     val title = "Benchmark trim the string"
     runBenchmark(title) {
       withTempPath { dir =>
-        val N = 500L << 13
+        val N = 500L << 14
         val df = spark.range(N)
         val withoutWhitespace = "withoutWhitespace"
         val withWhitespace = "withWhitespace"

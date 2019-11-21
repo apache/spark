@@ -6,7 +6,7 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.1
 Intel(R) Core(TM) i5-5287U CPU @ 2.90GHz
 Benchmark trim the string:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast(str as int) as c_int                          2208           4341        1848          1.9         539.0       1.0X
-cast(str as long) as c_long                        2039           3450        2146          2.0         497.8       1.1X
+cast(str as int) as c_int                          7105           8190         945          1.2         867.3       1.0X
+cast(str as long) as c_long                        7520           8670        1629          1.1         918.0       0.9X
 
 
