@@ -505,7 +505,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
     Seq("orc", "").foreach { useV1SourceReaderList =>
       // This test case depends on the size of ORC in statistics.
       withSQLConf(
-        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.PLAN_STATS_ENABLED.key -> "true",
         SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "orc",
         SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempPath { workDir =>
