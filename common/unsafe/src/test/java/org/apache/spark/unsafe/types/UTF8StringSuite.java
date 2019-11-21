@@ -227,7 +227,7 @@ public class UTF8StringSuite {
   @Test
   public void trims() {
     assertEquals(fromString("1"), fromString("1").trim());
-    assertEquals(fromString("1"), fromString("1\\t").trimAll());
+    assertEquals(fromString("1"), fromString("1\t").trimAll());
 
     assertEquals(fromString("hello"), fromString("  hello ").trim());
     assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
