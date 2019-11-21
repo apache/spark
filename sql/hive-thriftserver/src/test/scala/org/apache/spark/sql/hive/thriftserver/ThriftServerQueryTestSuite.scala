@@ -106,7 +106,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "subquery/in-subquery/in-set-operations.sql",
     // SPARK-29783: need to set conf
     "interval-display-iso_8601.sql",
-    "interval-display-sql_standard.sql"
+    "interval-display-sql_standard.sql",
+    "ansi/optional-interval.sql"
   )
 
   override def runQueries(
