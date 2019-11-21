@@ -1,0 +1,57 @@
+-- Number of queries: 7
+
+
+-- !query 0
+SELECT CAST(1 AS timestamp)
+-- !query 0 schema
+struct<>
+-- !query 0 output
+org.apache.spark.sql.AnalysisException
+
+
+-- !query 1
+SELECT CAST(1.1 AS timestamp)
+-- !query 1 schema
+struct<>
+-- !query 1 output
+org.apache.spark.sql.AnalysisException
+
+
+-- !query 2
+SELECT CAST(CAST(1 AS float) AS timestamp)
+-- !query 2 schema
+struct<>
+-- !query 2 output
+org.apache.spark.sql.AnalysisException
+
+
+-- !query 3
+SELECT CAST(CAST(1 AS boolean) AS timestamp)
+-- !query 3 schema
+struct<>
+-- !query 3 output
+org.apache.spark.sql.AnalysisException
+
+
+-- !query 4
+SELECT CAST(CAST(1 AS byte) AS timestamp)
+-- !query 4 schema
+struct<>
+-- !query 4 output
+org.apache.spark.sql.AnalysisException
+
+
+-- !query 5
+SELECT CAST(CAST(1 AS short) AS timestamp)
+-- !query 5 schema
+struct<>
+-- !query 5 output
+org.apache.spark.sql.AnalysisException
+
+
+-- !query 6
+SELECT CAST(CAST(1 AS double) AS timestamp)
+-- !query 6 schema
+struct<>
+-- !query 6 output
+org.apache.spark.sql.AnalysisException

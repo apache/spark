@@ -107,7 +107,8 @@ case class PostgreCastToTimestamp(child: Expression, timeZoneId: Option[String])
   override def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs, zoneId)
-        .getOrElse(throw new AnalysisException(s"invalid input syntax for type timestamp:$utfs")))
+        .getOrElse(throw new
+            IllegalArgumentException(s"invalid input syntax for type timestamp:$utfs")))
     case DateType =>
       super.castToTimestamp(from)
   }
@@ -128,7 +129,7 @@ case class PostgreCastToTimestamp(child: Expression, timeZoneId: Option[String])
           if ($longOpt.isDefined()) {
             $evPrim = ((Long) $longOpt.get()).longValue();
           } else {
-            throw new AnalysisException(s"invalid input syntax for type timestamp:$c");
+            throw new IllegalArgumentException(s"invalid input syntax for type timestamp:$c");
           }
          """
     case DateType =>

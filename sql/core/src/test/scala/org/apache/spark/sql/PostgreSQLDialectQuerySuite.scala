@@ -42,11 +42,7 @@ class PostgreSQLDialectQuerySuite extends QueryTest with SharedSparkSession {
 
   test("cast to timestamp") {
     Seq(1, 0.1, 1.toDouble, 5.toFloat, true, 3.toByte, 4.toShort) foreach { value =>
-        val actualResult = intercept[AnalysisException](
-          sql(s"SELECT CAST(${value} AS timestamp)")
-        ).getMessage
-        val expectedResult = s"cannot cast type ${value.getClass} to timestamp"
-        assert(actualResult.contains(expectedResult))
+      intercept[IllegalArgumentException](sql(s"select cast('$value' as timestamp)").collect())
     }
   }
 }
