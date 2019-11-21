@@ -37,7 +37,16 @@ import org.apache.spark.sql.types._
 
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
- * Note that this TestSuite does not support maven.
+ *
+ * To run the entire test suite:
+ * {{{
+ *   build/sbt "hive-thriftserver/test-only *ThriftServerQueryTestSuite" -Phive-thriftserver
+ * }}}
+ *
+ * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ * }}}
  *
  * TODO:
  *   1. Support UDF testing.
@@ -74,6 +83,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
+  // We only test this test suite with the default configuration to reduce test time.
   override val isTestWithConfigSets = false
 
   /** List of test cases to ignore, in lower cases. */
@@ -93,7 +103,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "subquery/in-subquery/in-group-by.sql",
     "subquery/in-subquery/simple-in.sql",
     "subquery/in-subquery/in-order-by.sql",
-    "subquery/in-subquery/in-set-operations.sql"
+    "subquery/in-subquery/in-set-operations.sql",
+    // SPARK-29783: need to set conf
+    "interval-display-iso_8601.sql",
+    "interval-display-sql_standard.sql"
   )
 
   override def runQueries(
@@ -253,6 +266,29 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
       val rs = statement.executeQuery("select 1L")
       rs.next()
       assert(rs.getLong(1) === 1L)
+    }
+  }
+
+  test("SPARK-29911: Uncache cached tables when session closed") {
+    val cacheManager = spark.sharedState.cacheManager
+    val globalTempDB = spark.sharedState.globalTempViewManager.database
+    withJdbcStatement { statement =>
+      statement.execute("CACHE TABLE tempTbl AS SELECT 1")
+    }
+    // the cached data of local temporary view should be uncached
+    assert(cacheManager.isEmpty)
+    try {
+      withJdbcStatement { statement =>
+        statement.execute("CREATE GLOBAL TEMP VIEW globalTempTbl AS SELECT 1, 2")
+        statement.execute(s"CACHE TABLE $globalTempDB.globalTempTbl")
+      }
+      // the cached data of global temporary view shouldn't be uncached
+      assert(!cacheManager.isEmpty)
+    } finally {
+      withJdbcStatement { statement =>
+        statement.execute(s"UNCACHE TABLE IF EXISTS $globalTempDB.globalTempTbl")
+      }
+      assert(cacheManager.isEmpty)
     }
   }
 

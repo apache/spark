@@ -65,7 +65,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *  1. A list of SQL queries separated by semicolon.
  *  2. Lines starting with -- are treated as comments and ignored.
  *  3. Lines starting with --SET are used to run the file with the following set of configs.
- *  4. Lines starting with --import are used to load queries from another test file.
+ *  4. Lines starting with --IMPORT are used to load queries from another test file.
  *
  * For example:
  * {{{
@@ -143,19 +143,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   /** List of test cases to ignore, in lower cases. */
   protected def blackList: Set[String] = Set(
-    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
-    // SPARK-28885 String value is not allowed to be stored as numeric type with
-    // ANSI store assignment policy.
-    "postgreSQL/numeric.sql",
-    "postgreSQL/int2.sql",
-    "postgreSQL/int4.sql",
-    "postgreSQL/int8.sql",
-    "postgreSQL/float4.sql",
-    "postgreSQL/float8.sql",
-    // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
-    // ANSI store assignment policy.
-    "postgreSQL/date.sql",
-    "postgreSQL/timestamp.sql"
+    "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
   )
 
   // Create all the test cases.
@@ -265,9 +253,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
     val (comments, code) = input.split("\n").partition(_.trim.startsWith("--"))
 
-    // If `--import` found, load code from another test case file, then insert them
+    // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
-    val importedTestCaseName = comments.filter(_.startsWith("--import ")).map(_.substring(9))
+    val importedTestCaseName = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
     val importedCode = importedTestCaseName.flatMap { testCaseName =>
       listTestCases.find(_.name == testCaseName).map { testCase =>
         val input = fileToString(new File(testCase.inputFile))
@@ -283,13 +271,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
 
-    // When we are regenerating the golden files, we don't need to set any config as they
-    // all need to return the same result
-    if (regenerateGoldenFiles || !isTestWithConfigSets) {
+    // When we are regenerating the golden files for test cases without '--IMPORT' specified, or
+    // running test cases against [[ThriftServerQueryTestSuite], we don't need to set any config as
+    // they all need to return the same result.
+    // When we use '--SET' and '--IMPORT' together for those import queries, we want to run the
+    // same queries from the original file but with different settings and save the answers. So the
+    // `--SET` will be respected in this case.
+    if ((regenerateGoldenFiles && importedTestCaseName.isEmpty) || !isTestWithConfigSets) {
       runQueries(queries, testCase, None)
     } else {
       val configSets = {
-        val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
+        val configLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
         val configs = configLines.map(_.split(",").map { confAndValue =>
           val (conf, value) = confAndValue.span(_ != '=')
           conf.trim -> value.substring(1).trim
@@ -343,7 +335,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
         // vol used by boolean.sql and case.sql.
         localSparkSession.udf.register("vol", (s: String) => s)
-        localSparkSession.conf.set(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
       case _: AnsiTest =>
         localSparkSession.conf.set(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key, true)

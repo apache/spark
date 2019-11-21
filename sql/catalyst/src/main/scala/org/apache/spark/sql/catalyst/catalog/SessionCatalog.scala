@@ -575,6 +575,10 @@ class SessionCatalog(
     tempViews.get(formatTableName(name))
   }
 
+  def getTempViewNames(): Seq[String] = synchronized {
+    tempViews.keySet.toSeq
+  }
+
   /**
    * Return a global temporary view exactly as it was stored.
    */

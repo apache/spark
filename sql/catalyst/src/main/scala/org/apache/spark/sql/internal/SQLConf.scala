@@ -1782,6 +1782,23 @@ object SQLConf {
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
+  object IntervalStyle extends Enumeration {
+    type IntervalStyle = Value
+    val SQL_STANDARD, ISO_8601, MULTI_UNITS = Value
+  }
+
+  val INTERVAL_STYLE = buildConf("spark.sql.intervalOutputStyle")
+    .doc("When converting interval values to strings (i.e. for display), this config decides the" +
+      " interval string format. The value SQL_STANDARD will produce output matching SQL standard" +
+      " interval literals (i.e. '+3-2 +10 -00:00:01'). The value ISO_8601 will produce output" +
+      " matching the ISO 8601 standard (i.e. 'P3Y2M10DT-1S'). The value MULTI_UNITS (which is the" +
+      " default) will produce output in form of value unit pairs, (i.e. '3 year 2 months 10 days" +
+      " -1 seconds'")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(IntervalStyle.values.map(_.toString))
+    .createWithDefault(IntervalStyle.MULTI_UNITS.toString)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -2496,7 +2513,11 @@ class SQLConf extends Serializable with Logging {
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
-  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString
+  def intervalOutputStyle: IntervalStyle.Value = IntervalStyle.withName(getConf(INTERVAL_STYLE))
+
+  def dialect: Dialect.Value = Dialect.withName(getConf(DIALECT))
+
+  def usePostgreSQLDialect: Boolean = dialect == Dialect.POSTGRESQL
 
   def dialectSparkAnsiEnabled: Boolean = getConf(DIALECT_SPARK_ANSI_ENABLED)
 

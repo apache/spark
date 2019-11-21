@@ -623,6 +623,15 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("alter table/view: rename table/view") {
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = false))
+    comparePlans(
+      parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = true))
+  }
+
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumnStatement(
@@ -1190,6 +1199,20 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
       AlterNamespaceSetPropertiesStatement(
         Seq("a", "b", "c"), Map("b" -> "b")))
+  }
+
+  test("set namespace location") {
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
   }
 
   test("show databases: basic") {
