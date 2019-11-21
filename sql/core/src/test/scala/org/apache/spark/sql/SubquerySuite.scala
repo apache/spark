@@ -204,151 +204,114 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-29145: JOIN Condition use QueryList") {
+  test("SPARK-29800") {
     withTempView("s1", "s2", "s3") {
       Seq(1, 3, 5, 7, 9).toDF("id").createOrReplaceTempView("s1")
       Seq(1, 3, 4, 6, 9).toDF("id").createOrReplaceTempView("s2")
       Seq(3, 4, 6, 9).toDF("id").createOrReplaceTempView("s3")
 
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id FROM s1
-            | JOIN s2 ON s1.id = s2.id
-            | AND s1.id IN (SELECT 9)
-          """.stripMargin),
-        Row(9) :: Nil)
+//      sql(
+//        """
+//          | SELECT s1.id FROM s1
+//          | JOIN s2 ON s1.id = s2.id
+//          | WHERE EXISTS (SELECT * from s3)
+//        """.stripMargin).explain(true)
+//
+//      sql(
+//        """
+//          | SELECT s1.id FROM s1
+//          | JOIN s2 ON s1.id = s2.id
+//          | WHERE EXISTS (SELECT * from s3)
+//        """.stripMargin).show()
 
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id FROM s1
-            | JOIN s2 ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT 9)
-          """.stripMargin),
-        Row(1) :: Row(3) :: Nil)
+      sql(
+        """
+          | SELECT s1.id FROM s1
+          | JOIN s2 ON s1.id = s2.id
+          | WHERE EXISTS (SELECT * from s3)
+        """.stripMargin).explain(true)
 
-      // case `IN`
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id FROM s1
-            | JOIN s2 ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(3) :: Row(9) :: Nil)
+      sql(
+        """
+          | SELECT s1.id FROM s1
+          | JOIN s2 ON s1.id = s2.id
+          | WHERE EXISTS (SELECT * from s3)
+        """.stripMargin).show()
 
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id AS id2 FROM s1
-            | LEFT SEMI JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(3) :: Row(9) :: Nil)
+//      sql(
+//        """
+//          | SELECT s1.id FROM s1
+//          | JOIN s2 ON s1.id = s2.id
+//          | WHERE EXISTS (SELECT * from s3 where s3.id = s1.id)
+//        """.stripMargin).show()
+//      println("==============================")
+//      sql(
+//        """
+//          | SELECT s1.id , s2.id as id2 FROM s1
+//          | LEFT OUTER JOIN  s2 ON s1.id = s2.id
+//          | WHERE EXISTS (SELECT * from s3 d)
+//        """.stripMargin).show()
+//
+//      sql(
+//        """
+//          | SELECT s1.id , s2.id as id2 FROM s1
+//          | RIGHT OUTER JOIN  s2 ON s1.id = s2.id
+//          | WHERE EXISTS (SELECT * from s3)
+//        """.stripMargin).show()
+//
+//      sql(
+//        """
+//          | SELECT s1.id , s2.id as id2 FROM s1
+//          | FULL OUTER JOIN  s2 ON s1.id = s2.id
+//          | WHERE EXISTS (SELECT * from s3)
+//        """.stripMargin).show()
+//
+//      sql(
+//        """
+//          | SELECT s1.id , s2.id as id2 FROM s1
+//          | LEFT OUTER JOIN  s2 ON s1.id = s2.id
+//          | WHERE EXISTS (SELECT * from s3 where s3.id = s1.id)
+//        """.stripMargin).show()
+//
+//      sql(
+//        """
+//          | SELECT s1.id , s2.id as id2 FROM s1
+//          | FULL OUTER JOIN  s2 ON s1.id = s2.id
+//          | WHERE EXISTS (SELECT * from s3 where s3.id = s1.id)
+//        """.stripMargin).show()
+//
+//      sql(
+//        """
+//          | SELECT s1.id , s2.id as id2 FROM s1
+//          | LEFT OUTER JOIN  s2 ON s1.id = s2.id
+//          | WHERE NOT EXISTS (SELECT * from s3 where s3.id = s1.id)
+//        """.stripMargin).show()
+//
+//      sql(
+//        """
+//          | SELECT s1.id , s2.id as id2 FROM s1
+//          | FULL OUTER JOIN  s2 ON s1.id = s2.id
+//          | WHERE NOT EXISTS (SELECT * from s3 where s3.id = s1.id)
+//        """.stripMargin).show()
+    }
+  }
 
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id as id2 FROM s1
-            | LEFT ANTI JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1) :: Row(5) :: Row(7) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id as id2 FROM s1
-            | LEFT OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, null) :: Row(3, 3) :: Row(5, null) :: Row(7, null) :: Row(9, 9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id as id2 FROM s1
-            | RIGHT OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(null, 1) :: Row(3, 3) :: Row(null, 4) :: Row(null, 6) :: Row(9, 9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id AS id2 FROM s1
-            | FULL OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, null) :: Row(3, 3) :: Row(5, null) :: Row(7, null) :: Row(9, 9) ::
-          Row(null, 1) :: Row(null, 4) :: Row(null, 6) :: Nil)
-
-      // case `NOT IN`
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id FROM s1
-            | JOIN s2 ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id AS id2 FROM s1
-            | LEFT SEMI JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id AS id2 FROM s1
-            | LEFT ANTI JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(3) :: Row(5) :: Row(7) :: Row(9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id AS id2 FROM s1
-            | LEFT OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, 1) :: Row(3, null) :: Row(5, null) :: Row(7, null) :: Row(9, null) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id AS id2 FROM s1
-            | RIGHT OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, 1) :: Row(null, 3) :: Row(null, 4) :: Row(null, 6) :: Row(null, 9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id AS id2 FROM s1
-            | FULL OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, 1) :: Row(3, null) :: Row(5, null) :: Row(7, null) :: Row(9, null) ::
-          Row(null, 3) :: Row(null, 4) :: Row(null, 6) :: Row(null, 9) :: Nil)
+  test("spark-29800:benchmark") {
+    withTempView("s1", "s2", "s3") {
+      (1 to 1000000).toDF("id").repartition(100).createOrReplaceTempView("s1")
+      (0 to 500000).toDF("id").repartition(50).createOrReplaceTempView("s2")
+      (0 to 500000).map(_ * 2).toDF("id").repartition(50).createOrReplaceTempView("s3")
+      var start = System.currentTimeMillis()
+      println("starting compute")
+      val result = sql(
+        """
+          | SELECT s1.id , s2.id as id2 FROM s1
+          | FULL OUTER JOIN  s2 ON s1.id = s2.id
+          | WHERE EXISTS (SELECT * from s3)
+        """.stripMargin).count()
+      println("resukt = " + result)
+      var end = System.currentTimeMillis()
+      println(s"duration = ${end - start}")
     }
   }
 
@@ -1416,6 +1379,23 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
           |             LIMIT 1)
         """.stripMargin
       assert(getNumSortsInQuery(query5) == 1)
+    }
+  }
+
+  test("Cannot remove sort for floating-point order-sensitive aggregates from subquery") {
+    Seq("float", "double").foreach { typeName =>
+      Seq("SUM", "AVG", "KURTOSIS", "SKEWNESS", "STDDEV_POP", "STDDEV_SAMP",
+          "VAR_POP", "VAR_SAMP").foreach { aggName =>
+        val query =
+          s"""
+            |SELECT k, $aggName(v) FROM (
+            |  SELECT k, v
+            |  FROM VALUES (1, $typeName(2.0)), (2, $typeName(1.0)) t(k, v)
+            |  ORDER BY v)
+            |GROUP BY k
+          """.stripMargin
+        assert(getNumSortsInQuery(query) == 1)
+      }
     }
   }
 

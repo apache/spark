@@ -274,6 +274,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         .setMaster("local[*]")
         .setAppName("test")
         .set(UI_ENABLED, false)
+        .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
         .set(SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key, "5")
         .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
         .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
@@ -507,7 +508,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
             join,
             expectedAnswer.collect())
 
-          // Then, let's make sure we do not reduce number of ppst shuffle partitions.
+          // Then, let's make sure we do not reduce number of post shuffle partitions.
           val finalPlan = join.queryExecution.executedPlan
             .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
           val shuffleReaders = finalPlan.collect {
