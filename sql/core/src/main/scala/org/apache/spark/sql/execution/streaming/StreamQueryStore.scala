@@ -34,9 +34,9 @@ private[sql] class StreamQueryStore {
   // stream query many times after it failed or terminated.
   private val inactiveStreamingQueries = new ConcurrentHashMap[(UUID, Long), StreamingQuery]()
 
-  def putIfAbsent(query: StreamingQuery): Option[StreamingQuery] = {
+  def put(query: StreamingQuery): Option[StreamingQuery] = {
     val curTime = System.currentTimeMillis()
-    val prevQuery = Option(activeStreamingQueries.putIfAbsent(query.id, (query, curTime))).map(_._1)
+    val prevQuery = Option(activeStreamingQueries.put(query.id, (query, curTime))).map(_._1)
     if (prevQuery.isEmpty) {
       // if `prevQuery` is empty, it indicates this query start at first time or restart again.
       // So it is safe to remove this query from `inactiveStreamingQueries`
@@ -49,10 +49,14 @@ private[sql] class StreamQueryStore {
     prevQuery
   }
 
+  def get(id: UUID): StreamingQuery = {
+    activeStreamingQueries.get(id)._1
+  }
+
   def terminate(id: UUID): Unit = {
     val query = activeStreamingQueries.remove(id)
     if (query != null) {
-      inactiveStreamingQueries.putIfAbsent((id, query._2), query._1)
+      inactiveStreamingQueries.put((id, query._2), query._1)
     }
   }
 

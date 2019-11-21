@@ -140,7 +140,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     val collectSubModelsParam = $(collectSubModels)
 
-    var subModels: Option[Array[Model[_]]] = if (collectSubModelsParam) {
+    val subModels: Option[Array[Model[_]]] = if (collectSubModelsParam) {
       Some(Array.fill[Model[_]](epm.length)(null))
     } else None
 
@@ -313,6 +313,11 @@ class TrainValidationSplitModel private[ml] (
   @Since("2.0.0")
   override def write: TrainValidationSplitModel.TrainValidationSplitModelWriter = {
     new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
+  }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"TrainValidationSplitModel: uid=$uid, bestModel=$bestModel, trainRatio=${$(trainRatio)}"
   }
 }
 

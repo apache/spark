@@ -29,4 +29,11 @@ private[ui] object ToolTips {
 
   val THRIFT_SERVER_DURATION =
     "Difference between start time and close time"
+
+  val THRIFT_SESSION_TOTAL_EXECUTE =
+    "Number of operations submitted in this session"
+
+  val THRIFT_SESSION_DURATION =
+    "Elapsed time since session start, or until closed if the session was closed"
+
 }

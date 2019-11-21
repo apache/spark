@@ -34,11 +34,10 @@ import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat.SummaryBuilderImpl._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
@@ -501,19 +500,16 @@ class LogisticRegression @Since("1.2.0") (
       probabilityCol, regParam, elasticNetParam, standardization, threshold, maxIter, tol,
       fitIntercept)
 
-    val (summarizer, labelSummarizer) = {
-      val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        instance: Instance) =>
-          (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
+    val (summarizer, labelSummarizer) = instances.treeAggregate(
+      (createSummarizerBuffer("mean", "variance", "count"), new MultiClassSummarizer))(
+      seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
+        (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
+      combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
+                c2: (SummarizerBuffer, MultiClassSummarizer)) =>
+        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
+      depth = $(aggregationDepth)
+    )
 
-      val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
-          (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-      instances.treeAggregate(
-        (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
-      )(seqOp, combOp, $(aggregationDepth))
-    }
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
@@ -1185,8 +1181,7 @@ class LogisticRegressionModel private[spark] (
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
 
   override def toString: String = {
-    s"LogisticRegressionModel: " +
-    s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures"
+    s"LogisticRegressionModel: uid=$uid, numClasses=$numClasses, numFeatures=$numFeatures"
   }
 }
 

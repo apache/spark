@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.Exchange
@@ -76,11 +77,17 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  private def checkNumLocalShuffleReaders(plan: SparkPlan, expected: Int): Unit = {
-    val localReaders = collect(plan) {
+  private def checkNumLocalShuffleReaders(
+      plan: SparkPlan, numShufflesWithoutLocalReader: Int = 0): Unit = {
+    val numShuffles = collect(plan) {
+      case s: ShuffleQueryStageExec => s
+    }.length
+
+    val numLocalReaders = collect(plan) {
       case reader: LocalShuffleReaderExec => reader
-    }
-    assert(localReaders.length === expected)
+    }.length
+
+    assert(numShuffles === (numLocalReaders + numShufflesWithoutLocalReader))
   }
 
   test("Change merge join to broadcast join") {
@@ -93,24 +100,68 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
 
-  test("Change merge join to broadcast join and reduce number of shuffle partitions") {
+  test("Reuse the parallelism of CoalescedShuffleReaderExec in LocalShuffleReaderExec") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "150") {
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "10") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a where value = '1'")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      val localReaders = collect(adaptivePlan) {
+        case reader: LocalShuffleReaderExec => reader
+      }
+      assert(localReaders.length == 2)
+      // The pre-shuffle partition size is [0, 0, 0, 72, 0]
+      // And the partitionStartIndices is [0, 3, 4]
+      assert(localReaders(0).advisoryParallelism.get == 3)
+      // The pre-shuffle partition size is [0, 72, 0, 72, 126]
+      // And the partitionStartIndices is [0, 1, 2, 3, 4]
+      assert(localReaders(1).advisoryParallelism.get == 5)
 
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      // the final parallelism is
+      // math.max(1, advisoryParallelism / numMappers): math.max(1, 3/2) = 1
+      // and the partitions length is 1 * numMappers = 2
+      assert(localShuffleRDD0.getPartitions.length == 2)
+      // the final parallelism is
+      // math.max(1, advisoryParallelism / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD1.getPartitions.length == 4)
+    }
+  }
+
+  test("Reuse the default parallelism in LocalShuffleReaderExec") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "false") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      val localReaders = collect(adaptivePlan) {
+        case reader: LocalShuffleReaderExec => reader
+      }
+      assert(localReaders.length == 2)
+      val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
+      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD0.getPartitions.length == 4)
+      // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
+      // and the partitions length is 2 * numMappers = 4
+      assert(localShuffleRDD1.getPartitions.length == 4)
     }
   }
 
@@ -125,7 +176,7 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
 
@@ -141,7 +192,7 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
 
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
 
@@ -163,8 +214,30 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
-      // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
+
+      // A possible resulting query plan:
+      // BroadcastHashJoin
+      // +- BroadcastExchange
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //          +- BroadcastHashJoin
+      //             +- BroadcastExchange
+      //                +- LocalShuffleReader*
+      //                   +- ShuffleExchange
+      //             +- LocalShuffleReader*
+      //                +- ShuffleExchange
+      // +- BroadcastHashJoin
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //    +- BroadcastExchange
+      //       +-LocalShuffleReader*
+      //             +- ShuffleExchange
+
+      // After applied the 'OptimizeLocalShuffleReader' rule, we can convert all the four
+      // shuffle reader to local shuffle reader in the bottom two 'BroadcastHashJoin'.
+      // For the top level 'BroadcastHashJoin', the probe side is not shuffle query stage
+      // and the build side shuffle query stage is also converted to local shuffle reader.
+      checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
 
@@ -188,7 +261,27 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
-      // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
+
+      // A possible resulting query plan:
+      // BroadcastHashJoin
+      // +- BroadcastExchange
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //          +- BroadcastHashJoin
+      //             +- BroadcastExchange
+      //                +- LocalShuffleReader*
+      //                   +- ShuffleExchange
+      //             +- LocalShuffleReader*
+      //                +- ShuffleExchange
+      // +- BroadcastHashJoin
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //    +- BroadcastExchange
+      //       +-HashAggregate
+      //          +- CoalescedShuffleReader
+      //             +- ShuffleExchange
+
+      // The shuffle added by Aggregate can't apply local reader.
       checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
@@ -213,7 +306,28 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
-      // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
+
+      // A possible resulting query plan:
+      // BroadcastHashJoin
+      // +- BroadcastExchange
+      //    +- LocalShuffleReader*
+      //       +- ShuffleExchange
+      //          +- BroadcastHashJoin
+      //             +- BroadcastExchange
+      //                +- LocalShuffleReader*
+      //                   +- ShuffleExchange
+      //             +- LocalShuffleReader*
+      //                +- ShuffleExchange
+      // +- BroadcastHashJoin
+      //    +- Filter
+      //       +- HashAggregate
+      //          +- CoalescedShuffleReader
+      //             +- ShuffleExchange
+      //    +- BroadcastExchange
+      //       +-LocalShuffleReader*
+      //           +- ShuffleExchange
+
+      // The shuffle added by Aggregate can't apply local reader.
       checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
@@ -229,8 +343,9 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 2)
+      // There is still a SMJ, and its two shuffles can't apply local reader.
       checkNumLocalShuffleReaders(adaptivePlan, 2)
-      // Even with local shuffle reader, the query statge reuse can also work.
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.size == 1)
     }
@@ -247,8 +362,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
-      // Even with local shuffle reader, the query statge reuse can also work.
+      checkNumLocalShuffleReaders(adaptivePlan)
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.size == 1)
     }
@@ -267,8 +382,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
-      // Even with local shuffle reader, the query statge reuse can also work.
+      checkNumLocalShuffleReaders(adaptivePlan)
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
       val sub = findReusedSubquery(adaptivePlan)
@@ -288,8 +403,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
-      // Even with local shuffle reader, the query statge reuse can also work.
+      checkNumLocalShuffleReaders(adaptivePlan)
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.isEmpty)
       val sub = findReusedSubquery(adaptivePlan)
@@ -312,8 +427,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
-      // Even with local shuffle reader, the query statge reuse can also work.
+      checkNumLocalShuffleReaders(adaptivePlan)
+      // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
       assert(ex.head.plan.isInstanceOf[BroadcastQueryStageExec])
@@ -390,8 +505,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 2)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
-      // additional shuffle exchange introduced, so revert OptimizeLocalShuffleReader rule.
-      checkNumLocalShuffleReaders(adaptivePlan, 0)
+      // There is still a SMJ, and its two shuffles can't apply local reader.
+      checkNumLocalShuffleReaders(adaptivePlan, 2)
     }
   }
 
@@ -418,6 +533,26 @@ class AdaptiveQueryExecSuite
         assert(bhj.size == 1)
         assert(bhj.head.buildSide == BuildRight)
       }
+    }
+  }
+
+  test("SPARK-29906: AQE should not introduce extra shuffle for outermost limit") {
+    var numStages = 0
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        numStages = jobStart.stageInfos.length
+      }
+    }
+    try {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        spark.sparkContext.addSparkListener(listener)
+        spark.range(0, 100, 1, numPartitions = 10).take(1)
+        spark.sparkContext.listenerBus.waitUntilEmpty()
+        // Should be only one stage since there is no shuffle.
+        assert(numStages == 1)
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
     }
   }
 }

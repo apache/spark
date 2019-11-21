@@ -60,7 +60,7 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
   </dd>
   <dt><code><em>function_name</em></code></dt>
   <dd>
-    Specifies a name of funnction to be created. The function name may be
+    Specifies a name of function to be created. The function name may be
     optionally qualified with a database name. <br><br>
     <b>Syntax:</b>
       <code>

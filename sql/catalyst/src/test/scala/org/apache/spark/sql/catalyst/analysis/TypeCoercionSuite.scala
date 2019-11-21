@@ -1405,7 +1405,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val dateTimeOperations = TypeCoercion.DateTimeOperations
     val date = Literal(new java.sql.Date(0L))
     val timestamp = Literal(new Timestamp(0L))
-    val interval = Literal(new CalendarInterval(0, 0))
+    val interval = Literal(new CalendarInterval(0, 0, 0))
     val str = Literal("2015-01-01")
     val intValue = Literal(0, IntegerType)
 
@@ -1526,26 +1526,15 @@ class TypeCoercionSuite extends AnalysisTest {
       GreaterThan(Literal("1.5"), Literal(BigDecimal("0.5"))),
       GreaterThan(Cast(Literal("1.5"), DoubleType), Cast(Literal(BigDecimal("0.5")),
         DoubleType)))
-    Seq(true, false).foreach { convertToTS =>
-      withSQLConf(
-        SQLConf.COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP.key -> convertToTS.toString) {
-        val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
-        val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
-        val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))
-        if (convertToTS) {
-          // `Date` should be treated as timestamp at 00:00:00 See SPARK-23549
-          ruleTest(rule, EqualTo(date0301, timestamp0301000000),
-            EqualTo(Cast(date0301, TimestampType), timestamp0301000000))
-          ruleTest(rule, LessThan(date0301, timestamp0301000001),
-            LessThan(Cast(date0301, TimestampType), timestamp0301000001))
-        } else {
-          ruleTest(rule, LessThan(date0301, timestamp0301000000),
-            LessThan(Cast(date0301, StringType), Cast(timestamp0301000000, StringType)))
-          ruleTest(rule, LessThan(date0301, timestamp0301000001),
-            LessThan(Cast(date0301, StringType), Cast(timestamp0301000001, StringType)))
-        }
-      }
-    }
+    // Checks that dates/timestamps are not promoted to strings
+    val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
+    val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
+    val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))
+    // `Date` should be treated as timestamp at 00:00:00 See SPARK-23549
+    ruleTest(rule, EqualTo(date0301, timestamp0301000000),
+      EqualTo(Cast(date0301, TimestampType), timestamp0301000000))
+    ruleTest(rule, LessThan(date0301, timestamp0301000001),
+      LessThan(Cast(date0301, TimestampType), timestamp0301000001))
   }
 
   test("cast WindowFrame boundaries to the type they operate upon") {
@@ -1596,6 +1585,27 @@ class TypeCoercionSuite extends AnalysisTest {
         Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)),
       Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
         Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)))
+  }
+
+  test("rule for interval operations") {
+    val dateTimeOperations = TypeCoercion.DateTimeOperations
+    val interval = Literal(new CalendarInterval(0, 0, 0))
+
+    Seq(
+      Literal(10.toByte, ByteType),
+      Literal(10.toShort, ShortType),
+      Literal(10, IntegerType),
+      Literal(10L, LongType),
+      Literal(Decimal(10), DecimalType.SYSTEM_DEFAULT),
+      Literal(10.5.toFloat, FloatType),
+      Literal(10.5, DoubleType)).foreach { num =>
+      ruleTest(dateTimeOperations, Multiply(interval, num),
+        MultiplyInterval(interval, num))
+      ruleTest(dateTimeOperations, Multiply(num, interval),
+        MultiplyInterval(interval, num))
+      ruleTest(dateTimeOperations, Divide(interval, num),
+        DivideInterval(interval, num))
+    }
   }
 }
 

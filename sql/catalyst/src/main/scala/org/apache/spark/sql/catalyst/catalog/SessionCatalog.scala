@@ -327,8 +327,7 @@ class SessionCatalog(
 
   def validateTableLocation(table: CatalogTable): Unit = {
     // SPARK-19724: the default location of a managed table should be non-existent or empty.
-    if (table.tableType == CatalogTableType.MANAGED &&
-      !conf.allowCreatingManagedTableUsingNonemptyLocation) {
+    if (table.tableType == CatalogTableType.MANAGED) {
       val tableLocation =
         new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
       val fs = tableLocation.getFileSystem(hadoopConf)
@@ -574,6 +573,10 @@ class SessionCatalog(
    */
   def getTempView(name: String): Option[LogicalPlan] = synchronized {
     tempViews.get(formatTableName(name))
+  }
+
+  def getTempViewNames(): Seq[String] = synchronized {
+    tempViews.keySet.toSeq
   }
 
   /**

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.util.Utils

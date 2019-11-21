@@ -177,14 +177,26 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     >>> df = sc.parallelize([
     ...     Row(label=1.0, features=Vectors.dense(1.0, 1.0, 1.0)),
     ...     Row(label=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
-    >>> svm = LinearSVC(maxIter=5, regParam=0.01)
+    >>> svm = LinearSVC()
+    >>> svm.getMaxIter()
+    100
+    >>> svm.setMaxIter(5)
+    LinearSVC...
+    >>> svm.getMaxIter()
+    5
+    >>> svm.getRegParam()
+    0.0
+    >>> svm.setRegParam(0.01)
+    LinearSVC...
+    >>> svm.getRegParam()
+    0.01
     >>> model = svm.fit(df)
     >>> model.setPredictionCol("newPrediction")
-    LinearSVC...
+    LinearSVCModel...
     >>> model.getPredictionCol()
     'newPrediction'
     >>> model.setThreshold(0.5)
-    LinearSVC...
+    LinearSVCModel...
     >>> model.getThreshold()
     0.5
     >>> model.coefficients
@@ -257,6 +269,62 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     def _create_model(self, java_model):
         return LinearSVCModel(java_model)
 
+    @since("2.2.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("2.2.0")
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+    @since("2.2.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    @since("2.2.0")
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    @since("2.2.0")
+    def setStandardization(self, value):
+        """
+        Sets the value of :py:attr:`standardization`.
+        """
+        return self._set(standardization=value)
+
+    @since("2.2.0")
+    def setThreshold(self, value):
+        """
+        Sets the value of :py:attr:`threshold`.
+        """
+        return self._set(threshold=value)
+
+    @since("2.2.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("2.2.0")
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
 
 class LinearSVCModel(JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
     """
@@ -264,6 +332,13 @@ class LinearSVCModel(JavaClassificationModel, _LinearSVCParams, JavaMLWritable, 
 
     .. versionadded:: 2.2.0
     """
+
+    @since("3.0.0")
+    def setThreshold(self, value):
+        """
+        Sets the value of :py:attr:`threshold`.
+        """
+        return self._set(threshold=value)
 
     @property
     @since("2.2.0")
@@ -454,7 +529,18 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
     ...     Row(label=0.0, weight=2.0, features=Vectors.dense(1.0, 2.0)),
     ...     Row(label=1.0, weight=3.0, features=Vectors.dense(2.0, 1.0)),
     ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
-    >>> blor = LogisticRegression(regParam=0.01, weightCol="weight")
+    >>> blor = LogisticRegression(weightCol="weight")
+    >>> blor.getRegParam()
+    0.0
+    >>> blor.setRegParam(0.01)
+    LogisticRegression...
+    >>> blor.getRegParam()
+    0.01
+    >>> blor.setMaxIter(10)
+    LogisticRegression...
+    >>> blor.getMaxIter()
+    10
+    >>> blor.clear(blor.maxIter)
     >>> blorModel = blor.fit(bdf)
     >>> blorModel.setFeaturesCol("features")
     LogisticRegressionModel...
@@ -508,7 +594,7 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
     >>> blorModel.intercept == model2.intercept
     True
     >>> model2
-    LogisticRegressionModel: uid = ..., numClasses = 2, numFeatures = 2
+    LogisticRegressionModel: uid=..., numClasses=2, numFeatures=2
 
     .. versionadded:: 1.3.0
     """
@@ -603,6 +689,54 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
         """
         return self._set(upperBoundsOnIntercepts=value)
 
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    def setElasticNetParam(self, value):
+        """
+        Sets the value of :py:attr:`elasticNetParam`.
+        """
+        return self._set(elasticNetParam=value)
+
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    def setStandardization(self, value):
+        """
+        Sets the value of :py:attr:`standardization`.
+        """
+        return self._set(standardization=value)
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
 
 class LogisticRegressionModel(JavaProbabilisticClassificationModel, _LogisticRegressionParams,
                               JavaMLWritable, JavaMLReadable, HasTrainingSummary):
@@ -677,9 +811,6 @@ class LogisticRegressionModel(JavaProbabilisticClassificationModel, _LogisticReg
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
         return BinaryLogisticRegressionSummary(java_blr_summary)
-
-    def __repr__(self):
-        return self._call_java("toString")
 
 
 class LogisticRegressionSummary(JavaWrapper):
@@ -1012,7 +1143,7 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
     >>> model.numClasses
     2
     >>> print(model.toDebugString)
-    DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
+    DecisionTreeClassificationModel...depth=1, numNodes=3...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.predict(test0.head().features)
     0.0
@@ -1049,7 +1180,7 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
     >>> dt3 = DecisionTreeClassifier(maxDepth=2, weightCol="weight", labelCol="indexed")
     >>> model3 = dt3.fit(td3)
     >>> print(model3.toDebugString)
-    DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
+    DecisionTreeClassificationModel...depth=1, numNodes=3...
 
     .. versionadded:: 1.4.0
     """
@@ -1148,6 +1279,27 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
         """
         return self._set(impurity=value)
 
+    @since("1.4.0")
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
+    @since("1.4.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
 
 @inherit_doc
 class DecisionTreeClassificationModel(_DecisionTreeModel, JavaProbabilisticClassificationModel,
@@ -1239,7 +1391,7 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
     >>> model.transform(test1).head().prediction
     1.0
     >>> model.trees
-    [DecisionTreeClassificationModel (uid=...) of depth..., DecisionTreeClassificationModel...]
+    [DecisionTreeClassificationModel...depth=..., DecisionTreeClassificationModel...]
     >>> rfc_path = temp_path + "/rfc"
     >>> rf.save(rfc_path)
     >>> rf2 = RandomForestClassifier.load(rfc_path)
@@ -1366,6 +1518,18 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
         """
         return self._set(featureSubsetStrategy=value)
 
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
 
 class RandomForestClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
                                       _RandomForestClassifierParams, JavaMLWritable,
@@ -1451,6 +1615,10 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
     >>> td = si_model.transform(df)
     >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42,
     ...     leafCol="leafId")
+    >>> gbt.setMaxIter(5)
+    GBTClassifier...
+    >>> gbt.getMaxIter()
+    5
     >>> gbt.getFeatureSubsetStrategy()
     'all'
     >>> model = gbt.fit(td)
@@ -1480,7 +1648,7 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
     >>> model.totalNumNodes
     15
     >>> print(model.toDebugString)
-    GBTClassificationModel (uid=...)...with 5 trees...
+    GBTClassificationModel...numTrees=5...
     >>> gbtc_path = temp_path + "gbtc"
     >>> gbt.save(gbtc_path)
     >>> gbt2 = GBTClassifier.load(gbtc_path)
@@ -1494,7 +1662,7 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
     >>> model.treeWeights == model2.treeWeights
     True
     >>> model.trees
-    [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    [DecisionTreeRegressionModel...depth=..., DecisionTreeRegressionModel...]
     >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0),)],
     ...              ["indexed", "features"])
     >>> model.evaluateEachIteration(validation)
@@ -1630,6 +1798,34 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
         """
         return self._set(validationIndicatorCol=value)
 
+    @since("1.4.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("1.4.0")
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
+    @since("1.4.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("1.4.0")
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
+
 
 class GBTClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
                              _GBTClassifierParams, JavaMLWritable, JavaMLReadable):
@@ -1682,7 +1878,8 @@ class _NaiveBayesParams(_JavaPredictorParams, HasWeightCol):
     smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
                       "default is 1.0", typeConverter=TypeConverters.toFloat)
     modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
-                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.",
+                      "(case-sensitive). Supported options: multinomial (default), bernoulli " +
+                      "and gaussian.",
                       typeConverter=TypeConverters.toString)
 
     @since("1.5.0")
@@ -1711,7 +1908,10 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     TF-IDF vectors, it can be used for document classification. By making every vector a
     binary (0/1) data, it can also be used as `Bernoulli NB
     <http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html>`_.
-    The input feature values must be nonnegative.
+    The input feature values for Multinomial NB and Bernoulli NB must be nonnegative.
+    Since 3.0.0, it also supports Gaussian NB
+    <https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes>`_.
+    which can handle continuous data.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
@@ -1722,17 +1922,15 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
     >>> model = nb.fit(df)
     >>> model.setFeaturesCol("features")
-    NaiveBayes_...
-    >>> model.setLabelCol("newLabel")
-    NaiveBayes_...
-    >>> model.getLabelCol()
-    'newLabel'
+    NaiveBayesModel...
     >>> model.getSmoothing()
     1.0
     >>> model.pi
     DenseVector([-0.81..., -0.58...])
     >>> model.theta
     DenseMatrix(2, 2, [-0.91..., -0.51..., -0.40..., -1.09...], 1)
+    >>> model.sigma == None
+    True
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> model.predict(test0.head().features)
     1.0
@@ -1763,6 +1961,12 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     >>> result = model3.transform(test0).head()
     >>> result.prediction
     0.0
+    >>> nb3 = NaiveBayes().setModelType("gaussian")
+    >>> model4 = nb3.fit(df)
+    >>> model4.getModelType()
+    'gaussian'
+    >>> model4.sigma
+    DenseMatrix(2, 2, [0.0, 0.25, 0.0, 0.0], 1)
 
     .. versionadded:: 1.5.0
     """
@@ -1814,6 +2018,12 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
         """
         return self._set(modelType=value)
 
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
 
 class NaiveBayesModel(JavaProbabilisticClassificationModel, _NaiveBayesParams, JavaMLWritable,
                       JavaMLReadable):
@@ -1838,6 +2048,14 @@ class NaiveBayesModel(JavaProbabilisticClassificationModel, _NaiveBayesParams, J
         log of class conditional probabilities.
         """
         return self._call_java("theta")
+
+    @property
+    @since("3.0.0")
+    def sigma(self):
+        """
+        variance of each feature.
+        """
+        return self._call_java("sigma")
 
 
 class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, HasMaxIter,
@@ -1906,10 +2124,14 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     ...     (1.0, Vectors.dense([0.0, 1.0])),
     ...     (1.0, Vectors.dense([1.0, 0.0])),
     ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
-    >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 2, 2], blockSize=1, seed=123)
+    >>> mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], blockSize=1, seed=123)
+    >>> mlp.setMaxIter(100)
+    MultilayerPerceptronClassifier...
+    >>> mlp.getMaxIter()
+    100
     >>> model = mlp.fit(df)
     >>> model.setFeaturesCol("features")
-    MultilayerPerceptronClassifier...
+    MultilayerPerceptronClassificationModel...
     >>> model.layers
     [2, 2, 2]
     >>> model.weights.size
@@ -2001,18 +2223,42 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
         return self._set(blockSize=value)
 
     @since("2.0.0")
+    def setInitialWeights(self, value):
+        """
+        Sets the value of :py:attr:`initialWeights`.
+        """
+        return self._set(initialWeights=value)
+
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    @since("2.0.0")
     def setStepSize(self, value):
         """
         Sets the value of :py:attr:`stepSize`.
         """
         return self._set(stepSize=value)
 
-    @since("2.0.0")
-    def setInitialWeights(self, value):
+    def setSolver(self, value):
         """
-        Sets the value of :py:attr:`initialWeights`.
+        Sets the value of :py:attr:`solver`.
         """
-        return self._set(initialWeights=value)
+        return self._set(solver=value)
 
 
 class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationModel, JavaMLWritable,
@@ -2133,6 +2379,42 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
         Sets the value of :py:attr:`classifier`.
         """
         return self._set(classifier=value)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    def setRawPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`rawPredictionCol`.
+        """
+        return self._set(rawPredictionCol=value)
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
 
     def _fit(self, dataset):
         labelCol = self.getLabelCol()
@@ -2286,6 +2568,43 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 2.0.0
     """
+
+    @since("2.0.0")
+    def setClassifier(self, value):
+        """
+        Sets the value of :py:attr:`classifier`.
+        """
+        return self._set(classifier=value)
+
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    def setRawPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`rawPredictionCol`.
+        """
+        return self._set(rawPredictionCol=value)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
 
     def __init__(self, models):
         super(OneVsRestModel, self).__init__()

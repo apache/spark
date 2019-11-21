@@ -28,14 +28,14 @@ import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -898,54 +898,6 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   }
 
   override def prettyName: String = "sort_array"
-}
-
-
-/**
- * Sorts the input array in ascending order according to the natural ordering of
- * the array elements and returns it.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(array) - Sorts the input array in ascending order. The elements of the input array must
-      be orderable. Null elements will be placed at the end of the returned array.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
-       ["a","b","c","d",null]
-  """,
-  since = "2.4.0")
-// scalastyle:on line.size.limit
-case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLike {
-
-  override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
-
-  override def arrayExpression: Expression = child
-  override def nullOrder: NullOrder = NullOrder.Greatest
-
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
-      TypeCheckResult.TypeCheckSuccess
-    case ArrayType(dt, _) =>
-      val dtSimple = dt.catalogString
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
-  }
-
-  override def nullSafeEval(array: Any): Any = {
-    sortEval(array, true)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => sortCodegen(ctx, ev, c, "true"))
-  }
-
-  override def prettyName: String = "array_sort"
 }
 
 /**
@@ -2610,25 +2562,33 @@ object Sequence {
     override val defaultStep: DefaultStep = new DefaultStep(
       (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
       CalendarIntervalType,
-      new CalendarInterval(0, MICROS_PER_DAY))
+      new CalendarInterval(0, 1, 0))
 
     private val backedSequenceImpl = new IntegralSequenceImpl[T](dt)
-    private val microsPerMonth = 28 * CalendarInterval.MICROS_PER_DAY
+    private val microsPerDay = HOURS_PER_DAY * MICROS_PER_HOUR
+    // We choose a minimum days(28) in one month to calculate the `intervalStepInMicros`
+    // in order to make sure the estimated array length is long enough
+    private val microsPerMonth = 28 * microsPerDay
 
     override def eval(input1: Any, input2: Any, input3: Any): Array[T] = {
       val start = input1.asInstanceOf[T]
       val stop = input2.asInstanceOf[T]
       val step = input3.asInstanceOf[CalendarInterval]
       val stepMonths = step.months
+      val stepDays = step.days
       val stepMicros = step.microseconds
 
-      if (stepMonths == 0) {
-        backedSequenceImpl.eval(start, stop, fromLong(stepMicros / scale))
+      if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
+        backedSequenceImpl.eval(start, stop, fromLong(stepDays))
+
+      } else if (stepMonths == 0 && stepDays == 0 && scale == 1) {
+        backedSequenceImpl.eval(start, stop, fromLong(stepMicros))
 
       } else {
         // To estimate the resulted array length we need to make assumptions
-        // about a month length in microseconds
-        val intervalStepInMicros = stepMicros + stepMonths * microsPerMonth
+        // about a month length in days and a day length in microseconds
+        val intervalStepInMicros =
+          stepMicros + stepMonths * microsPerMonth + stepDays * microsPerDay
         val startMicros: Long = num.toLong(start) * scale
         val stopMicros: Long = num.toLong(stop) * scale
         val maxEstimatedArrayLength =
@@ -2643,7 +2603,8 @@ object Sequence {
         while (t < exclusiveItem ^ stepSign < 0) {
           arr(i) = fromLong(t / scale)
           i += 1
-          t = timestampAddInterval(startMicros, i * stepMonths, i * stepMicros, zoneId)
+          t = timestampAddInterval(
+            startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
         }
 
         // truncate array to the correct length
@@ -2659,6 +2620,7 @@ object Sequence {
         arr: String,
         elemType: String): String = {
       val stepMonths = ctx.freshName("stepMonths")
+      val stepDays = ctx.freshName("stepDays")
       val stepMicros = ctx.freshName("stepMicros")
       val stepScaled = ctx.freshName("stepScaled")
       val intervalInMicros = ctx.freshName("intervalInMicros")
@@ -2673,18 +2635,21 @@ object Sequence {
 
       val sequenceLengthCode =
         s"""
-           |final long $intervalInMicros = $stepMicros + $stepMonths * ${microsPerMonth}L;
+           |final long $intervalInMicros =
+           |  $stepMicros + $stepMonths * ${microsPerMonth}L + $stepDays * ${microsPerDay}L;
            |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
           """.stripMargin
 
       s"""
          |final int $stepMonths = $step.months;
+         |final int $stepDays = $step.days;
          |final long $stepMicros = $step.microseconds;
          |
-         |if ($stepMonths == 0) {
-         |  final $elemType $stepScaled = ($elemType) ($stepMicros / ${scale}L);
-         |  ${backedSequenceImpl.genCode(ctx, start, stop, stepScaled, arr, elemType)};
+         |if ($stepMonths == 0 && $stepMicros == 0 && ${scale}L == ${MICROS_PER_DAY}L) {
+         |  ${backedSequenceImpl.genCode(ctx, start, stop, stepDays, arr, elemType)};
          |
+         |} else if ($stepMonths == 0 && $stepDays == 0 && ${scale}L == 1) {
+         |  ${backedSequenceImpl.genCode(ctx, start, stop, stepMicros, arr, elemType)};
          |} else {
          |  final long $startMicros = $start * ${scale}L;
          |  final long $stopMicros = $stop * ${scale}L;
@@ -2702,7 +2667,7 @@ object Sequence {
          |    $arr[$i] = ($elemType) ($t / ${scale}L);
          |    $i += 1;
          |    $t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
-         |       $startMicros, $i * $stepMonths, $i * $stepMicros, $zid);
+         |       $startMicros, $i * $stepMonths, $i * $stepDays, $i * $stepMicros, $zid);
          |  }
          |
          |  if ($arr.length > $i) {
