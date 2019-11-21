@@ -484,7 +484,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new LongWrapper()
-      buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
+      buildCast[UTF8String](_, s => if (s.trim.toLong(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0L)
     case DateType =>
@@ -501,7 +501,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
+      buildCast[UTF8String](_, s => if (s.trim.toInt(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
@@ -520,7 +520,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toShort(result)) {
+      buildCast[UTF8String](_, s => if (s.trim.toShort(result)) {
         result.value.toShort
       } else {
         null
@@ -561,7 +561,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toByte(result)) {
+      buildCast[UTF8String](_, s => if (s.trim.toByte(result)) {
         result.value.toByte
       } else {
         null
@@ -632,7 +632,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
-        changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
+        changePrecision(Decimal(new JavaBigDecimal(s.trim.toString)), target)
       } catch {
         case _: NumberFormatException => null
       })
@@ -659,7 +659,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDouble(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => {
-        val doubleStr = s.toString
+        val doubleStr = s.trim.toString
         try doubleStr.toDouble catch {
           case _: NumberFormatException =>
             Cast.processFloatingPointSpecialLiterals(doubleStr, false)
@@ -679,7 +679,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToFloat(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => {
-        val floatStr = s.toString
+        val floatStr = s.trim.toString
         try floatStr.toFloat catch {
           case _: NumberFormatException =>
             Cast.processFloatingPointSpecialLiterals(floatStr, true)
