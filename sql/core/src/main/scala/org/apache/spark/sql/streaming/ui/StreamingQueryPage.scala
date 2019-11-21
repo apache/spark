@@ -31,7 +31,7 @@ import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
-class StreamingQueryPage(parent: StreamingQueryTab, store: Option[StreamQueryStore])
+class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
   extends WebUIPage("streaming") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(TimeZone.getDefault)
@@ -124,8 +124,7 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: Option[StreamQuerySto
   }
 
   private def generateStreamingQueryTable(request: HttpServletRequest): Seq[Node] = {
-    val (activeQueries, inactiveQueries) =
-      store.map(_.allStreamQueries.partition(_._1.isActive)).getOrElse((Seq.empty, Seq.empty))
+    val (activeQueries, inactiveQueries) = store.allStreamQueries.partition(_._1.isActive)
     val activeQueryTables = if (activeQueries.nonEmpty) {
       val headerRow = Seq(
         "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input PerSec",

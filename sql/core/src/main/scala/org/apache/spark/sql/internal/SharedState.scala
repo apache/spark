@@ -118,7 +118,7 @@ private[sql] class SharedState(
    */
   private[sql] val streamQueryStore: StreamQueryStore = {
     val store = new StreamQueryStore()
-    sparkContext.ui.foreach(new StreamingQueryTab(store, sparkContext, _))
+    sparkContext.ui.foreach(new StreamingQueryTab(store, _))
     store
   }
 
@@ -131,7 +131,7 @@ private[sql] class SharedState(
     val listener = new SQLAppStatusListener(conf, kvStore, live = true)
     sparkContext.listenerBus.addToStatusQueue(listener)
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
-    sparkContext.ui.foreach(new SQLTab(statusStore, Some(streamQueryStore), _))
+    sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
   }
 

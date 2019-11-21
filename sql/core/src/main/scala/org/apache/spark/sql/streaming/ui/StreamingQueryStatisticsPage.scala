@@ -35,7 +35,7 @@ import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, W
 
 class StreamingQueryStatisticsPage(
     parent: StreamingQueryTab,
-    store: Option[StreamQueryStore])
+    store: StreamQueryStore)
   extends WebUIPage("streaming/statistics") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(getTimeZone("UTC"))
@@ -53,13 +53,9 @@ class StreamingQueryStatisticsPage(
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val (query, timeSinceStart) = if (store.nonEmpty) {
-      store.get.allStreamQueries.find { case (query, _) =>
-        query.runId.equals(UUID.fromString(parameterId))
-      }.getOrElse(throw new Exception(s"Can not find streaming query $parameterId"))
-    } else {
-      throw new Exception(s"Can not find streaming query $parameterId")
-    }
+    val (query, timeSinceStart) = store.allStreamQueries.find { case (q, _) =>
+      q.runId.equals(UUID.fromString(parameterId))
+    }.getOrElse(throw new Exception(s"Can not find streaming query $parameterId"))
 
     val resources = generateLoadResources(request)
     val basicInfo = generateBasicInfo(query, timeSinceStart)

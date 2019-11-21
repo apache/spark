@@ -21,7 +21,7 @@ import org.apache.spark.sql.execution.streaming.StreamQueryStore
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 class StreamingQueryTab(
-    val streamQueryStore: Option[StreamQueryStore],
+    val store: StreamQueryStore,
     sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "StreamingQuery") with Logging {
 
@@ -29,8 +29,8 @@ class StreamingQueryTab(
 
   val parent = sparkUI
 
-  attachPage(new StreamingQueryPage(this, streamQueryStore))
-  attachPage(new StreamingQueryStatisticsPage(this, streamQueryStore))
+  attachPage(new StreamingQueryPage(this, store))
+  attachPage(new StreamingQueryStatisticsPage(this, store))
   parent.attachTab(this)
 
   parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")

@@ -33,7 +33,6 @@ import org.apache.spark.util.Utils
 private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with Logging {
 
   private val sqlStore = parent.sqlStore
-  private val streamQueryStore = parent.streamQueryStore
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val currentTime = System.currentTimeMillis()
@@ -121,16 +120,6 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     val summary: NodeSeq =
       <div>
         <ul class="unstyled">
-          {
-            if (streamQueryStore.nonEmpty && streamQueryStore.get.allStreamQueries.nonEmpty) {
-              val streamQueryPageLink = "%s/%s/streaming"
-                .format(UIUtils.prependBaseUri(request, parent.basePath), parent.prefix)
-              <li>
-                <a href={streamQueryPageLink}><strong>Streaming Queries:</strong></a>
-                {streamQueryStore.get.allStreamQueries.size}
-              </li>
-            }
-          }
           {
             if (running.nonEmpty) {
               <li>
