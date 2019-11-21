@@ -28,7 +28,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case FileSourceOperation(project, filters, relation: DataSourceV2Relation) =>
-      println("into V2ScanRelationPushDown.PhysicalOperation")
       val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
 
       val (withSubquery, withoutSubquery) = filters.partition(SubqueryExpression.hasSubquery)
