@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
