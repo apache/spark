@@ -373,6 +373,21 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     }
   }
 
+  private def checkOwner(db: String, owner: String,
+      location: URI, hasProps: Boolean = false): Unit = {
+    val answer = Seq(Row("Database Name", db),
+      Row("Description", ""),
+      Row("Location", CatalogUtils.URIToString(location)),
+      Row("Owner Name", owner),
+      Row("Owner Type", "USER"))
+    val props = if (hasProps) {
+      Seq(Row("Properties", "((a,a))"))
+    } else {
+      Seq(Row("Properties", ""))
+    }
+    checkAnswer(sql(s"DESCRIBE DATABASE EXTENDED $db"), answer ++ props)
+  }
+
   test("Database Ownership") {
     val catalog = spark.sessionState.catalog
     try {
@@ -383,54 +398,21 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       val location2 = getDBPath(db2)
 
       sql(s"CREATE DATABASE $db1")
-      checkAnswer(
-        sql(s"DESCRIBE DATABASE $db1"),
-        Row("Database Name", db1) ::
-          Row("Description", "") ::
-          Row("Location", CatalogUtils.URIToString(location1)) ::
-          Row("Owner Name", Utils.getCurrentUserName()) ::
-          Row("Owner Type", "USER") :: Nil)
+      checkOwner(db1, Utils.getCurrentUserName(), location1)
 
       // TODO: Specify ownership should be forbidden after we implement `SET OWNER` syntax
       sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('ownerName'='$owner')")
-      checkAnswer(
-        sql(s"DESCRIBE DATABASE $db2"),
-        Row("Database Name", db2) ::
-          Row("Description", "") ::
-          Row("Location", CatalogUtils.URIToString(location2)) ::
-          Row("Owner Name", owner) ::
-          Row("Owner Type", "USER") :: Nil)
+      checkOwner(db2, owner, location2)
 
-      sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-      checkAnswer(
-        sql(s"DESCRIBE DATABASE EXTENDED $db1"),
-        Row("Database Name", db1) ::
-          Row("Description", "") ::
-          Row("Location", CatalogUtils.URIToString(location1)) ::
-          Row("Owner Name", Utils.getCurrentUserName()) ::
-          Row("Owner Type", "USER") ::
-          Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+      sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a')")
+      checkOwner(db1, Utils.getCurrentUserName(), location1, true)
 
-      sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-      checkAnswer(
-        sql(s"DESCRIBE DATABASE EXTENDED $db2"),
-        Row("Database Name", db2) ::
-          Row("Description", "") ::
-          Row("Location", CatalogUtils.URIToString(location2)) ::
-          Row("Owner Name", owner) ::
-          Row("Owner Type", "USER") ::
-          Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+      sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('a'='a')")
+      checkOwner(db2, owner, location2, true)
 
       // TODO: Changing ownership should be forbidden after we implement `SET OWNER` syntax
       sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('ownerName'='a')")
-      checkAnswer(
-        sql(s"DESCRIBE DATABASE EXTENDED $db2"),
-        Row("Database Name", db2) ::
-          Row("Description", "") ::
-          Row("Location", CatalogUtils.URIToString(location2)) ::
-          Row("Owner Name", "a") ::
-          Row("Owner Type", "USER") ::
-          Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+      checkOwner(db2, "a", location2, true)
     } finally {
       catalog.reset()
     }
