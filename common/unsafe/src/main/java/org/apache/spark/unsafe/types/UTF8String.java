@@ -1062,19 +1062,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     public transient int value = 0;
   }
 
-  private void insideTrim() {
-    int s = 0;
-    while (s < this.numBytes && getByte(s) == 0x20) {
-      s++;
-      this.offset++;
-    }
-    int e = this.numBytes - 1;
-    while (e > s && getByte(e) == 0x20) {
-      e--;
-      this.numBytes--;
-    }
-  }
-
   /**
    * Parses this UTF8String to long.
    *
@@ -1090,14 +1077,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toLong(LongWrapper toLongResult) {
-    insideTrim();
+    int numBytes = this.numBytes;
+    int offset = 0;
+    while (offset < numBytes && getByte(offset) == 0x20) {
+      offset++;
+    }
+    while (numBytes - 1 > offset && getByte(numBytes - 1) == 0x20) {
+      numBytes--;
+    }
+
     if (numBytes == 0) {
       return false;
     }
 
-    byte b = getByte(0);
+    byte b = getByte(offset);
     final boolean negative = b == '-';
-    int offset = 0;
     if (negative || b == '+') {
       offset++;
       if (numBytes == 1) {
@@ -1182,13 +1176,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toInt(IntWrapper intWrapper) {
-    insideTrim();
+    int numBytes = this.numBytes;
+    int offset = 0;
+    while (offset < numBytes && getByte(offset) == 0x20) {
+      offset++;
+    }
+    while (numBytes - 1 > offset && getByte(numBytes - 1) == 0x20) {
+      numBytes--;
+    }
+
     if (numBytes == 0) {
       return false;
     }
-    byte b = getByte(0);
+
+    byte b = getByte(offset);
     final boolean negative = b == '-';
-    int offset = 0;
     if (negative || b == '+') {
       offset++;
       if (numBytes == 1) {
