@@ -1788,7 +1788,7 @@ object SQLConf {
   }
 
   val OPTIONAL_INTERVAL =
-    buildConf("spark.sql.optionalInterval")
+    buildConf("spark.sql.parser.optionalInterval")
       .doc("When true, an INTERVAL keyword can be optional for interval values in SQL statements," +
         " e.g., 'SELECT 1 day'.")
       .booleanConf

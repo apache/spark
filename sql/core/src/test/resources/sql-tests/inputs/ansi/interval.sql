@@ -1,4 +1,4 @@
---SET spark.sql.optionalInterval=true
+--SET spark.sql.parser.optionalInterval=true
 --IMPORT interval.sql
 
 -- the `interval` keyword can be omitted with ansi mode
