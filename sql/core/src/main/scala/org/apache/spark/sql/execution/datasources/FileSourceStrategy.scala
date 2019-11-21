@@ -22,7 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.{FileSourceOperation, PhysicalOperation}
+import org.apache.spark.sql.catalyst.planning.FileSourceOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.util.collection.BitSet
@@ -215,7 +215,6 @@ object FileSourceStrategy extends Strategy with Logging {
 
       withProjections :: Nil
 
-    case _ =>
-      Nil
+    case _ => Nil
   }
 }

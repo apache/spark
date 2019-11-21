@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions.{And, SubqueryExpression}
-import org.apache.spark.sql.catalyst.planning.{FileSourceOperation, PhysicalOperation}
+import org.apache.spark.sql.catalyst.planning.FileSourceOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
