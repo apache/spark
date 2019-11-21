@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.collection.mutable
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.Predicate
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -86,21 +83,6 @@ case class SortAggregateExec(
         // so return an empty iterator.
         Iterator[UnsafeRow]()
       } else {
-        val filterPredicates = new mutable.HashMap[Int, Predicate]
-        aggregateExpressions.zipWithIndex.foreach{
-          case (ae: AggregateExpression, i) =>
-            ae.mode match {
-              case Partial | Complete =>
-                ae.filter.foreach { filterExpr =>
-                  val filterAttrs = filterExpr.references.toSeq
-                  val predicate = newPredicate(filterExpr, child.output ++ filterAttrs)
-                  predicate.initialize(partIndex)
-                  filterPredicates(i) = predicate
-                }
-              case _ =>
-            }
-          case _ =>
-        }
         val outputIter = new SortBasedAggregationIterator(
           partIndex,
           groupingExpressions,
@@ -112,8 +94,7 @@ case class SortAggregateExec(
           resultExpressions,
           (expressions, inputSchema) =>
             newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
-          numOutputRows,
-          filterPredicates)
+          numOutputRows)
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.

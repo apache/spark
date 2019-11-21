@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.collection.mutable
-
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeRowJoiner, Predicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
@@ -95,8 +93,7 @@ class TungstenAggregationIterator(
     numOutputRows: SQLMetric,
     peakMemory: SQLMetric,
     spillSize: SQLMetric,
-    avgHashProbe: SQLMetric,
-    predicates: mutable.Map[Int, Predicate])
+    avgHashProbe: SQLMetric)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -105,7 +102,6 @@ class TungstenAggregationIterator(
     aggregateAttributes,
     initialInputBufferOffset,
     resultExpressions,
-    predicates,
     newMutableProjection) with Logging {
 
   ///////////////////////////////////////////////////////////////////////////

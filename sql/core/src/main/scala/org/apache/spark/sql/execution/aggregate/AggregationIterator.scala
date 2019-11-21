@@ -23,7 +23,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.Predicate
 
 /**
  * The base class of [[SortBasedAggregationIterator]] and [[TungstenAggregationIterator]].
@@ -41,7 +40,6 @@ abstract class AggregationIterator(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    predicates: mutable.Map[Int, Predicate],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection)
   extends Iterator[UnsafeRow] with Logging {
 
@@ -117,6 +115,29 @@ abstract class AggregationIterator(
 
   protected val aggregateFunctions: Array[AggregateFunction] =
     initializeAggregateFunctions(aggregateExpressions, initialInputBufferOffset)
+
+  protected def initializeFilterPredicates(
+      expressions: Seq[AggregateExpression]): mutable.Map[Int, BasePredicate] = {
+    val filterPredicates = new mutable.HashMap[Int, BasePredicate]
+    expressions.zipWithIndex.foreach {
+      case (ae: AggregateExpression, i) =>
+        ae.mode match {
+          case Partial | Complete =>
+            ae.filter.foreach { filterExpr =>
+              val filterAttrs = filterExpr.references.toSeq
+              val predicate = Predicate.create(filterExpr, inputAttributes ++ filterAttrs)
+              predicate.initialize(partIndex)
+              filterPredicates(i) = predicate
+            }
+          case _ =>
+        }
+      case _ =>
+    }
+    filterPredicates
+  }
+
+  protected val predicates: mutable.Map[Int, BasePredicate] =
+    initializeFilterPredicates(aggregateExpressions)
 
   // Positions of those imperative aggregate functions in allAggregateFunctions.
   // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
