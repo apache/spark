@@ -474,7 +474,7 @@ case class AlterTableAddPartitionCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
     // Also the request to metastore times out when adding lot of partitions in one shot.
     // we should split them into smaller batches
-    val batchSize = 100
+    val batchSize = sparkSession.sessionState.conf.partitionBatchSize
     parts.toIterator.grouped(batchSize).foreach { batch =>
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
@@ -780,7 +780,7 @@ case class AlterTableRecoverPartitionsCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
     // we should split them into smaller batches. Since Hive client is not thread safe, we cannot
     // do this in parallel.
-    val batchSize = 100
+    val batchSize = spark.sessionState.conf.partitionBatchSize
     partitionSpecsAndLocs.toIterator.grouped(batchSize).foreach { batch =>
       val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>

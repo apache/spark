@@ -779,6 +779,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARTITION_BATCH_SIZE = buildConf("spark.sql.catalog.partitionBatchSize")
+    .internal()
+    .doc("The batch size to use while adding partitions to catalog")
+    .intConf
+    .checkValue(_ > 0, "partition batch size must be greater than 0")
+    .createWithDefault(100)
+
   val PARTITION_COLUMN_TYPE_INFERENCE =
     buildConf("spark.sql.sources.partitionColumnTypeInference.enabled")
       .doc("When true, automatically infer the data types for partitioned columns.")
@@ -2233,6 +2240,8 @@ class SQLConf extends Serializable with Logging {
   def compareDateTimestampInTimestamp : Boolean = getConf(COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
+
+  def partitionBatchSize: Int = getConf(PARTITION_BATCH_SIZE)
 
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
