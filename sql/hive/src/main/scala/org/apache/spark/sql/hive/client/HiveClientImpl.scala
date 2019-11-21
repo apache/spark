@@ -440,8 +440,14 @@ private[hive] class HiveClientImpl(
   private def convertHiveTableToCatalogTable(h: HiveTable): CatalogTable = {
     // Note: Hive separates partition columns and the schema, but for us the
     // partition columns are part of the schema
-    val cols = h.getCols.asScala.map(c => HiveClientImpl.fromHiveColumn(c, h))
-    val partCols = h.getPartCols.asScala.map(c => HiveClientImpl.fromHiveColumn(c, h))
+    val (cols, partCols) = try {
+      (h.getCols.asScala.map(fromHiveColumn),
+        h.getPartCols.asScala.map(fromHiveColumn))
+    } catch {
+      case ex: SparkException =>
+        throw new SparkException(ex.getMessage
+          + s".db: ${h.getDbName},table: ${h.getTableName},", ex);
+    }
     val schema = StructType(cols ++ partCols)
 
     val bucketSpec = if (h.getNumBuckets > 0) {
@@ -977,20 +983,19 @@ private[hive] object HiveClientImpl {
   }
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
-  private def getSparkSQLDataType(hc: FieldSchema, t: HiveTable = null): DataType = {
+  private def getSparkSQLDataType(hc: FieldSchema): DataType = {
     try {
       CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
         throw new SparkException(s"Cannot recognize hive type string: ${hc.getType}," +
-          (if (t != null) s"db: ${t.getDbName},table: ${t.getTableName}," else "") +
           s"column: ${hc.getName}", e)
     }
   }
 
   /** Builds the native StructField from Hive's FieldSchema. */
-  def fromHiveColumn(hc: FieldSchema, t: HiveTable): StructField = {
-    val columnType = getSparkSQLDataType(hc, t)
+  def fromHiveColumn(hc: FieldSchema): StructField = {
+    val columnType = getSparkSQLDataType(hc)
     val metadata = if (hc.getType != columnType.catalogString) {
       new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
     } else {
