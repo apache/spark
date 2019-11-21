@@ -24,13 +24,9 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Inherits some default implementation for Java from `Ordering[Row]`
+ * A base class for generated/interpreted row ordering.
  */
-class BaseOrdering extends Ordering[InternalRow] {
-  def compare(a: InternalRow, b: InternalRow): Int = {
-    throw new UnsupportedOperationException
-  }
-}
+abstract class BaseOrdering extends Ordering[InternalRow]
 
 /**
  * An interpreted row ordering comparator.
