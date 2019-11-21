@@ -34,19 +34,15 @@ object CastBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
-    val title = "Benchmark trim the string"
+    val title = "Cast String to Numeric"
     runBenchmark(title) {
       withTempPath { dir =>
         val N = 500L << 14
         val df = spark.range(N)
-        val withoutWhitespace = "withoutWhitespace"
-        val withWhitespace = "withWhitespace"
-//        val types = Seq("int", "long", "float", "double", "decimal", "boolean")
         val types = Seq("int", "long")
-
         df.selectExpr(s"concat('${" " * 5}', id, '${" " * 5}') as str")
           .write.mode("overwrite").parquet(dir.getCanonicalPath)
-        val benchmark = new Benchmark(title, N, minNumIters = 3, output = output)
+        val benchmark = new Benchmark(title, N, minNumIters = 5, output = output)
         types.foreach { t =>
           val expr = s"cast(str as $t) as c_$t"
           benchmark.addCase(expr) { _ =>

@@ -554,29 +554,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Trims space characters (ASCII 32) from both ends of this string.
-   *
-   * @return this string with no spaces at the start or end
-   */
-  public UTF8String nonCopyTrim() {
-    int s = 0;
-    // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
-    if (s == this.numBytes) {
-      // Everything trimmed
-      return EMPTY_UTF8;
-    }
-    // skip all of the space (0x20) in the right side
-    int e = this.numBytes - 1;
-    while (e > s && getByte(e) == 0x20) e--;
-    if (s == 0 && e == numBytes - 1) {
-      // Nothing trimmed
-      return this;
-    }
-    return new UTF8String(base, offset + s, e - s + 1);
-  }
-
-  /**
    * Trims instances of the given trim string from both ends of this string.
    *
    * @param trimString the trim character string
@@ -1085,6 +1062,19 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     public transient int value = 0;
   }
 
+  private void insideTrim() {
+    int s = 0;
+    while (s < this.numBytes && getByte(s) == 0x20) {
+      s++;
+      this.offset++;
+    }
+    int e = this.numBytes - 1;
+    while (e > s && getByte(e) == 0x20) {
+      e--;
+      this.numBytes--;
+    }
+  }
+
   /**
    * Parses this UTF8String to long.
    *
@@ -1100,6 +1090,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toLong(LongWrapper toLongResult) {
+    insideTrim();
     if (numBytes == 0) {
       return false;
     }
@@ -1191,10 +1182,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toInt(IntWrapper intWrapper) {
+    insideTrim();
     if (numBytes == 0) {
       return false;
     }
-
     byte b = getByte(0);
     final boolean negative = b == '-';
     int offset = 0;
