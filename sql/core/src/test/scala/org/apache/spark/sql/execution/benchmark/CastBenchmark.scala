@@ -42,7 +42,7 @@ object CastBenchmark extends SqlBasedBenchmark {
         val withoutWhitespace = "withoutWhitespace"
         val withWhitespace = "withWhitespace"
 //        val types = Seq("int", "long", "float", "double", "decimal", "boolean")
-        val types = Seq("long", "double", "decimal")
+        val types = Seq("int", "long")
 
         df.selectExpr(s"concat('${" " * 5}', id, '${" " * 5}') as str")
           .write.mode("overwrite").parquet(dir.getCanonicalPath)
