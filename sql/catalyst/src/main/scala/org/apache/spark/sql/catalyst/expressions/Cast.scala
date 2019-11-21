@@ -484,7 +484,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new LongWrapper()
-      buildCast[UTF8String](_, s => if (s.trim().toLong(result)) result.value else null)
+      buildCast[UTF8String](_, s => if (s.nonCopyTrim().toLong(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0L)
     case DateType =>
@@ -501,7 +501,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.trim().toInt(result)) result.value else null)
+      buildCast[UTF8String](_, s => if (s.nonCopyTrim().toInt(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
@@ -1418,7 +1418,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.trim().toInt($wrapper)) {
+          if ($c.nonCopyTrim().toInt($wrapper)) {
             $evPrim = $wrapper.value;
           } else {
             $evNull = true;
@@ -1447,7 +1447,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) =>
         code"""
           UTF8String.LongWrapper $wrapper = new UTF8String.LongWrapper();
-          if ($c.trim().toLong($wrapper)) {
+          if ($c.nonCopyTrim().toLong($wrapper)) {
             $evPrim = $wrapper.value;
           } else {
             $evNull = true;
