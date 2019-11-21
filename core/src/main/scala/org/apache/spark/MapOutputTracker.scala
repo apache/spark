@@ -902,7 +902,7 @@ private[spark] object MapOutputTracker extends Logging {
     // the contents don't have to be copied to the new buffer.
     val out = new ApacheByteArrayOutputStream()
     out.write(DIRECT)
-    val codec = CompressionCodec.createCodec(conf, conf.get(IO_COMPRESSION_CODEC.key, "zstd"))
+    val codec = CompressionCodec.createCodec(conf, conf.get(MAP_STATUS_COMPRESSION_CODEC))
     val objOut = new ObjectOutputStream(codec.compressedOutputStream(out))
     Utils.tryWithSafeFinally {
       // Since statuses can be modified in parallel, sync on it
@@ -939,7 +939,7 @@ private[spark] object MapOutputTracker extends Logging {
     assert (bytes.length > 0)
 
     def deserializeObject(arr: Array[Byte], off: Int, len: Int): AnyRef = {
-      val codec = CompressionCodec.createCodec(conf, conf.get(IO_COMPRESSION_CODEC.key, "zstd"))
+      val codec = CompressionCodec.createCodec(conf, conf.get(MAP_STATUS_COMPRESSION_CODEC))
       // The ZStd codec is wrapped in a `BufferedInputStream` which avoids overhead excessive
       // of JNI call while trying to decompress small amount of data for each element
       // of `MapStatuses`
