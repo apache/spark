@@ -1,4 +1,4 @@
--- Number of queries: 7
+-- Number of queries: 10
 
 
 -- !query 0
@@ -7,6 +7,7 @@ SELECT CAST(1 AS timestamp)
 struct<>
 -- !query 0 output
 org.apache.spark.sql.AnalysisException
+cannot resolve 'CAST(1 AS TIMESTAMP)' due to data type mismatch: cannot cast type int to timestamp
 
 
 -- !query 1
@@ -15,6 +16,7 @@ SELECT CAST(1.1 AS timestamp)
 struct<>
 -- !query 1 output
 org.apache.spark.sql.AnalysisException
+cannot resolve 'CAST(1.1BD AS TIMESTAMP)' due to data type mismatch: cannot cast type decimal(2,1) to timestamp
 
 
 -- !query 2
@@ -23,6 +25,7 @@ SELECT CAST(CAST(1 AS float) AS timestamp)
 struct<>
 -- !query 2 output
 org.apache.spark.sql.AnalysisException
+cannot resolve 'CAST(CAST(1 AS FLOAT) AS TIMESTAMP)' due to data type mismatch: cannot cast type float to timestamp
 
 
 -- !query 3
@@ -31,6 +34,7 @@ SELECT CAST(CAST(1 AS boolean) AS timestamp)
 struct<>
 -- !query 3 output
 org.apache.spark.sql.AnalysisException
+cannot resolve 'CAST(CAST(1 AS BOOLEAN) AS TIMESTAMP)' due to data type mismatch: cannot cast type boolean to timestamp
 
 
 -- !query 4
@@ -39,6 +43,7 @@ SELECT CAST(CAST(1 AS byte) AS timestamp)
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
+cannot resolve 'CAST(CAST(1 AS TINYINT) AS TIMESTAMP)' due to data type mismatch: cannot cast type tinyint to timestamp
 
 
 -- !query 5
@@ -47,6 +52,7 @@ SELECT CAST(CAST(1 AS short) AS timestamp)
 struct<>
 -- !query 5 output
 org.apache.spark.sql.AnalysisException
+cannot resolve 'CAST(CAST(1 AS SMALLINT) AS TIMESTAMP)' due to data type mismatch: cannot cast type smallint to timestamp
 
 
 -- !query 6
@@ -55,3 +61,28 @@ SELECT CAST(CAST(1 AS double) AS timestamp)
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
+cannot resolve 'CAST(CAST(1 AS DOUBLE) AS TIMESTAMP)' due to data type mismatch: cannot cast type double to timestamp
+
+
+-- !query 7
+SELECT CAST(CAST('2019' AS date) AS timestamp)
+-- !query 7 schema
+struct<CAST(CAST(2019 AS DATE) AS TIMESTAMP): timestamp>
+-- !query 7 output
+2019-01-01 00:00:00.0
+
+
+-- !query 8
+SELECT CAST(NULL AS timestamp)
+-- !query 8 schema
+struct<CAST(NULL AS TIMESTAMP): timestamp>
+-- !query 8 output
+
+
+
+-- !query 9
+SELECT CAST('2019' AS timestamp)
+-- !query 9 schema
+struct<CAST(2019 AS TIMESTAMP): timestamp>
+-- !query 9 output
+2019-01-01 00:00:00.0
