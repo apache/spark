@@ -22,6 +22,8 @@ jobs:
           hadoop: 'hadoop-2.7'
         - java: '11'
           hive: 'hive-1.2'
+        - hadoop: 'hadoop-3.2'
+          hive: 'hive-1.2'
     name: Build Spark - JDK${{ matrix.java }}/${{ matrix.hadoop }}/${{ matrix.hive }}
 
     steps:
