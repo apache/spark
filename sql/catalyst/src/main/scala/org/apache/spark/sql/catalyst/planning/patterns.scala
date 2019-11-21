@@ -99,6 +99,10 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
 
 object FileSourceOperation extends OperationHelper with PredicateHelper {
 
+  private val invalid: LogicalPlan => (Option[Seq[NamedExpression]], Seq[Expression],
+    LogicalPlan, Boolean, AttributeMap[Expression], Set[String]) =
+    plan => (None, Nil, plan, false, AttributeMap(Seq()), Set.empty)
+
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
     val (fields, filters, child, valid, _, _) = collectProjectsAndFilters(plan)
     if (valid) {
@@ -124,10 +128,10 @@ object FileSourceOperation extends OperationHelper with PredicateHelper {
               (Some(substitutedFields), filters, other, true,
                 collectAliases(substitutedFields), thisNonDeterministics)
             } else {
-              (None, Nil, p, false, AttributeMap(Seq()), Set.empty)
+              invalid(p)
             }
           } else {
-            (None, Nil, p, false, AttributeMap(Seq()), Set.empty)
+            invalid(p)
           }
 
         case f @ Filter(condition, child) =>
@@ -139,10 +143,10 @@ object FileSourceOperation extends OperationHelper with PredicateHelper {
               (fields, filters ++ splitConjunctivePredicates(substitutedCondition),
                 other, true, aliases, nonDeterministics)
             } else {
-              (None, Nil, f, false, AttributeMap(Seq()), Set.empty)
+              invalid(f)
             }
           } else {
-            (None, Nil, f, false, AttributeMap(Seq()), Set.empty)
+            invalid(f)
           }
 
         case h: ResolvedHint =>
