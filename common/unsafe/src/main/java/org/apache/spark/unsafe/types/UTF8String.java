@@ -556,7 +556,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Trims whitespaces (<= ASCII 32) from both ends of this string.
    *
-   * @return this string with no spaces at the start or end
+   * @return this string with no control characters and spaces at the start or end
    */
   public UTF8String trimAll() {
     int s = 0;
