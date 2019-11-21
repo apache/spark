@@ -40,13 +40,12 @@ private[ui] class StageTableBase(
     stageTag: String,
     basePath: String,
     subPath: String,
-    isFairScheduler: Boolean,
+    showPoolInfo: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
   val parameterOtherTable = request.getParameterMap().asScala
     .filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
-
   val parameterStagePage = request.getParameter(stageTag + ".page")
   val parameterStageSortColumn = request.getParameter(stageTag + ".sort")
   val parameterStageSortDesc = request.getParameter(stageTag + ".desc")
@@ -72,7 +71,7 @@ private[ui] class StageTableBase(
       stageTag,
       basePath,
       subPath,
-      isFairScheduler,
+      showPoolInfo,
       killEnabled,
       currentTime,
       stagePageSize,
@@ -128,7 +127,7 @@ private[ui] class StagePagedTable(
     stageTag: String,
     basePath: String,
     subPath: String,
-    isFairScheduler: Boolean,
+    showPoolInfo: Boolean,
     killEnabled: Boolean,
     currentTime: Long,
     pageSize: Int,
@@ -181,7 +180,7 @@ private[ui] class StagePagedTable(
     // Otherwise, it has two parts: tooltip text, and position (true for left, false for default).
     val stageHeadersAndCssClasses: Seq[(String, String, Boolean)] =
       Seq(("Stage Id", null, true)) ++
-      {if (isFairScheduler) {Seq(("Pool Name", null, true))} else Seq.empty} ++
+      {if (showPoolInfo) {Seq(("Pool Name", null, true))} else Seq.empty} ++
       Seq(
         ("Description", null, true), ("Submitted", null, true), ("Duration", null, true),
         ("Tasks: Succeeded/Total", null, false),
@@ -263,7 +262,7 @@ private[ui] class StagePagedTable(
         } else {
           <td>{data.stageId}</td>
         }} ++
-        {if (isFairScheduler) {
+        {if (showPoolInfo) {
           <td>
             <a href={"%s/stages/pool?poolname=%s"
               .format(UIUtils.prependBaseUri(request, basePath), data.schedulingPool)}>
@@ -370,7 +369,7 @@ private[ui] class StagePagedTable(
 
   protected def missingStageRow(stageId: Int): Seq[Node] = {
     <td>{stageId}</td> ++
-    {if (isFairScheduler) {<td>-</td>} else Seq.empty} ++
+    {if (showPoolInfo) {<td>-</td>} else Seq.empty} ++
     <td>No data available for this stage</td> ++ // Description
     <td></td> ++ // Submitted
     <td></td> ++ // Duration
