@@ -1778,6 +1778,48 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
   }
 
+  private def testSingleTaskSpeculation(singleTaskEnabled: Boolean): Unit = {
+    sc = new SparkContext("local", "test")
+    // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+    sc.conf.set(config.SPECULATION_SINGLETASKSTAGE_ENABLED, singleTaskEnabled)
+    // Set the threshold to be 60 minutes
+    sc.conf.set(config.SPECULATION_SINGLETASKSTAGE_DURATION_THRESHOLD.key, "60min")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    // Create a task set with only one task
+    val taskSet = FakeTask.createTaskSet(1)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    // Offer resources for the task to start
+    manager.resourceOffer("exec1", "host1", NO_PREF)
+
+    // if the time threshold has not been exceeded, no speculative run should be triggered
+    clock.advance(1000*60*60)
+    assert(!manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.size == 0)
+
+    // Now the task should have been running for 60 minutes and 1 second
+    clock.advance(1)
+    if (singleTaskEnabled) {
+      assert(manager.checkSpeculatableTasks(0))
+      assert(sched.speculativeTasks.size == 1)
+    } else {
+      // If the feature flag is turned off, shouldn't do speculative run if there is only one task
+      assert(!manager.checkSpeculatableTasks(0))
+      assert(sched.speculativeTasks.size == 0)
+    }
+  }
+
+  test("SPARK-29976 when single task stage speculation enabled, should speculative run the task") {
+    testSingleTaskSpeculation(true)
+  }
+
+  test("SPARK-29976: when single task stage speculation disabled, don't speculative run") {
+    testSingleTaskSpeculation(false)
+  }
+
   test("TaskOutputFileAlreadyExistException lead to task set abortion") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))

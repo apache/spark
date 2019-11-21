@@ -1461,6 +1461,16 @@ package object config {
       .doubleConf
       .createWithDefault(0.75)
 
+  private[spark] val SPECULATION_SINGLETASKSTAGE_ENABLED =
+    ConfigBuilder("spark.speculation.singleTaskStage.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SPECULATION_SINGLETASKSTAGE_DURATION_THRESHOLD =
+    ConfigBuilder("spark.speculation.singleTaskStage.duration.threshold")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("30min")
+
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .stringConf

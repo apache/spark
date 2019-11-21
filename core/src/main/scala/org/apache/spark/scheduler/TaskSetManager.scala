@@ -81,6 +81,10 @@ private[spark] class TaskSetManager(
   val speculationQuantile = conf.get(SPECULATION_QUANTILE)
   val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
+  // Whether start speculation if there is only one task
+  val speculationSingleTaskStageEnabled = conf.get(SPECULATION_SINGLETASKSTAGE_ENABLED)
+  val speculationSingleTaskStageTimeThres =
+    conf.get(SPECULATION_SINGLETASKSTAGE_DURATION_THRESHOLD)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -965,22 +969,33 @@ private[spark] class TaskSetManager(
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
     // zombie or is from a barrier stage.
-    if (isZombie || isBarrier || numTasks == 1) {
+    if (isZombie || isBarrier || (numTasks == 1 && !speculationSingleTaskStageEnabled)) {
       return false
     }
     var foundTasks = false
-    logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
+    val minFinished = if (numTasks == 1) {
+      logDebug("Checking if need to trigger speculative task for single task stage")
+      // Set the minFinish to be 0 so that the single task could be speculated
+      0
+    } else {
+      logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
+      minFinishedForSpeculation
+    }
 
     // It's possible that a task is marked as completed by the scheduler, then the size of
     // `successfulTaskDurations` may not equal to `tasksSuccessful`. Here we should only count the
     // tasks that are submitted by this `TaskSetManager` and are completed successfully.
     val numSuccessfulTasks = successfulTaskDurations.size()
-    if (numSuccessfulTasks >= minFinishedForSpeculation) {
+    if (numSuccessfulTasks >= minFinished) {
       val time = clock.getTimeMillis()
-      val medianDuration = successfulTaskDurations.median
-      val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
-      // TODO: Threshold should also look at standard deviation of task durations and have a lower
-      // bound based on that.
+      val threshold = if (numTasks == 1) {
+        speculationSingleTaskStageTimeThres
+      } else {
+        // TODO: Threshold should also look at standard deviation of task durations and have a lower
+        // bound based on that.
+        val medianDuration = successfulTaskDurations.median
+        max(speculationMultiplier * medianDuration, minTimeToSpeculation)
+      }
       logDebug("Task length threshold for speculation: " + threshold)
       for (tid <- runningTasksSet) {
         val info = taskInfos(tid)
