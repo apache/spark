@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1615,6 +1615,37 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       // override in `AnalysisException`,so here we get the root cause
       // exception message for check.
       assert(cause.cause.get.getMessage.contains("Actual error"))
+    }
+  }
+
+  test("test catalog table cache") {
+    withSQLConf()
+    withBasicCatalog { catalog =>
+      val tableId = TableIdentifier("tbl1", Some("db2"))
+      val qtn = QualifiedTableName("tbl1", "db2")
+
+      val ct1 = catalog.getTableMetadata(tableId)
+      val cct1 = catalog.getCachedCatalogTable(qtn)
+      assert(ct1 == cct1.get)
+
+      Thread.sleep(conf.tableCatalogCacheExpireSeconds * 1000 + 1)
+      val expireCatalogTable = catalog.getCachedCatalogTable(qtn)
+      assert(expireCatalogTable.isEmpty)
+
+      catalog.getTableMetadata(tableId)
+      catalog.dropTable(tableId, false, false)
+      val cct2 = catalog.getCachedCatalogTable(qtn)
+      assert(cct2.isEmpty)
+
+      catalog.getTableMetadata(tableId)
+      catalog.refreshTable(tableId)
+      val cct3 = catalog.getCachedCatalogTable(qtn)
+      assert(cct3.isEmpty)
+
+      catalog.getTableMetadata(tableId)
+      val cct4 = catalog.getCachedCatalogTable(qtn)
+      catalog.dropDatabase(qtn.database, false, false)
+      assert(cct4.isEmpty)
     }
   }
 }

@@ -69,6 +69,15 @@ object StaticSQLConf {
       .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
       .createWithDefault(1000)
 
+  val FILESOURCE_TABLE_CATALOG_CACHE_EXPIRE_SECONDS =
+    buildStaticConf("spark.sql.filesourceTableCatalogCacheExpireSeconds")
+      .internal()
+      .doc("The maximum expire seconds time of cache table catalog.")
+      .intConf
+      .checkValue(cacheSize => cacheSize >= 0 && cacheSize < 8,
+        "The cache expire seconds threshold must be in [0,8].")
+      .createWithDefault(2)
+
   val CODEGEN_CACHE_MAX_ENTRIES = buildStaticConf("spark.sql.codegen.cache.maxEntries")
       .internal()
       .doc("When nonzero, enable caching of generated classes for operators and expressions. " +

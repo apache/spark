@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.util.Locale
-import java.util.concurrent.Callable
+import java.util.concurrent.{Callable, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.{QualifiedTableName, _}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ImplicitCastInputTypes}
@@ -103,6 +103,12 @@ class SessionCatalog(
   protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
   private val validNameFormat = "([\\w_]+)".r
+
+  private val cachedCatalogTable = {
+    val expireSeconds = conf.tableCatalogCacheExpireSeconds
+    CacheBuilder.newBuilder().expireAfterWrite(expireSeconds, TimeUnit.SECONDS)
+      .build[QualifiedTableName, CatalogTable]()
+  }
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
@@ -222,6 +228,7 @@ class SessionCatalog(
     if (cascade && databaseExists(dbName)) {
       listTables(dbName).foreach { t =>
         invalidateCachedTable(QualifiedTableName(dbName, t.table))
+        invalidateCachedCatalogTable(QualifiedTableName(dbName, t.table))
       }
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
@@ -366,6 +373,7 @@ class SessionCatalog(
       tableDefinition.copy(identifier = tableIdentifier)
     }
 
+    invalidateCachedCatalogTable(QualifiedTableName(db, table))
     externalCatalog.alterTable(newTableDefinition)
   }
 
@@ -386,7 +394,7 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(tableIdentifier)
 
-    val catalogTable = externalCatalog.getTable(db, table)
+    val catalogTable = getTableMetadata(tableIdentifier)
     val oldDataSchema = catalogTable.dataSchema
     // not supporting dropping columns yet
     val nonExistentColumnNames =
@@ -399,6 +407,7 @@ class SessionCatalog(
          """.stripMargin)
     }
 
+    invalidateCachedCatalogTable(QualifiedTableName(db, table))
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)
   }
 
@@ -428,7 +437,12 @@ class SessionCatalog(
   def tableExists(name: TableIdentifier): Boolean = synchronized {
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
-    externalCatalog.tableExists(db, table)
+    val exists = externalCatalog.tableExists(db, table)
+    if (!exists) {
+      // try best to keep cached table right
+      invalidateCachedCatalogTable(QualifiedTableName(db, table))
+    }
+    exists
   }
 
   /**
@@ -440,9 +454,14 @@ class SessionCatalog(
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
-    requireDbExists(db)
-    requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.getTable(db, table)
+    val qtn = QualifiedTableName(db, table)
+    getCachedCatalogTable(qtn).getOrElse {
+      requireDbExists(db)
+      requireTableExists(TableIdentifier(table, Some(db)))
+      val catalogTable = externalCatalog.getTable(db, table)
+      cacheCatalogTable(qtn, catalogTable)
+      catalogTable
+    }
   }
 
   /**
@@ -669,6 +688,7 @@ class SessionCatalog(
         requireTableNotExists(TableIdentifier(newTableName, Some(db)))
         validateName(newTableName)
         validateNewLocationOfRename(oldName, newName)
+        invalidateCachedCatalogTable(QualifiedTableName(db, oldTableName))
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
         if (newName.database.isDefined) {
@@ -711,6 +731,7 @@ class SessionCatalog(
         // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
         // Instead, log it as an error message.
         if (tableExists(TableIdentifier(table, Option(db)))) {
+          invalidateCachedCatalogTable(QualifiedTableName(db, table))
           externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = purge)
         } else if (!ignoreIfNotExists) {
           throw new NoSuchTableException(db = db, table = table)
@@ -872,6 +893,8 @@ class SessionCatalog(
     // Also invalidate the table relation cache.
     val qualifiedTableName = QualifiedTableName(dbName, tableName)
     tableRelationCache.invalidate(qualifiedTableName)
+
+    invalidateCachedCatalogTable(qualifiedTableName)
   }
 
   /**
@@ -908,6 +931,7 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Option(db)))
     requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
+    invalidateCachedCatalogTable(QualifiedTableName(db, table))
     externalCatalog.createPartitions(
       db, table, partitionWithQualifiedPath(tableName, parts), ignoreIfExists)
   }
@@ -928,6 +952,7 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Option(db)))
     requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(specs)
+    invalidateCachedCatalogTable(QualifiedTableName(db, table))
     externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists, purge, retainData)
   }
 
@@ -950,6 +975,7 @@ class SessionCatalog(
     requireExactMatchedPartitionSpec(newSpecs, tableMetadata)
     requireNonEmptyValueInPartitionSpec(specs)
     requireNonEmptyValueInPartitionSpec(newSpecs)
+    invalidateCachedCatalogTable(QualifiedTableName(db, table))
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
   }
 
@@ -969,6 +995,7 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Option(db)))
     requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
+    invalidateCachedCatalogTable(QualifiedTableName(db, table))
     externalCatalog.alterPartitions(db, table, partitionWithQualifiedPath(tableName, parts))
   }
 
@@ -1484,6 +1511,26 @@ class SessionCatalog(
       require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
       functionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
     }
+    invalidateAllCachedCatalogTable()
+  }
+
+  private[sql] def getCachedCatalogTable(qtn: QualifiedTableName): Option[CatalogTable] = {
+    cachedCatalogTable.getIfPresent(qtn) match {
+      case null => None
+      case catalogTable => Some(catalogTable)
+    }
+  }
+
+  private[sql] def cacheCatalogTable(qtn: QualifiedTableName, catalogTable: CatalogTable): Unit = {
+    cachedCatalogTable.put(qtn, catalogTable)
+  }
+
+  private[sql] def invalidateAllCachedCatalogTable(): Unit = {
+    cachedCatalogTable.cleanUp()
+  }
+
+  private[sql] def invalidateCachedCatalogTable(qtn: QualifiedTableName): Unit = {
+    cachedCatalogTable.invalidate(qtn)
   }
 
   /**
