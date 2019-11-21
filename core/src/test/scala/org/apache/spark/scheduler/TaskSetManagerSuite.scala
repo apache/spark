@@ -1780,8 +1780,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
   private def testSingleTaskSpeculation(singleTaskEnabled: Boolean): Unit = {
     sc = new SparkContext("local", "test")
-    // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
     sc.conf.set(config.SPECULATION_ENABLED, true)
     sc.conf.set(config.SPECULATION_SINGLETASKSTAGE_ENABLED, singleTaskEnabled)
     // Set the threshold to be 60 minutes
@@ -1791,6 +1789,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(1)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    manager.isZombie = false
 
     // Offer resources for the task to start
     manager.resourceOffer("exec1", "host1", NO_PREF)
