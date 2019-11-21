@@ -14,24 +14,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package org.apache.spark.sql.execution.ui
+package org.apache.spark.sql.streaming.ui
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.streaming.StreamQueryStore
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
+class StreamingQueryTab(
+    val streamQueryStore: Option[StreamQueryStore],
+    sparkUI: SparkUI)
+  extends SparkUITab(sparkUI, "StreamingQuery") with Logging {
+
+  override val name = "Structured Streaming"
 
   val parent = sparkUI
 
-  attachPage(new AllExecutionsPage(this))
-  attachPage(new ExecutionPage(this))
+  attachPage(new StreamingQueryPage(this, streamQueryStore))
+  attachPage(new StreamingQueryStatisticsPage(this, streamQueryStore))
   parent.attachTab(this)
 
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
+  parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")
 }
 
-object SQLTab {
+object StreamingQueryTab {
   private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
 }

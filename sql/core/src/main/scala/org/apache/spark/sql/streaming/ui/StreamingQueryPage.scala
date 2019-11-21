@@ -27,12 +27,11 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.{QuerySummary, StreamQueryStore}
-import org.apache.spark.sql.execution.ui.SQLTab
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
-class StreamingQueryPage(parent: SQLTab, store: Option[StreamQueryStore])
+class StreamingQueryPage(parent: StreamingQueryTab, store: Option[StreamQueryStore])
   extends WebUIPage("streaming") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(TimeZone.getDefault)

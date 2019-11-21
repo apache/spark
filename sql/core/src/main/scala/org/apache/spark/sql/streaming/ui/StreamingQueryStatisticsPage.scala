@@ -29,13 +29,12 @@ import scala.xml.{Node, Unparsed}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.execution.streaming.{QuerySummary, StreamQueryStore}
-import org.apache.spark.sql.execution.ui.SQLTab
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
 
 class StreamingQueryStatisticsPage(
-    parent: SQLTab,
+    parent: StreamingQueryTab,
     store: Option[StreamQueryStore])
   extends WebUIPage("streaming/statistics") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
@@ -46,6 +45,7 @@ class StreamingQueryStatisticsPage(
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
         <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
       <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
+      <script src={SparkUIUtils.prependBaseUri(request, "/static/structured-streaming-page.js")}></script>
     // scalastyle:on
   }
 
@@ -143,11 +143,6 @@ class StreamingQueryStatisticsPage(
     val minRecordRate = 0L
     val maxProcessRate =
       withNoProgress(query, query.recentProgress.map(_.processedRowsPerSecond).max, 0L)
-
-    // scalastyle:off
-    query.recentProgress.foreach(e => println(s"====>1 ${e.inputRowsPerSecond}"))
-    query.recentProgress.foreach(e => println(s"====>2 ${e.processedRowsPerSecond}"))
-    // scalastyle:on
 
     val minProcessRate = 0L
     val maxRows = withNoProgress(query, query.recentProgress.map(_.numInputRows).max, 0L)

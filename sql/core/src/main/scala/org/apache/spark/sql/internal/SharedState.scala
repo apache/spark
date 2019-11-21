@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.streaming.StreamQueryStore
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.ui.StreamingQueryTab
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
 
@@ -115,7 +116,11 @@ private[sql] class SharedState(
    * A class that holds [[StreamingQuery]] active across all sessions to manage the lifecycle
    * of the stream.
    */
-  private[sql] val streamQueryStore: StreamQueryStore = new StreamQueryStore()
+  private[sql] val streamQueryStore: StreamQueryStore = {
+    val store = new StreamQueryStore()
+    sparkContext.ui.foreach(new StreamingQueryTab(store, sparkContext, _))
+    store
+  }
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
