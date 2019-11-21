@@ -554,6 +554,29 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Trims whitespaces (<= ASCII 32) from both ends of this string.
+   *
+   * @return this string with no spaces at the start or end
+   */
+  public UTF8String trimAll() {
+    int s = 0;
+    // skip all of the whitespaces (<=0x20) in the left side
+    while (s < this.numBytes && getByte(s) <= 0x20) s++;
+    if (s == this.numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    // skip all of the whitespaces (<=0x20) in the right side
+    int e = this.numBytes - 1;
+    while (e > s && getByte(e) <= 0x20) e--;
+    if (s == 0 && e == numBytes - 1) {
+      // Nothing trimmed
+      return this;
+    }
+    return copyUTF8String(s, e);
+  }
+
+  /**
    * Trims instances of the given trim string from both ends of this string.
    *
    * @param trimString the trim character string

@@ -465,7 +465,7 @@ object IntervalUtils {
       throwIAE("interval string cannot be null")
     }
     // scalastyle:off caselocale .toLowerCase
-    val s = input.trim.toLowerCase
+    val s = input.trimAll().toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
     if (bytes.isEmpty) {
