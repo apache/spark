@@ -212,15 +212,13 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         try {
           daemonPort = in.readInt()
         } catch {
+          case _: EOFException if daemon.isAlive =>
+            throw new SparkException("EOFException occurred while reading the port number " +
+              s"from $daemonModule's stdout")
           case _: EOFException =>
-            val exceptionMessage =
-              s"EOFException occurred while reading the port number from $daemonModule."
-            if (daemon.isAlive) {
-              throw new SparkException(exceptionMessage)
-            } else {
-              throw new SparkException(exceptionMessage +
-                s"Python daemon has dead and exit code is: ${daemon.exitValue}")
-            }
+            throw new SparkException(
+              s"EOFException occurred while reading the port number from $daemonModule's" +
+              s" stdout and terminated with code: ${daemon.exitValue}.")
         }
 
         // test that the returned port number is within a valid range.
