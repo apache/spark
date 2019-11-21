@@ -1077,26 +1077,23 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toLong(LongWrapper toLongResult) {
-    int numBytes = this.numBytes;
+    if (this.numBytes == 0) return false;
     int offset = 0;
-    while (offset < numBytes && getByte(offset) == 0x20) {
-      offset++;
-    }
-    while (numBytes - 1 > offset && getByte(numBytes - 1) == 0x20) {
-      numBytes--;
-    }
+    while (offset < this.numBytes && getByte(offset) == ' ') offset++;
+    if (offset == this.numBytes) return false;
 
-    if (numBytes == 0) {
-      return false;
-    }
+    int end = this.numBytes - 1;
+    while (end > offset && getByte(end) == ' ') end--;
+
+    int numBytes = end - offset + 1;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
     if (negative || b == '+') {
-      offset++;
       if (numBytes == 1) {
         return false;
       }
+      offset++;
     }
 
     final byte separator = '.';
@@ -1104,7 +1101,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     final long stopValue = Long.MIN_VALUE / radix;
     long result = 0;
 
-    while (offset < numBytes) {
+    while (offset <= end) {
       b = getByte(offset);
       offset++;
       if (b == separator) {
@@ -1139,7 +1136,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // This is the case when we've encountered a decimal separator. The fractional
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
-    while (offset < numBytes) {
+    while (offset <= end) {
       byte currentByte = getByte(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;
@@ -1176,26 +1173,23 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toInt(IntWrapper intWrapper) {
-    int numBytes = this.numBytes;
+    if (this.numBytes == 0) return false;
     int offset = 0;
-    while (offset < numBytes && getByte(offset) == 0x20) {
-      offset++;
-    }
-    while (numBytes - 1 > offset && getByte(numBytes - 1) == 0x20) {
-      numBytes--;
-    }
+    while (offset < this.numBytes && getByte(offset) == ' ') offset++;
+    if (offset == this.numBytes) return false;
 
-    if (numBytes == 0) {
-      return false;
-    }
+    int end = this.numBytes - 1;
+    while (end > offset && getByte(end) == ' ') end--;
+
+    int numBytes = end - offset + 1;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
     if (negative || b == '+') {
-      offset++;
       if (numBytes == 1) {
         return false;
       }
+      offset++;
     }
 
     final byte separator = '.';
@@ -1203,7 +1197,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     final int stopValue = Integer.MIN_VALUE / radix;
     int result = 0;
 
-    while (offset < numBytes) {
+    while (offset <= end) {
       b = getByte(offset);
       offset++;
       if (b == separator) {
@@ -1238,7 +1232,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // This is the case when we've encountered a decimal separator. The fractional
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
-    while (offset < numBytes) {
+    while (offset <= end) {
       byte currentByte = getByte(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;
