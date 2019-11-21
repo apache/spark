@@ -1021,16 +1021,6 @@ class SparkContext(object):
 
             To work around this, you should manually copy and set the local
             properties from the parent thread to the child thread when you create another thread.
-            Workaround class can be written as below (unofficial way):
-
-            >>> class CustomThread(threading.Thread):
-            ...     def __init__(self, sc, target, *args, **kwargs):
-            ...         properties = sc._jsc.sc().getLocalProperties()
-            ...         def copy_local_properties(*a, **k):
-            ...             sc._jsc.sc().setLocalProperties(properties)
-            ...             return target(*a, **k)
-            ...         super(CustomThread, self).__init__(
-            ...             target=copy_local_properties, *args, **kwargs)
         """
         _warn_pin_thread("setJobGroup")
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
@@ -1052,16 +1042,6 @@ class SparkContext(object):
 
             To work around this, you should manually copy and set the local
             properties from the parent thread to the child thread when you create another thread.
-            Workaround class can be written as below (unofficial way):
-
-            >>> class CustomThread(threading.Thread):
-            ...     def __init__(self, sc, target, *args, **kwargs):
-            ...         properties = sc._jsc.sc().getLocalProperties()
-            ...         def copy_local_properties(*a, **k):
-            ...             sc._jsc.sc().setLocalProperties(properties)
-            ...             return target(*a, **k)
-            ...         super(CustomThread, self).__init__(
-            ...             target=copy_local_properties, *args, **kwargs)
         """
         _warn_pin_thread("setLocalProperty")
         self._jsc.setLocalProperty(key, value)
@@ -1089,16 +1069,6 @@ class SparkContext(object):
 
             To work around this, you should manually copy and set the local
             properties from the parent thread to the child thread when you create another thread.
-            Workaround class can be written as below (unofficial way):
-
-            >>> class CustomThread(threading.Thread):
-            ...     def __init__(self, sc, target, *args, **kwargs):
-            ...         properties = sc._jsc.sc().getLocalProperties()
-            ...         def copy_local_properties(*a, **k):
-            ...             sc._jsc.sc().setLocalProperties(properties)
-            ...             return target(*a, **k)
-            ...         super(CustomThread, self).__init__(
-            ...             target=copy_local_properties, *args, **kwargs)
         """
         _warn_pin_thread("setJobDescription")
         self._jsc.setJobDescription(value)
