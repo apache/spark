@@ -6,7 +6,16 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.1
 Intel(R) Core(TM) i5-5287U CPU @ 2.90GHz
 Cast String to Numeric:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast(str as int) as c_int                          5034           8010         NaN          1.6         614.5       1.0X
-cast(str as long) as c_long                        8985          19670        1381          0.9        1096.8       0.6X
+cast(trim(str) as int) as c_int                    6559           9435         NaN          1.2         800.6       1.0X
+cast(trim(str) as long) as c_long                  6841           9341        1416          1.2         835.1       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.1
+Intel(R) Core(TM) i5-5287U CPU @ 2.90GHz
+Cast String to Numeric:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast(trim(str) as int) as c_int                    4259           5270        1110          1.9         519.9       1.0X
+cast(trim(str) as long) as c_long                  4081           5663        1372          2.0         498.2       1.0X
+cast(str as int) as c_int                          4071           4254         176          2.0         496.9       1.0X
+cast(str as long) as c_long                        4121           5087        1272          2.0         503.1       1.0X
 
 
