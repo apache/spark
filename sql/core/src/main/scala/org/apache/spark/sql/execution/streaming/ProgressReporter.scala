@@ -26,7 +26,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{NANOS_PER_MILLIS, NANOS_PER_SECOND}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, SparkDataStream}
@@ -178,7 +178,7 @@ trait ProgressReporter extends Logging {
       id = id,
       runId = runId,
       name = name,
-      timestamp = formatTimestamp(currentTriggerStartTimestamp),
+      timestamp = formatTimestamp(currentTriggerStartTimestamp / NANOS_PER_MILLIS),
       batchId = currentBatchId,
       durationMs = new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
