@@ -39,6 +39,8 @@ import org.apache.spark.sql.internal.SQLConf
 case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
   import OptimizeLocalShuffleReader._
 
+  private val ensureRequirements = EnsureRequirements(conf)
+
   // The build side is a broadcast query stage which should have been optimized using local reader
   // already. So we only need to deal with probe side here.
   private def createProbeSideLocalReader(plan: SparkPlan): SparkPlan = {
@@ -51,14 +53,12 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
         join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
     }
 
-    def numExchanges(plan: SparkPlan): Int = {
-      plan.collect {
-        case e: ShuffleExchangeExec => e
-      }.length
-    }
+    val numShuffles = ensureRequirements.apply(optimizedPlan).collect {
+      case e: ShuffleExchangeExec => e
+    }.length
 
     // Check whether additional shuffle introduced. If introduced, revert the local reader.
-    if (numExchanges(EnsureRequirements(conf).apply(optimizedPlan)) > 0) {
+    if (numShuffles > 0) {
       logDebug("OptimizeLocalShuffleReader rule is not applied due" +
         " to additional shuffles will be introduced.")
       plan
