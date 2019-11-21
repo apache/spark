@@ -40,7 +40,7 @@ object CastBenchmark extends SqlBasedBenchmark {
         val N = 500L << 14
         val df = spark.range(N)
         val types = Seq("int", "long")
-        df.selectExpr(s"concat('${" " * 5}', id, '${" " * 5}') as str")
+        df.selectExpr(s"concat(id, '${" " * 5}') as str")
           .write.mode("overwrite").parquet(dir.getCanonicalPath)
         val benchmark = new Benchmark(title, N, minNumIters = 5, output = output)
         types.foreach { t =>
