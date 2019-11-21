@@ -218,31 +218,10 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     }
   }
 
-  test("SPARK-29973: Use nano time to avoid 'NaN'/'Infinity'") {
+  test("SPARK-29973: Make `processedRowsPerSecond` calculated more accurately and meaningfully") {
     import testImplicits._
 
-    class StreamManualClockInNano extends StreamManualClock {
-      private var timeInNano: Long = 0L
-
-      override def nanoTime(): Long = {
-        val currentNanos = timeInNano
-        // indicate the process time in each batch is less than 1 millis.
-        timeInNano += 1000 * 1000 -1
-        currentNanos
-      }
-
-      override def setTime(timeToSet: Long): Unit = {
-        super.setTime(timeToSet)
-        timeInNano = super.nanoTime()
-      }
-
-      override def advance(timeToAdd: Long): Unit = {
-        super.advance(timeToAdd)
-        timeInNano = super.nanoTime()
-      }
-    }
-
-    clock = new StreamManualClockInNano
+    clock = new StreamManualClock
     val inputData = MemoryStream[Int]
     val query = inputData.toDS()
 
@@ -253,7 +232,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
       WaitUntilBatchProcessed,
       AssertOnQuery(query => {
         assert(query.lastProgress.numInputRows == 0)
-        assert(query.lastProgress.processedRowsPerSecond == 0.0)
+        assert(query.lastProgress.processedRowsPerSecond == 0.0d)
         true
       }),
       AddData(inputData, 1, 2),
@@ -262,7 +241,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
       WaitUntilBatchProcessed,
       AssertOnQuery(query => {
         assert(query.lastProgress.numInputRows == 2)
-        assert(query.lastProgress.processedRowsPerSecond.toLong == 2000)
+        assert(query.lastProgress.processedRowsPerSecond == 2000d)
         true
       }),
       StopStream
