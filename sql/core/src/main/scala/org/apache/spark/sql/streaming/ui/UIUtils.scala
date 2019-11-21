@@ -43,4 +43,20 @@ private[ui] object UIUtils {
       default
     }
   }
+
+  def getQueryName(query: StreamingQuery): String = {
+    if (query.name == null || query.name.isEmpty) {
+      "<no name>"
+    } else {
+      query.name
+    }
+  }
+
+  def getQueryStatus(query: StreamingQuery): String = {
+    if (query.isActive) {
+      "RUNNING"
+    } else {
+      query.exception.map(_ => "FAILED").getOrElse("FINISHED")
+    }
+  }
 }

@@ -36,7 +36,7 @@ import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, W
 class StreamingQueryStatisticsPage(
     parent: StreamingQueryTab,
     store: StreamQueryStore)
-  extends WebUIPage("streaming/statistics") with Logging {
+  extends WebUIPage("statistics") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(getTimeZone("UTC"))
 
@@ -55,23 +55,20 @@ class StreamingQueryStatisticsPage(
 
     val (query, timeSinceStart) = store.allStreamQueries.find { case (q, _) =>
       q.runId.equals(UUID.fromString(parameterId))
-    }.getOrElse(throw new Exception(s"Can not find streaming query $parameterId"))
+    }.getOrElse(throw new IllegalArgumentException(s"Failed to find streaming query $parameterId"))
 
     val resources = generateLoadResources(request)
     val basicInfo = generateBasicInfo(query, timeSinceStart)
     val content =
-      store.synchronized { // make sure all parts in this page are consistent
-        resources ++
-          basicInfo ++
-          generateStatTable(query)
-      }
+      resources ++
+        basicInfo ++
+        generateStatTable(query)
     SparkUIUtils.headerSparkPage(request, "Streaming Query Statistics", content, parent)
   }
 
   def generateTimeMap(times: Seq[Long]): Seq[Node] = {
     val js = "var timeFormat = {};\n" + times.map { time =>
-      val formattedTime =
-        SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
+      val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
       s"timeFormat[$time] = '$formattedTime';"
     }.mkString("\n")
 
@@ -80,8 +77,8 @@ class StreamingQueryStatisticsPage(
 
   def generateVar(values: Array[(Long, ju.Map[String, JLong])]): Seq[Node] = {
     val js = "var timeToValues = {};\n" + values.map { case (x, y) =>
-      val s = y.asScala.toSeq.sortBy(_._1).map(e => s""""${e._2.toDouble}"""")
-        .mkString("[", ",", "]")
+      val s =
+        y.asScala.toSeq.sortBy(_._1).map(e => s""""${e._2.toDouble}"""").mkString("[", ",", "]")
       s"""timeToValues["${SparkUIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)}"] = $s;"""
     }.mkString("\n")
 
@@ -100,12 +97,7 @@ class StreamingQueryStatisticsPage(
       }, "-")
     }
 
-    val name = if (query.name == null || query.name.isEmpty) {
-      "null"
-    } else {
-      query.name
-    }
-
+    val name = UIUtils.getQueryName(query)
     val numBatches = withNoProgress(query, { query.lastProgress.batchId + 1L }, 0)
     val totalRecords = query.getQuerySummary.getMetric(QuerySummary.TOTAL_INPUT_RECORDS, 0L)
     <div>Running batches for
@@ -119,11 +111,9 @@ class StreamingQueryStatisticsPage(
       (<strong>{numBatches}</strong> completed batches, <strong>{totalRecords}</strong> records)
     </div>
     <br />
-    <div>
-      [name = <strong>{name}</strong>,
-       id = <strong>{query.id}</strong>,
-       runId = <strong>{query.runId}</strong>]
-    </div>
+    <div><strong>Name: </strong>{name}</div>
+    <div><strong>Id: </strong>{query.id}</div>
+    <div><strong>RunId: </strong>{query.runId}</div>
     <br />
   }
 
@@ -277,7 +267,7 @@ class StreamingQueryStatisticsPage(
           </tr>
           <tr>
             <td style="vertical-align: middle;">
-              <div style="width: 160px;">
+              <div style="width: auto;">
                 <div><strong>Operation Duration {SparkUIUtils.tooltip("The amount of time taken to perform various operations in milliseconds.", "right")}</strong></div>
               </div>
             </td>

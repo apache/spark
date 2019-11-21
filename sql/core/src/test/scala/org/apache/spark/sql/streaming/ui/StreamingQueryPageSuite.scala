@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfter
 import scala.xml.Node
 
 import org.apache.spark.sql.execution.streaming.{QuerySummary, StreamQueryStore}
-import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
+import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore}
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamingQueryProgress}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.ElementTrackingStore
@@ -45,23 +45,21 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     val id = UUID.randomUUID()
     val request = mock(classOf[HttpServletRequest])
     val statusStore = createStatusStore
-    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
+    val tab = mock(classOf[StreamingQueryTab], RETURNS_SMART_NULLS)
     val streamQueryStore = mock(classOf[StreamQueryStore], RETURNS_SMART_NULLS)
-    when(tab.sqlStore).thenReturn(statusStore)
-    when(tab.streamQueryStore).thenReturn(None)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
 
     val streamQuery = createStreamQuery(id)
     when(streamQueryStore.allStreamQueries).thenReturn(Seq((streamQuery, 1L)))
-    var html = renderStreamingQueryPage(request, tab, Some(streamQueryStore))
+    var html = renderStreamingQueryPage(request, tab, streamQueryStore)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (1)"))
     assert(html.contains("completed streaming queries (0)"))
 
     when(streamQuery.isActive).thenReturn(false)
     when(streamQuery.exception).thenReturn(None)
-    html = renderStreamingQueryPage(request, tab, Some(streamQueryStore))
+    html = renderStreamingQueryPage(request, tab, streamQueryStore)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (0)"))
     assert(html.contains("completed streaming queries (1)"))
@@ -71,7 +69,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(exception.message).thenReturn("exception in query")
     when(streamQuery.isActive).thenReturn(false)
     when(streamQuery.exception).thenReturn(Option(exception))
-    html = renderStreamingQueryPage(request, tab, Some(streamQueryStore))
+    html = renderStreamingQueryPage(request, tab, streamQueryStore)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (0)"))
     assert(html.contains("completed streaming queries (1)"))
@@ -83,17 +81,15 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     val id = UUID.randomUUID()
     val request = mock(classOf[HttpServletRequest])
     val statusStore = createStatusStore
-    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
+    val tab = mock(classOf[StreamingQueryTab], RETURNS_SMART_NULLS)
     val streamQueryStore = mock(classOf[StreamQueryStore], RETURNS_SMART_NULLS)
     when(request.getParameter("id")).thenReturn(id.toString)
-    when(tab.sqlStore).thenReturn(statusStore)
-    when(tab.streamQueryStore).thenReturn(None)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
 
     val streamQuery = createStreamQuery(id)
     when(streamQueryStore.allStreamQueries).thenReturn(Seq((streamQuery, 1L)))
-    val html = renderStreamingQueryStatisticsPage(request, tab, Some(streamQueryStore))
+    val html = renderStreamingQueryStatisticsPage(request, tab, streamQueryStore)
       .toString().toLowerCase(Locale.ROOT)
 
     assert(html.contains("name = <strong>query</strong>"))
@@ -139,16 +135,16 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
    */
   private def renderStreamingQueryPage(
       request: HttpServletRequest,
-      tab: SQLTab,
-      store: Option[StreamQueryStore]): Seq[Node] = {
+      tab: StreamingQueryTab,
+      store: StreamQueryStore): Seq[Node] = {
     val page = new StreamingQueryPage(tab, store)
     page.render(request)
   }
 
   private def renderStreamingQueryStatisticsPage(
       request: HttpServletRequest,
-      tab: SQLTab,
-      store: Option[StreamQueryStore]): Seq[Node] = {
+      tab: StreamingQueryTab,
+      store: StreamQueryStore): Seq[Node] = {
     val page = new StreamingQueryStatisticsPage(tab, store)
     page.render(request)
   }

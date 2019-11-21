@@ -95,16 +95,16 @@ private[spark] class GraphUIData(
       values: Array[(Long, ju.Map[String, JLong])],
       operationLabels: Seq[String]): Seq[Node] = {
     val jsForData = values.map { case (x, y) =>
-      val s = y.asScala.toSeq.sortBy(_._1).map(e => s""""${e._1}": "${e._2.toDouble}"""")
-        .mkString(",")
+      val s =
+        y.asScala.toSeq.sortBy(_._1).map(e => s""""${e._1}": "${e._2.toDouble}"""").mkString(",")
       s"""{x: "${UIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)}", $s}"""
     }.mkString("[", ",", "]")
     val jsForLabels = operationLabels.mkString("[\"", "\",\"", "\"]")
+
     val (maxX, minX, maxY, minY) = if (values != null && values.length > 0) {
-      (values.map(_._1.toLong).max,
-        values.map(_._1.toLong).min,
-        values.map(_._2.asScala.toSeq.map(_._2.toLong).sum).max,
-        values.map(_._2.asScala.toSeq.map(_._2.toLong).sum).min)
+      val xValues = values.map(_._1.toLong)
+      val yValues = values.map(_._2.asScala.toSeq.map(_._2.toLong).sum)
+      (xValues.max, xValues.min, yValues.max, yValues.min)
     } else {
       (0L, 0L, 0L, 0L)
     }

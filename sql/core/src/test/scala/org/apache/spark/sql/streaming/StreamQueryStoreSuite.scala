@@ -40,20 +40,26 @@ class StreamQueryStoreSuite extends SparkFunSuite with Matchers {
     store.putIfAbsent(query1)
     store.putIfAbsent(query2)
 
-    assert(store.allStreamQueries.size === 1)
-    assert(store.allStreamQueries.map(_._1.name).sorted === Seq("query1"))
+    assertStore(store, Seq("query1"), Seq.empty)
 
     val id2 = UUID.randomUUID()
     when(query2.id).thenReturn(id2)
     store.putIfAbsent(query2)
-    assert(store.allStreamQueries.size === 2)
-    assert(store.allStreamQueries.map(_._1.name).sorted === Seq("query1", "query2"))
+    assertStore(store, Seq("query1", "query2"), Seq.empty)
 
     store.terminate(id2)
     when(query2.isActive).thenReturn(false)
-    assert(store.allStreamQueries.size === 2)
-    assert(store.allStreamQueries.map(_._1.name).sorted === Seq("query1", "query2"))
-    assert(store.allStreamQueries.count(q => q._1.isActive) === 1)
-    assert(store.allStreamQueries.count(q => !q._1.isActive) === 1)
+    assertStore(store, Seq("query1"), Seq("query1"))
+  }
+
+  private def assertStore(
+      store: StreamQueryStore,
+      activeQueryNames: Seq[String],
+      inactiveQueryNames: Seq[String]): Unit = {
+    assert(store.allStreamQueries.size === activeQueryNames.length + inactiveQueryNames.length)
+    assert(store.allStreamQueries.map(_._1.name).toSet ===
+      (activeQueryNames ++ inactiveQueryNames).toSet)
+    assert(store.allStreamQueries.count(_._1.isActive) === activeQueryNames.length)
+    assert(store.allStreamQueries.count(!_._1.isActive) === inactiveQueryNames.length)
   }
 }

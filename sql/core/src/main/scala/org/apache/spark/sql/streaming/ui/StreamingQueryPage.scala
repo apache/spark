@@ -32,18 +32,16 @@ import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
 class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
-  extends WebUIPage("streaming") with Logging {
+  extends WebUIPage("") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(TimeZone.getDefault)
 
   override def render(request: HttpServletRequest): Seq[Node] = {
-    val content = store.synchronized {
-      generateStreamingQueryTable(request)
-    }
+    val content = generateStreamingQueryTable(request)
     SparkUIUtils.headerSparkPage(request, "Streaming Query", content, parent)
   }
 
-  def generateDataRow(request: HttpServletRequest, isActive: Boolean)
+  def generateDataRow(request: HttpServletRequest, queryActive: Boolean)
     (streamQuery: (StreamingQuery, Long)): Seq[Node] = {
 
     val (query, timeSinceStart) = streamQuery
@@ -51,11 +49,8 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
       val s = detail.asInstanceOf[String]
       val isMultiline = s.indexOf('\n') >= 0
       val summary = StringEscapeUtils.escapeHtml4(
-        if (isMultiline) {
-          s.substring(0, s.indexOf('\n'))
-        } else {
-          s
-        })
+        if (isMultiline) s.substring(0, s.indexOf('\n')) else s
+      )
       val details = if (isMultiline) {
         // scalastyle:off
         <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
@@ -72,32 +67,19 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
       <td>{summary}{details}</td>
     }
 
-    val statisticsLink = "%s/%s/streaming/statistics?id=%s"
+    val statisticsLink = "%s/%s/statistics?id=%s"
       .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix, query.runId)
 
-    val name = if (query.name == null || query.name.isEmpty) {
-      "null"
-    } else {
-      query.name
-    }
-
-    val status = if (isActive) {
-      "RUNNING"
-    } else {
-      query.exception.map(_.message) match {
-        case Some(_) => "FAILED"
-        case None => "FINISHED"
-      }
-    }
-
-    val duration = if (isActive) {
+    val name = UIUtils.getQueryName(query)
+    val status = UIUtils.getQueryStatus(query)
+    val duration = if (queryActive) {
       SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - timeSinceStart)
     } else {
       withNoProgress(query, {
-        val end = query.lastProgress.timestamp
-        val start = query.recentProgress.head.timestamp
+        val endTimeMs = query.lastProgress.timestamp
+        val startTimeMs = query.recentProgress.head.timestamp
         SparkUIUtils.formatDurationVerbose(
-          df.parse(end).getTime - df.parse(start).getTime)
+          df.parse(endTimeMs).getTime - df.parse(startTimeMs).getTime)
       }, "-")
     }
 
@@ -127,22 +109,22 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
     val (activeQueries, inactiveQueries) = store.allStreamQueries.partition(_._1.isActive)
     val activeQueryTables = if (activeQueries.nonEmpty) {
       val headerRow = Seq(
-        "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input PerSec",
-        "Avg Process PerSec", s"Total Input Rows", "Last Batch ID", "Error")
+        "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input /sec",
+        "Avg Process /sec", "Total Input Rows", "Last Batch ID", "Error")
 
-      Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, true), activeQueries,
-        true, None, Seq(null), false))
+      Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, queryActive = true),
+        activeQueries, true, None, Seq(null), false))
     } else {
       None
     }
 
     val inactiveQueryTables = if (inactiveQueries.nonEmpty) {
       val headerRow = Seq(
-        "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input PerSec",
-        "Avg Process PerSec", s"Total Input Rows", "Last Batch ID", "Error")
+        "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input /sec",
+        "Avg Process /sec", "Total Input Rows", "Last Batch ID", "Error")
 
-      Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, false), inactiveQueries,
-        true, None, Seq(null), false))
+      Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, queryActive = false),
+        inactiveQueries, true, None, Seq(null), false))
     } else {
       None
     }
@@ -151,13 +133,13 @@ class StreamingQueryPage(parent: StreamingQueryTab, store: StreamQueryStore)
       <h5 id="activequeries">Active Streaming Queries ({activeQueries.length})</h5> ++
         <div>
           <ul class="unstyled">
-            {activeQueryTables.getOrElse("No active streaming query have been generated yet.")}
+            {activeQueryTables.getOrElse("No active streaming query has been generated yet.")}
           </ul>
         </div> ++
         <h5 id="completedqueries">Completed Streaming Queries ({inactiveQueries.length})</h5> ++
         <div>
           <ul class="unstyled">
-            {inactiveQueryTables.getOrElse("No streaming query have completed yet.")}
+            {inactiveQueryTables.getOrElse("No streaming query has completed yet.")}
           </ul>
         </div>
 
