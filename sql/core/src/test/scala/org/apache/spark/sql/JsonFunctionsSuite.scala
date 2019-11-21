@@ -644,4 +644,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       to_json(struct($"t"), Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss.SSSSSS")))
     checkAnswer(df, Row(s"""{"t":"$s"}"""))
   }
+
+  test("json_tuple - do not truncate results") {
+    Seq(2000, 2800, 8000 - 1, 8000, 8000 + 1, 65535).foreach { len =>
+      val str = Array.tabulate(len)(_ => "a").mkString
+      val json_tuple_result = Seq(s"""{"test":"$str"}""").toDF("json")
+        .withColumn("result", json_tuple('json, "test"))
+        .select('result)
+        .as[String].head.length
+      assert(json_tuple_result === len)
+    }
+  }
 }
