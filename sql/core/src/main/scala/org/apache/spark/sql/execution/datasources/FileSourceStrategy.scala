@@ -137,7 +137,7 @@ object FileSourceStrategy extends Strategy with Logging {
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters,
+    case FileSourceOperation(projects, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
       println("into FileSourceOperation")
       // Filters on this relation fall into four categories based on where we can use them to avoid
