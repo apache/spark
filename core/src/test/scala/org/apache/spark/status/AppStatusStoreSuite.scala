@@ -79,91 +79,77 @@ class AppStatusStoreSuite extends SparkFunSuite {
     assert(store.count(classOf[CachedQuantile]) === 2)
   }
 
-  private def createLiveStore(inMemoryStore: InMemoryStore): AppStatusStore = {
+  private def createAppStore(store: KVStore, live: Boolean = false): AppStatusStore = {
     val conf = new SparkConf()
-    val store = new ElementTrackingStore(inMemoryStore, conf)
-    val listener = new AppStatusListener(store, conf, true, None)
-    new AppStatusStore(store, listener = Some(listener))
-  }
-
-  test("SPARK-28638: only successful tasks have taskSummary when with in memory kvstore") {
-    val store = new InMemoryStore()
-    (0 until 5).foreach { i => store.write(newTaskData(i, status = "FAILED")) }
-    Seq(new AppStatusStore(store), createLiveStore(store)).foreach { appStore =>
-      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
-      assert(summary.size === 0)
+    if (live) {
+      AppStatusStore.createLiveStore(conf)
+    } else {
+      new AppStatusStore(store)
     }
   }
 
-  test("SPARK-26260: only successful tasks have taskSummary when with disk kvstore (LevelDB)") {
+  test("SPARK-26260: task summary should contain only successful tasks' metrics") {
     val testDir = Utils.createTempDir()
-    val diskStore = KVUtils.open(testDir, getClass().getName())
+    val diskStore = KVUtils.open(testDir, getClass.getName)
+    val inMemoryStore = new InMemoryStore
 
-    (0 until 5).foreach { i => diskStore.write(newTaskData(i, status = "FAILED")) }
-    Seq(new AppStatusStore(diskStore)).foreach { appStore =>
-      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
-      assert(summary.size === 0)
+    val historyDiskAppStore = createAppStore(diskStore)
+    val historyInMemoryAppStore = createAppStore(inMemoryStore)
+    val liveAppStore = createAppStore(inMemoryStore, live = true)
+
+    Seq(historyDiskAppStore, historyInMemoryAppStore, liveAppStore).foreach { appStore =>
+      val store = appStore.store
+      // Success and failed tasks metrics
+      for (i <- 0 to 5) {
+        if (i % 2 == 1) {
+          store.write(newTaskData(i, status = "FAILED"))
+        } else {
+          store.write(newTaskData(i, status = "SUCCESS"))
+        }
+      }
+      // Running tasks metrics (default metrics, positive metrics)
+      Seq(-1, 6).foreach { metric =>
+        store.write(newTaskData(metric, status = "RUNNING"))
+      }
+
+      /**
+       * Following are the tasks metrics,
+       * 0, 2, 4 => Success
+       * 1, 3, 5 => Failed
+       * -1, 6 => Running
+       *
+       * Task summary will consider (0, 2, 4) only
+       */
+      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
+
+      val values = Array(0.0, 2.0, 4.0)
+
+      val dist = new Distribution(values, 0, values.length).getQuantiles(uiQuantiles.sorted)
+      dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
+        assert(expected === actual)
+      }
+      appStore.close()
     }
-    diskStore.close()
     Utils.deleteRecursively(testDir)
   }
 
-  test("SPARK-28638: summary should contain successful tasks only when with in memory kvstore") {
-    val store = new InMemoryStore()
+  test("SPARK-26260: task summary should be empty for non-successful tasks") {
+    // This test will check for 0 metric value for failed task
+    val testDir = Utils.createTempDir()
+    val diskStore = KVUtils.open(testDir, getClass.getName)
+    val inMemoryStore = new InMemoryStore
 
-    for (i <- 0 to 5) {
-      if (i % 2 == 1) {
-        store.write(newTaskData(i, status = "FAILED"))
-      } else {
-        store.write(newTaskData(i))
-      }
-    }
+    val historyDiskAppStore = createAppStore(diskStore)
+    val historyInMemoryAppStore = createAppStore(inMemoryStore)
+    val liveAppStore = createAppStore(inMemoryStore, live = true)
 
-    Seq(new AppStatusStore(store), createLiveStore(store)).foreach { appStore =>
-      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
-
-      val values = Array(0.0, 2.0, 4.0)
-
-      val dist = new Distribution(values, 0, values.length).getQuantiles(uiQuantiles.sorted)
-      dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
-        assert(expected === actual)
-      }
-    }
-  }
-
-
-  test("SPARK-26260: task summary size for default metrics should be zero") {
-    val store = new InMemoryStore()
-    store.write(newTaskData(-1, status = "RUNNING"))
-    Seq(new AppStatusStore(store), createLiveStore(store)).foreach { appStore =>
+    Seq(historyDiskAppStore, historyInMemoryAppStore, liveAppStore).foreach { appStore =>
+      val store = appStore.store
+      (0 until 5).foreach { i => store.write(newTaskData(i, status = "FAILED")) }
       val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
       assert(summary.size === 0)
+      appStore.close()
     }
-  }
-
-  test("SPARK-26260: summary should contain successful tasks only when with LevelDB store") {
-    val testDir = Utils.createTempDir()
-    val diskStore = KVUtils.open(testDir, getClass().getName())
-
-    for (i <- 0 to 5) {
-      if (i % 2 == 1) {
-        diskStore.write(newTaskData(i, status = "FAILED"))
-      } else {
-        diskStore.write(newTaskData(i))
-      }
-    }
-
-    Seq(new AppStatusStore(diskStore)).foreach { appStore =>
-      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
-
-      val values = Array(0.0, 2.0, 4.0)
-
-      val dist = new Distribution(values, 0, values.length).getQuantiles(uiQuantiles.sorted)
-      dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
-        assert(expected === actual)
-      }
-    }
-    diskStore.close()
     Utils.deleteRecursively(testDir)
   }
 
