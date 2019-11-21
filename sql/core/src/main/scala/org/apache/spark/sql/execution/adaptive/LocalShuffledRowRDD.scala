@@ -57,7 +57,7 @@ private final class LocalShuffledRowRDDPartition(
 class LocalShuffledRowRDD(
      var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
      metrics: Map[String, SQLMetric],
-     advisoryParallelism : Option[Int] = None)
+     partitionStartIndices: Array[Array[Int]])
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   private[this] val numReducers = dependency.partitioner.numPartitions
@@ -65,30 +65,12 @@ class LocalShuffledRowRDD(
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
-  /**
-   * To equally divide n elements into m buckets, basically each bucket should have n/m elements,
-   * for the remaining n%m elements, add one more element to the first n%m buckets each. Returns
-   * a sequence with length numBuckets and each value represents the start index of each bucket.
-   */
-  private def equallyDivide(numElements: Int, numBuckets: Int): Seq[Int] = {
-    val elementsPerBucket = numElements / numBuckets
-    val remaining = numElements % numBuckets
-    val splitPoint = (elementsPerBucket + 1) * remaining
-    (0 until remaining).map(_ * (elementsPerBucket + 1)) ++
-      (remaining until numBuckets).map(i => splitPoint + (i - remaining) * elementsPerBucket)
-  }
-
   override def getPartitions: Array[Partition] = {
-    val partitionStartIndices: Array[Int] = {
-      val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
-      // TODO split by data size in the future.
-      equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
-    }
-
     val partitions = ArrayBuffer[LocalShuffledRowRDDPartition]()
     for (mapIndex <- 0 until numMappers) {
-      (partitionStartIndices :+ numReducers).sliding(2, 1).foreach { case Array(start, end) =>
-        partitions += new LocalShuffledRowRDDPartition(partitions.length, mapIndex, start, end)
+      (partitionStartIndices(mapIndex) :+ numReducers).sliding(2, 1).foreach {
+        case Array(start, end) =>
+          partitions += new LocalShuffledRowRDDPartition(partitions.length, mapIndex, start, end)
       }
     }
     partitions.toArray

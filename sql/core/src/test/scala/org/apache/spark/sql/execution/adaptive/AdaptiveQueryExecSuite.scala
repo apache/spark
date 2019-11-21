@@ -119,19 +119,16 @@ class AdaptiveQueryExecSuite
         case reader: LocalShuffleReaderExec => reader
       }
       assert(localReaders.length == 2)
-      // The pre-shuffle partition size is [0, 0, 0, 72, 0]
-      // And the partitionStartIndices is [0, 3, 4]
-      assert(localReaders(0).advisoryParallelism.get == 3)
-      // The pre-shuffle partition size is [0, 72, 0, 72, 126]
-      // And the partitionStartIndices is [0, 1, 2, 3, 4]
-      assert(localReaders(1).advisoryParallelism.get == 5)
-
       val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[LocalShuffledRowRDD]
       val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[LocalShuffledRowRDD]
+      // The pre-shuffle partition size is [0, 0, 0, 72, 0]
+      // And the partitionStartIndices is [0, 3, 4], so advisoryParallelism = 3.
       // the final parallelism is
       // math.max(1, advisoryParallelism / numMappers): math.max(1, 3/2) = 1
       // and the partitions length is 1 * numMappers = 2
       assert(localShuffleRDD0.getPartitions.length == 2)
+      // The pre-shuffle partition size is [0, 72, 0, 72, 126]
+      // And the partitionStartIndices is [0, 1, 2, 3, 4], so advisoryParallelism = 5.
       // the final parallelism is
       // math.max(1, advisoryParallelism / numMappers): math.max(1, 5/2) = 2
       // and the partitions length is 2 * numMappers = 4
