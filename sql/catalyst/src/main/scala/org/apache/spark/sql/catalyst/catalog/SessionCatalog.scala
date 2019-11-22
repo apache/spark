@@ -20,14 +20,15 @@ package org.apache.spark.sql.catalyst.catalog
 import java.net.URI
 import java.util.Locale
 import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
-
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
+
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QualifiedTableName, _}
