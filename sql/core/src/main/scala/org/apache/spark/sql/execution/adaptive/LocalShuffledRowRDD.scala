@@ -44,7 +44,7 @@ private final class LocalShuffledRowRDDPartition(
  * data of another input table of the join that reads from shuffle. Each partition of the RDD reads
  * the whole data from just one mapper output locally. So actually there is no data transferred
  * from the network.
-
+ *
  * This RDD takes a [[ShuffleDependency]] (`dependency`).
  *
  * The `dependency` has the parent RDD of this RDD, which represents the dataset before shuffle
@@ -53,6 +53,10 @@ private final class LocalShuffledRowRDDPartition(
  * `dependency.partitioner.numPartitions` is the number of pre-shuffle partitions. (i.e. the number
  * of partitions of the map output). The post-shuffle partition number is the same to the parent
  * RDD's partition number.
+ *
+ * @param partitionStartIndices A mapper usually writes many shuffle blocks, and it's better to
+ *                              launch multiple tasks to read shuffle blocks of one mapper. This
+ *                              array contains the partition start indices for each mapper.
  */
 class LocalShuffledRowRDD(
      var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
