@@ -21,10 +21,10 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-import org.apache.spark.network.shuffle.protocol.*;
-
 import java.util.HashMap;
 import java.util.Map;
+
+import org.apache.spark.network.shuffle.protocol.*;
 
 /** Verifies that all BlockTransferMessages can be serialized correctly. */
 public class BlockTransferMessagesSuite {

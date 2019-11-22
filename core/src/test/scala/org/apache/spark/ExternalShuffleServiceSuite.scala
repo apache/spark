@@ -140,8 +140,6 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
 
     // Now Spark will not receive FetchFailed as host local blocks are read from the cached local
     // disk directly
-    rdd.count()
-
     rdd.collect().map(_._2).sum should equal(1000)
   }
 

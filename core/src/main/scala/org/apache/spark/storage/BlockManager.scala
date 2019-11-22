@@ -134,7 +134,7 @@ private[spark] class HostLocalDirManager(
   }
 
   private[spark] def getHostLocalDirs(
-      executorIds: Array[String],
+      executorIds: Array[String])(
       callback: Try[java.util.Map[String, Array[String]]] => Unit): Unit = {
     val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
     externalBlockStoreClient.getHostLocalDirs(

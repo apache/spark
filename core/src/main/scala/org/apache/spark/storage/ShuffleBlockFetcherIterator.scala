@@ -486,25 +486,25 @@ final class ShuffleBlockFetcherIterator(
     if (immutableHostLocalBlocksWithoutDirs.nonEmpty) {
       logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
         s"${immutableHostLocalBlocksWithoutDirs.mkString(", ")}")
-      hostLocalDirManager.getHostLocalDirs(
-        immutableHostLocalBlocksWithoutDirs.keys.map(_.executorId).toArray, {
-          case Success(dirs) =>
-            immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
-              blockInfos.takeWhile { case (blockId, _, mapIndex) =>
-                fetchHostLocalBlock(
-                  blockId,
-                  mapIndex,
-                  dirs.get(hostLocalBmId.executorId),
-                  hostLocalBmId)
-              }
+      val execIdsWithoutDirs = immutableHostLocalBlocksWithoutDirs.keys.map(_.executorId).toArray
+      hostLocalDirManager.getHostLocalDirs(execIdsWithoutDirs) {
+        case Success(dirs) =>
+          immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
+            blockInfos.takeWhile { case (blockId, _, mapIndex) =>
+              fetchHostLocalBlock(
+                blockId,
+                mapIndex,
+                dirs.get(hostLocalBmId.executorId),
+                hostLocalBmId)
             }
+          }
 
-          case Failure(throwable) =>
-            logError(s"Error occurred while fetching host local blocks", throwable)
-            val (hostLocalBmId, blockInfoSeq) = immutableHostLocalBlocksWithoutDirs.head
-            val (blockId, _, mapIndex) = blockInfoSeq.head
-            results.put(FailureFetchResult(blockId, mapIndex, hostLocalBmId, throwable))
-        })
+        case Failure(throwable) =>
+          logError(s"Error occurred while fetching host local blocks", throwable)
+          val (hostLocalBmId, blockInfoSeq) = immutableHostLocalBlocksWithoutDirs.head
+          val (blockId, _, mapIndex) = blockInfoSeq.head
+          results.put(FailureFetchResult(blockId, mapIndex, hostLocalBmId, throwable))
+      }
     }
     if (hostLocalBlocksWithCachedDirs.nonEmpty) {
       logDebug(s"Synchronous fetching host-local blocks with cached executors' dir: " +

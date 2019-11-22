@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+
 import org.apache.spark.network.protocol.Encoders;
 
 import java.util.Arrays;
@@ -29,7 +30,6 @@ import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Typ
 /** Request to get the local dirs for the given executors. */
 public class GetLocalDirsForExecutors extends BlockTransferMessage {
   public final String appId;
-
   public final String[] execIds;
 
   public GetLocalDirsForExecutors(String appId, String[] execIds) {

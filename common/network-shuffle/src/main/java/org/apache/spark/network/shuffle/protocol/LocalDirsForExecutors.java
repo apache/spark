@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+
 import org.apache.spark.network.protocol.Encoders;
 
 import java.util.*;
@@ -111,6 +112,6 @@ public class LocalDirsForExecutors extends BlockTransferMessage {
       localDirsIndex += length;
       index++;
     }
-    return  localDirsByExec;
+    return localDirsByExec;
   }
 }
