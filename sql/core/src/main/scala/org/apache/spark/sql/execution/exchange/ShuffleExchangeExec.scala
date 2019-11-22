@@ -84,8 +84,8 @@ case class ShuffleExchangeExec(
   }
 
   def createLocalShuffleRDD(
-      advisoryParallelism: Option[Int] = None): LocalShuffledRowRDD = {
-    new LocalShuffledRowRDD(shuffleDependency, readMetrics, advisoryParallelism)
+      partitionStartIndicesPerMapper: Array[Array[Int]]): LocalShuffledRowRDD = {
+    new LocalShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndicesPerMapper)
   }
 
   /**
