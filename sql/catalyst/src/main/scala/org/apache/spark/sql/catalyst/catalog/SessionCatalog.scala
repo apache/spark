@@ -19,16 +19,15 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.util.Locale
-import java.util.concurrent.{Callable, TimeUnit}
+import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
+
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
-
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QualifiedTableName, _}
@@ -1522,7 +1521,16 @@ class SessionCatalog(
   private[sql] def getOrCacheCatalogTable(
       qtn: QualifiedTableName,
       init: Callable[CatalogTable]): CatalogTable = {
-    catalogTableCache.get(qtn, init)
+    try {
+      catalogTableCache.get(qtn, init)
+    } catch {
+      case e: ExecutionException =>
+        // unpack ExecutionException to raw Exception
+        throw e.getCause
+      case other =>
+        // unexpected exception, should never happen
+        throw other
+    }
   }
 
   private[sql] def cacheCatalogTable(qtn: QualifiedTableName, catalogTable: CatalogTable): Unit = {

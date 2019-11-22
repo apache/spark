@@ -1632,14 +1632,14 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(expireCatalogTable.isEmpty)
 
       catalog.getTableMetadata(tableId)
-      catalog.dropTable(tableId, false, false)
-      val cct2 = catalog.getCachedCatalogTable(qtn)
-      assert(cct2.isEmpty)
-
-      catalog.getTableMetadata(tableId)
       catalog.refreshTable(tableId)
       val cct3 = catalog.getCachedCatalogTable(qtn)
       assert(cct3.isEmpty)
+
+      catalog.getTableMetadata(tableId)
+      catalog.dropTable(tableId, false, false)
+      val cct2 = catalog.getCachedCatalogTable(qtn)
+      assert(cct2.isEmpty)
 
       catalog.getTableMetadata(tableId)
       val cct4 = catalog.getCachedCatalogTable(qtn)
