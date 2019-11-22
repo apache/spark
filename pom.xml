@@ -203,6 +203,8 @@
     and ./python/setup.py too.
     -->
     <arrow.version>0.15.1</arrow.version>
+    <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
+    <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -531,7 +533,7 @@
         <version>${commons.httpcore.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.fusesource.leveldbjni</groupId>
+        <groupId>${leveldbjni.group}</groupId>
         <artifactId>leveldbjni-all</artifactId>
         <version>1.8</version>
       </dependency>
@@ -959,6 +961,10 @@
         <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
+            <groupId>org.fusesource.leveldbjni</groupId>
+            <artifactId>leveldbjni-all</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
@@ -1205,6 +1211,10 @@
         <scope>test</scope>
         <exclusions>
           <exclusion>
+            <groupId>org.fusesource.leveldbjni</groupId>
+            <artifactId>leveldbjni-all</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
@@ -1244,6 +1254,10 @@
         <version>${yarn.version}</version>
         <scope>${hadoop.deps.scope}</scope>
         <exclusions>
+          <exclusion>
+            <groupId>org.fusesource.leveldbjni</groupId>
+            <artifactId>leveldbjni-all</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>asm</groupId>
             <artifactId>asm</artifactId>
@@ -3117,6 +3131,13 @@
     </profile>
     <profile>
       <id>sparkr</id>
+    </profile>
+    <!-- use org.openlabtesting.leveldbjni on aarch64 platform -->
+    <profile>
+      <id>aarch64</id>
+      <properties>
+        <leveldbjni.group>org.openlabtesting.leveldbjni</leveldbjni.group>
+      </properties>
     </profile>
   </profiles>
 </project>
