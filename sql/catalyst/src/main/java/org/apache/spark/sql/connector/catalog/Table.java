@@ -40,9 +40,6 @@ import java.util.Set;
 @Evolving
 public interface Table {
 
-  String TABLE_PROP_LOCATION = "location";
-  String TABLE_PROP_COMMENT = "comment";
-
   /**
    * A name to identify this table. Implementations should provide a meaningful name, like the
    * database and table name from catalog, or the location of files for this table.

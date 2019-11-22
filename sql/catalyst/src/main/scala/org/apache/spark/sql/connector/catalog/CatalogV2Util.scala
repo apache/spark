@@ -245,10 +245,10 @@ private[sql] object CatalogV2Util {
           "you can only specify one of them.")
     }
 
-    if ((options.contains(Table.TABLE_PROP_COMMENT)
-      || properties.contains(Table.TABLE_PROP_COMMENT)) && comment.isDefined) {
+    if ((options.contains(TableCatalog.PROP_COMMENT)
+      || properties.contains(TableCatalog.PROP_COMMENT)) && comment.isDefined) {
       throw new AnalysisException(
-        s"COMMENT and option/property '${Table.TABLE_PROP_COMMENT}' " +
+        s"COMMENT and option/property '${TableCatalog.PROP_COMMENT}' " +
           s"are both used to set the table comment, you can only specify one of them.")
     }
 
@@ -267,9 +267,9 @@ private[sql] object CatalogV2Util {
 
     // convert USING, LOCATION, and COMMENT clauses to table properties
     tableProperties += ("provider" -> provider)
-    comment.map(text => tableProperties += (Table.TABLE_PROP_COMMENT -> text))
+    comment.map(text => tableProperties += (TableCatalog.PROP_COMMENT -> text))
     location.orElse(options.get("path")).map(
-      loc => tableProperties += (Table.TABLE_PROP_LOCATION -> loc))
+      loc => tableProperties += (TableCatalog.PROP_LOCATION -> loc))
 
     tableProperties.toMap
   }

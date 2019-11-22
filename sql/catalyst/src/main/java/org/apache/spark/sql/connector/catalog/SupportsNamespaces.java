@@ -41,10 +41,10 @@ import java.util.Map;
 @Experimental
 public interface SupportsNamespaces extends CatalogPlugin {
 
-  String NAMESPACE_PROP_LOCATION = "location";
-  String NAMESPACE_PROP_COMMENT = "comment";
-  List<String> RESERVED_NAMESPACE_PROPERTIES = Arrays.asList(
-          NAMESPACE_PROP_COMMENT, NAMESPACE_PROP_LOCATION);
+  String PROP_LOCATION = "location";
+  String PROP_COMMENT = "comment";
+  List<String> RESERVED_PROPERTIES = Arrays.asList(
+          PROP_COMMENT, PROP_LOCATION);
 
   /**
    * Return a default namespace for the catalog.

@@ -85,7 +85,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
     val provider = properties.getOrDefault("provider", conf.defaultDataSourceName)
     val tableProperties = properties.asScala
-    val location = Option(properties.get(Table.TABLE_PROP_LOCATION))
+    val location = Option(properties.get(TableCatalog.PROP_LOCATION))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -100,7 +100,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       bucketSpec = maybeBucketSpec,
       properties = tableProperties.toMap,
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
-      comment = Option(properties.get(Table.TABLE_PROP_COMMENT)))
+      comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
 
     try {
       catalog.createTable(tableDesc, ignoreIfExists = false)
@@ -228,7 +228,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
         // validate that this catalog's reserved properties are not removed
         changes.foreach {
           case remove: RemoveProperty
-            if SupportsNamespaces.RESERVED_NAMESPACE_PROPERTIES.contains(remove.property) =>
+            if SupportsNamespaces.RESERVED_PROPERTIES.contains(remove.property) =>
             throw new UnsupportedOperationException(
               s"Cannot remove reserved property: ${remove.property}")
           case _ =>
@@ -292,13 +292,13 @@ private[sql] object V2SessionCatalog {
       defaultLocation: Option[URI] = None): CatalogDatabase = {
     CatalogDatabase(
       name = db,
-      description = metadata.getOrDefault(SupportsNamespaces.NAMESPACE_PROP_COMMENT, ""),
-      locationUri = Option(metadata.get(SupportsNamespaces.NAMESPACE_PROP_LOCATION))
+      description = metadata.getOrDefault(SupportsNamespaces.PROP_COMMENT, ""),
+      locationUri = Option(metadata.get(SupportsNamespaces.PROP_LOCATION))
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
           .getOrElse(throw new IllegalArgumentException("Missing database location")),
       properties = metadata.asScala.toMap --
-        Seq(SupportsNamespaces.NAMESPACE_PROP_COMMENT, SupportsNamespaces.NAMESPACE_PROP_LOCATION))
+        Seq(SupportsNamespaces.PROP_COMMENT, SupportsNamespaces.PROP_LOCATION))
   }
 
   private implicit class CatalogDatabaseHelper(catalogDatabase: CatalogDatabase) {
@@ -308,8 +308,8 @@ private[sql] object V2SessionCatalog {
       catalogDatabase.properties.foreach {
         case (key, value) => metadata.put(key, value)
       }
-      metadata.put(SupportsNamespaces.NAMESPACE_PROP_LOCATION, catalogDatabase.locationUri.toString)
-      metadata.put(SupportsNamespaces.NAMESPACE_PROP_COMMENT, catalogDatabase.description)
+      metadata.put(SupportsNamespaces.PROP_LOCATION, catalogDatabase.locationUri.toString)
+      metadata.put(SupportsNamespaces.PROP_COMMENT, catalogDatabase.description)
 
       metadata.asJava
     }

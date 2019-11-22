@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, Table, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -147,7 +147,7 @@ class ResolveSessionCatalog(
           throw new AnalysisException(
             "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
         }
-        val changes = Seq(TableChange.setProperty(Table.TABLE_PROP_LOCATION, newLoc))
+        val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
         createAlterTable(nameParts, catalog, tableName, changes)
       }
 
@@ -301,11 +301,11 @@ class ResolveSessionCatalog(
           s"The database name is not valid: ${nameParts.quoted}")
       }
 
-      val comment = c.properties.get(SupportsNamespaces.NAMESPACE_PROP_COMMENT)
-      val location = c.properties.get(SupportsNamespaces.NAMESPACE_PROP_LOCATION)
+      val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
+      val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
       val newProperties = c.properties -
-        SupportsNamespaces.NAMESPACE_PROP_COMMENT -
-        SupportsNamespaces.NAMESPACE_PROP_LOCATION
+        SupportsNamespaces.PROP_COMMENT -
+        SupportsNamespaces.PROP_LOCATION
       CreateDatabaseCommand(nameParts.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespaceStatement(SessionCatalog(_, nameParts), _, _) =>

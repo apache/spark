@@ -42,12 +42,12 @@ case class DescribeNamespaceExec(
     val metadata = catalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Namespace Name", ns.last)
-    rows += toCatalystRow("Description", metadata.get(SupportsNamespaces.NAMESPACE_PROP_COMMENT))
-    rows += toCatalystRow("Location", metadata.get(SupportsNamespaces.NAMESPACE_PROP_LOCATION))
+    rows += toCatalystRow("Description", metadata.get(SupportsNamespaces.PROP_COMMENT))
+    rows += toCatalystRow("Location", metadata.get(SupportsNamespaces.PROP_LOCATION))
     if (isExtended) {
       val properties =
         metadata.asScala.toSeq.filter(p =>
-          !SupportsNamespaces.RESERVED_NAMESPACE_PROPERTIES.contains(p._1))
+          !SupportsNamespaces.RESERVED_PROPERTIES.contains(p._1))
       if (properties.nonEmpty) {
         rows += toCatalystRow("Properties", properties.mkString("(", ",", ")"))
       }
