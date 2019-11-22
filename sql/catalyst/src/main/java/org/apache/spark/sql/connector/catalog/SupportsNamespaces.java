@@ -41,6 +41,9 @@ import java.util.Map;
 @Experimental
 public interface SupportsNamespaces extends CatalogPlugin {
 
+  /**
+   * Keys of reserved namespace properties.
+   */
   String PROP_LOCATION = "location";
   String PROP_COMMENT = "comment";
   List<String> RESERVED_PROPERTIES = Arrays.asList(

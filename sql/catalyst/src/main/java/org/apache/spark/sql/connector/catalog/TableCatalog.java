@@ -38,6 +38,9 @@ import java.util.Map;
 @Experimental
 public interface TableCatalog extends CatalogPlugin {
 
+  /**
+   * Keys of reserved table properties.
+   */
   String PROP_LOCATION = "location";
   String PROP_COMMENT = "comment";
 
