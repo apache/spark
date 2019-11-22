@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StringType, StructType}
 
 class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -264,6 +265,32 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       joined_df.na.fill("", cols = Seq("f2"))
     }.getMessage
     assert(message.contains("Reference 'f2' is ambiguous"))
+  }
+
+  test("fill with col(*)") {
+    val df = createDF()
+    // If columns are specified with "*", they are ignored.
+    checkAnswer(df.na.fill("new name", Seq("*")), df.collect())
+  }
+
+  test("fill with nested columns") {
+    val schema = new StructType()
+      .add("c1", new StructType()
+        .add("c1-1", StringType)
+        .add("c1-2", StringType))
+
+    val data = Seq(
+      Row(Row(null, "a2")),
+      Row(Row("b1", "b2")))
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(data), schema)
+
+    checkAnswer(df.select("c1.c1-1"),
+      Row(null) :: Row("b1") :: Nil)
+
+    // Nested columns are ignored for fill().
+    checkAnswer(df.na.fill("a1", Seq("c1.c1-1")), data)
   }
 
   test("replace") {

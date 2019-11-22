@@ -478,13 +478,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   private def toAttributes(cols: Seq[String]): Seq[Attribute] = {
-    def resolve(colName: String) : Attribute = {
-      df.col(colName).named.toAttribute match {
+    cols.flatMap { colName =>
+      df.col(colName).expr.collect {
         case a: Attribute => a
-        case _ => throw new IllegalArgumentException(s"'$colName' is not a top level column.")
       }
     }
-    cols.map(resolve)
   }
 
   private def outputAttributes: Seq[Attribute] = {
