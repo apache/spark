@@ -5,6 +5,11 @@
 -- AGGREGATES [Part 2]
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/aggregates.sql#L145-L350
 
+-- Test aggregate operator with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 create temporary view int4_tbl as select * from values
   (0),
   (123456),

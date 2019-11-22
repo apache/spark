@@ -1091,7 +1091,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses this UTF8String to long.
+   * Parses this UTF8String(trimmed if needed) to long.
    *
    * Note that, in this method we accumulate the result in negative format, and convert it to
    * positive format at the end, if this string is not started with '-'. This is because min value
@@ -1105,18 +1105,20 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toLong(LongWrapper toLongResult) {
-    if (numBytes == 0) {
-      return false;
-    }
-
-    byte b = getByte(0);
-    final boolean negative = b == '-';
     int offset = 0;
+    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
+    if (offset == this.numBytes) return false;
+
+    int end = this.numBytes - 1;
+    while (end > offset && getByte(end) <= ' ') end--;
+
+    byte b = getByte(offset);
+    final boolean negative = b == '-';
     if (negative || b == '+') {
-      offset++;
-      if (numBytes == 1) {
+      if (end - offset == 0) {
         return false;
       }
+      offset++;
     }
 
     final byte separator = '.';
@@ -1124,7 +1126,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     final long stopValue = Long.MIN_VALUE / radix;
     long result = 0;
 
-    while (offset < numBytes) {
+    while (offset <= end) {
       b = getByte(offset);
       offset++;
       if (b == separator) {
@@ -1159,7 +1161,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // This is the case when we've encountered a decimal separator. The fractional
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
-    while (offset < numBytes) {
+    while (offset <= end) {
       byte currentByte = getByte(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;
@@ -1179,7 +1181,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses this UTF8String to int.
+   * Parses this UTF8String(trimmed if needed) to int.
    *
    * Note that, in this method we accumulate the result in negative format, and convert it to
    * positive format at the end, if this string is not started with '-'. This is because min value
@@ -1196,18 +1198,20 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toInt(IntWrapper intWrapper) {
-    if (numBytes == 0) {
-      return false;
-    }
-
-    byte b = getByte(0);
-    final boolean negative = b == '-';
     int offset = 0;
+    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
+    if (offset == this.numBytes) return false;
+
+    int end = this.numBytes - 1;
+    while (end > offset && getByte(end) <= ' ') end--;
+
+    byte b = getByte(offset);
+    final boolean negative = b == '-';
     if (negative || b == '+') {
-      offset++;
-      if (numBytes == 1) {
+      if (end - offset == 0) {
         return false;
       }
+      offset++;
     }
 
     final byte separator = '.';
@@ -1215,7 +1219,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     final int stopValue = Integer.MIN_VALUE / radix;
     int result = 0;
 
-    while (offset < numBytes) {
+    while (offset <= end) {
       b = getByte(offset);
       offset++;
       if (b == separator) {
@@ -1250,7 +1254,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // This is the case when we've encountered a decimal separator. The fractional
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
-    while (offset < numBytes) {
+    while (offset <= end) {
       byte currentByte = getByte(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;

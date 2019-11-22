@@ -113,7 +113,7 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute],
           }
         }.toArray
       }.toArray
-      val projection = newMutableProjection(allInputs, child.output)
+      val projection = MutableProjection.create(allInputs, child.output)
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
       })
