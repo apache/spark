@@ -44,7 +44,7 @@ private final class LocalShuffledRowRDDPartition(
  * data of another input table of the join that reads from shuffle. Each partition of the RDD reads
  * the whole data from just one mapper output locally. So actually there is no data transferred
  * from the network.
-
+ *
  * This RDD takes a [[ShuffleDependency]] (`dependency`).
  *
  * The `dependency` has the parent RDD of this RDD, which represents the dataset before shuffle
@@ -53,11 +53,15 @@ private final class LocalShuffledRowRDDPartition(
  * `dependency.partitioner.numPartitions` is the number of pre-shuffle partitions. (i.e. the number
  * of partitions of the map output). The post-shuffle partition number is the same to the parent
  * RDD's partition number.
+ *
+ * `partitionStartIndicesPerMapper` specifies how to split the shuffle blocks of each mapper into
+ * one or more partitions. For a mapper `i`, the `j`th partition includes shuffle blocks from
+ * `partitionStartIndicesPerMapper[i][j]` to `partitionStartIndicesPerMapper[i][j+1]` (exclusive).
  */
 class LocalShuffledRowRDD(
      var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
      metrics: Map[String, SQLMetric],
-     advisoryParallelism : Option[Int] = None)
+     partitionStartIndicesPerMapper: Array[Array[Int]])
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   private[this] val numReducers = dependency.partitioner.numPartitions
@@ -65,30 +69,12 @@ class LocalShuffledRowRDD(
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
-  /**
-   * To equally divide n elements into m buckets, basically each bucket should have n/m elements,
-   * for the remaining n%m elements, add one more element to the first n%m buckets each. Returns
-   * a sequence with length numBuckets and each value represents the start index of each bucket.
-   */
-  private def equallyDivide(numElements: Int, numBuckets: Int): Seq[Int] = {
-    val elementsPerBucket = numElements / numBuckets
-    val remaining = numElements % numBuckets
-    val splitPoint = (elementsPerBucket + 1) * remaining
-    (0 until remaining).map(_ * (elementsPerBucket + 1)) ++
-      (remaining until numBuckets).map(i => splitPoint + (i - remaining) * elementsPerBucket)
-  }
-
   override def getPartitions: Array[Partition] = {
-    val partitionStartIndices: Array[Int] = {
-      val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
-      // TODO split by data size in the future.
-      equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
-    }
-
     val partitions = ArrayBuffer[LocalShuffledRowRDDPartition]()
     for (mapIndex <- 0 until numMappers) {
-      (partitionStartIndices :+ numReducers).sliding(2, 1).foreach { case Array(start, end) =>
-        partitions += new LocalShuffledRowRDDPartition(partitions.length, mapIndex, start, end)
+      (partitionStartIndicesPerMapper(mapIndex) :+ numReducers).sliding(2, 1).foreach {
+        case Array(start, end) =>
+          partitions += new LocalShuffledRowRDDPartition(partitions.length, mapIndex, start, end)
       }
     }
     partitions.toArray
