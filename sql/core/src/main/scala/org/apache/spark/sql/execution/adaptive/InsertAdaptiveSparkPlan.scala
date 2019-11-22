@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -51,6 +52,7 @@ case class InsertAdaptiveSparkPlan(
 
   private def applyInternal(plan: SparkPlan, qe: QueryExecution): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
+    case _: V2CommandExec => plan
     case _ if conf.adaptiveExecutionEnabled && supportAdaptive(plan) =>
       try {
         // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse. Fall
