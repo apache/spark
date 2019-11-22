@@ -1621,7 +1621,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
   test("test catalog table cache") {
     withBasicCatalog { catalog =>
       val tableId = TableIdentifier("tbl1", Some("db2"))
-      val qtn = QualifiedTableName("tbl1", "db2")
+      val qtn = QualifiedTableName("db2", "tbl1")
 
       val ct1 = catalog.getTableMetadata(tableId)
       val cct1 = catalog.getCachedCatalogTable(qtn)

@@ -104,7 +104,7 @@ class SessionCatalog(
 
   private val validNameFormat = "([\\w_]+)".r
 
-  private val cachedCatalogTable = {
+  private val catalogTableCache = {
     val expireSeconds = conf.tableCatalogCacheExpireSeconds
     CacheBuilder.newBuilder().expireAfterWrite(expireSeconds, TimeUnit.SECONDS)
       .build[QualifiedTableName, CatalogTable]()
@@ -455,13 +455,11 @@ class SessionCatalog(
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     val qtn = QualifiedTableName(db, table)
-    getCachedCatalogTable(qtn).getOrElse {
+    getOrCacheCatalogTable(qtn, () => {
       requireDbExists(db)
       requireTableExists(TableIdentifier(table, Some(db)))
-      val catalogTable = externalCatalog.getTable(db, table)
-      cacheCatalogTable(qtn, catalogTable)
-      catalogTable
-    }
+      externalCatalog.getTable(db, table)
+    })
   }
 
   /**
@@ -1511,26 +1509,32 @@ class SessionCatalog(
       require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
       functionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
     }
-    invalidateAllCachedCatalogTable()
+    invalidateAllCachedCatalogTables()
   }
 
   private[sql] def getCachedCatalogTable(qtn: QualifiedTableName): Option[CatalogTable] = {
-    cachedCatalogTable.getIfPresent(qtn) match {
+    catalogTableCache.getIfPresent(qtn) match {
       case null => None
       case catalogTable => Some(catalogTable)
     }
   }
 
-  private[sql] def cacheCatalogTable(qtn: QualifiedTableName, catalogTable: CatalogTable): Unit = {
-    cachedCatalogTable.put(qtn, catalogTable)
+  private[sql] def getOrCacheCatalogTable(
+      qtn: QualifiedTableName,
+      init: Callable[CatalogTable]): CatalogTable = {
+    catalogTableCache.get(qtn, init)
   }
 
-  private[sql] def invalidateAllCachedCatalogTable(): Unit = {
-    cachedCatalogTable.cleanUp()
+  private[sql] def cacheCatalogTable(qtn: QualifiedTableName, catalogTable: CatalogTable): Unit = {
+    catalogTableCache.put(qtn, catalogTable)
+  }
+
+  private[sql] def invalidateAllCachedCatalogTables(): Unit = {
+    catalogTableCache.cleanUp()
   }
 
   private[sql] def invalidateCachedCatalogTable(qtn: QualifiedTableName): Unit = {
-    cachedCatalogTable.invalidate(qtn)
+    catalogTableCache.invalidate(qtn)
   }
 
   /**
