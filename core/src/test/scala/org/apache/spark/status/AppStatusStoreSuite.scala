@@ -99,7 +99,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     "in memory" -> createAppStore(disk = false, live = false),
     "in memory live" -> createAppStore(disk = false, live = true)
   ).foreach { case (hint, appStore) =>
-    test(s"SPARK-26260: summary should contain only successful tasks' metrics (store = $hint") {
+    test(s"SPARK-26260: summary should contain only successful tasks' metrics (store = $hint)") {
       val store = appStore.store
 
       // Success and failed tasks metrics
