@@ -227,18 +227,16 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
 
     testStream(query)(
       StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
-      AssertStreamExecThreadIsWaitingForTime(1000),
       AdvanceManualClock(1000),
-      WaitUntilBatchProcessed,
+      waitUntilBatchProcessed,
       AssertOnQuery(query => {
         assert(query.lastProgress.numInputRows == 0)
         assert(query.lastProgress.processedRowsPerSecond == 0.0d)
         true
       }),
       AddData(inputData, 1, 2),
-      AssertStreamExecThreadIsWaitingForTime(2000),
       AdvanceManualClock(1000),
-      WaitUntilBatchProcessed,
+      waitUntilBatchProcessed,
       AssertOnQuery(query => {
         assert(query.lastProgress.numInputRows == 2)
         assert(query.lastProgress.processedRowsPerSecond == 2000d)
@@ -248,20 +246,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     )
   }
 
-  case class AssertStreamExecThreadIsWaitingForTime(targetTime: Long)
-    extends AssertOnQuery(q => {
-      eventually(Timeout(streamingTimeout)) {
-        if (q.exception.isEmpty) {
-          assert(clock.isStreamWaitingFor(targetTime))
-        }
-      }
-      if (q.exception.isDefined) {
-        throw q.exception.get
-      }
-      true
-    }, "")
-
-  def WaitUntilBatchProcessed: AssertOnQuery = Execute { q =>
+  def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>
     eventually(Timeout(streamingTimeout)) {
       if (q.exception.isEmpty) {
         assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
