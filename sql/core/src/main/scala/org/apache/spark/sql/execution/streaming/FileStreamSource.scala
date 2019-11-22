@@ -259,6 +259,8 @@ class FileStreamSource(
 
   override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
 
+  private var warnedIgnoringCleanSourceOption: Boolean = false
+
   /**
    * Informs the source that Spark has completed processing all data for offsets less than or
    * equal to `end` and will only request offsets greater than `end` in the future.
@@ -267,10 +269,22 @@ class FileStreamSource(
     val logOffset = FileStreamSourceOffset(end).logOffset
 
     sourceCleaner.foreach { cleaner =>
-      val files = metadataLog.get(Some(logOffset), Some(logOffset)).flatMap(_._2)
-      val validFileEntities = files.filter(_.batchId == logOffset)
-      logDebug(s"completed file entries: ${validFileEntities.mkString(",")}")
-      validFileEntities.foreach(cleaner.clean)
+      sourceHasMetadata match {
+        case Some(true) if !warnedIgnoringCleanSourceOption =>
+          logWarning("Ignoring 'cleanSource' option since source path refers to the output" +
+            " directory of FileStreamSink.")
+          warnedIgnoringCleanSourceOption = true
+
+        case Some(false) =>
+          val files = metadataLog.get(Some(logOffset), Some(logOffset)).flatMap(_._2)
+          val validFileEntities = files.filter(_.batchId == logOffset)
+          logDebug(s"completed file entries: ${validFileEntities.mkString(",")}")
+          validFileEntities.foreach(cleaner.clean)
+
+        case _ =>
+          logWarning("Ignoring 'cleanSource' option since Spark hasn't figured out whether " +
+            "source path refers to the output directory of FileStreamSink or not.")
+      }
     }
   }
 
