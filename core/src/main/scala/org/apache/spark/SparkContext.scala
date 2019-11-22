@@ -2590,7 +2590,7 @@ object SparkContext extends Logging {
   }
 
   /** Return the current active [[SparkContext]] if any. */
-  private[spark] def getActive: Option[SparkContext] = {
+  def getActive: Option[SparkContext] = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       Option(activeContext.get())
     }
