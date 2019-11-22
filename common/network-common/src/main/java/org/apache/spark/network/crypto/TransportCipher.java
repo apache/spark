@@ -90,7 +90,8 @@ public class TransportCipher {
     return new CryptoOutputStream(cipher, conf, ch, key, new IvParameterSpec(outIv));
   }
 
-  private CryptoInputStream createInputStream(ReadableByteChannel ch) throws IOException {
+  @VisibleForTesting
+  CryptoInputStream createInputStream(ReadableByteChannel ch) throws IOException {
     return new CryptoInputStream(cipher, conf, ch, key, new IvParameterSpec(inIv));
   }
 
@@ -166,34 +167,45 @@ public class TransportCipher {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
-      if (!isCipherValid) {
-        throw new IOException("Cipher is in invalid state.");
-      }
-      byteChannel.feedData((ByteBuf) data);
+      ByteBuf buffer = (ByteBuf) data;
 
-      byte[] decryptedData = new byte[byteChannel.readableBytes()];
-      int offset = 0;
-      while (offset < decryptedData.length) {
-        // SPARK-25535: workaround for CRYPTO-141.
-        try {
-          offset += cis.read(decryptedData, offset, decryptedData.length - offset);
-        } catch (InternalError ie) {
-          isCipherValid = false;
-          throw ie;
+      try {
+        if (!isCipherValid) {
+          throw new IOException("Cipher is in invalid state.");
         }
-      }
+        byte[] decryptedData = new byte[buffer.readableBytes()];
+        byteChannel.feedData(buffer);
 
-      ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, decryptedData.length));
+        int offset = 0;
+        while (offset < decryptedData.length) {
+          // SPARK-25535: workaround for CRYPTO-141.
+          try {
+            offset += cis.read(decryptedData, offset, decryptedData.length - offset);
+          } catch (InternalError ie) {
+            isCipherValid = false;
+            throw ie;
+          }
+        }
+
+        ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, decryptedData.length));
+      } finally {
+        buffer.release();
+      }
     }
 
     @Override
-    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+      // We do the closing of the stream / channel in handlerRemoved(...) as
+      // this method will be called in all cases:
+      //
+      //     - when the Channel becomes inactive
+      //     - when the handler is removed from the ChannelPipeline
       try {
         if (isCipherValid) {
           cis.close();
         }
       } finally {
-        super.channelInactive(ctx);
+        super.handlerRemoved(ctx);
       }
     }
   }
