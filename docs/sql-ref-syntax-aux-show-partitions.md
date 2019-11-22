@@ -42,7 +42,7 @@ SHOW PARTITIONS table_identifier [partition_spec]
   <dt><code><em>partition_spec</em></code></dt>
   <dd>
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. When specified, the partitions that matches the partition spec
+    for partitions. When specified, the partitions that match the partition spec
     are returned.<br><br>
     <b>Syntax:</b>
       <code>
@@ -51,7 +51,7 @@ SHOW PARTITIONS table_identifier [partition_spec]
   </dd>
 </dl>
 
-### Example
+### Examples
 {% highlight sql %}
 -- create a partitioned table and insert a few rows.
 USE salesdb;
