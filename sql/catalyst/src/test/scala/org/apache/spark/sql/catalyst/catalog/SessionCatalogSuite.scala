@@ -1640,7 +1640,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       catalog.dropTable(tableId, false, false)
       val cct2 = catalog.getCachedCatalogTable(qtn)
       assert(cct2.isEmpty)
+    }
 
+    withBasicCatalog { catalog =>
+      val tableId = TableIdentifier("tbl1", Some("db2"))
+      val qtn = QualifiedTableName("db2", "tbl1")
       catalog.getTableMetadata(tableId)
       val cct4 = catalog.getCachedCatalogTable(qtn)
       catalog.dropDatabase(qtn.database, false, false)

@@ -425,6 +425,7 @@ class SessionCatalog(
     val tableIdentifier = TableIdentifier(table, Some(db))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
+    invalidateCachedCatalogTable(QualifiedTableName(db, table))
     externalCatalog.alterTableStats(db, table, newStats)
     // Invalidate the table relation cache
     refreshTable(identifier)
