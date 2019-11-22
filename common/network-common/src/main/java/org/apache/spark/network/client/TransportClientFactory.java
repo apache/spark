@@ -26,6 +26,7 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.codahale.metrics.MetricSet;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
@@ -42,10 +43,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
-import org.apache.spark.network.util.IOMode;
-import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.NettyUtils;
-import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.util.*;
 
 /**
  * Factory for creating {@link TransportClient}s by using createClient.
@@ -73,7 +71,7 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
-  private final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -86,7 +84,8 @@ public class TransportClientFactory implements Closeable {
 
   private final Class<? extends Channel> socketChannelClass;
   private EventLoopGroup workerGroup;
-  private PooledByteBufAllocator pooledAllocator;
+  private final PooledByteBufAllocator pooledAllocator;
+  private final NettyMemoryMetrics metrics;
 
   public TransportClientFactory(
       TransportContext context,
@@ -94,16 +93,29 @@ public class TransportClientFactory implements Closeable {
     this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
     this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
-    this.connectionPool = new ConcurrentHashMap<SocketAddress, ClientPool>();
+    this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
-    // TODO: Make thread pool name configurable.
-    this.workerGroup = NettyUtils.createEventLoop(ioMode, conf.clientThreads(), "shuffle-client");
-    this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
-      conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
+    this.workerGroup = NettyUtils.createEventLoop(
+        ioMode,
+        conf.clientThreads(),
+        conf.getModuleName() + "-client");
+    if (conf.sharedByteBufAllocators()) {
+      this.pooledAllocator = NettyUtils.getSharedPooledByteBufAllocator(
+          conf.preferDirectBufsForSharedByteBufAllocators(), false /* allowCache */);
+    } else {
+      this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
+          conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
+    }
+    this.metrics = new NettyMemoryMetrics(
+      this.pooledAllocator, conf.getModuleName() + "-client", conf);
+  }
+
+  public MetricSet getAllMetrics() {
+    return metrics;
   }
 
   /**
@@ -120,16 +132,19 @@ public class TransportClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  public TransportClient createClient(String remoteHost, int remotePort) throws IOException {
+  public TransportClient createClient(String remoteHost, int remotePort)
+      throws IOException, InterruptedException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
-    final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
+    // Use unresolved address here to avoid DNS resolution each time we creates a client.
+    final InetSocketAddress unresolvedAddress =
+      InetSocketAddress.createUnresolved(remoteHost, remotePort);
 
     // Create the ClientPool if we don't have it yet.
-    ClientPool clientPool = connectionPool.get(address);
+    ClientPool clientPool = connectionPool.get(unresolvedAddress);
     if (clientPool == null) {
-      connectionPool.putIfAbsent(address, new ClientPool(numConnectionsPerPeer));
-      clientPool = connectionPool.get(address);
+      connectionPool.putIfAbsent(unresolvedAddress, new ClientPool(numConnectionsPerPeer));
+      clientPool = connectionPool.get(unresolvedAddress);
     }
 
     int clientIndex = rand.nextInt(numConnectionsPerPeer);
@@ -146,25 +161,38 @@ public class TransportClientFactory implements Closeable {
       }
 
       if (cachedClient.isActive()) {
-        logger.trace("Returning cached connection to {}: {}", address, cachedClient);
+        logger.trace("Returning cached connection to {}: {}",
+          cachedClient.getSocketAddress(), cachedClient);
         return cachedClient;
       }
     }
 
     // If we reach here, we don't have an existing connection open. Let's create a new one.
     // Multiple threads might race here to create new connections. Keep only one of them active.
+    final long preResolveHost = System.nanoTime();
+    final InetSocketAddress resolvedAddress = new InetSocketAddress(remoteHost, remotePort);
+    final long hostResolveTimeMs = (System.nanoTime() - preResolveHost) / 1000000;
+    final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
+    if (hostResolveTimeMs > 2000) {
+      logger.warn("DNS resolution {} for {} took {} ms",
+          resolvMsg, resolvedAddress, hostResolveTimeMs);
+    } else {
+      logger.trace("DNS resolution {} for {} took {} ms",
+          resolvMsg, resolvedAddress, hostResolveTimeMs);
+    }
+
     synchronized (clientPool.locks[clientIndex]) {
       cachedClient = clientPool.clients[clientIndex];
 
       if (cachedClient != null) {
         if (cachedClient.isActive()) {
-          logger.trace("Returning cached connection to {}: {}", address, cachedClient);
+          logger.trace("Returning cached connection to {}: {}", resolvedAddress, cachedClient);
           return cachedClient;
         } else {
-          logger.info("Found inactive connection to {}, creating a new one.", address);
+          logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
         }
       }
-      clientPool.clients[clientIndex] = createClient(address);
+      clientPool.clients[clientIndex] = createClient(resolvedAddress);
       return clientPool.clients[clientIndex];
     }
   }
@@ -176,14 +204,15 @@ public class TransportClientFactory implements Closeable {
    * As with {@link #createClient(String, int)}, this method is blocking.
    */
   public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
-      throws IOException {
+      throws IOException, InterruptedException {
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
     return createClient(address);
   }
 
   /** Create a completely new {@link TransportClient} to the remote address. */
-  private TransportClient createClient(InetSocketAddress address) throws IOException {
-    logger.debug("Creating new connection to " + address);
+  private TransportClient createClient(InetSocketAddress address)
+      throws IOException, InterruptedException {
+    logger.debug("Creating new connection to {}", address);
 
     Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(workerGroup)
@@ -193,6 +222,14 @@ public class TransportClientFactory implements Closeable {
       .option(ChannelOption.SO_KEEPALIVE, true)
       .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
       .option(ChannelOption.ALLOCATOR, pooledAllocator);
+
+    if (conf.receiveBuf() > 0) {
+      bootstrap.option(ChannelOption.SO_RCVBUF, conf.receiveBuf());
+    }
+
+    if (conf.sendBuf() > 0) {
+      bootstrap.option(ChannelOption.SO_SNDBUF, conf.sendBuf());
+    }
 
     final AtomicReference<TransportClient> clientRef = new AtomicReference<>();
     final AtomicReference<Channel> channelRef = new AtomicReference<>();
@@ -209,7 +246,7 @@ public class TransportClientFactory implements Closeable {
     // Connect to the remote server
     long preConnect = System.nanoTime();
     ChannelFuture cf = bootstrap.connect(address);
-    if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
+    if (!cf.await(conf.connectionTimeoutMs())) {
       throw new IOException(
         String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
     } else if (cf.cause() != null) {
@@ -235,7 +272,7 @@ public class TransportClientFactory implements Closeable {
     }
     long postBootstrap = System.nanoTime();
 
-    logger.debug("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
+    logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
       address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
 
     return client;
@@ -256,9 +293,8 @@ public class TransportClientFactory implements Closeable {
     }
     connectionPool.clear();
 
-    if (workerGroup != null) {
+    if (workerGroup != null && !workerGroup.isShuttingDown()) {
       workerGroup.shutdownGracefully();
-      workerGroup = null;
     }
   }
 }

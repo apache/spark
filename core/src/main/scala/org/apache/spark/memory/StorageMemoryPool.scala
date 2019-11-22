@@ -35,6 +35,11 @@ private[memory] class StorageMemoryPool(
     memoryMode: MemoryMode
   ) extends MemoryPool(lock) with Logging {
 
+  private[this] val poolName: String = memoryMode match {
+    case MemoryMode.ON_HEAP => "on-heap storage"
+    case MemoryMode.OFF_HEAP => "off-heap storage"
+  }
+
   @GuardedBy("lock")
   private[this] var _memoryUsed: Long = 0L
 
@@ -60,7 +65,7 @@ private[memory] class StorageMemoryPool(
 
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
- *
+   *
    * @return whether all N bytes were successfully granted.
    */
   def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = lock.synchronized {
@@ -83,9 +88,8 @@ private[memory] class StorageMemoryPool(
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
-    // Once we support off-heap caching, this will need to change:
-    if (numBytesToFree > 0 && memoryMode == MemoryMode.ON_HEAP) {
-      memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree)
+    if (numBytesToFree > 0) {
+      memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree, memoryMode)
     }
     // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
     // back into this StorageMemoryPool in order to free memory. Therefore, these variables
@@ -112,27 +116,20 @@ private[memory] class StorageMemoryPool(
   }
 
   /**
-   * Try to shrink the size of this storage memory pool by `spaceToFree` bytes. Return the number
-   * of bytes removed from the pool's capacity.
+   * Free space to shrink the size of this storage memory pool by `spaceToFree` bytes.
+   * Note: this method doesn't actually reduce the pool size but relies on the caller to do so.
+   *
+   * @return number of bytes to be removed from the pool's capacity.
    */
-  def shrinkPoolToFreeSpace(spaceToFree: Long): Long = lock.synchronized {
-    // First, shrink the pool by reclaiming free memory:
+  def freeSpaceToShrinkPool(spaceToFree: Long): Long = lock.synchronized {
     val spaceFreedByReleasingUnusedMemory = math.min(spaceToFree, memoryFree)
-    decrementPoolSize(spaceFreedByReleasingUnusedMemory)
     val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
     if (remainingSpaceToFree > 0) {
       // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
-      val spaceFreedByEviction = {
-        // Once we support off-heap caching, this will need to change:
-        if (memoryMode == MemoryMode.ON_HEAP) {
-          memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree)
-        } else {
-          0
-        }
-      }
+      val spaceFreedByEviction =
+        memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree, memoryMode)
       // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
       // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.
-      decrementPoolSize(spaceFreedByEviction)
       spaceFreedByReleasingUnusedMemory + spaceFreedByEviction
     } else {
       spaceFreedByReleasingUnusedMemory

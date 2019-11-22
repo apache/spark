@@ -22,22 +22,22 @@ import scala.collection.mutable
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Stable
 
 
 /**
- * :: DeveloperApi ::
- *
  * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
  * Long, Double, String, Metadata, Array[Boolean], Array[Long], Array[Double], Array[String], and
  * Array[Metadata]. JSON is used for serialization.
  *
  * The default constructor is private. User should use either [[MetadataBuilder]] or
- * [[Metadata.fromJson()]] to create Metadata instances.
+ * `Metadata.fromJson()` to create Metadata instances.
  *
  * @param map an immutable map that stores the data
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@Stable
 sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   extends Serializable {
 
@@ -84,25 +84,28 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case that: Metadata =>
-        if (map.keySet == that.map.keySet) {
-          map.keys.forall { k =>
-            (map(k), that.map(k)) match {
-              case (v0: Array[_], v1: Array[_]) =>
-                v0.view == v1.view
-              case (v0, v1) =>
-                v0 == v1
-            }
+      case that: Metadata if map.size == that.map.size =>
+        map.keysIterator.forall { key =>
+          that.map.get(key) match {
+            case Some(otherValue) =>
+              val ourValue = map(key)
+              (ourValue, otherValue) match {
+                case (v0: Array[Long], v1: Array[Long]) => java.util.Arrays.equals(v0, v1)
+                case (v0: Array[Double], v1: Array[Double]) => java.util.Arrays.equals(v0, v1)
+                case (v0: Array[Boolean], v1: Array[Boolean]) => java.util.Arrays.equals(v0, v1)
+                case (v0: Array[AnyRef], v1: Array[AnyRef]) => java.util.Arrays.equals(v0, v1)
+                case (v0, v1) => v0 == v1
+              }
+            case None => false
           }
-        } else {
-          false
         }
       case other =>
         false
     }
   }
 
-  override def hashCode: Int = Metadata.hash(this)
+  private lazy val _hashCode: Int = Metadata.hash(this)
+  override def hashCode: Int = _hashCode
 
   private def get[T](key: String): T = {
     map(key).asInstanceOf[T]
@@ -111,10 +114,16 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   private[sql] def jsonValue: JValue = Metadata.toJsonValue(this)
 }
 
+/**
+ * @since 1.3.0
+ */
+@Stable
 object Metadata {
 
+  private[this] val _empty = new Metadata(Map.empty)
+
   /** Returns an empty Metadata. */
-  def empty: Metadata = new Metadata(Map.empty)
+  def empty: Metadata = _empty
 
   /** Creates a Metadata instance from JSON. */
   def fromJson(json: String): Metadata = {
@@ -168,7 +177,7 @@ object Metadata {
   private def toJsonValue(obj: Any): JValue = {
     obj match {
       case map: Map[_, _] =>
-        val fields = map.toList.map { case (k: String, v) => (k, toJsonValue(v)) }
+        val fields = map.toList.map { case (k, v) => (k.toString, toJsonValue(v)) }
         JObject(fields)
       case arr: Array[_] =>
         val values = arr.toList.map(toJsonValue)
@@ -181,6 +190,8 @@ object Metadata {
         JBool(x)
       case x: String =>
         JString(x)
+      case null =>
+        JNull
       case x: Metadata =>
         toJsonValue(x.map)
       case other =>
@@ -206,6 +217,8 @@ object Metadata {
         x.##
       case x: Metadata =>
         hash(x.map)
+      case null =>
+        0
       case other =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
@@ -213,11 +226,11 @@ object Metadata {
 }
 
 /**
- * :: DeveloperApi ::
- *
  * Builder for [[Metadata]]. If there is a key collision, the latter will overwrite the former.
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@Stable
 class MetadataBuilder {
 
   private val map: mutable.Map[String, Any] = mutable.Map.empty

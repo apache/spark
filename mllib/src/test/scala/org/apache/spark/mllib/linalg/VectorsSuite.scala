@@ -17,14 +17,18 @@
 
 package org.apache.spark.mllib.linalg
 
+import scala.reflect.ClassTag
 import scala.util.Random
 
 import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
 import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.serializer.KryoSerializer
 
 class VectorsSuite extends SparkFunSuite with Logging {
 
@@ -32,6 +36,21 @@ class VectorsSuite extends SparkFunSuite with Logging {
   val n = 4
   val indices = Array(0, 2, 3)
   val values = Array(0.1, 0.3, 0.4)
+
+  test("kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+    def check[T: ClassTag](t: T): Unit = {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+
+    val desVec = Vectors.dense(arr).asInstanceOf[DenseVector]
+    val sparVec = Vectors.sparse(n, indices, values).asInstanceOf[SparseVector]
+    check(desVec)
+    check(sparVec)
+  }
 
   test("dense vector construction with varargs") {
     val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
@@ -121,6 +140,13 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
     val vec8 = Vectors.sparse(5, Array(1, 2), Array(0.0, -1.0))
     assert(vec8.argmax === 0)
+
+    // Check for case when sparse vector is non-empty but the values are empty
+    val vec9 = Vectors.sparse(100, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
+    assert(vec9.argmax === 0)
+
+    val vec10 = Vectors.sparse(1, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
+    assert(vec10.argmax === 0)
   }
 
   test("vector equals") {
@@ -268,7 +294,7 @@ class VectorsSuite extends SparkFunSuite with Logging {
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
       val denseVector2 = Vectors.dense(sparseVector2.toArray)
 
-      val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
+      val squaredDist = breezeSquaredDistance(sparseVector1.asBreeze, sparseVector2.asBreeze)
 
       // SparseVector vs. SparseVector
       assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
@@ -343,11 +369,21 @@ class VectorsSuite extends SparkFunSuite with Logging {
     assert(dv0s.numActives === 2)
     assert(dv0s === dv0)
 
+    assert(dv0.toSparseWithSize(dv0.numNonzeros) === dv0)
+    val dv0s2 = dv0.toSparseWithSize(dv0.numNonzeros)
+    assert(dv0s2.numActives === 2)
+    assert(dv0s2 === dv0s)
+
     val sv0 = Vectors.sparse(4, Array(0, 1, 2), Array(0.0, 2.0, 3.0))
     assert(sv0.toDense === sv0)
     val sv0s = sv0.toSparse
     assert(sv0s.numActives === 2)
     assert(sv0s === sv0)
+
+    assert(sv0.toSparseWithSize(sv0.numNonzeros) === sv0)
+    val sv0s2 = sv0.toSparseWithSize(sv0.numNonzeros)
+    assert(sv0s2.numActives === 2)
+    assert(sv0s2 === sv0s)
   }
 
   test("Vector.compressed") {
@@ -391,5 +427,110 @@ class VectorsSuite extends SparkFunSuite with Logging {
       assert(u.getClass === v.getClass, "toJson/fromJson should preserve vector types.")
       assert(u === v, "toJson/fromJson should preserve vector values.")
     }
+  }
+
+  test("conversions between new local linalg and mllib linalg") {
+    val dv: DenseVector = new DenseVector(Array(1.0, 2.0, 3.5))
+    val sv: SparseVector = new SparseVector(5, Array(1, 2, 4), Array(1.1, 2.2, 4.4))
+    val sv0: Vector = sv.asInstanceOf[Vector]
+    val dv0: Vector = dv.asInstanceOf[Vector]
+
+    val newSV: newlinalg.SparseVector = sv.asML
+    val newDV: newlinalg.DenseVector = dv.asML
+    val newSV0: newlinalg.Vector = sv0.asML
+    val newDV0: newlinalg.Vector = dv0.asML
+    assert(newSV0.isInstanceOf[newlinalg.SparseVector])
+    assert(newDV0.isInstanceOf[newlinalg.DenseVector])
+    assert(sv.toArray === newSV.toArray)
+    assert(dv.toArray === newDV.toArray)
+    assert(sv0.toArray === newSV0.toArray)
+    assert(dv0.toArray === newDV0.toArray)
+
+    val oldSV: SparseVector = SparseVector.fromML(newSV)
+    val oldDV: DenseVector = DenseVector.fromML(newDV)
+    val oldSV0: Vector = Vectors.fromML(newSV0)
+    val oldDV0: Vector = Vectors.fromML(newDV0)
+    assert(oldSV0.isInstanceOf[SparseVector])
+    assert(oldDV0.isInstanceOf[DenseVector])
+    assert(oldSV.toArray === newSV.toArray)
+    assert(oldDV.toArray === newDV.toArray)
+    assert(oldSV0.toArray === newSV0.toArray)
+    assert(oldDV0.toArray === newDV0.toArray)
+  }
+
+  test("implicit conversions between new local linalg and mllib linalg") {
+
+    def mllibVectorToArray(v: Vector): Array[Double] = v.toArray
+
+    def mllibDenseVectorToArray(v: DenseVector): Array[Double] = v.toArray
+
+    def mllibSparseVectorToArray(v: SparseVector): Array[Double] = v.toArray
+
+    def mlVectorToArray(v: newlinalg.Vector): Array[Double] = v.toArray
+
+    def mlDenseVectorToArray(v: newlinalg.DenseVector): Array[Double] = v.toArray
+
+    def mlSparseVectorToArray(v: newlinalg.SparseVector): Array[Double] = v.toArray
+
+    val dv: DenseVector = new DenseVector(Array(1.0, 2.0, 3.5))
+    val sv: SparseVector = new SparseVector(5, Array(1, 2, 4), Array(1.1, 2.2, 4.4))
+    val sv0: Vector = sv.asInstanceOf[Vector]
+    val dv0: Vector = dv.asInstanceOf[Vector]
+
+    val newSV: newlinalg.SparseVector = sv.asML
+    val newDV: newlinalg.DenseVector = dv.asML
+    val newSV0: newlinalg.Vector = sv0.asML
+    val newDV0: newlinalg.Vector = dv0.asML
+
+    import org.apache.spark.mllib.linalg.VectorImplicits._
+
+    assert(mllibVectorToArray(dv0) === mllibVectorToArray(newDV0))
+    assert(mllibVectorToArray(sv0) === mllibVectorToArray(newSV0))
+
+    assert(mllibDenseVectorToArray(dv) === mllibDenseVectorToArray(newDV))
+    assert(mllibSparseVectorToArray(sv) === mllibSparseVectorToArray(newSV))
+
+    assert(mlVectorToArray(dv0) === mlVectorToArray(newDV0))
+    assert(mlVectorToArray(sv0) === mlVectorToArray(newSV0))
+
+    assert(mlDenseVectorToArray(dv) === mlDenseVectorToArray(newDV))
+    assert(mlSparseVectorToArray(sv) === mlSparseVectorToArray(newSV))
+  }
+
+  test("sparse vector only support non-negative length") {
+    val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
+    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
+    assert(v1.size === 0)
+    assert(v2.size === 0)
+
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array(1), Array(2.0))
+    }
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array((1, 2.0)))
+    }
+  }
+
+  test("dot product only supports vectors of same size") {
+    val vSize4 = Vectors.dense(arr)
+    val vSize1 = Vectors.zeros(1)
+    intercept[IllegalArgumentException]{ vSize1.dot(vSize4) }
+  }
+
+  test("dense vector dot product") {
+    val dv = Vectors.dense(arr)
+    assert(dv.dot(dv) === 0.26)
+  }
+
+  test("sparse vector dot product") {
+    val sv = Vectors.sparse(n, indices, values)
+    assert(sv.dot(sv) === 0.26)
+  }
+
+  test("mixed sparse and dense vector dot product") {
+    val sv = Vectors.sparse(n, indices, values)
+    val dv = Vectors.dense(arr)
+    assert(sv.dot(dv) === 0.26)
+    assert(dv.dot(sv) === 0.26)
   }
 }

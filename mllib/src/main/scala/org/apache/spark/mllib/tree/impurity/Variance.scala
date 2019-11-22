@@ -17,14 +17,12 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
- * :: Experimental ::
  * Class for calculating variance during regression
  */
 @Since("1.0.0")
-@Experimental
 object Variance extends Impurity {
 
   /**
@@ -68,21 +66,32 @@ object Variance extends Impurity {
 
 /**
  * Class for updating views of a vector of sufficient statistics,
- * in order to compute impurity from a sample.
+ * in order to compute impurity from a sample. For variance, we track:
+ *   - sum(w_i)
+ *   - sum(w_i * y_i)
+ *   - sum(w_i * y_i * y_i)
+ *   - count(y_i)
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  */
-private[tree] class VarianceAggregator()
-  extends ImpurityAggregator(statsSize = 3) with Serializable {
+private[spark] class VarianceAggregator()
+  extends ImpurityAggregator(statsSize = 4) with Serializable {
 
   /**
    * Update stats for one (node, feature, bin) with the given label.
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit = {
+  def update(
+      allStats: Array[Double],
+      offset: Int,
+      label: Double,
+      numSamples: Int,
+      sampleWeight: Double): Unit = {
+    val instanceWeight = numSamples * sampleWeight
     allStats(offset) += instanceWeight
     allStats(offset + 1) += instanceWeight * label
     allStats(offset + 2) += instanceWeight * label * label
+    allStats(offset + 3) += numSamples
   }
 
   /**
@@ -91,7 +100,8 @@ private[tree] class VarianceAggregator()
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): VarianceCalculator = {
-    new VarianceCalculator(allStats.view(offset, offset + statsSize).toArray)
+    new VarianceCalculator(allStats.view(offset, offset + statsSize - 1).toArray,
+      allStats(offset + statsSize - 1).toLong)
   }
 }
 
@@ -101,7 +111,8 @@ private[tree] class VarianceAggregator()
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+private[spark] class VarianceCalculator(stats: Array[Double], var rawCount: Long)
+  extends ImpurityCalculator(stats) {
 
   require(stats.length == 3,
     s"VarianceCalculator requires sufficient statistics array stats to be of length 3," +
@@ -110,7 +121,7 @@ private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCa
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
    */
-  def copy: VarianceCalculator = new VarianceCalculator(stats.clone())
+  def copy: VarianceCalculator = new VarianceCalculator(stats.clone(), rawCount)
 
   /**
    * Calculate the impurity from the stored sufficient statistics.
@@ -118,9 +129,9 @@ private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCa
   def calculate(): Double = Variance.calculate(stats(0), stats(1), stats(2))
 
   /**
-   * Number of data points accounted for in the sufficient statistics.
+   * Weighted number of data points accounted for in the sufficient statistics.
    */
-  def count: Long = stats(0).toLong
+  def count: Double = stats(0)
 
   /**
    * Prediction which should be made based on the sufficient statistics.

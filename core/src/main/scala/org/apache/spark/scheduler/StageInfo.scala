@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.RDDInfo
 
 /**
@@ -29,26 +30,36 @@ import org.apache.spark.storage.RDDInfo
 @DeveloperApi
 class StageInfo(
     val stageId: Int,
-    val attemptId: Int,
+    private val attemptId: Int,
     val name: String,
     val numTasks: Int,
     val rddInfos: Seq[RDDInfo],
     val parentIds: Seq[Int],
     val details: String,
-    private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
+    val taskMetrics: TaskMetrics = null,
+    private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty,
+    private[spark] val shuffleDepId: Option[Int] = None) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   /** Time when all tasks in the stage completed or when the stage was cancelled. */
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
-  /** Terminal values of accumulables updated during this stage. */
+
+  /**
+   * Terminal values of accumulables updated during this stage, including all the user-defined
+   * accumulators.
+   */
   val accumulables = HashMap[Long, AccumulableInfo]()
 
-  def stageFailed(reason: String) {
+  def stageFailed(reason: String): Unit = {
     failureReason = Some(reason)
     completionTime = Some(System.currentTimeMillis)
   }
+
+  // This would just be the second constructor arg, except we need to maintain this method
+  // with parentheses for compatibility
+  def attemptNumber(): Int = attemptId
 
   private[spark] def getStatusString: String = {
     if (completionTime.isDefined) {
@@ -75,10 +86,15 @@ private[spark] object StageInfo {
       stage: Stage,
       attemptId: Int,
       numTasks: Option[Int] = None,
+      taskMetrics: TaskMetrics = null,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
     ): StageInfo = {
     val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)
     val rddInfos = Seq(RDDInfo.fromRdd(stage.rdd)) ++ ancestorRddInfos
+    val shuffleDepId = stage match {
+      case sms: ShuffleMapStage => Option(sms.shuffleDep).map(_.shuffleId)
+      case _ => None
+    }
     new StageInfo(
       stage.id,
       attemptId,
@@ -87,6 +103,8 @@ private[spark] object StageInfo {
       rddInfos,
       stage.parents.map(_.id),
       stage.details,
-      taskLocalityPreferences)
+      taskMetrics,
+      taskLocalityPreferences,
+      shuffleDepId)
   }
 }

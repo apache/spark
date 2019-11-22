@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.types
 
-import scala.language.postfixOps
-
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.Decimal._
 
 class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
   /** Check that a Decimal has the given string representation, precision and scale */
@@ -33,6 +32,16 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("creating decimals") {
     checkDecimal(new Decimal(), "0", 1, 0)
+    checkDecimal(Decimal(BigDecimal("0.09")), "0.09", 3, 2)
+    checkDecimal(Decimal(BigDecimal("0.9")), "0.9", 2, 1)
+    checkDecimal(Decimal(BigDecimal("0.90")), "0.90", 3, 2)
+    checkDecimal(Decimal(BigDecimal("0.0")), "0.0", 2, 1)
+    checkDecimal(Decimal(BigDecimal("0")), "0", 1, 0)
+    checkDecimal(Decimal(BigDecimal("1.0")), "1.0", 2, 1)
+    checkDecimal(Decimal(BigDecimal("-0.09")), "-0.09", 3, 2)
+    checkDecimal(Decimal(BigDecimal("-0.9")), "-0.9", 2, 1)
+    checkDecimal(Decimal(BigDecimal("-0.90")), "-0.90", 3, 2)
+    checkDecimal(Decimal(BigDecimal("-1.0")), "-1.0", 2, 1)
     checkDecimal(Decimal(BigDecimal("10.030")), "10.030", 5, 3)
     checkDecimal(Decimal(BigDecimal("10.030"), 4, 1), "10.0", 4, 1)
     checkDecimal(Decimal(BigDecimal("-9.95"), 4, 1), "-10.0", 4, 1)
@@ -47,11 +56,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkDecimal(Decimal(1000000000000000000L, 20, 2), "10000000000000000.00", 20, 2)
     checkDecimal(Decimal(Long.MaxValue), Long.MaxValue.toString, 20, 0)
     checkDecimal(Decimal(Long.MinValue), Long.MinValue.toString, 20, 0)
-    intercept[IllegalArgumentException](Decimal(170L, 2, 1))
-    intercept[IllegalArgumentException](Decimal(170L, 2, 0))
-    intercept[IllegalArgumentException](Decimal(BigDecimal("10.030"), 2, 1))
-    intercept[IllegalArgumentException](Decimal(BigDecimal("-9.95"), 2, 1))
-    intercept[IllegalArgumentException](Decimal(1e17.toLong, 17, 0))
+    intercept[ArithmeticException](Decimal(170L, 2, 1))
+    intercept[ArithmeticException](Decimal(170L, 2, 0))
+    intercept[ArithmeticException](Decimal(BigDecimal("10.030"), 2, 1))
+    intercept[ArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1))
+    intercept[ArithmeticException](Decimal(1e17.toLong, 17, 0))
   }
 
   test("creating decimals with negative scale") {
@@ -90,7 +99,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   // Accessor for the BigDecimal value of a Decimal, which will be null if it's using Longs
-  private val decimalVal = PrivateMethod[BigDecimal]('decimalVal)
+  private val decimalVal = PrivateMethod[BigDecimal](Symbol("decimalVal"))
 
   /** Check whether a decimal is represented compactly (passing whether we expect it to be) */
   private def checkCompact(d: Decimal, expected: Boolean): Unit = {
@@ -100,8 +109,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("small decimals represented as unscaled long") {
     checkCompact(new Decimal(), true)
-    checkCompact(Decimal(BigDecimal(10.03)), false)
-    checkCompact(Decimal(BigDecimal(1e20)), false)
+    checkCompact(Decimal(BigDecimal("10.03")), false)
+    checkCompact(Decimal(BigDecimal("100000000000000000000")), false)
     checkCompact(Decimal(17L), true)
     checkCompact(Decimal(17), true)
     checkCompact(Decimal(17L, 2, 1), true)
@@ -192,5 +201,42 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     assert(new Decimal().set(10L, 10, 0).toUnscaledLong === 10L)
     assert(new Decimal().set(100L, 10, 0).toUnscaledLong === 100L)
     assert(Decimal(Long.MaxValue, 100, 0).toUnscaledLong === Long.MaxValue)
+  }
+
+  test("changePrecision/toPrecision on compact decimal should respect rounding mode") {
+    Seq(ROUND_FLOOR, ROUND_CEILING, ROUND_HALF_UP, ROUND_HALF_EVEN).foreach { mode =>
+      Seq("0.4", "0.5", "0.6", "1.0", "1.1", "1.6", "2.5", "5.5").foreach { n =>
+        Seq("", "-").foreach { sign =>
+          val bd = BigDecimal(sign + n)
+          val unscaled = (bd * 10).toLongExact
+          val d = Decimal(unscaled, 8, 1)
+          assert(d.changePrecision(10, 0, mode))
+          assert(d.toString === bd.setScale(0, mode).toString(), s"num: $sign$n, mode: $mode")
+
+          val copy = d.toPrecision(10, 0, mode)
+          assert(copy !== null)
+          assert(d.ne(copy))
+          assert(d === copy)
+          assert(copy.toString === bd.setScale(0, mode).toString(), s"num: $sign$n, mode: $mode")
+        }
+      }
+    }
+  }
+
+  test("SPARK-20341: support BigInt's value does not fit in long value range") {
+    val bigInt = scala.math.BigInt("9223372036854775808")
+    val decimal = Decimal.apply(bigInt)
+    assert(decimal.toJavaBigDecimal.unscaledValue.toString === "9223372036854775808")
+  }
+
+  test("SPARK-26038: toScalaBigInt/toJavaBigInteger") {
+    // not fitting long
+    val decimal = Decimal("1234568790123456789012348790.1234879012345678901234568790")
+    assert(decimal.toScalaBigInt == scala.math.BigInt("1234568790123456789012348790"))
+    assert(decimal.toJavaBigInteger == new java.math.BigInteger("1234568790123456789012348790"))
+    // fitting long
+    val decimalLong = Decimal(123456789123456789L, 18, 9)
+    assert(decimalLong.toScalaBigInt == scala.math.BigInt("123456789"))
+    assert(decimalLong.toJavaBigInteger == new java.math.BigInteger("123456789"))
   }
 }

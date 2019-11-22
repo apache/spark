@@ -36,16 +36,30 @@ class Window(object):
 
     For example:
 
-    >>> # PARTITION BY country ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    >>> window = Window.partitionBy("country").orderBy("date").rowsBetween(-sys.maxsize, 0)
+    >>> # ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    >>> window = Window.orderBy("date").rowsBetween(Window.unboundedPreceding, Window.currentRow)
 
     >>> # PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
     >>> window = Window.orderBy("date").partitionBy("country").rangeBetween(-3, 3)
 
-    .. note:: Experimental
+    .. note:: When ordering is not defined, an unbounded window frame (rowFrame,
+         unboundedPreceding, unboundedFollowing) is used by default. When ordering is defined,
+         a growing window frame (rangeFrame, unboundedPreceding, currentRow) is used by default.
 
     .. versionadded:: 1.4
     """
+
+    _JAVA_MIN_LONG = -(1 << 63)  # -9223372036854775808
+    _JAVA_MAX_LONG = (1 << 63) - 1  # 9223372036854775807
+    _PRECEDING_THRESHOLD = max(-sys.maxsize, _JAVA_MIN_LONG)
+    _FOLLOWING_THRESHOLD = min(sys.maxsize, _JAVA_MAX_LONG)
+
+    unboundedPreceding = _JAVA_MIN_LONG
+
+    unboundedFollowing = _JAVA_MAX_LONG
+
+    currentRow = 0
+
     @staticmethod
     @since(1.4)
     def partitionBy(*cols):
@@ -66,6 +80,121 @@ class Window(object):
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
+    @staticmethod
+    @since(2.1)
+    def rowsBetween(start, end):
+        """
+        Creates a :class:`WindowSpec` with the frame boundaries defined,
+        from `start` (inclusive) to `end` (inclusive).
+
+        Both `start` and `end` are relative positions from the current row.
+        For example, "0" means "current row", while "-1" means the row before
+        the current row, and "5" means the fifth row after the current row.
+
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
+        A row based boundary is based on the position of the row within the partition.
+        An offset indicates the number of rows above or below the current row, the frame for the
+        current row starts or ends. For instance, given a row based sliding frame with a lower bound
+        offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
+        index 4 to index 7.
+
+        >>> from pyspark.sql import Window
+        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import SQLContext
+        >>> sc = SparkContext.getOrCreate()
+        >>> sqlContext = SQLContext(sc)
+        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).show()
+        +---+--------+---+
+        | id|category|sum|
+        +---+--------+---+
+        |  1|       b|  3|
+        |  2|       b|  5|
+        |  3|       b|  3|
+        |  1|       a|  2|
+        |  1|       a|  3|
+        |  2|       a|  2|
+        +---+--------+---+
+
+        :param start: boundary start, inclusive.
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      any value less than or equal to -9223372036854775808.
+        :param end: boundary end, inclusive.
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    any value greater than or equal to 9223372036854775807.
+        """
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
+        sc = SparkContext._active_spark_context
+        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
+        return WindowSpec(jspec)
+
+    @staticmethod
+    @since(2.1)
+    def rangeBetween(start, end):
+        """
+        Creates a :class:`WindowSpec` with the frame boundaries defined,
+        from `start` (inclusive) to `end` (inclusive).
+
+        Both `start` and `end` are relative from the current row. For example,
+        "0" means "current row", while "-1" means one off before the current row,
+        and "5" means the five off after the current row.
+
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
+        A range-based boundary is based on the actual value of the ORDER BY
+        expression(s). An offset is used to alter the value of the ORDER BY expression, for
+        instance if the current ORDER BY expression has a value of 10 and the lower bound offset
+        is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
+        number of constraints on the ORDER BY expressions: there can be only one expression and this
+        expression must have a numerical data type. An exception can be made when the offset is
+        unbounded, because no value modification is needed, in this case multiple and non-numeric
+        ORDER BY expression are allowed.
+
+        >>> from pyspark.sql import Window
+        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import SQLContext
+        >>> sc = SparkContext.getOrCreate()
+        >>> sqlContext = SQLContext(sc)
+        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).show()
+        +---+--------+---+
+        | id|category|sum|
+        +---+--------+---+
+        |  1|       b|  3|
+        |  2|       b|  5|
+        |  3|       b|  3|
+        |  1|       a|  4|
+        |  1|       a|  4|
+        |  2|       a|  2|
+        +---+--------+---+
+
+        :param start: boundary start, inclusive.
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        :param end: boundary end, inclusive.
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+        """
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
+        sc = SparkContext._active_spark_context
+        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
+        return WindowSpec(jspec)
+
 
 class WindowSpec(object):
     """
@@ -74,13 +203,8 @@ class WindowSpec(object):
 
     Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
 
-    .. note:: Experimental
-
     .. versionadded:: 1.4
     """
-
-    _JAVA_MAX_LONG = (1 << 63) - 1
-    _JAVA_MIN_LONG = - (1 << 63)
 
     def __init__(self, jspec):
         self._jspec = jspec
@@ -112,15 +236,21 @@ class WindowSpec(object):
         For example, "0" means "current row", while "-1" means the row before
         the current row, and "5" means the fifth row after the current row.
 
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= -sys.maxsize:
-            start = self._JAVA_MIN_LONG
-        if end >= sys.maxsize:
-            end = self._JAVA_MAX_LONG
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
     @since(1.4)
@@ -132,24 +262,34 @@ class WindowSpec(object):
         "0" means "current row", while "-1" means one off before the current row,
         and "5" means the five off after the current row.
 
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= -sys.maxsize:
-            start = self._JAVA_MIN_LONG
-        if end >= sys.maxsize:
-            end = self._JAVA_MAX_LONG
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rangeBetween(start, end))
 
 
 def _test():
     import doctest
+    import pyspark.sql.window
     SparkContext('local[4]', 'PythonTest')
-    (failure_count, test_count) = doctest.testmod()
+    globs = pyspark.sql.window.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.window, globs=globs,
+        optionflags=doctest.NORMALIZE_WHITESPACE)
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

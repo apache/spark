@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.sql.types._
 
 
 /**
@@ -40,14 +41,15 @@ private[spark] object SchemaUtils {
     val actualDataType = schema(colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(actualDataType.equals(dataType),
-      s"Column $colName must be of type $dataType but was actually $actualDataType.$message")
+      s"Column $colName must be of type ${dataType.catalogString} but was actually " +
+        s"${actualDataType.catalogString}.$message")
   }
 
   /**
-    * Check whether the given schema contains a column of one of the require data types.
-    * @param colName  column name
-    * @param dataTypes  required column data types
-    */
+   * Check whether the given schema contains a column of one of the require data types.
+   * @param colName  column name
+   * @param dataTypes  required column data types
+   */
   def checkColumnTypes(
       schema: StructType,
       colName: String,
@@ -57,7 +59,23 @@ private[spark] object SchemaUtils {
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(dataTypes.exists(actualDataType.equals),
       s"Column $colName must be of type equal to one of the following types: " +
-        s"${dataTypes.mkString("[", ", ", "]")} but was actually of type $actualDataType.$message")
+        s"${dataTypes.map(_.catalogString).mkString("[", ", ", "]")} but was actually of type " +
+        s"${actualDataType.catalogString}.$message")
+  }
+
+  /**
+   * Check whether the given schema contains a column of the numeric data type.
+   * @param colName  column name
+   */
+  def checkNumericType(
+      schema: StructType,
+      colName: String,
+      msg: String = ""): Unit = {
+    val actualDataType = schema(colName).dataType
+    val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
+    require(actualDataType.isInstanceOf[NumericType],
+      s"Column $colName must be of type ${NumericType.simpleString} but was actually of type " +
+      s"${actualDataType.catalogString}.$message")
   }
 
   /**
@@ -86,5 +104,18 @@ private[spark] object SchemaUtils {
   def appendColumn(schema: StructType, col: StructField): StructType = {
     require(!schema.fieldNames.contains(col.name), s"Column ${col.name} already exists.")
     StructType(schema.fields :+ col)
+  }
+
+  /**
+   * Check whether the given column in the schema is one of the supporting vector type: Vector,
+   * Array[Float]. Array[Double]
+   * @param schema input schema
+   * @param colName column name
+   */
+  def validateVectorCompatibleColumn(schema: StructType, colName: String): Unit = {
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, false))
+    checkColumnTypes(schema, colName, typeCandidates)
   }
 }

@@ -17,12 +17,28 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-case class Sum(child: Expression) extends DeclarativeAggregate {
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (5), (10), (15) AS tab(col);
+       30
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (10), (15) AS tab(col);
+       25
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
+       NULL
+      > SELECT _FUNC_(cast(col as interval)) FROM VALUES ('1 seconds'), ('2 seconds'), (null) tab(col);
+       3 seconds
+  """,
+  since = "1.0.0")
+// scalastyle:on line.size.limit
+case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -31,23 +47,21 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
   // Return data type.
   override def dataType: DataType = resultType
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, DoubleType, DecimalType))
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function sum")
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision + 10, scale)
-    case _ => child.dataType
+    case _: CalendarIntervalType => CalendarIntervalType
+    case _: IntegralType => LongType
+    case _ => DoubleType
   }
 
   private lazy val sumDataType = resultType
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
-  private lazy val zero = Cast(Literal(0), sumDataType)
+  private lazy val zero = Literal.default(resultType)
 
   override lazy val aggBufferAttributes = sum :: Nil
 
@@ -59,12 +73,12 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
     if (child.nullable) {
       Seq(
         /* sum = */
-        Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType)), sum))
+        coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
       )
     } else {
       Seq(
         /* sum = */
-        Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType))
+        coalesce(sum, zero) + child.cast(sumDataType)
       )
     }
   }
@@ -72,9 +86,13 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
   override lazy val mergeExpressions: Seq[Expression] = {
     Seq(
       /* sum = */
-      Coalesce(Seq(Add(Coalesce(Seq(sum.left, zero)), sum.right), sum.left))
+      coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
     )
   }
 
-  override lazy val evaluateExpression: Expression = sum
+  override lazy val evaluateExpression: Expression = resultType match {
+    case d: DecimalType => CheckOverflow(sum, d, !SQLConf.get.ansiEnabled)
+    case _ => sum
+  }
+
 }

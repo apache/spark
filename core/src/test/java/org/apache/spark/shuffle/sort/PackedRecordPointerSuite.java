@@ -22,8 +22,8 @@ import java.io.IOException;
 import org.junit.Test;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.memory.TestMemoryManager;
-import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.internal.config.package$;
+import org.apache.spark.memory.*;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 import static org.apache.spark.shuffle.sort.PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES;
@@ -35,11 +35,12 @@ public class PackedRecordPointerSuite {
 
   @Test
   public void heap() throws IOException {
-    final SparkConf conf = new SparkConf().set("spark.memory.offHeap.enabled", "false");
+    final SparkConf conf = new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
-    final MemoryBlock page0 = memoryManager.allocatePage(128, null);
-    final MemoryBlock page1 = memoryManager.allocatePage(128, null);
+    final MemoryConsumer c = new TestMemoryConsumer(memoryManager, MemoryMode.ON_HEAP);
+    final MemoryBlock page0 = memoryManager.allocatePage(128, c);
+    final MemoryBlock page1 = memoryManager.allocatePage(128, c);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,
       page1.getBaseOffset() + 42);
     PackedRecordPointer packedPointer = new PackedRecordPointer();
@@ -55,12 +56,13 @@ public class PackedRecordPointerSuite {
   @Test
   public void offHeap() throws IOException {
     final SparkConf conf = new SparkConf()
-      .set("spark.memory.offHeap.enabled", "true")
-      .set("spark.memory.offHeap.size", "10000");
+      .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), true)
+      .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 10000L);
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
-    final MemoryBlock page0 = memoryManager.allocatePage(128, null);
-    final MemoryBlock page1 = memoryManager.allocatePage(128, null);
+    final MemoryConsumer c = new TestMemoryConsumer(memoryManager, MemoryMode.OFF_HEAP);
+    final MemoryBlock page0 = memoryManager.allocatePage(128, c);
+    final MemoryBlock page1 = memoryManager.allocatePage(128, c);
     final long addressInPage1 = memoryManager.encodePageNumberAndOffset(page1,
       page1.getBaseOffset() + 42);
     PackedRecordPointer packedPointer = new PackedRecordPointer();

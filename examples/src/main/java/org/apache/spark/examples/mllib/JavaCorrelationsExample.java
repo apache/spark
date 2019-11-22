@@ -46,7 +46,7 @@ public class JavaCorrelationsExample {
 
     // compute the correlation using Pearson's method. Enter "spearman" for Spearman's method.
     // If a method is not specified, Pearson's method will be used by default.
-    Double correlation = Statistics.corr(seriesX.srdd(), seriesY.srdd(), "pearson");
+    double correlation = Statistics.corr(seriesX.srdd(), seriesY.srdd(), "pearson");
     System.out.println("Correlation is: " + correlation);
 
     // note that each Vector is a row and not a column

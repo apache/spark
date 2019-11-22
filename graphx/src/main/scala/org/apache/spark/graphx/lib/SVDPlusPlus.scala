@@ -42,7 +42,8 @@ object SVDPlusPlus {
   /**
    * Implement SVD++ based on "Factorization Meets the Neighborhood:
    * a Multifaceted Collaborative Filtering Model",
-   * available at [[http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf]].
+   * available at <a href="http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf">
+   * here</a>.
    *
    * The prediction rule is rui = u + bu + bi + qi*(pu + |N(u)|^^-0.5^^*sum(y)),
    * see the details on page 6.
@@ -71,7 +72,7 @@ object SVDPlusPlus {
 
     // calculate global rating mean
     edges.cache()
-    val (rs, rc) = edges.map(e => (e.attr, 1L)).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+    val (rs, rc) = edges.map(e => (e.attr, 1L)).fold((0, 0))((a, b) => (a._1 + b._1, a._2 + b._2))
     val u = rs / rc
 
     // construct graph
@@ -97,7 +98,7 @@ object SVDPlusPlus {
         (ctx: EdgeContext[
           (Array[Double], Array[Double], Double, Double),
           Double,
-          (Array[Double], Array[Double], Double)]) {
+          (Array[Double], Array[Double], Double)]): Unit = {
       val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
       val (p, q) = (usr._1, itm._1)
       val rank = p.length
@@ -176,7 +177,7 @@ object SVDPlusPlus {
 
     // calculate error on training set
     def sendMsgTestF(conf: Conf, u: Double)
-        (ctx: EdgeContext[(Array[Double], Array[Double], Double, Double), Double, Double]) {
+        (ctx: EdgeContext[(Array[Double], Array[Double], Double, Double), Double, Double]): Unit = {
       val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
       val (p, q) = (usr._1, itm._1)
       var pred = u + usr._3 + itm._3 + blas.ddot(q.length, q, 1, usr._2, 1)

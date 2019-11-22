@@ -23,22 +23,16 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
+import org.apache.spark.streaming.{LocalStreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
 
-class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase {
+class StreamingLogisticRegressionSuite
+  extends SparkFunSuite
+  with LocalStreamingContext
+  with TestSuiteBase {
 
   // use longer wait time to ensure job completion
   override def maxWaitTimeMillis: Int = 30000
-
-  var ssc: StreamingContext = _
-
-  override def afterFunction() {
-    super.afterFunction()
-    if (ssc != null) {
-      ssc.stop()
-    }
-  }
 
   // Test if we can accurately learn B for Y = logistic(BX) on streaming data
   test("parameter accuracy") {
@@ -95,7 +89,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
     // (we add a count to ensure the result is a DStream)
     ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
       model.trainOn(inputDStream)
-      inputDStream.foreachRDD(x => history.append(math.abs(model.latestModel().weights(0) - B)))
+      inputDStream.foreachRDD(x => history += math.abs(model.latestModel().weights(0) - B))
       inputDStream.count()
     })
     runStreams(ssc, numBatches, numBatches)

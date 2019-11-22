@@ -125,9 +125,9 @@ private[ui] class MillisecondsStatUIData(data: Seq[(Long, Long)]) {
  * A helper class for "input rate" to generate data that will be used in the timeline and histogram
  * graphs.
  *
- * @param data (batchTime, event-rate).
+ * @param data (batch time, record rate).
  */
-private[ui] class EventRateUIData(val data: Seq[(Long, Double)]) {
+private[ui] class RecordRateUIData(val data: Seq[(Long, Double)]) {
 
   val avg: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
 
@@ -143,11 +143,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
   import StreamingPage._
 
   private val listener = parent.listener
-  private val startTime = System.currentTimeMillis()
+
+  private def startTime: Long = listener.startTime
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val resources = generateLoadResources()
+    val resources = generateLoadResources(request)
     val basicInfo = generateBasicInfo()
     val content = resources ++
       basicInfo ++
@@ -155,17 +156,17 @@ private[ui] class StreamingPage(parent: StreamingTab)
         generateStatTable() ++
           generateBatchListTables()
       }
-    SparkUIUtils.headerSparkPage("Streaming Statistics", content, parent, Some(5000))
+    SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
   }
 
   /**
    * Generate html that will load css/js files for StreamingPage
    */
-  private def generateLoadResources(): Seq[Node] = {
+  private def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
-    <script src={SparkUIUtils.prependBaseUri("/static/d3.min.js")}></script>
-      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.js")}></script>
+    <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming/streaming-page.css")} type="text/css"/>
+      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming/streaming-page.js")}></script>
     // scalastyle:on
   }
 
@@ -215,7 +216,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val minBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.min
     val maxBatchTime = if (batchTimes.isEmpty) startTime else batchTimes.max
 
-    val eventRateForAllStreams = new EventRateUIData(batches.map { batchInfo =>
+    val recordRateForAllStreams = new RecordRateUIData(batches.map { batchInfo =>
       (batchInfo.batchTime.milliseconds, batchInfo.numRecords * 1000.0 / listener.batchDuration)
     })
 
@@ -241,24 +242,24 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     // Use the max input rate for all InputDStreams' graphs to make the Y axis ranges same.
     // If it's not an integral number, just use its ceil integral number.
-    val maxEventRate = eventRateForAllStreams.max.map(_.ceil.toLong).getOrElse(0L)
-    val minEventRate = 0L
+    val maxRecordRate = recordRateForAllStreams.max.map(_.ceil.toLong).getOrElse(0L)
+    val minRecordRate = 0L
 
     val batchInterval = UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
     val jsCollector = new JsCollector
 
-    val graphUIDataForEventRateOfAllStreams =
+    val graphUIDataForRecordRateOfAllStreams =
       new GraphUIData(
-        "all-stream-events-timeline",
-        "all-stream-events-histogram",
-        eventRateForAllStreams.data,
+        "all-stream-records-timeline",
+        "all-stream-records-histogram",
+        recordRateForAllStreams.data,
         minBatchTime,
         maxBatchTime,
-        minEventRate,
-        maxEventRate,
-        "events/sec")
-    graphUIDataForEventRateOfAllStreams.generateDataJs(jsCollector)
+        minRecordRate,
+        maxRecordRate,
+        "records/sec")
+    graphUIDataForRecordRateOfAllStreams.generateDataJs(jsCollector)
 
     val graphUIDataForSchedulingDelay =
       new GraphUIData(
@@ -320,7 +321,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 if (hasStream) {
                   <span class="expand-input-rate">
                     <span class="expand-input-rate-arrow arrow-closed"></span>
-                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="right">
+                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="top">
                       <strong>Input Rate</strong>
                     </a>
                   </span>
@@ -334,23 +335,23 @@ private[ui] class StreamingPage(parent: StreamingTab)
                   <div>Receivers: {listener.numActiveReceivers} / {numReceivers} active</div>
                 }
               }
-              <div>Avg: {eventRateForAllStreams.formattedAvg} events/sec</div>
+              <div>Avg: {recordRateForAllStreams.formattedAvg} records/sec</div>
             </div>
           </td>
-          <td class="timeline">{graphUIDataForEventRateOfAllStreams.generateTimelineHtml(jsCollector)}</td>
-          <td class="histogram">{graphUIDataForEventRateOfAllStreams.generateHistogramHtml(jsCollector)}</td>
+          <td class="timeline">{graphUIDataForRecordRateOfAllStreams.generateTimelineHtml(jsCollector)}</td>
+          <td class="histogram">{graphUIDataForRecordRateOfAllStreams.generateHistogramHtml(jsCollector)}</td>
         </tr>
       {if (hasStream) {
         <tr id="inputs-table" style="display: none;" >
           <td colspan="3">
-            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minEventRate, maxEventRate)}
+            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate, maxRecordRate)}
           </td>
         </tr>
       }}
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Scheduling Delay {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "right")}</strong></div>
+              <div><strong>Scheduling Delay {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "top")}</strong></div>
               <div>Avg: {schedulingDelay.formattedAvg}</div>
             </div>
           </td>
@@ -360,7 +361,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Processing Time {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "right")}</strong></div>
+              <div><strong>Processing Time {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "top")}</strong></div>
               <div>Avg: {processingTime.formattedAvg}</div>
             </div>
           </td>
@@ -370,7 +371,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "right")}</strong></div>
+              <div><strong>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</strong></div>
               <div>Avg: {totalDelay.formattedAvg}</div>
             </div>
           </td>
@@ -390,16 +391,17 @@ private[ui] class StreamingPage(parent: StreamingTab)
       maxX: Long,
       minY: Double,
       maxY: Double): Seq[Node] = {
-    val maxYCalculated = listener.receivedEventRateWithBatchTime.values
-      .flatMap { case streamAndRates => streamAndRates.map { case (_, eventRate) => eventRate } }
+    val maxYCalculated = listener.receivedRecordRateWithBatchTime.values
+      .flatMap { case streamAndRates => streamAndRates.map { case (_, recordRate) => recordRate } }
       .reduceOption[Double](math.max)
       .map(_.ceil.toLong)
       .getOrElse(0L)
 
-    val content = listener.receivedEventRateWithBatchTime.toList.sortBy(_._1).map {
-      case (streamId, eventRates) =>
-        generateInputDStreamRow(jsCollector, streamId, eventRates, minX, maxX, minY, maxYCalculated)
-    }.foldLeft[Seq[Node]](Nil)(_ ++ _)
+    val content: Seq[Node] = listener.receivedRecordRateWithBatchTime.toList.sortBy(_._1).flatMap {
+      case (streamId, recordRates) =>
+        generateInputDStreamRow(
+          jsCollector, streamId, recordRates, minX, maxX, minY, maxYCalculated)
+    }
 
     // scalastyle:off
     <table class="table table-bordered" style="width: auto">
@@ -422,7 +424,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private def generateInputDStreamRow(
       jsCollector: JsCollector,
       streamId: Int,
-      eventRates: Seq[(Long, Double)],
+      recordRates: Seq[(Long, Double)],
       minX: Long,
       maxX: Long,
       minY: Double,
@@ -447,25 +449,25 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val receiverLastErrorTime = receiverInfo.map {
       r => if (r.lastErrorTime < 0) "-" else SparkUIUtils.formatDate(r.lastErrorTime)
     }.getOrElse(emptyCell)
-    val receivedRecords = new EventRateUIData(eventRates)
+    val receivedRecords = new RecordRateUIData(recordRates)
 
-    val graphUIDataForEventRate =
+    val graphUIDataForRecordRate =
       new GraphUIData(
-        s"stream-$streamId-events-timeline",
-        s"stream-$streamId-events-histogram",
+        s"stream-$streamId-records-timeline",
+        s"stream-$streamId-records-histogram",
         receivedRecords.data,
         minX,
         maxX,
         minY,
         maxY,
-        "events/sec")
-    graphUIDataForEventRate.generateDataJs(jsCollector)
+        "records/sec")
+    graphUIDataForRecordRate.generateDataJs(jsCollector)
 
     <tr>
       <td rowspan="2" style="vertical-align: middle; width: 151px;">
         <div style="width: 151px;">
           <div style="word-wrap: break-word;"><strong>{receiverName}</strong></div>
-          <div>Avg: {receivedRecords.formattedAvg} events/sec</div>
+          <div>Avg: {receivedRecords.formattedAvg} records/sec</div>
         </div>
       </td>
       <td>{receiverActive}</td>
@@ -475,9 +477,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </tr>
     <tr>
       <td colspan="3" class="timeline">
-        {graphUIDataForEventRate.generateTimelineHtml(jsCollector)}
+        {graphUIDataForRecordRate.generateTimelineHtml(jsCollector)}
       </td>
-      <td class="histogram">{graphUIDataForEventRate.generateHistogramHtml(jsCollector)}</td>
+      <td class="histogram">{graphUIDataForRecordRate.generateHistogramHtml(jsCollector)}</td>
     </tr>
   }
 
@@ -488,15 +490,40 @@ private[ui] class StreamingPage(parent: StreamingTab)
       sortBy(_.batchTime.milliseconds).reverse
 
     val activeBatchesContent = {
-      <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
-        new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq
+      <div class="row-fluid">
+        <div class="span12">
+          <span id="activeBatches" class="collapse-aggregated-activeBatches collapse-table"
+                onClick="collapseTable('collapse-aggregated-activeBatches',
+                'aggregated-activeBatches')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Active Batches ({runningBatches.size + waitingBatches.size})</a>
+            </h4>
+          </span>
+          <div class="aggregated-activeBatches collapsible-table">
+            {new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq}
+          </div>
+        </div>
+      </div>
     }
 
     val completedBatchesContent = {
-      <h4 id="completed">
-        Completed Batches (last {completedBatches.size} out of {listener.numTotalCompletedBatches})
-      </h4> ++
-        new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq
+      <div class="row-fluid">
+        <div class="span12">
+          <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
+                onClick="collapseTable('collapse-aggregated-completedBatches',
+                'aggregated-completedBatches')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Completed Batches (last {completedBatches.size}
+                out of {listener.numTotalCompletedBatches})</a>
+            </h4>
+          </span>
+          <div class="aggregated-completedBatches collapsible-table">
+            {new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq}
+          </div>
+        </div>
+      </div>
     }
 
     activeBatchesContent ++ completedBatchesContent

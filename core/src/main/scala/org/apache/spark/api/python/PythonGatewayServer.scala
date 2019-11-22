@@ -17,42 +17,52 @@
 
 package org.apache.spark.api.python
 
-import java.io.DataOutputStream
-import java.net.Socket
+import java.io.{DataOutputStream, File, FileOutputStream}
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 
-import py4j.GatewayServer
-
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
 
 /**
- * Process that starts a Py4J GatewayServer on an ephemeral port and communicates the bound port
- * back to its caller via a callback port specified by the caller.
+ * Process that starts a Py4J server on an ephemeral port.
  *
  * This process is launched (via SparkSubmit) by the PySpark driver (see java_gateway.py).
  */
 private[spark] object PythonGatewayServer extends Logging {
-  def main(args: Array[String]): Unit = Utils.tryOrExit {
-    // Start a GatewayServer on an ephemeral port
-    val gatewayServer: GatewayServer = new GatewayServer(null, 0)
+  initializeLogIfNecessary(true)
+
+  def main(args: Array[String]): Unit = {
+    val sparkConf = new SparkConf()
+    val gatewayServer: Py4JServer = new Py4JServer(sparkConf)
+
     gatewayServer.start()
     val boundPort: Int = gatewayServer.getListeningPort
     if (boundPort == -1) {
-      logError("GatewayServer failed to bind; exiting")
+      logError(s"${gatewayServer.server.getClass} failed to bind; exiting")
       System.exit(1)
     } else {
       logDebug(s"Started PythonGatewayServer on port $boundPort")
     }
 
-    // Communicate the bound port back to the caller via the caller-specified callback port
-    val callbackHost = sys.env("_PYSPARK_DRIVER_CALLBACK_HOST")
-    val callbackPort = sys.env("_PYSPARK_DRIVER_CALLBACK_PORT").toInt
-    logDebug(s"Communicating GatewayServer port to Python driver at $callbackHost:$callbackPort")
-    val callbackSocket = new Socket(callbackHost, callbackPort)
-    val dos = new DataOutputStream(callbackSocket.getOutputStream)
+    // Communicate the connection information back to the python process by writing the
+    // information in the requested file. This needs to match the read side in java_gateway.py.
+    val connectionInfoPath = new File(sys.env("_PYSPARK_DRIVER_CONN_INFO_PATH"))
+    val tmpPath = Files.createTempFile(connectionInfoPath.getParentFile().toPath(),
+      "connection", ".info").toFile()
+
+    val dos = new DataOutputStream(new FileOutputStream(tmpPath))
     dos.writeInt(boundPort)
+
+    val secretBytes = gatewayServer.secret.getBytes(UTF_8)
+    dos.writeInt(secretBytes.length)
+    dos.write(secretBytes, 0, secretBytes.length)
     dos.close()
-    callbackSocket.close()
+
+    if (!tmpPath.renameTo(connectionInfoPath)) {
+      logError(s"Unable to write connection information to $connectionInfoPath.")
+      System.exit(1)
+    }
 
     // Exit on EOF or broken pipe to ensure that this process dies when the Python driver dies:
     while (System.in.read() != -1) {

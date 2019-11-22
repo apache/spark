@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-from py4j.protocol import Py4JJavaError
-
-from pyspark.serializers import PairDeserializer, NoOpSerializer
+from pyspark.serializers import NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming import DStream
+from pyspark.util import _print_missing_jar
+
 
 __all__ = ['KinesisUtils', 'InitialPositionInStream', 'utf8_decoder']
 
@@ -37,13 +37,14 @@ class KinesisUtils(object):
     def createStream(ssc, kinesisAppName, streamName, endpointUrl, regionName,
                      initialPositionInStream, checkpointInterval,
                      storageLevel=StorageLevel.MEMORY_AND_DISK_2,
-                     awsAccessKeyId=None, awsSecretKey=None, decoder=utf8_decoder):
+                     awsAccessKeyId=None, awsSecretKey=None, decoder=utf8_decoder,
+                     stsAssumeRoleArn=None, stsSessionName=None, stsExternalId=None):
         """
         Create an input stream that pulls messages from a Kinesis stream. This uses the
         Kinesis Client Library (KCL) to pull messages from Kinesis.
 
-        Note: The given AWS credentials will get saved in DStream checkpoints if checkpointing is
-        enabled. Make sure that your checkpoint directory is secure.
+        .. note:: The given AWS credentials will get saved in DStream checkpoints if checkpointing
+            is enabled. Make sure that your checkpoint directory is secure.
 
         :param ssc:  StreamingContext object
         :param kinesisAppName:  Kinesis application name used by the Kinesis Client Library (KCL) to
@@ -67,45 +68,33 @@ class KinesisUtils(object):
         :param awsSecretKey:  AWS SecretKey (default is None. If None, will use
                               DefaultAWSCredentialsProviderChain)
         :param decoder:  A function used to decode value (default is utf8_decoder)
+        :param stsAssumeRoleArn: ARN of IAM role to assume when using STS sessions to read from
+                                 the Kinesis stream (default is None).
+        :param stsSessionName: Name to uniquely identify STS sessions used to read from Kinesis
+                               stream, if STS is being used (default is None).
+        :param stsExternalId: External ID that can be used to validate against the assumed IAM
+                              role's trust policy, if STS is being used (default is None).
         :return: A DStream object
         """
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         jduration = ssc._jduration(checkpointInterval)
 
         try:
-            # Use KinesisUtilsPythonHelper to access Scala's KinesisUtils
             helper = ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
-                KinesisUtils._printErrorMsg(ssc.sparkContext)
+                _print_missing_jar(
+                    "Streaming's Kinesis",
+                    "streaming-kinesis-asl",
+                    "streaming-kinesis-asl-assembly",
+                    ssc.sparkContext.version)
             raise
         jstream = helper.createStream(ssc._jssc, kinesisAppName, streamName, endpointUrl,
                                       regionName, initialPositionInStream, jduration, jlevel,
-                                      awsAccessKeyId, awsSecretKey)
+                                      awsAccessKeyId, awsSecretKey, stsAssumeRoleArn,
+                                      stsSessionName, stsExternalId)
         stream = DStream(jstream, ssc, NoOpSerializer())
         return stream.map(lambda v: decoder(v))
-
-    @staticmethod
-    def _printErrorMsg(sc):
-        print("""
-________________________________________________________________________________________________
-
-  Spark Streaming's Kinesis libraries not found in class path. Try one of the following.
-
-  1. Include the Kinesis library and its dependencies with in the
-     spark-submit command as
-
-     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kinesis-asl:%s ...
-
-  2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
-     Group Id = org.apache.spark, Artifact Id = spark-streaming-kinesis-asl-assembly, Version = %s.
-     Then, include the jar in the spark-submit command as
-
-     $ bin/spark-submit --jars <spark-streaming-kinesis-asl-assembly.jar> ...
-
-________________________________________________________________________________________________
-
-""" % (sc.version, sc.version))
 
 
 class InitialPositionInStream(object):

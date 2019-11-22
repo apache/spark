@@ -1,3 +1,14 @@
 org.apache.spark.sql.sources.FakeSourceOne
 org.apache.spark.sql.sources.FakeSourceTwo
 org.apache.spark.sql.sources.FakeSourceThree
+org.apache.spark.sql.sources.FakeSourceFour
+org.apache.fakesource.FakeExternalSourceOne
+org.apache.fakesource.FakeExternalSourceTwo
+org.apache.fakesource.FakeExternalSourceThree
+org.apache.spark.sql.streaming.sources.FakeReadMicroBatchOnly
+org.apache.spark.sql.streaming.sources.FakeReadContinuousOnly
+org.apache.spark.sql.streaming.sources.FakeReadBothModes
+org.apache.spark.sql.streaming.sources.FakeReadNeitherMode
+org.apache.spark.sql.streaming.sources.FakeWriteOnly
+org.apache.spark.sql.streaming.sources.FakeNoWrite
+org.apache.spark.sql.streaming.sources.FakeWriteSupportProviderV1Fallback

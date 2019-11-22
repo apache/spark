@@ -38,17 +38,18 @@ object PageView extends Serializable {
 }
 
 // scalastyle:off
-/** Generates streaming events to simulate page views on a website.
-  *
-  * This should be used in tandem with PageViewStream.scala. Example:
-  *
-  * To run the generator
-  * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
-  * To process the generated stream
-  * `$ bin/run-example \
-  *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
-  *
-  */
+/**
+ * Generates streaming events to simulate page views on a website.
+ *
+ * This should be used in tandem with PageViewStream.scala. Example:
+ *
+ * To run the generator
+ * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
+ * To process the generated stream
+ * `$ bin/run-example \
+ *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
+ *
+ */
 // scalastyle:on
 object PageViewGenerator {
   val pages = Map("http://foo.com/" -> .7,
@@ -80,7 +81,7 @@ object PageViewGenerator {
     new PageView(page, status, zipCode, id).toString()
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 2) {
       System.err.println("Usage: PageViewGenerator <port> <viewsPerSecond>")
       System.exit(1)
@@ -89,13 +90,13 @@ object PageViewGenerator {
     val viewsPerSecond = args(1).toFloat
     val sleepDelayMs = (1000.0 / viewsPerSecond).toInt
     val listener = new ServerSocket(port)
-    println("Listening on port: " + port)
+    println(s"Listening on port: $port")
 
     while (true) {
       val socket = listener.accept()
       new Thread() {
         override def run(): Unit = {
-          println("Got client connected from: " + socket.getInetAddress)
+          println(s"Got client connected from: ${socket.getInetAddress}")
           val out = new PrintWriter(socket.getOutputStream(), true)
 
           while (true) {

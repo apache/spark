@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
+import org.scalatest.Assertions._
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
@@ -206,7 +207,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
   def validatePrediction(
       predictions: Seq[Double],
       input: Seq[LabeledPoint],
-      expectedAcc: Double = 0.83) {
+      expectedAcc: Double = 0.83): Unit = {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
     }
@@ -224,12 +225,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer
-      .setStepSize(10.0)
-      .setRegParam(0.0)
-      .setNumIterations(20)
-      .setConvergenceTol(0.0005)
+    val lr = new LogisticRegressionWithSGD(10.0, 20, 0.0, 1.0).setIntercept(true)
+    lr.optimizer.setConvergenceTol(0.0005)
 
     val model = lr.run(testRDD)
 
@@ -300,11 +297,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer
-      .setStepSize(10.0)
-      .setRegParam(0.0)
-      .setNumIterations(10)
+    val lr = new LogisticRegressionWithSGD(10.0, 10, 0.0, 1.0).setIntercept(true)
 
     val model = lr.run(testRDD, initialWeights)
 
@@ -335,11 +328,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer.
-      setStepSize(1.0).
-      setNumIterations(10).
-      setRegParam(1.0)
+    val lr = new LogisticRegressionWithSGD(1.0, 10, 1.0, 1.0).setIntercept(true)
 
     val model = lr.run(testRDD, initialWeights)
 
@@ -411,10 +400,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val testRDD1 = sc.parallelize(testData, 2)
 
     val testRDD2 = sc.parallelize(
-      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.toBreeze * 1.0E3))), 2)
+      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.asBreeze * 1.0E3))), 2)
 
     val testRDD3 = sc.parallelize(
-      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.toBreeze * 1.0E6))), 2)
+      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.asBreeze * 1.0E6))), 2)
 
     testRDD1.cache()
     testRDD2.cache()
@@ -916,7 +905,7 @@ class LogisticRegressionClusterSuite extends SparkFunSuite with LocalClusterSpar
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val model = LogisticRegressionWithSGD.train(points, 2)
+    val model = new LogisticRegressionWithSGD(1.0, 2, 0.0, 1.0).run(points)
 
     val predictions = model.predict(points.map(_.features))
 

@@ -19,7 +19,11 @@ from __future__ import print_function
 
 import time
 import threading
-import Queue
+import sys
+if sys.version >= '3':
+    import queue as Queue
+else:
+    import Queue
 
 from pyspark import SparkConf, SparkContext
 

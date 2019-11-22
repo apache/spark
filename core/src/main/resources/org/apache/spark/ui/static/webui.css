@@ -88,6 +88,10 @@ a.kill-link {
   float: right;
 }
 
+a.name-link {
+  word-wrap: break-word;
+}
+
 span.expand-details {
   font-size: 10pt;
   cursor: pointer;
@@ -106,21 +110,22 @@ pre {
   line-height: 18px;
   padding: 6px;
   margin: 0;
+  word-break: break-word;
   border-radius: 3px;
 }
 
 .stage-details {
-  max-height: 100px;
   overflow-y: auto;
   margin: 0;
+  display: block;
   transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stage-details.collapsed {
-  max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
   border: none;
+  display: none;
 }
 
 .description-input {
@@ -143,25 +148,22 @@ pre {
   max-height: 300px;
   overflow-y: auto;
   margin: 0;
+  display: block;
   transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stacktrace-details.collapsed {
-  max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
   border: none;
+  display: none;
 }
 
-span.expand-additional-metrics, span.expand-dag-viz {
+span.expand-dag-viz, span.collapse-table {
   cursor: pointer;
 }
 
-span.additional-metric-title {
-  cursor: pointer;
-}
-
-.additional-metrics.collapsed {
+.collapsible-table.collapsed {
   display: none;
 }
 
@@ -200,13 +202,6 @@ span.additional-metric-title {
   color: #777;
 }
 
-/* Hide all additional metrics by default. This is done here rather than using JavaScript to
- * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
-.scheduler_delay, .deserialization_time, .fetch_wait_time, .shuffle_read_remote,
-.serialization_time, .getting_result_time, .peak_execution_memory {
-  display: none;
-}
-
 .accordion-inner {
   background: #f5f5f5;
 }
@@ -234,4 +229,128 @@ a.expandbutton {
   /* Suppress the default link styling */
   color: #333;
   text-decoration: none;
+}
+
+.log-more-btn, .log-new-btn {
+  width: 100%
+}
+
+.no-new-alert {
+  text-align: center;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.table-cell-width-limited td {
+  max-width: 600px;
+}
+
+.paginate_button.active {
+  border: 1px solid #979797 !important;
+  background: white linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
+}
+
+.title-table {
+  clear: left;
+  display: inline-block;
+}
+
+.table-dataTable {
+  width: 100%;
+}
+
+.container-fluid-div {
+  width: 200px;
+}
+
+.select-all-div-checkbox-div {
+  width: 90px;
+}
+
+.scheduler-delay-checkbox-div {
+  width: 130px;
+}
+
+.task-deserialization-time-checkbox-div {
+  width: 190px;
+}
+
+.shuffle-read-blocked-time-checkbox-div {
+  width: 200px;
+}
+
+.shuffle-remote-reads-checkbox-div {
+  width: 170px;
+}
+
+.result-serialization-time-checkbox-div {
+  width: 185px;
+}
+
+.getting-result-time-checkbox-div {
+  width: 155px;
+}
+
+.peak-execution-memory-checkbox-div {
+  width: 180px;
+}
+
+#active-tasks-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#active-tasks-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#accumulator-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#accumulator-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-executor-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-executor-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-metrics-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-metrics-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-execs-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-execs-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#active-executors-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#active-executors-table th:first-child {
+  border-left: 1px solid #dddddd;
 }

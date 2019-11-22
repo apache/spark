@@ -15,26 +15,10 @@
  * limitations under the License.
  */
 
-// this function works exactly the same as UIUtils.formatDuration
-function formatDuration(milliseconds) {
-  if (milliseconds < 100) {
-    return milliseconds + " ms";
-  }
-  var seconds = milliseconds * 1.0 / 1000;
-  if (seconds < 1) {
-    return seconds.toFixed(1) + " s";
-  }
-  if (seconds < 60) {
-    return seconds.toFixed(0) + " s";
-  }
-  var minutes = seconds / 60;
-  if (minutes < 10) {
-    return minutes.toFixed(1) + " min";
-  } else if (minutes < 60) {
-    return minutes.toFixed(0) + " min";
-  }
-  var hours = minutes / 60;
-  return hours.toFixed(1) + " h";
+var appLimit = -1;
+
+function setAppLimit(val) {
+    appLimit = val;
 }
 
 function makeIdNumeric(id) {
@@ -53,14 +37,22 @@ function makeIdNumeric(id) {
   return resl;
 }
 
-function formatDate(date) {
-  return date.split(".")[0].replace("T", " ");
-}
-
 function getParameterByName(name, searchString) {
   var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
   results = regex.exec(searchString);
   return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+}
+
+function removeColumnByName(columns, columnName) {
+  return columns.filter(function(col) {return col.name != columnName})
+}
+
+function getColumnIndex(columns, columnName) {
+  for(var i = 0; i < columns.length; i++) {
+    if (columns[i].name == columnName)
+      return i;
+  }
+  return -1;
 }
 
 jQuery.extend( jQuery.fn.dataTableExt.oSort, {
@@ -93,6 +85,12 @@ jQuery.extend( jQuery.fn.dataTableExt.oSort, {
     }
 } );
 
+jQuery.extend( jQuery.fn.dataTableExt.ofnSearch, {
+    "appid-numeric": function ( a ) {
+        return a.replace(/[\r\n]/g, " ").replace(/<.*?>/g, "");
+    }
+} );
+
 $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function(){
     $.blockUI({ message: '<h3>Loading history summary...</h3>'});
@@ -105,18 +103,27 @@ $(document).ready(function() {
       pageLength: 20
     });
 
-    historySummary = $("#history-summary");
-    searchString = historySummary["context"]["location"]["search"];
-    requestedIncomplete = getParameterByName("showIncomplete", searchString);
+    var historySummary = $("#history-summary");
+    var searchString = window.location.search;
+    var requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    $.getJSON("api/v1/applications", function(response,status,jqXHR) {
+    var appParams = {
+      limit: appLimit,
+      status: (requestedIncomplete ? "running" : "completed")
+    };
+
+    $.getJSON(uiRoot + "/api/v1/applications", appParams, function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
-      for (i in response) {
+      for (var i in response) {
         var app = response[i];
         if (app["attempts"][0]["completed"] == requestedIncomplete) {
           continue; // if we want to show for Incomplete, we skip the completed apps; otherwise skip incomplete ones.
+        }
+        var version = "Unknown"
+        if (app["attempts"].length > 0) {
+            version = app["attempts"][0]["appSparkVersion"]
         }
         var id = app["id"];
         var name = app["name"];
@@ -124,69 +131,79 @@ $(document).ready(function() {
             hasMultipleAttempts = true;
         }
         var num = app["attempts"].length;
-        for (j in app["attempts"]) {
+        for (var j in app["attempts"]) {
           var attempt = app["attempts"][j];
-          attempt["startTime"] = formatDate(attempt["startTime"]);
-          attempt["endTime"] = formatDate(attempt["endTime"]);
-          attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
-          var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
+          attempt["startTime"] = formatTimeMillis(attempt["startTimeEpoch"]);
+          attempt["endTime"] = formatTimeMillis(attempt["endTimeEpoch"]);
+          attempt["lastUpdated"] = formatTimeMillis(attempt["lastUpdatedEpoch"]);
+          attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
+            (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
+          attempt["durationMillisec"] = attempt["duration"];
+          attempt["duration"] = formatDuration(attempt["duration"]);
+          var app_clone = {"id" : id, "name" : name, "version": version, "num" : num, "attempts" : [attempt]};
           array.push(app_clone);
         }
       }
+      if(array.length < 20) {
+        $.fn.dataTable.defaults.paging = false;
+      }
 
-      var data = {"applications": array}
-      $.get("static/historypage-template.html", function(template) {
-        historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data));
-        var selector = "#history-summary-table";
+      var data = {
+        "uiroot": uiRoot,
+        "applications": array,
+        "hasMultipleAttempts": hasMultipleAttempts,
+        "showCompletedColumns": !requestedIncomplete,
+      };
+
+      $.get(uiRoot + "/static/historypage-template.html", function(template) {
+        var sibling = historySummary.prev();
+        historySummary.detach();
+        var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
+        var attemptIdColumnName = 'attemptId';
+        var startedColumnName = 'started';
+        var completedColumnName = 'completed';
+        var durationColumnName = 'duration';
         var conf = {
-                    "columns": [
-                        {name: 'first', type: "appid-numeric"},
-                        {name: 'second'},
-                        {name: 'third'},
-                        {name: 'fourth'},
-                        {name: 'fifth'},
-                        {name: 'sixth', type: "title-numeric"},
-                        {name: 'seventh'},
-                        {name: 'eighth'},
-                    ],
-                    "autoWidth": false,
-                    "order": [[ 4, "desc" ]]
-        };
-
-        var rowGroupConf = {
-                           "rowsGroup": [
-                               'first:name',
-                               'second:name'
-                           ],
+          "columns": [
+            {name: 'version'},
+            {name: 'appId', type: "appid-numeric"},
+            {name: 'appName'},
+            {name: attemptIdColumnName},
+            {name: startedColumnName},
+            {name: completedColumnName},
+            {name: durationColumnName, type: "title-numeric"},
+            {name: 'user'},
+            {name: 'lastUpdated'},
+            {name: 'eventLog'},
+          ],
+          "autoWidth": false,
+          "deferRender": true
         };
 
         if (hasMultipleAttempts) {
-          jQuery.extend(conf, rowGroupConf);
-          var rowGroupCells = document.getElementsByClassName("rowGroupColumn");
-          for (i = 0; i < rowGroupCells.length; i++) {
-            rowGroupCells[i].style='background-color: #ffffff';
-          }
+          conf.rowsGroup = [
+            'appId:name',
+            'version:name',
+            'appName:name'
+          ];
+        } else {
+          conf.columns = removeColumnByName(conf.columns, attemptIdColumnName);
         }
 
-        if (!hasMultipleAttempts) {
-          var attemptIDCells = document.getElementsByClassName("attemptIDSpan");
-          for (i = 0; i < attemptIDCells.length; i++) {
-            attemptIDCells[i].style.display='none';
-          }
+        var defaultSortColumn = completedColumnName;
+        if (requestedIncomplete) {
+          defaultSortColumn = startedColumnName;
+          conf.columns = removeColumnByName(conf.columns, completedColumnName);
+          conf.columns = removeColumnByName(conf.columns, durationColumnName);
         }
-
-        var durationCells = document.getElementsByClassName("durationClass");
-        for (i = 0; i < durationCells.length; i++) {
-          var timeInMilliseconds = parseInt(durationCells[i].title);
-          durationCells[i].innerHTML = formatDuration(timeInMilliseconds);
-        }
-
-        if ($(selector.concat(" tr")).length < 20) {
-          $.extend(conf, {paging: false});
-        }
-
-        $(selector).DataTable(conf);
-        $('#hisotry-summary [data-toggle="tooltip"]').tooltip();
+        conf.order = [[ getColumnIndex(conf.columns, defaultSortColumn), "desc" ]];
+        conf.columnDefs = [
+          {"searchable": false, "targets": [getColumnIndex(conf.columns, durationColumnName)]}
+        ];
+        historySummary.append(apps);
+        apps.DataTable(conf);
+        sibling.after(historySummary);
+        $('#history-summary [data-toggle="tooltip"]').tooltip();
       });
     });
 });

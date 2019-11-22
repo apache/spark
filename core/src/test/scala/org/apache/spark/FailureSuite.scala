@@ -19,6 +19,9 @@ package org.apache.spark
 
 import java.io.{IOException, NotSerializableException, ObjectInputStream}
 
+import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
+import org.apache.spark.memory.TestMemoryConsumer
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.NonSerializable
 
 // Common state shared by FailureSuite-launched tasks. We use a global object
@@ -28,7 +31,7 @@ object FailureSuiteState {
   var tasksRun = 0
   var tasksFailed = 0
 
-  def clear() {
+  def clear(): Unit = {
     synchronized {
       tasksRun = 0
       tasksFailed = 0
@@ -142,14 +145,15 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("managed memory leak error should not mask other failures (SPARK-9266") {
-    val conf = new SparkConf().set("spark.unsafe.exceptionOnMemoryLeak", "true")
+    val conf = new SparkConf().set(UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
     sc = new SparkContext("local[1,1]", "test", conf)
 
     // If a task leaks memory but fails due to some other cause, then make sure that the original
     // cause is preserved
     val thrownDueToTaskFailure = intercept[SparkException] {
       sc.parallelize(Seq(0)).mapPartitions { iter =>
-        TaskContext.get().taskMemoryManager().allocatePage(128, null)
+        val c = new TestMemoryConsumer(TaskContext.get().taskMemoryManager())
+        TaskContext.get().taskMemoryManager().allocatePage(128, c)
         throw new Exception("intentional task failure")
         iter
       }.count()
@@ -159,7 +163,8 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     // If the task succeeded but memory was leaked, then the task should fail due to that leak
     val thrownDueToMemoryLeak = intercept[SparkException] {
       sc.parallelize(Seq(0)).mapPartitions { iter =>
-        TaskContext.get().taskMemoryManager().allocatePage(128, null)
+        val c = new TestMemoryConsumer(TaskContext.get().taskMemoryManager())
+        TaskContext.get().taskMemoryManager().allocatePage(128, c)
         iter
       }.count()
     }
@@ -236,6 +241,28 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
       assert(FailureSuiteState.tasksRun === 4)
     }
     FailureSuiteState.clear()
+  }
+
+  test("failure because cached RDD partitions are missing from DiskStore (SPARK-15736)") {
+    sc = new SparkContext("local[1,2]", "test")
+    val rdd = sc.parallelize(1 to 2, 2).persist(StorageLevel.DISK_ONLY)
+    rdd.count()
+    // Directly delete all files from the disk store, triggering failures when reading cached data:
+    SparkEnv.get.blockManager.diskBlockManager.getAllFiles().foreach(_.delete())
+    // Each task should fail once due to missing cached data, but then should succeed on its second
+    // attempt because the missing cache locations will be purged and the blocks will be recomputed.
+    rdd.count()
+  }
+
+  test("SPARK-16304: Link error should not crash executor") {
+    sc = new SparkContext("local[1,2]", "test")
+    intercept[SparkException] {
+      sc.parallelize(1 to 2).foreach { i =>
+        // scalastyle:off throwerror
+        throw new LinkageError()
+        // scalastyle:on throwerror
+      }
+    }
   }
 
   // TODO: Need to add tests with shuffle fetch failures.

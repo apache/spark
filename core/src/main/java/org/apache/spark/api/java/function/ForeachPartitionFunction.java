@@ -23,6 +23,7 @@ import java.util.Iterator;
 /**
  * Base interface for a function used in Dataset's foreachPartition function.
  */
+@FunctionalInterface
 public interface ForeachPartitionFunction<T> extends Serializable {
   void call(Iterator<T> t) throws Exception;
 }

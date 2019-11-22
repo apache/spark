@@ -31,6 +31,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -58,7 +59,9 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow extends MutableRow implements Externalizable, KryoSerializable {
+public final class UnsafeRow extends InternalRow implements Externalizable, KryoSerializable {
+
+  public static final int WORD_SIZE = 8;
 
   //////////////////////////////////////////////////////////////////////////////
   // Static methods
@@ -66,10 +69,6 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
 
   public static int calculateBitSetWidthInBytes(int numFields) {
     return ((numFields + 63)/ 64) * 8;
-  }
-
-  public static int calculateFixedPortionByteSize(int numFields) {
-    return 8 * numFields + calculateBitSetWidthInBytes(numFields);
   }
 
   /**
@@ -166,6 +165,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
+    assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
@@ -182,6 +182,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   }
 
   public void setTotalSize(int sizeInBytes) {
+    assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     this.sizeInBytes = sizeInBytes;
   }
 
@@ -195,7 +196,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     assertIndexIsValid(i);
     BitSetMethods.set(baseObject, baseOffset, i);
     // To preserve row equality, zero out the value when setting the column to null.
-    // Since this row does does not currently support updates to variable-length values, we don't
+    // Since this row does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
     Platform.putLong(baseObject, getFieldOffset(i), 0);
   }
@@ -223,9 +224,6 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    if (Double.isNaN(value)) {
-      value = Double.NaN;
-    }
     Platform.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -254,9 +252,6 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    if (Float.isNaN(value)) {
-      value = Float.NaN;
-    }
     Platform.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -304,46 +299,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    if (isNullAt(ordinal) || dataType instanceof NullType) {
-      return null;
-    } else if (dataType instanceof BooleanType) {
-      return getBoolean(ordinal);
-    } else if (dataType instanceof ByteType) {
-      return getByte(ordinal);
-    } else if (dataType instanceof ShortType) {
-      return getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof LongType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof FloatType) {
-      return getFloat(ordinal);
-    } else if (dataType instanceof DoubleType) {
-      return getDouble(ordinal);
-    } else if (dataType instanceof DecimalType) {
-      DecimalType dt = (DecimalType) dataType;
-      return getDecimal(ordinal, dt.precision(), dt.scale());
-    } else if (dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof BinaryType) {
-      return getBinary(ordinal);
-    } else if (dataType instanceof StringType) {
-      return getUTF8String(ordinal);
-    } else if (dataType instanceof CalendarIntervalType) {
-      return getInterval(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType) dataType).size());
-    } else if (dataType instanceof ArrayType) {
-      return getArray(ordinal);
-    } else if (dataType instanceof MapType) {
-      return getMap(ordinal);
-    } else if (dataType instanceof UserDefinedType) {
-      return get(ordinal, ((UserDefinedType)dataType).sqlType());
-    } else {
-      throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
-    }
+    return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
 
   @Override
@@ -445,9 +401,10 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
+      final int months = Platform.getInt(baseObject, baseOffset + offset);
+      final int days = Platform.getInt(baseObject, baseOffset + offset + 4);
       final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
-      return new CalendarInterval(months, microseconds);
+      return new CalendarInterval(months, days, microseconds);
     }
   }
 
@@ -549,7 +506,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
     if (baseObject instanceof byte[]) {
-      int offsetInByteArray = (int) (Platform.BYTE_ARRAY_OFFSET - baseOffset);
+      int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
       out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
     } else {
       int dataRemaining = sizeInBytes;
@@ -585,14 +542,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    * Returns the underlying bytes for this UnsafeRow.
    */
   public byte[] getBytes() {
-    if (baseObject instanceof byte[] && baseOffset == Platform.BYTE_ARRAY_OFFSET
-      && (((byte[]) baseObject).length == sizeInBytes)) {
-      return (byte[]) baseObject;
-    } else {
-      byte[] bytes = new byte[sizeInBytes];
-      Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
-      return bytes;
-    }
+    return UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
   }
 
   // This is for debugging

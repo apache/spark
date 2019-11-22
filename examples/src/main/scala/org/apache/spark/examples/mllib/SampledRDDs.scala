@@ -35,7 +35,7 @@ object SampledRDDs {
   case class Params(input: String = "data/mllib/sample_binary_classification_data.txt")
     extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("SampledRDDs") {
@@ -52,14 +52,13 @@ object SampledRDDs {
         """.stripMargin)
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    } getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val conf = new SparkConf().setAppName(s"SampledRDDs with $params")
     val sc = new SparkContext(conf)
 

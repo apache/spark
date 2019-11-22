@@ -17,17 +17,14 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.util.Arrays;
+import java.util.List;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.OneHotEncoder;
-import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.ml.feature.StringIndexerModel;
+import org.apache.spark.ml.feature.OneHotEncoderModel;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -39,40 +36,39 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaOneHotEncoderExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaOneHotEncoderExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaOneHotEncoderExample")
+      .getOrCreate();
 
+    // Note: categorical features are usually first encoded with StringIndexer
     // $example on$
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-      RowFactory.create(0, "a"),
-      RowFactory.create(1, "b"),
-      RowFactory.create(2, "c"),
-      RowFactory.create(3, "a"),
-      RowFactory.create(4, "a"),
-      RowFactory.create(5, "c")
-    ));
+    List<Row> data = Arrays.asList(
+      RowFactory.create(0.0, 1.0),
+      RowFactory.create(1.0, 0.0),
+      RowFactory.create(2.0, 1.0),
+      RowFactory.create(0.0, 2.0),
+      RowFactory.create(0.0, 1.0),
+      RowFactory.create(2.0, 0.0)
+    );
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("id", DataTypes.DoubleType, false, Metadata.empty()),
-      new StructField("category", DataTypes.StringType, false, Metadata.empty())
+      new StructField("categoryIndex1", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("categoryIndex2", DataTypes.DoubleType, false, Metadata.empty())
     });
 
-    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
-
-    StringIndexerModel indexer = new StringIndexer()
-      .setInputCol("category")
-      .setOutputCol("categoryIndex")
-      .fit(df);
-    Dataset<Row> indexed = indexer.transform(df);
+    Dataset<Row> df = spark.createDataFrame(data, schema);
 
     OneHotEncoder encoder = new OneHotEncoder()
-      .setInputCol("categoryIndex")
-      .setOutputCol("categoryVec");
-    Dataset<Row> encoded = encoder.transform(indexed);
-    encoded.select("id", "categoryVec").show();
+      .setInputCols(new String[] {"categoryIndex1", "categoryIndex2"})
+      .setOutputCols(new String[] {"categoryVec1", "categoryVec2"});
+
+    OneHotEncoderModel model = encoder.fit(df);
+    Dataset<Row> encoded = model.transform(df);
+    encoded.show();
     // $example off$
-    jsc.stop();
+
+    spark.stop();
   }
 }
 

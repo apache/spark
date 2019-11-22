@@ -21,35 +21,43 @@ import org.apache.spark.streaming.Time
 
 private[streaming] trait PythonStreamingListener{
 
+  /** Called when the streaming has been started */
+  def onStreamingStarted(streamingStarted: JavaStreamingListenerStreamingStarted): Unit = { }
+
   /** Called when a receiver has been started */
-  def onReceiverStarted(receiverStarted: JavaStreamingListenerReceiverStarted) { }
+  def onReceiverStarted(receiverStarted: JavaStreamingListenerReceiverStarted): Unit = { }
 
   /** Called when a receiver has reported an error */
-  def onReceiverError(receiverError: JavaStreamingListenerReceiverError) { }
+  def onReceiverError(receiverError: JavaStreamingListenerReceiverError): Unit = { }
 
   /** Called when a receiver has been stopped */
-  def onReceiverStopped(receiverStopped: JavaStreamingListenerReceiverStopped) { }
+  def onReceiverStopped(receiverStopped: JavaStreamingListenerReceiverStopped): Unit = { }
 
   /** Called when a batch of jobs has been submitted for processing. */
-  def onBatchSubmitted(batchSubmitted: JavaStreamingListenerBatchSubmitted) { }
+  def onBatchSubmitted(batchSubmitted: JavaStreamingListenerBatchSubmitted): Unit = { }
 
   /** Called when processing of a batch of jobs has started.  */
-  def onBatchStarted(batchStarted: JavaStreamingListenerBatchStarted) { }
+  def onBatchStarted(batchStarted: JavaStreamingListenerBatchStarted): Unit = { }
 
   /** Called when processing of a batch of jobs has completed. */
-  def onBatchCompleted(batchCompleted: JavaStreamingListenerBatchCompleted) { }
+  def onBatchCompleted(batchCompleted: JavaStreamingListenerBatchCompleted): Unit = { }
 
   /** Called when processing of a job of a batch has started. */
   def onOutputOperationStarted(
-      outputOperationStarted: JavaStreamingListenerOutputOperationStarted) { }
+      outputOperationStarted: JavaStreamingListenerOutputOperationStarted): Unit = { }
 
   /** Called when processing of a job of a batch has completed. */
   def onOutputOperationCompleted(
-      outputOperationCompleted: JavaStreamingListenerOutputOperationCompleted) { }
+      outputOperationCompleted: JavaStreamingListenerOutputOperationCompleted): Unit = { }
 }
 
 private[streaming] class PythonStreamingListenerWrapper(listener: PythonStreamingListener)
   extends JavaStreamingListener {
+
+  /** Called when the streaming has been started */
+  override def onStreamingStarted(streamingStarted: JavaStreamingListenerStreamingStarted): Unit = {
+    listener.onStreamingStarted(streamingStarted)
+  }
 
   /** Called when a receiver has been started */
   override def onReceiverStarted(receiverStarted: JavaStreamingListenerReceiverStarted): Unit = {
@@ -99,6 +107,9 @@ private[streaming] class PythonStreamingListenerWrapper(listener: PythonStreamin
  */
 private[streaming] class JavaStreamingListener {
 
+  /** Called when the streaming has been started */
+  def onStreamingStarted(streamingStarted: JavaStreamingListenerStreamingStarted): Unit = { }
+
   /** Called when a receiver has been started */
   def onReceiverStarted(receiverStarted: JavaStreamingListenerReceiverStarted): Unit = { }
 
@@ -130,6 +141,9 @@ private[streaming] class JavaStreamingListener {
  * Base trait for events related to JavaStreamingListener
  */
 private[streaming] sealed trait JavaStreamingListenerEvent
+
+private[streaming] class JavaStreamingListenerStreamingStarted(val time: Long)
+  extends JavaStreamingListenerEvent
 
 private[streaming] class JavaStreamingListenerBatchSubmitted(val batchInfo: JavaBatchInfo)
   extends JavaStreamingListenerEvent

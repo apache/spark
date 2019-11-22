@@ -23,11 +23,13 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * Base class for operators that exchange data among multiple threads or processes.
@@ -36,8 +38,10 @@ import org.apache.spark.sql.types.StructType
  * differs significantly, the concept is similar to the exchange operator described in
  * "Volcano -- An Extensible and Parallel Query Evaluation System" by Goetz Graefe.
  */
-abstract class Exchange extends UnaryNode {
+abstract class Exchange extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
+
+  override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
 }
 
 /**
@@ -45,23 +49,52 @@ abstract class Exchange extends UnaryNode {
  * logically identical output will have distinct sets of output attribute ids, so we need to
  * preserve the original ids because they're what downstream operators are expecting.
  */
-case class ReusedExchange(override val output: Seq[Attribute], child: Exchange) extends LeafNode {
+case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchange)
+  extends LeafExecNode {
 
-  override def sameResult(plan: SparkPlan): Boolean = {
-    // Ignore this wrapper. `plan` could also be a ReusedExchange, so we reverse the order here.
-    plan.sameResult(child)
-  }
+  override def supportsColumnar: Boolean = child.supportsColumnar
+
+  // Ignore this wrapper for canonicalizing.
+  override def doCanonicalize(): SparkPlan = child.canonicalized
 
   def doExecute(): RDD[InternalRow] = {
     child.execute()
+  }
+
+  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    child.executeColumnar()
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
     child.executeBroadcast()
   }
 
-  // Do not repeat the same tree in explain.
-  override def treeChildren: Seq[SparkPlan] = Nil
+  // `ReusedExchangeExec` can have distinct set of output attribute ids from its child, we need
+  // to update the attribute ids in `outputPartitioning` and `outputOrdering`.
+  private lazy val updateAttr: Expression => Expression = {
+    val originalAttrToNewAttr = AttributeMap(child.output.zip(output))
+    e => e.transform {
+      case attr: Attribute => originalAttrToNewAttr.getOrElse(attr, attr)
+    }
+  }
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning match {
+    case e: Expression => updateAttr(e).asInstanceOf[Partitioning]
+    case other => other
+  }
+
+  override def outputOrdering: Seq[SortOrder] = {
+    child.outputOrdering.map(updateAttr(_).asInstanceOf[SortOrder])
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val cdgen = ExplainUtils.getCodegenId(this)
+    val reuse_op_str = ExplainUtils.getOpId(child)
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${cdgen} [Reuses operator id: $reuse_op_str]
+       |Output : ${output}
+     """.stripMargin
+  }
 }
 
 /**
@@ -76,9 +109,10 @@ case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
     }
     // Build a hash map using schema of exchanges to avoid O(N*N) sameResult calls.
     val exchanges = mutable.HashMap[StructType, ArrayBuffer[Exchange]]()
-    plan.transformUp {
+
+    // Replace a Exchange duplicate with a ReusedExchange
+    def reuse: PartialFunction[Exchange, SparkPlan] = {
       case exchange: Exchange =>
-        // the exchanges that have same results usually also have same schemas (same column names).
         val sameSchema = exchanges.getOrElseUpdate(exchange.schema, ArrayBuffer[Exchange]())
         val samePlan = sameSchema.find { e =>
           exchange.sameResult(e)
@@ -86,11 +120,22 @@ case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
         if (samePlan.isDefined) {
           // Keep the output of this exchange, the following plans require that to resolve
           // attributes.
-          ReusedExchange(exchange.output, samePlan.get)
+          ReusedExchangeExec(exchange.output, samePlan.get)
         } else {
           sameSchema += exchange
           exchange
         }
+    }
+
+    plan transformUp {
+      case exchange: Exchange => reuse(exchange)
+    } transformAllExpressions {
+      // Lookup inside subqueries for duplicate exchanges
+      case in: InSubqueryExec =>
+        val newIn = in.plan.transformUp {
+          case exchange: Exchange => reuse(exchange)
+        }
+        in.copy(plan = newIn.asInstanceOf[BaseSubqueryExec])
     }
   }
 }

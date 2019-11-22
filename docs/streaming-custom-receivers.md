@@ -1,10 +1,25 @@
 ---
 layout: global
 title: Spark Streaming Custom Receivers
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Spark Streaming can receive streaming data from any arbitrary data source beyond
-the ones for which it has built-in support (that is, beyond Flume, Kafka, Kinesis, files, sockets, etc.).
+the ones for which it has built-in support (that is, beyond Kafka, Kinesis, files, sockets, etc.).
 This requires the developer to implement a *receiver* that is customized for receiving data from
 the concerned data source. This guide walks through the process of implementing a custom receiver
 and using it in a Spark Streaming application. Note that custom receivers can be implemented
@@ -36,7 +51,7 @@ Any exception in the receiving threads should be caught and handled properly to 
 failures of the receiver. `restart(<exception>)` will restart the receiver by
 asynchronously calling `onStop()` and then calling `onStart()` after a delay.
 `stop(<exception>)` will call `onStop()` and terminate the receiver. Also, `reportError(<error>)`
-reports a error message to the driver (visible in the logs and UI) without stopping / restarting
+reports an error message to the driver (visible in the logs and UI) without stopping / restarting
 the receiver.
 
 The following is a custom receiver that receives a stream of text over a socket. It treats
@@ -59,8 +74,8 @@ class CustomReceiver(host: String, port: Int)
   }
 
   def onStop() {
-   // There is nothing much to do as the thread calling receive()
-   // is designed to stop by itself if isStopped() returns false
+    // There is nothing much to do as the thread calling receive()
+    // is designed to stop by itself if isStopped() returns false
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
@@ -68,29 +83,29 @@ class CustomReceiver(host: String, port: Int)
     var socket: Socket = null
     var userInput: String = null
     try {
-     // Connect to host:port
-     socket = new Socket(host, port)
+      // Connect to host:port
+      socket = new Socket(host, port)
 
-     // Until stopped or connection broken continue reading
-     val reader = new BufferedReader(
-       new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
-     userInput = reader.readLine()
-     while(!isStopped && userInput != null) {
-       store(userInput)
-       userInput = reader.readLine()
-     }
-     reader.close()
-     socket.close()
+      // Until stopped or connection broken continue reading
+      val reader = new BufferedReader(
+        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
+      userInput = reader.readLine()
+      while(!isStopped && userInput != null) {
+        store(userInput)
+        userInput = reader.readLine()
+      }
+      reader.close()
+      socket.close()
 
-     // Restart in an attempt to connect again when server is active again
-     restart("Trying to connect again")
+      // Restart in an attempt to connect again when server is active again
+      restart("Trying to connect again")
     } catch {
-     case e: java.net.ConnectException =>
-       // restart if could not connect to server
-       restart("Error connecting to " + host + ":" + port, e)
-     case t: Throwable =>
-       // restart if there is any other error
-       restart("Error receiving data", t)
+      case e: java.net.ConnectException =>
+        // restart if could not connect to server
+        restart("Error connecting to " + host + ":" + port, e)
+      case t: Throwable =>
+        // restart if there is any other error
+        restart("Error receiving data", t)
     }
   }
 }
@@ -113,15 +128,13 @@ public class JavaCustomReceiver extends Receiver<String> {
     port = port_;
   }
 
+  @Override
   public void onStart() {
     // Start the thread that receives data over a connection
-    new Thread()  {
-      @Override public void run() {
-        receive();
-      }
-    }.start();
+    new Thread(this::receive).start();
   }
 
+  @Override
   public void onStop() {
     // There is nothing much to do as the thread calling receive()
     // is designed to stop by itself if isStopped() returns false
@@ -177,11 +190,11 @@ an input DStream using data received by the instance of custom receiver, as show
 {% highlight scala %}
 // Assuming ssc is the StreamingContext
 val customReceiverStream = ssc.receiverStream(new CustomReceiver(host, port))
-val words = lines.flatMap(_.split(" "))
+val words = customReceiverStream.flatMap(_.split(" "))
 ...
 {% endhighlight %}
 
-The full source code is in the example [CustomReceiver.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/CustomReceiver.scala).
+The full source code is in the example [CustomReceiver.scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/CustomReceiver.scala).
 
 </div>
 <div data-lang="java" markdown="1">
@@ -189,11 +202,11 @@ The full source code is in the example [CustomReceiver.scala](https://github.com
 {% highlight java %}
 // Assuming ssc is the JavaStreamingContext
 JavaDStream<String> customReceiverStream = ssc.receiverStream(new JavaCustomReceiver(host, port));
-JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() { ... });
+JavaDStream<String> words = customReceiverStream.flatMap(s -> ...);
 ...
 {% endhighlight %}
 
-The full source code is in the example [JavaCustomReceiver.java](https://github.com/apache/spark/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaCustomReceiver.java).
+The full source code is in the example [JavaCustomReceiver.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaCustomReceiver.java).
 
 </div>
 </div>

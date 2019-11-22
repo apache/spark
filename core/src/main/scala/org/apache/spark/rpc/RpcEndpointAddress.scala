@@ -25,10 +25,11 @@ import org.apache.spark.SparkException
  * The `rpcAddress` may be null, in which case the endpoint is registered via a client-only
  * connection and can only be reached via the client that sent the endpoint reference.
  *
- * @param rpcAddress The socket address of the endpoint.
+ * @param rpcAddress The socket address of the endpoint. It's `null` when this address pointing to
+ *                   an endpoint in a client `NettyRpcEnv`.
  * @param name Name of the endpoint.
  */
-private[spark] case class RpcEndpointAddress(val rpcAddress: RpcAddress, val name: String) {
+private[spark] case class RpcEndpointAddress(rpcAddress: RpcAddress, name: String) {
 
   require(name != null, "RpcEndpoint name must be provided.")
 

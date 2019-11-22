@@ -25,14 +25,14 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 
 /**
  * Latent Dirichlet Allocation (LDA) model.
@@ -66,7 +66,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *
    * This is the parameter to a symmetric Dirichlet distribution.
    *
-   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * @note The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    */
   @Since("1.5.0")
@@ -171,7 +171,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *                   The term count vectors are "bags of words" with a fixed-size vocabulary
    *                   (where the vocabulary size is the length of the vector).
    *                   This must use the same vocabulary (ordering of term counts) as in training.
-   *                   Document IDs must be unique and >= 0.
+   *                   Document IDs must be unique and greater than or equal to 0.
    * @return  Estimated topic distribution for each document.
    *          The returned RDD may be zipped with the given RDD, where each returned vector
    *          is a multinomial distribution over topics.
@@ -194,6 +194,8 @@ class LocalLDAModel private[spark] (
     override protected[spark] val gammaShape: Double = 100)
   extends LDAModel with Serializable {
 
+  private[spark] var seed: Long = Utils.random.nextLong()
+
   @Since("1.3.0")
   override def k: Int = topics.numCols
 
@@ -205,7 +207,7 @@ class LocalLDAModel private[spark] (
 
   @Since("1.3.0")
   override def describeTopics(maxTermsPerTopic: Int): Array[(Array[Int], Array[Double])] = {
-    val brzTopics = topics.toBreeze.toDenseMatrix
+    val brzTopics = topics.asBreeze.toDenseMatrix
     Range(0, k).map { topicIndex =>
       val topic = normalize(brzTopics(::, topicIndex), 1.0)
       val (termWeights, terms) =
@@ -214,7 +216,20 @@ class LocalLDAModel private[spark] (
     }.toArray
   }
 
-  override protected def formatVersion = "1.0"
+  /**
+   * Random seed for cluster initialization.
+   */
+  @Since("2.4.0")
+  def getSeed: Long = seed
+
+  /**
+   * Set the random seed for cluster initialization.
+   */
+  @Since("2.4.0")
+  def setSeed(seed: Long): this.type = {
+    this.seed = seed
+    this
+  }
 
   @Since("1.5.0")
   override def save(sc: SparkContext, path: String): Unit = {
@@ -233,11 +248,11 @@ class LocalLDAModel private[spark] (
    */
   @Since("1.5.0")
   def logLikelihood(documents: RDD[(Long, Vector)]): Double = logLikelihoodBound(documents,
-    docConcentration, topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k,
+    docConcentration, topicConcentration, topicsMatrix.asBreeze.toDenseMatrix, gammaShape, k,
     vocabSize)
 
   /**
-   * Java-friendly version of [[logLikelihood]]
+   * Java-friendly version of `logLikelihood`
    */
   @Since("1.5.0")
   def logLikelihood(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
@@ -245,7 +260,7 @@ class LocalLDAModel private[spark] (
   }
 
   /**
-   * Calculate an upper bound bound on perplexity.  (Lower is better.)
+   * Calculate an upper bound on perplexity.  (Lower is better.)
    * See Equation (16) in original Online LDA paper.
    *
    * @param documents test corpus to use for calculating perplexity
@@ -259,7 +274,9 @@ class LocalLDAModel private[spark] (
     -logLikelihood(documents) / corpusTokenCount
   }
 
-  /** Java-friendly version of [[logPerplexity]] */
+  /**
+   * Java-friendly version of `logPerplexity`
+   */
   @Since("1.5.0")
   def logPerplexity(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
     logPerplexity(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
@@ -291,11 +308,12 @@ class LocalLDAModel private[spark] (
       gammaShape: Double,
       k: Int,
       vocabSize: Long): Double = {
-    val brzAlpha = alpha.toBreeze.toDenseVector
+    val brzAlpha = alpha.asBreeze.toDenseVector
     // transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
     val ElogbetaBc = documents.sparkContext.broadcast(Elogbeta)
+    val gammaSeed = this.seed
 
     // Sum bound components for each document:
     //  component for prob(tokens) + component for prob(document-topic distribution)
@@ -303,8 +321,8 @@ class LocalLDAModel private[spark] (
       documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
         val localElogbeta = ElogbetaBc.value
         var docBound = 0.0D
-        val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, exp(localElogbeta), brzAlpha, gammaShape, k)
+        val (gammad: BDV[Double], _, _) = OnlineLDAOptimizer.variationalTopicInference(
+          termCounts, exp(localElogbeta), brzAlpha, gammaShape, k, gammaSeed + id)
         val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
         // E[log p(doc | theta, beta)]
@@ -312,17 +330,18 @@ class LocalLDAModel private[spark] (
           docBound += count * LDAUtils.logSumExp(Elogthetad + localElogbeta(idx, ::).t)
         }
         // E[log p(theta | alpha) - log q(theta | gamma)]
-        docBound += sum((brzAlpha - gammad) :* Elogthetad)
+        docBound += sum((brzAlpha - gammad) *:* Elogthetad)
         docBound += sum(lgamma(gammad) - lgamma(brzAlpha))
         docBound += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
 
         docBound
       }.sum()
+    ElogbetaBc.destroy()
 
     // Bound component for prob(topic-term distributions):
     //   E[log p(beta | eta) - log q(beta | lambda)]
     val sumEta = eta * vocabSize
-    val topicsPart = sum((eta - lambda) :* Elogbeta) +
+    val topicsPart = sum((eta - lambda) *:* Elogbeta) +
       sum(lgamma(lambda) - lgamma(eta)) +
       sum(lgamma(sumEta) - lgamma(sum(lambda(::, breeze.linalg.*))))
 
@@ -344,47 +363,27 @@ class LocalLDAModel private[spark] (
   def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
     // Double transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
-    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     val expElogbetaBc = documents.sparkContext.broadcast(expElogbeta)
-    val docConcentrationBrz = this.docConcentration.toBreeze
+    val docConcentrationBrz = this.docConcentration.asBreeze
     val gammaShape = this.gammaShape
     val k = this.k
+    val gammaSeed = this.seed
 
     documents.map { case (id: Long, termCounts: Vector) =>
       if (termCounts.numNonzeros == 0) {
         (id, Vectors.zeros(k))
       } else {
-        val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
           expElogbetaBc.value,
           docConcentrationBrz,
           gammaShape,
-          k)
+          k,
+          gammaSeed + id)
         (id, Vectors.dense(normalize(gamma, 1.0).toArray))
       }
     }
-  }
-
-  /** Get a method usable as a UDF for [[topicDistributions()]] */
-  private[spark] def getTopicDistributionMethod(sc: SparkContext): Vector => Vector = {
-    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
-    val expElogbetaBc = sc.broadcast(expElogbeta)
-    val docConcentrationBrz = this.docConcentration.toBreeze
-    val gammaShape = this.gammaShape
-    val k = this.k
-
-    (termCounts: Vector) =>
-      if (termCounts.numNonzeros == 0) {
-        Vectors.zeros(k)
-      } else {
-        val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts,
-          expElogbetaBc.value,
-          docConcentrationBrz,
-          gammaShape,
-          k)
-        Vectors.dense(normalize(gamma, 1.0).toArray)
-      }
   }
 
   /**
@@ -392,29 +391,31 @@ class LocalLDAModel private[spark] (
    * literature).  Returns a vector of zeros for an empty document.
    *
    * Note this means to allow quick query for single document. For batch documents, please refer
-   * to [[topicDistributions()]] to avoid overhead.
+   * to `topicDistributions()` to avoid overhead.
    *
    * @param document document to predict topic mixture distributions for
    * @return topic mixture distribution for the document
    */
   @Since("2.0.0")
   def topicDistribution(document: Vector): Vector = {
-    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val gammaSeed = this.seed
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     if (document.numNonzeros == 0) {
       Vectors.zeros(this.k)
     } else {
-      val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+      val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
         document,
         expElogbeta,
-        this.docConcentration.toBreeze,
+        this.docConcentration.asBreeze,
         gammaShape,
-        this.k)
+        this.k,
+        gammaSeed)
       Vectors.dense(normalize(gamma, 1.0).toArray)
     }
   }
 
   /**
-   * Java-friendly version of [[topicDistributions]]
+   * Java-friendly version of `topicDistributions`
    */
   @Since("1.4.1")
   def topicDistributions(
@@ -425,7 +426,11 @@ class LocalLDAModel private[spark] (
 
 }
 
-@Experimental
+/**
+ * Local (non-distributed) model fitted by [[LDA]].
+ *
+ * This model stores the inferred topics only; it does not store info about the training dataset.
+ */
 @Since("1.5.0")
 object LocalLDAModel extends Loader[LocalLDAModel] {
 
@@ -446,9 +451,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
         docConcentration: Vector,
         topicConcentration: Double,
         gammaShape: Double): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
-
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val k = topicsMatrix.numCols
       val metadata = compact(render
         (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
@@ -458,11 +461,11 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
           ("gammaShape" -> gammaShape)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val topicsDenseMatrix = topicsMatrix.toBreeze.toDenseMatrix
+      val topicsDenseMatrix = topicsMatrix.asBreeze.toDenseMatrix
       val topics = Range(0, k).map { topicInd =>
         Data(Vectors.dense((topicsDenseMatrix(::, topicInd).toArray)), topicInd)
-      }.toSeq
-      sc.parallelize(topics, 1).toDF().write.parquet(Loader.dataPath(path))
+      }
+      spark.createDataFrame(topics).repartition(1).write.parquet(Loader.dataPath(path))
     }
 
     def load(
@@ -472,8 +475,8 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
         topicConcentration: Double,
         gammaShape: Double): LocalLDAModel = {
       val dataPath = Loader.dataPath(path)
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val dataFrame = sqlContext.read.parquet(dataPath)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val dataFrame = spark.read.parquet(dataPath)
 
       Loader.checkSchema[Data](dataFrame.schema)
       val topics = dataFrame.collect()
@@ -482,7 +485,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 
       val brzTopics = BDM.zeros[Double](vocabSize, k)
       topics.foreach { case Row(vec: Vector, ind: Int) =>
-        brzTopics(::, ind) := vec.toBreeze
+        brzTopics(::, ind) := vec.asBreeze
       }
       val topicsMat = Matrices.fromBreeze(brzTopics)
 
@@ -534,7 +537,8 @@ class DistributedLDAModel private[clustering] (
     @Since("1.5.0") override val docConcentration: Vector,
     @Since("1.5.0") override val topicConcentration: Double,
     private[spark] val iterationTimes: Array[Double],
-    override protected[clustering] val gammaShape: Double = 100)
+    override protected[clustering] val gammaShape: Double = DistributedLDAModel.defaultGammaShape,
+    private[spark] val checkpointFiles: Array[String] = Array.empty[String])
   extends LDAModel {
 
   import LDA._
@@ -714,7 +718,7 @@ class DistributedLDAModel private[clustering] (
       val N_wj = edgeContext.attr
       val smoothed_N_wk: TopicCounts = edgeContext.dstAttr + (eta - 1.0)
       val smoothed_N_kj: TopicCounts = edgeContext.srcAttr + (alpha - 1.0)
-      val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+      val phi_wk: TopicCounts = smoothed_N_wk /:/ smoothed_N_k
       val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
       val tokenLogLikelihood = N_wj * math.log(phi_wk.dot(theta_kj))
       edgeContext.sendToDst(tokenLogLikelihood)
@@ -741,13 +745,13 @@ class DistributedLDAModel private[clustering] (
         if (isTermVertex(vertex)) {
           val N_wk = vertex._2
           val smoothed_N_wk: TopicCounts = N_wk + (eta - 1.0)
-          val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
-          (eta - 1.0) * sum(phi_wk.map(math.log))
+          val phi_wk: TopicCounts = smoothed_N_wk /:/ smoothed_N_k
+          sumPrior + (eta - 1.0) * sum(phi_wk.map(math.log))
         } else {
           val N_kj = vertex._2
           val smoothed_N_kj: TopicCounts = N_kj + (alpha - 1.0)
           val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
-          (alpha - 1.0) * sum(theta_kj.map(math.log))
+          sumPrior + (alpha - 1.0) * sum(theta_kj.map(math.log))
         }
     }
     graph.vertices.aggregate(0.0)(seqOp, _ + _)
@@ -784,11 +788,11 @@ class DistributedLDAModel private[clustering] (
       val topIndices = argtopk(topicCounts, k)
       val sumCounts = sum(topicCounts)
       val weights = if (sumCounts != 0) {
-        topicCounts(topIndices) / sumCounts
+        topicCounts(topIndices).toArray.map(_ / sumCounts)
       } else {
-        topicCounts(topIndices)
+        topicCounts(topIndices).toArray
       }
-      (docID.toLong, topIndices.toArray, weights.toArray)
+      (docID.toLong, topIndices.toArray, weights)
     }
   }
 
@@ -804,23 +808,30 @@ class DistributedLDAModel private[clustering] (
   // TODO:
   // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
 
-  override protected def formatVersion = "1.0"
-
-  /**
-   * Java-friendly version of [[topicDistributions]]
-   */
   @Since("1.5.0")
   override def save(sc: SparkContext, path: String): Unit = {
+    // Note: This intentionally does not save checkpointFiles.
     DistributedLDAModel.SaveLoadV1_0.save(
       sc, path, graph, globalTopicTotals, k, vocabSize, docConcentration, topicConcentration,
       iterationTimes, gammaShape)
   }
 }
 
-
-@Experimental
+/**
+ * Distributed model fitted by [[LDA]].
+ * This type of model is currently only produced by Expectation-Maximization (EM).
+ *
+ * This model stores the inferred topics, the full training dataset, and the topic distribution
+ * for each training document.
+ */
 @Since("1.5.0")
 object DistributedLDAModel extends Loader[DistributedLDAModel] {
+
+  /**
+   * The [[DistributedLDAModel]] constructor's default arguments assume gammaShape = 100
+   * to ensure equivalence in LDAModel.toLocal conversion.
+   */
+  private[clustering] val defaultGammaShape: Double = 100
 
   private object SaveLoadV1_0 {
 
@@ -848,8 +859,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
         topicConcentration: Double,
         iterationTimes: Array[Double],
         gammaShape: Double): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val metadata = compact(render
         (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
@@ -861,18 +871,17 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
-      sc.parallelize(Seq(Data(Vectors.fromBreeze(globalTopicTotals)))).toDF()
-        .write.parquet(newPath)
+      spark.createDataFrame(Seq(Data(Vectors.fromBreeze(globalTopicTotals)))).write.parquet(newPath)
 
       val verticesPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
-      graph.vertices.map { case (ind, vertex) =>
+      spark.createDataFrame(graph.vertices.map { case (ind, vertex) =>
         VertexData(ind, Vectors.fromBreeze(vertex))
-      }.toDF().write.parquet(verticesPath)
+      }).write.parquet(verticesPath)
 
       val edgesPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
-      graph.edges.map { case Edge(srcId, dstId, prop) =>
+      spark.createDataFrame(graph.edges.map { case Edge(srcId, dstId, prop) =>
         EdgeData(srcId, dstId, prop)
-      }.toDF().write.parquet(edgesPath)
+      }).write.parquet(edgesPath)
     }
 
     def load(
@@ -886,18 +895,18 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       val dataPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
       val vertexDataPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
       val edgeDataPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val dataFrame = sqlContext.read.parquet(dataPath)
-      val vertexDataFrame = sqlContext.read.parquet(vertexDataPath)
-      val edgeDataFrame = sqlContext.read.parquet(edgeDataPath)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val dataFrame = spark.read.parquet(dataPath)
+      val vertexDataFrame = spark.read.parquet(vertexDataPath)
+      val edgeDataFrame = spark.read.parquet(edgeDataPath)
 
       Loader.checkSchema[Data](dataFrame.schema)
       Loader.checkSchema[VertexData](vertexDataFrame.schema)
       Loader.checkSchema[EdgeData](edgeDataFrame.schema)
       val globalTopicTotals: LDA.TopicCounts =
-        dataFrame.first().getAs[Vector](0).toBreeze.toDenseVector
+        dataFrame.first().getAs[Vector](0).asBreeze.toDenseVector
       val vertices: RDD[(VertexId, LDA.TopicCounts)] = vertexDataFrame.rdd.map {
-        case Row(ind: Long, vec: Vector) => (ind, vec.toBreeze.toDenseVector)
+        case Row(ind: Long, vec: Vector) => (ind, vec.asBreeze.toDenseVector)
       }
 
       val edges: RDD[Edge[LDA.TokenCount]] = edgeDataFrame.rdd.map {

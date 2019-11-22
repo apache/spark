@@ -15,11 +15,14 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
+from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
+from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import *
+from pyspark.sql.cogroup import CoGroupedData
 
 __all__ = ["GroupedData"]
 
@@ -27,7 +30,7 @@ __all__ = ["GroupedData"]
 def dfapi(f):
     def _api(self):
         name = f.__name__
-        jdf = getattr(self._jdf, name)()
+        jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -35,9 +38,9 @@ def dfapi(f):
 
 
 def df_varargs_api(f):
-    def _api(self, *args):
+    def _api(self, *cols):
         name = f.__name__
-        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
+        jdf = getattr(self._jgd, name)(_to_seq(self.sql_ctx._sc, cols))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -49,26 +52,39 @@ class GroupedData(object):
     A set of methods for aggregations on a :class:`DataFrame`,
     created by :func:`DataFrame.groupBy`.
 
-    .. note:: Experimental
-
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jdf, sql_ctx):
-        self._jdf = jdf
-        self.sql_ctx = sql_ctx
+    def __init__(self, jgd, df):
+        self._jgd = jgd
+        self._df = df
+        self.sql_ctx = df.sql_ctx
 
     @ignore_unicode_prefix
     @since(1.3)
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
-        The available aggregate functions are `avg`, `max`, `min`, `sum`, `count`.
+        The available aggregate functions can be:
+
+        1. built-in aggregation functions, such as `avg`, `max`, `min`, `sum`, `count`
+
+        2. group aggregate pandas UDFs, created with :func:`pyspark.sql.functions.pandas_udf`
+
+           .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
+               a full shuffle is required. Also, all the data of a group will be loaded into
+               memory, so the user should be aware of the potential OOM risk if data is skewed
+               and certain groups are too large to fit in memory.
+
+           .. seealso:: :func:`pyspark.sql.functions.pandas_udf`
 
         If ``exprs`` is a single :class:`dict` mapping from string to string, then the key
         is the column to perform aggregation on, and the value is the aggregate function.
 
         Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
+
+        .. note:: Built-in aggregation functions and group aggregate pandas UDFs cannot be mixed
+            in a single call to this function.
 
         :param exprs: a dict mapping from column name (string) to aggregate functions (string),
             or a list of :class:`Column`.
@@ -80,14 +96,21 @@ class GroupedData(object):
         >>> from pyspark.sql import functions as F
         >>> sorted(gdf.agg(F.min(df.age)).collect())
         [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> @pandas_udf('int', PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
+        ... def min_udf(v):
+        ...     return v.min()
+        >>> sorted(gdf.agg(min_udf(df.age)).collect())  # doctest: +SKIP
+        [Row(name=u'Alice', min_udf(age)=2), Row(name=u'Bob', min_udf(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            jdf = self._jdf.agg(exprs[0])
+            jdf = self._jgd.agg(exprs[0])
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jdf.agg(exprs[0]._jc,
+            jdf = self._jgd.agg(exprs[0]._jc,
                                 _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
@@ -170,7 +193,7 @@ class GroupedData(object):
     @since(1.6)
     def pivot(self, pivot_col, values=None):
         """
-        Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
+        Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
         There are two versions of pivot function: one that requires the caller to specify the list
         of distinct values to pivot on, and one that does not. The latter is more concise but less
         efficient, because Spark needs to first compute the list of distinct values internally.
@@ -178,30 +201,99 @@ class GroupedData(object):
         :param pivot_col: Name of the column to pivot.
         :param values: List of values that will be translated to columns in the output DataFrame.
 
-        // Compute the sum of earnings for each year by course with each course as a separate column
+        # Compute the sum of earnings for each year by course with each course as a separate column
+
         >>> df4.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").collect()
         [Row(year=2012, dotNET=15000, Java=20000), Row(year=2013, dotNET=48000, Java=30000)]
 
-        // Or without specifying column values (less efficient)
+        # Or without specifying column values (less efficient)
+
         >>> df4.groupBy("year").pivot("course").sum("earnings").collect()
+        [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
+        >>> df5.groupBy("sales.year").pivot("sales.course").sum("sales.earnings").collect()
         [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
         """
         if values is None:
-            jgd = self._jdf.pivot(pivot_col)
+            jgd = self._jgd.pivot(pivot_col)
         else:
-            jgd = self._jdf.pivot(pivot_col, values)
-        return GroupedData(jgd, self.sql_ctx)
+            jgd = self._jgd.pivot(pivot_col, values)
+        return GroupedData(jgd, self._df)
+
+    @since(3.0)
+    def cogroup(self, other):
+        """
+        Cogroups this group with another group so that we can run cogrouped operations.
+
+        See :class:`CoGroupedData` for the operations that can be run.
+        """
+        return CoGroupedData(self, other)
+
+    @since(2.3)
+    def apply(self, udf):
+        """
+        Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
+        as a `DataFrame`.
+
+        The user-defined function should take a `pandas.DataFrame` and return another
+        `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
+        to the user-function and the returned `pandas.DataFrame` are combined as a
+        :class:`DataFrame`.
+
+        The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
+        returnType of the pandas udf.
+
+        .. note:: This function requires a full shuffle. All the data of a group will be loaded
+            into memory, so the user should be aware of the potential OOM risk if data is skewed
+            and certain groups are too large to fit in memory.
+
+        :param udf: a grouped map user-defined function returned by
+            :func:`pyspark.sql.functions.pandas_udf`.
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ...     ("id", "v"))
+        >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
+        ... def normalize(pdf):
+        ...     v = pdf.v
+        ...     return pdf.assign(v=(v - v.mean()) / v.std())
+        >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
+        +---+-------------------+
+        | id|                  v|
+        +---+-------------------+
+        |  1|-0.7071067811865475|
+        |  1| 0.7071067811865475|
+        |  2|-0.8320502943378437|
+        |  2|-0.2773500981126146|
+        |  2| 1.1094003924504583|
+        +---+-------------------+
+
+        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
+
+        """
+        # Columns are special because hasattr always return True
+        if isinstance(udf, Column) or not hasattr(udf, 'func') \
+           or udf.evalType != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
+                             "GROUPED_MAP.")
+        df = self._df
+        udf_column = udf(*[df[col] for col in df.columns])
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.sql_ctx)
 
 
 def _test():
     import doctest
-    from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SparkSession
     import pyspark.sql.group
     globs = pyspark.sql.group.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.group tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
+    globs['spark'] = spark
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
@@ -212,13 +304,19 @@ def _test():
                                    Row(course="dotNET", year=2012, earnings=5000),
                                    Row(course="dotNET", year=2013, earnings=48000),
                                    Row(course="Java",   year=2013, earnings=30000)]).toDF()
+    globs['df5'] = sc.parallelize([
+        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
+        Row(training="junior", sales=Row(course="Java",   year=2012, earnings=20000)),
+        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
+        Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
+        Row(training="expert", sales=Row(course="Java",   year=2013, earnings=30000))]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

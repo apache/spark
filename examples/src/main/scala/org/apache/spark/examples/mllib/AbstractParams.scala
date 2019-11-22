@@ -38,7 +38,7 @@ abstract class AbstractParams[T: TypeTag] {
    */
   override def toString: String = {
     val tpe = tag.tpe
-    val allAccessors = tpe.declarations.collect {
+    val allAccessors = tpe.decls.collect {
       case m: MethodSymbol if m.isCaseAccessor => m
     }
     val mirror = runtimeMirror(getClass.getClassLoader)

@@ -18,14 +18,18 @@
 package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
+import java.util.regex.PatternSyntaxException
+
+import scala.util.matching.Regex
 
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
+import org.apache.spark.util.Utils
 
 private object ConfigHelpers {
 
   def toNumber[T](s: String, converter: String => T, key: String, configType: String): T = {
     try {
-      converter(s)
+      converter(s.trim)
     } catch {
       case _: NumberFormatException =>
         throw new IllegalArgumentException(s"$key should be $configType, but was $s")
@@ -34,7 +38,7 @@ private object ConfigHelpers {
 
   def toBoolean(s: String, key: String): Boolean = {
     try {
-      s.toBoolean
+      s.trim.toBoolean
     } catch {
       case _: IllegalArgumentException =>
         throw new IllegalArgumentException(s"$key should be boolean, but was $s")
@@ -42,7 +46,7 @@ private object ConfigHelpers {
   }
 
   def stringToSeq[T](str: String, converter: String => T): Seq[T] = {
-    str.split(",").map(_.trim()).filter(_.nonEmpty).map(converter)
+    Utils.stringToSeq(str).map(converter)
   }
 
   def seqToString[T](v: Seq[T], stringConverter: T => String): String = {
@@ -65,6 +69,13 @@ private object ConfigHelpers {
 
   def byteToString(v: Long, unit: ByteUnit): String = unit.convertTo(v, ByteUnit.BYTE) + "b"
 
+  def regexFromString(str: String, key: String): Regex = {
+    try str.r catch {
+      case e: PatternSyntaxException =>
+        throw new IllegalArgumentException(s"$key should be a regex, but was $str", e)
+    }
+  }
+
 }
 
 /**
@@ -85,10 +96,20 @@ private[spark] class TypedConfigBuilder[T](
     this(parent, converter, Option(_).map(_.toString).orNull)
   }
 
+  /** Apply a transformation to the user-provided values of the config entry. */
   def transform(fn: T => T): TypedConfigBuilder[T] = {
     new TypedConfigBuilder(parent, s => fn(converter(s)), stringConverter)
   }
 
+  /** Checks if the user-provided value for the config matches the validator. */
+  def checkValue(validator: T => Boolean, errorMsg: String): TypedConfigBuilder[T] = {
+    transform { v =>
+      if (!validator(v)) throw new IllegalArgumentException(errorMsg)
+      v
+    }
+  }
+
+  /** Check that user-provided values for the config match a pre-defined set. */
   def checkValues(validValues: Set[T]): TypedConfigBuilder[T] = {
     transform { v =>
       if (!validValues.contains(v)) {
@@ -99,30 +120,55 @@ private[spark] class TypedConfigBuilder[T](
     }
   }
 
+  /** Turns the config entry into a sequence of values of the underlying type. */
   def toSequence: TypedConfigBuilder[Seq[T]] = {
     new TypedConfigBuilder(parent, stringToSeq(_, converter), seqToString(_, stringConverter))
   }
 
-  /** Creates a [[ConfigEntry]] that does not require a default value. */
-  def optional: OptionalConfigEntry[T] = {
-    new OptionalConfigEntry[T](parent.key, converter, stringConverter, parent._doc, parent._public)
+  /** Creates a [[ConfigEntry]] that does not have a default value. */
+  def createOptional: OptionalConfigEntry[T] = {
+    val entry = new OptionalConfigEntry[T](parent.key, parent._prependedKey,
+      parent._prependSeparator, parent._alternatives, converter, stringConverter, parent._doc,
+      parent._public)
+    parent._onCreate.foreach(_(entry))
+    entry
   }
 
   /** Creates a [[ConfigEntry]] that has a default value. */
-  def withDefault(default: T): ConfigEntry[T] = {
-    val transformedDefault = converter(stringConverter(default))
-    new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter, stringConverter,
+  def createWithDefault(default: T): ConfigEntry[T] = {
+    // Treat "String" as a special case, so that both createWithDefault and createWithDefaultString
+    // behave the same w.r.t. variable expansion of default values.
+    if (default.isInstanceOf[String]) {
+      createWithDefaultString(default.asInstanceOf[String])
+    } else {
+      val transformedDefault = converter(stringConverter(default))
+      val entry = new ConfigEntryWithDefault[T](parent.key, parent._prependedKey,
+        parent._prependSeparator, parent._alternatives, transformedDefault, converter,
+        stringConverter, parent._doc, parent._public)
+      parent._onCreate.foreach(_(entry))
+      entry
+    }
+  }
+
+  /** Creates a [[ConfigEntry]] with a function to determine the default value */
+  def createWithDefaultFunction(defaultFunc: () => T): ConfigEntry[T] = {
+    val entry = new ConfigEntryWithDefaultFunction[T](parent.key, parent._prependedKey,
+      parent._prependSeparator, parent._alternatives, defaultFunc, converter, stringConverter,
       parent._doc, parent._public)
+    parent._onCreate.foreach(_ (entry))
+    entry
   }
 
   /**
    * Creates a [[ConfigEntry]] that has a default value. The default value is provided as a
    * [[String]] and must be a valid value for the entry.
    */
-  def withDefaultString(default: String): ConfigEntry[T] = {
-    val typedDefault = converter(default)
-    new ConfigEntryWithDefault[T](parent.key, typedDefault, converter, stringConverter, parent._doc,
-      parent._public)
+  def createWithDefaultString(default: String): ConfigEntry[T] = {
+    val entry = new ConfigEntryWithDefaultString[T](parent.key, parent._prependedKey,
+      parent._prependSeparator, parent._alternatives, default, converter, stringConverter,
+      parent._doc, parent._public)
+    parent._onCreate.foreach(_(entry))
+    entry
   }
 
 }
@@ -136,10 +182,14 @@ private[spark] case class ConfigBuilder(key: String) {
 
   import ConfigHelpers._
 
-  var _public = true
-  var _doc = ""
+  private[config] var _prependedKey: Option[String] = None
+  private[config] var _prependSeparator: String = ""
+  private[config] var _public = true
+  private[config] var _doc = ""
+  private[config] var _onCreate: Option[ConfigEntry[_] => Unit] = None
+  private[config] var _alternatives = List.empty[String]
 
-  def internal: ConfigBuilder = {
+  def internal(): ConfigBuilder = {
     _public = false
     this
   }
@@ -149,19 +199,43 @@ private[spark] case class ConfigBuilder(key: String) {
     this
   }
 
+  /**
+   * Registers a callback for when the config entry is finally instantiated. Currently used by
+   * SQLConf to keep track of SQL configuration entries.
+   */
+  def onCreate(callback: ConfigEntry[_] => Unit): ConfigBuilder = {
+    _onCreate = Option(callback)
+    this
+  }
+
+  def withPrepended(key: String, separator: String = " "): ConfigBuilder = {
+    _prependedKey = Option(key)
+    _prependSeparator = separator
+    this
+  }
+
+  def withAlternative(key: String): ConfigBuilder = {
+    _alternatives = _alternatives :+ key
+    this
+  }
+
   def intConf: TypedConfigBuilder[Int] = {
+    checkPrependConfig
     new TypedConfigBuilder(this, toNumber(_, _.toInt, key, "int"))
   }
 
   def longConf: TypedConfigBuilder[Long] = {
+    checkPrependConfig
     new TypedConfigBuilder(this, toNumber(_, _.toLong, key, "long"))
   }
 
   def doubleConf: TypedConfigBuilder[Double] = {
+    checkPrependConfig
     new TypedConfigBuilder(this, toNumber(_, _.toDouble, key, "double"))
   }
 
   def booleanConf: TypedConfigBuilder[Boolean] = {
+    checkPrependConfig
     new TypedConfigBuilder(this, toBoolean(_, key))
   }
 
@@ -170,15 +244,30 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   def timeConf(unit: TimeUnit): TypedConfigBuilder[Long] = {
+    checkPrependConfig
     new TypedConfigBuilder(this, timeFromString(_, unit), timeToString(_, unit))
   }
 
   def bytesConf(unit: ByteUnit): TypedConfigBuilder[Long] = {
+    checkPrependConfig
     new TypedConfigBuilder(this, byteFromString(_, unit), byteToString(_, unit))
   }
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
-    new FallbackConfigEntry(key, _doc, _public, fallback)
+    val entry = new FallbackConfigEntry(key, _prependedKey, _prependSeparator, _alternatives, _doc,
+      _public, fallback)
+    _onCreate.foreach(_(entry))
+    entry
   }
 
+  def regexConf: TypedConfigBuilder[Regex] = {
+    checkPrependConfig
+    new TypedConfigBuilder(this, regexFromString(_, this.key), _.toString)
+  }
+
+  private def checkPrependConfig = {
+    if (_prependedKey.isDefined) {
+      throw new IllegalArgumentException(s"$key type must be string if prepend used")
+    }
+  }
 }

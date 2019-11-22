@@ -32,18 +32,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
-import org.apache.spark.network.protocol.ChunkFetchRequest;
-import org.apache.spark.network.protocol.OneWayMessage;
-import org.apache.spark.network.protocol.RpcRequest;
-import org.apache.spark.network.protocol.StreamChunkId;
-import org.apache.spark.network.protocol.StreamRequest;
-import org.apache.spark.network.util.NettyUtils;
+import org.apache.spark.network.protocol.*;
+
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
  * Client for fetching consecutive chunks of a pre-negotiated stream. This API is intended to allow
@@ -72,7 +70,7 @@ import org.apache.spark.network.util.NettyUtils;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportClient implements Closeable {
-  private final Logger logger = LoggerFactory.getLogger(TransportClient.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportClient.class);
 
   private final Channel channel;
   private final TransportResponseHandler handler;
@@ -133,37 +131,23 @@ public class TransportClient implements Closeable {
    */
   public void fetchChunk(
       long streamId,
-      final int chunkIndex,
-      final ChunkReceivedCallback callback) {
-    final String serverAddr = NettyUtils.getRemoteAddress(channel);
-    final long startTime = System.currentTimeMillis();
-    logger.debug("Sending fetch chunk request {} to {}", chunkIndex, serverAddr);
+      int chunkIndex,
+      ChunkReceivedCallback callback) {
+    if (logger.isDebugEnabled()) {
+      logger.debug("Sending fetch chunk request {} to {}", chunkIndex, getRemoteAddress(channel));
+    }
 
-    final StreamChunkId streamChunkId = new StreamChunkId(streamId, chunkIndex);
+    StreamChunkId streamChunkId = new StreamChunkId(streamId, chunkIndex);
+    StdChannelListener listener = new StdChannelListener(streamChunkId) {
+      @Override
+      void handleFailure(String errorMsg, Throwable cause) {
+        handler.removeFetchRequest(streamChunkId);
+        callback.onFailure(chunkIndex, new IOException(errorMsg, cause));
+      }
+    };
     handler.addFetchRequest(streamChunkId, callback);
 
-    channel.writeAndFlush(new ChunkFetchRequest(streamChunkId)).addListener(
-      new ChannelFutureListener() {
-        @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
-          if (future.isSuccess()) {
-            long timeTaken = System.currentTimeMillis() - startTime;
-            logger.trace("Sending request {} to {} took {} ms", streamChunkId, serverAddr,
-              timeTaken);
-          } else {
-            String errorMsg = String.format("Failed to send request %s to %s: %s", streamChunkId,
-              serverAddr, future.cause());
-            logger.error(errorMsg, future.cause());
-            handler.removeFetchRequest(streamChunkId);
-            channel.close();
-            try {
-              callback.onFailure(chunkIndex, new IOException(errorMsg, future.cause()));
-            } catch (Exception e) {
-              logger.error("Uncaught exception in RPC response callback handler!", e);
-            }
-          }
-        }
-      });
+    channel.writeAndFlush(new ChunkFetchRequest(streamChunkId)).addListener(listener);
   }
 
   /**
@@ -172,37 +156,23 @@ public class TransportClient implements Closeable {
    * @param streamId The stream to fetch.
    * @param callback Object to call with the stream data.
    */
-  public void stream(final String streamId, final StreamCallback callback) {
-    final String serverAddr = NettyUtils.getRemoteAddress(channel);
-    final long startTime = System.currentTimeMillis();
-    logger.debug("Sending stream request for {} to {}", streamId, serverAddr);
+  public void stream(String streamId, StreamCallback callback) {
+    StdChannelListener listener = new StdChannelListener(streamId) {
+      @Override
+      void handleFailure(String errorMsg, Throwable cause) throws Exception {
+        callback.onFailure(streamId, new IOException(errorMsg, cause));
+      }
+    };
+    if (logger.isDebugEnabled()) {
+      logger.debug("Sending stream request for {} to {}", streamId, getRemoteAddress(channel));
+    }
 
     // Need to synchronize here so that the callback is added to the queue and the RPC is
     // written to the socket atomically, so that callbacks are called in the right order
     // when responses arrive.
     synchronized (this) {
-      handler.addStreamCallback(callback);
-      channel.writeAndFlush(new StreamRequest(streamId)).addListener(
-        new ChannelFutureListener() {
-          @Override
-          public void operationComplete(ChannelFuture future) throws Exception {
-            if (future.isSuccess()) {
-              long timeTaken = System.currentTimeMillis() - startTime;
-              logger.trace("Sending request for {} to {} took {} ms", streamId, serverAddr,
-                timeTaken);
-            } else {
-              String errorMsg = String.format("Failed to send request for %s to %s: %s", streamId,
-                serverAddr, future.cause());
-              logger.error(errorMsg, future.cause());
-              channel.close();
-              try {
-                callback.onFailure(streamId, new IOException(errorMsg, future.cause()));
-              } catch (Exception e) {
-                logger.error("Uncaught exception in RPC response callback handler!", e);
-              }
-            }
-          }
-        });
+      handler.addStreamCallback(streamId, callback);
+      channel.writeAndFlush(new StreamRequest(streamId)).addListener(listener);
     }
   }
 
@@ -214,35 +184,45 @@ public class TransportClient implements Closeable {
    * @param callback Callback to handle the RPC's reply.
    * @return The RPC's id.
    */
-  public long sendRpc(ByteBuffer message, final RpcResponseCallback callback) {
-    final String serverAddr = NettyUtils.getRemoteAddress(channel);
-    final long startTime = System.currentTimeMillis();
-    logger.trace("Sending RPC to {}", serverAddr);
+  public long sendRpc(ByteBuffer message, RpcResponseCallback callback) {
+    if (logger.isTraceEnabled()) {
+      logger.trace("Sending RPC to {}", getRemoteAddress(channel));
+    }
 
-    final long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
+    long requestId = requestId();
     handler.addRpcRequest(requestId, callback);
 
-    channel.writeAndFlush(new RpcRequest(requestId, new NioManagedBuffer(message))).addListener(
-      new ChannelFutureListener() {
-        @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
-          if (future.isSuccess()) {
-            long timeTaken = System.currentTimeMillis() - startTime;
-            logger.trace("Sending request {} to {} took {} ms", requestId, serverAddr, timeTaken);
-          } else {
-            String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
-              serverAddr, future.cause());
-            logger.error(errorMsg, future.cause());
-            handler.removeRpcRequest(requestId);
-            channel.close();
-            try {
-              callback.onFailure(new IOException(errorMsg, future.cause()));
-            } catch (Exception e) {
-              logger.error("Uncaught exception in RPC response callback handler!", e);
-            }
-          }
-        }
-      });
+    RpcChannelListener listener = new RpcChannelListener(requestId, callback);
+    channel.writeAndFlush(new RpcRequest(requestId, new NioManagedBuffer(message)))
+      .addListener(listener);
+
+    return requestId;
+  }
+
+  /**
+   * Send data to the remote end as a stream.  This differs from stream() in that this is a request
+   * to *send* data to the remote end, not to receive it from the remote.
+   *
+   * @param meta meta data associated with the stream, which will be read completely on the
+   *             receiving end before the stream itself.
+   * @param data this will be streamed to the remote end to allow for transferring large amounts
+   *             of data without reading into memory.
+   * @param callback handles the reply -- onSuccess will only be called when both message and data
+   *                 are received successfully.
+   */
+  public long uploadStream(
+      ManagedBuffer meta,
+      ManagedBuffer data,
+      RpcResponseCallback callback) {
+    if (logger.isTraceEnabled()) {
+      logger.trace("Sending RPC to {}", getRemoteAddress(channel));
+    }
+
+    long requestId = requestId();
+    handler.addRpcRequest(requestId, callback);
+
+    RpcChannelListener listener = new RpcChannelListener(requestId, callback);
+    channel.writeAndFlush(new UploadStream(requestId, meta, data)).addListener(listener);
 
     return requestId;
   }
@@ -257,11 +237,16 @@ public class TransportClient implements Closeable {
     sendRpc(message, new RpcResponseCallback() {
       @Override
       public void onSuccess(ByteBuffer response) {
-        ByteBuffer copy = ByteBuffer.allocate(response.remaining());
-        copy.put(response);
-        // flip "copy" to make it readable
-        copy.flip();
-        result.set(copy);
+        try {
+          ByteBuffer copy = ByteBuffer.allocate(response.remaining());
+          copy.put(response);
+          // flip "copy" to make it readable
+          copy.flip();
+          result.set(copy);
+        } catch (Throwable t) {
+          logger.warn("Error in responding PRC callback", t);
+          result.setException(t);
+        }
       }
 
       @Override
@@ -322,4 +307,60 @@ public class TransportClient implements Closeable {
       .add("isActive", isActive())
       .toString();
   }
+
+  private static long requestId() {
+    return Math.abs(UUID.randomUUID().getLeastSignificantBits());
+  }
+
+  private class StdChannelListener
+      implements GenericFutureListener<Future<? super Void>> {
+    final long startTime;
+    final Object requestId;
+
+    StdChannelListener(Object requestId) {
+      this.startTime = System.currentTimeMillis();
+      this.requestId = requestId;
+    }
+
+    @Override
+    public void operationComplete(Future<? super Void> future) throws Exception {
+      if (future.isSuccess()) {
+        if (logger.isTraceEnabled()) {
+          long timeTaken = System.currentTimeMillis() - startTime;
+          logger.trace("Sending request {} to {} took {} ms", requestId,
+              getRemoteAddress(channel), timeTaken);
+        }
+      } else {
+        String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
+            getRemoteAddress(channel), future.cause());
+        logger.error(errorMsg, future.cause());
+        channel.close();
+        try {
+          handleFailure(errorMsg, future.cause());
+        } catch (Exception e) {
+          logger.error("Uncaught exception in RPC response callback handler!", e);
+        }
+      }
+    }
+
+    void handleFailure(String errorMsg, Throwable cause) throws Exception {}
+  }
+
+  private class RpcChannelListener extends StdChannelListener {
+    final long rpcRequestId;
+    final RpcResponseCallback callback;
+
+    RpcChannelListener(long rpcRequestId, RpcResponseCallback callback) {
+      super("RPC " + rpcRequestId);
+      this.rpcRequestId = rpcRequestId;
+      this.callback = callback;
+    }
+
+    @Override
+    void handleFailure(String errorMsg, Throwable cause) {
+      handler.removeRpcRequest(rpcRequestId);
+      callback.onFailure(new IOException(errorMsg, cause));
+    }
+  }
+
 }

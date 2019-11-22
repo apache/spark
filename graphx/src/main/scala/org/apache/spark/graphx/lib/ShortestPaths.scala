@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx.lib
 
+import scala.collection.{mutable, Map}
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
@@ -25,7 +26,7 @@ import org.apache.spark.graphx._
  * Computes shortest paths to the given set of landmark vertices, returning a graph where each
  * vertex attribute is a map containing the shortest-path distance to each reachable landmark.
  */
-object ShortestPaths {
+object ShortestPaths extends Serializable {
   /** Stores a map from the vertex id of a landmark to the distance to that landmark. */
   type SPMap = Map[VertexId, Int]
 
@@ -33,10 +34,14 @@ object ShortestPaths {
 
   private def incrementMap(spmap: SPMap): SPMap = spmap.map { case (v, d) => v -> (d + 1) }
 
-  private def addMaps(spmap1: SPMap, spmap2: SPMap): SPMap =
-    (spmap1.keySet ++ spmap2.keySet).map {
-      k => k -> math.min(spmap1.getOrElse(k, Int.MaxValue), spmap2.getOrElse(k, Int.MaxValue))
-    }.toMap
+  private def addMaps(spmap1: SPMap, spmap2: SPMap): SPMap = {
+    // Mimics the optimization of breakOut, not present in Scala 2.13, while working in 2.12
+    val map = mutable.Map[VertexId, Int]()
+    (spmap1.keySet ++ spmap2.keySet).foreach { k =>
+      map.put(k, math.min(spmap1.getOrElse(k, Int.MaxValue), spmap2.getOrElse(k, Int.MaxValue)))
+    }
+    map
+  }
 
   /**
    * Computes shortest paths to the given set of landmark vertices.

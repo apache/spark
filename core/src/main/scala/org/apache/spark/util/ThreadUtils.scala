@@ -19,11 +19,16 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
-import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
-import scala.util.control.NonFatal
+import scala.collection.generic.CanBuildFrom
+import scala.language.higherKinds
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
+import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.util.control.NonFatal
+
+import org.apache.spark.SparkException
+import org.apache.spark.rpc.RpcAbortException
 
 private[spark] object ThreadUtils {
 
@@ -101,6 +106,22 @@ private[spark] object ThreadUtils {
   }
 
   /**
+   * Wrapper over ScheduledThreadPoolExecutor.
+   */
+  def newDaemonThreadPoolScheduledExecutor(threadNamePrefix: String, numThreads: Int)
+      : ScheduledExecutorService = {
+    val threadFactory = new ThreadFactoryBuilder()
+      .setDaemon(true)
+      .setNameFormat(s"$threadNamePrefix-%d")
+      .build()
+    val executor = new ScheduledThreadPoolExecutor(numThreads, threadFactory)
+    // By default, a cancelled task is not automatically removed from the work queue until its delay
+    // elapses. We have to enable it manually.
+    executor.setRemoveOnCancelPolicy(true)
+    executor
+  }
+
+  /**
    * Run a piece of code in a new thread and return the result. Exception in the new thread is
    * thrown in the caller thread with an adjusted stack trace that removes references to this
    * method for clarity. The exception stack traces will be like the following
@@ -159,19 +180,111 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Construct a new Scala ForkJoinPool with a specified max parallelism and name prefix.
+   * Construct a new ForkJoinPool with a specified max parallelism and name prefix.
    */
-  def newForkJoinPool(prefix: String, maxThreadNumber: Int): SForkJoinPool = {
+  def newForkJoinPool(prefix: String, maxThreadNumber: Int): ForkJoinPool = {
     // Custom factory to set thread names
-    val factory = new SForkJoinPool.ForkJoinWorkerThreadFactory {
-      override def newThread(pool: SForkJoinPool) =
-        new SForkJoinWorkerThread(pool) {
+    val factory = new ForkJoinPool.ForkJoinWorkerThreadFactory {
+      override def newThread(pool: ForkJoinPool) =
+        new ForkJoinWorkerThread(pool) {
           setName(prefix + "-" + super.getName)
         }
     }
-    new SForkJoinPool(maxThreadNumber, factory,
+    new ForkJoinPool(maxThreadNumber, factory,
       null, // handler
       false // asyncMode
     )
+  }
+
+  // scalastyle:off awaitresult
+  /**
+   * Preferred alternative to `Await.result()`.
+   *
+   * This method wraps and re-throws any exceptions thrown by the underlying `Await` call, ensuring
+   * that this thread's stack trace appears in logs.
+   *
+   * In addition, it calls `Awaitable.result` directly to avoid using `ForkJoinPool`'s
+   * `BlockingContext`. Codes running in the user's thread may be in a thread of Scala ForkJoinPool.
+   * As concurrent executions in ForkJoinPool may see some [[ThreadLocal]] value unexpectedly, this
+   * method basically prevents ForkJoinPool from running other tasks in the current waiting thread.
+   * In general, we should use this method because many places in Spark use [[ThreadLocal]] and it's
+   * hard to debug when [[ThreadLocal]]s leak to other tasks.
+   */
+  @throws(classOf[SparkException])
+  def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
+    try {
+      // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
+      // See SPARK-13747.
+      val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
+      awaitable.result(atMost)(awaitPermission)
+    } catch {
+      case e: SparkFatalException =>
+        throw e.throwable
+      // TimeoutException and RpcAbortException is thrown in the current thread, so not need to warp
+      // the exception.
+      case NonFatal(t)
+          if !t.isInstanceOf[TimeoutException] && !t.isInstanceOf[RpcAbortException] =>
+        throw new SparkException("Exception thrown in awaitResult: ", t)
+    }
+  }
+  // scalastyle:on awaitresult
+
+  // scalastyle:off awaitready
+  /**
+   * Preferred alternative to `Await.ready()`.
+   *
+   * @see [[awaitResult]]
+   */
+  @throws(classOf[SparkException])
+  def awaitReady[T](awaitable: Awaitable[T], atMost: Duration): awaitable.type = {
+    try {
+      // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
+      // See SPARK-13747.
+      val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
+      awaitable.ready(atMost)(awaitPermission)
+    } catch {
+      // TimeoutException is thrown in the current thread, so not need to warp the exception.
+      case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
+        throw new SparkException("Exception thrown in awaitResult: ", t)
+    }
+  }
+  // scalastyle:on awaitready
+
+  def shutdown(
+      executor: ExecutorService,
+      gracePeriod: Duration = FiniteDuration(30, TimeUnit.SECONDS)): Unit = {
+    executor.shutdown()
+    executor.awaitTermination(gracePeriod.toMillis, TimeUnit.MILLISECONDS)
+    if (!executor.isShutdown) {
+      executor.shutdownNow()
+    }
+  }
+
+  /**
+   * Transforms input collection by applying the given function to each element in parallel fashion.
+   * Comparing to the map() method of Scala parallel collections, this method can be interrupted
+   * at any time. This is useful on canceling of task execution, for example.
+   *
+   * @param in - the input collection which should be transformed in parallel.
+   * @param prefix - the prefix assigned to the underlying thread pool.
+   * @param maxThreads - maximum number of thread can be created during execution.
+   * @param f - the lambda function will be applied to each element of `in`.
+   * @tparam I - the type of elements in the input collection.
+   * @tparam O - the type of elements in resulted collection.
+   * @return new collection in which each element was given from the input collection `in` by
+   *         applying the lambda function `f`.
+   */
+  def parmap[I, O](in: Seq[I], prefix: String, maxThreads: Int)(f: I => O): Seq[O] = {
+    val pool = newForkJoinPool(prefix, maxThreads)
+    try {
+      implicit val ec = ExecutionContext.fromExecutor(pool)
+
+      val futures = in.map(x => Future(f(x)))
+      val futureSeq = Future.sequence(futures)
+
+      awaitResult(futureSeq, Duration.Inf)
+    } finally {
+      pool.shutdownNow()
+    }
   }
 }

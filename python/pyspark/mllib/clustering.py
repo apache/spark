@@ -33,7 +33,6 @@ from pyspark import SparkContext, since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
-from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
@@ -47,8 +46,6 @@ __all__ = ['BisectingKMeansModel', 'BisectingKMeans', 'KMeansModel', 'KMeans',
 @inherit_doc
 class BisectingKMeansModel(JavaModelWrapper):
     """
-    .. note:: Experimental
-
     A clustering model derived from the bisecting k-means method.
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
@@ -120,8 +117,6 @@ class BisectingKMeansModel(JavaModelWrapper):
 
 class BisectingKMeans(object):
     """
-    .. note:: Experimental
-
     A bisecting k-means algorithm based on the paper "A comparison of
     document clustering techniques" by Steinbach, Karypis, and Kumar,
     with modification to fit Spark.
@@ -135,9 +130,9 @@ class BisectingKMeans(object):
     clusters, larger clusters get higher priority.
 
     Based on
-    U{http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf}
-    Steinbach, Karypis, and Kumar, A comparison of document clustering
-    techniques, KDD Workshop on Text Mining, 2000.
+    `Steinbach, Karypis, and Kumar, A comparison of document clustering
+    techniques, KDD Workshop on Text Mining, 2000
+    <http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf>`_.
 
     .. versionadded:: 2.0.0
     """
@@ -179,7 +174,7 @@ class KMeansModel(Saveable, Loader):
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> model = KMeans.train(
-    ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random",
+    ...     sc.parallelize(data), 2, maxIterations=10, initializationMode="random",
     ...                    seed=50, initializationSteps=5, epsilon=1e-4)
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
     True
@@ -188,7 +183,7 @@ class KMeansModel(Saveable, Loader):
     >>> model.k
     2
     >>> model.computeCost(sc.parallelize(data))
-    2.0000000000000004
+    2.0
     >>> model = KMeans.train(sc.parallelize(data), 2)
     >>> sparse_data = [
     ...     SparseVector(3, {1: 1.0}),
@@ -309,8 +304,8 @@ class KMeans(object):
 
     @classmethod
     @since('0.9.0')
-    def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
-              seed=None, initializationSteps=5, epsilon=1e-4, initialModel=None):
+    def train(cls, rdd, k, maxIterations=100, initializationMode="k-means||",
+              seed=None, initializationSteps=2, epsilon=1e-4, initialModel=None):
         """
         Train a k-means clustering model.
 
@@ -322,10 +317,6 @@ class KMeans(object):
         :param maxIterations:
           Maximum number of iterations allowed.
           (default: 100)
-        :param runs:
-          Number of runs to execute in parallel. The best model according
-          to the cost function will be returned (deprecated in 1.6.0).
-          (default: 1)
         :param initializationMode:
           The initialization algorithm. This can be either "random" or
           "k-means||".
@@ -336,9 +327,9 @@ class KMeans(object):
           (default: None)
         :param initializationSteps:
           Number of steps for the k-means|| initialization mode.
-          This is an advanced setting -- the default of 5 is almost
+          This is an advanced setting -- the default of 2 is almost
           always enough.
-          (default: 5)
+          (default: 2)
         :param epsilon:
           Distance threshold within which a center will be considered to
           have converged. If all centers move less than this Euclidean
@@ -349,9 +340,6 @@ class KMeans(object):
           rather than using the random or k-means|| initializationModel.
           (default: None)
         """
-        if runs != 1:
-            warnings.warn(
-                "Support for runs is deprecated in 1.6.0. This param will have no effect in 2.0.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):
@@ -359,7 +347,7 @@ class KMeans(object):
                                 "to be of <type 'KMeansModel'>")
             clusterInitialModel = [_convert_to_vector(c) for c in initialModel.clusterCenters]
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
-                              runs, initializationMode, seed, initializationSteps, epsilon,
+                              initializationMode, seed, initializationSteps, epsilon,
                               clusterInitialModel)
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
@@ -369,8 +357,6 @@ class KMeans(object):
 class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """
-    .. note:: Experimental
-
     A clustering model derived from the Gaussian Mixture Model method.
 
     >>> from pyspark.mllib.linalg import Vectors, DenseMatrix
@@ -393,11 +379,11 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model.predict([-0.1,-0.05])
     0
     >>> softPredicted = model.predictSoft([-0.1,-0.05])
-    >>> abs(softPredicted[0] - 1.0) < 0.001
+    >>> abs(softPredicted[0] - 1.0) < 0.03
     True
-    >>> abs(softPredicted[1] - 0.0) < 0.001
+    >>> abs(softPredicted[1] - 0.0) < 0.03
     True
-    >>> abs(softPredicted[2] - 0.0) < 0.001
+    >>> abs(softPredicted[2] - 0.0) < 0.03
     True
 
     >>> path = tempfile.mkdtemp()
@@ -425,7 +411,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     ...                 4.5605,  5.2043,  6.2734])
     >>> clusterdata_2 = sc.parallelize(data.reshape(5,3))
     >>> model = GaussianMixture.train(clusterdata_2, 2, convergenceTol=0.0001,
-    ...                               maxIterations=150, seed=10)
+    ...                               maxIterations=150, seed=4)
     >>> labels = model.predict(clusterdata_2).collect()
     >>> labels[0]==labels[1]
     True
@@ -510,14 +496,12 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
           Path to where the model is stored.
         """
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.GaussianMixtureModelWrapper(model)
+        wrapper = sc._jvm.org.apache.spark.mllib.api.python.GaussianMixtureModelWrapper(model)
         return cls(wrapper)
 
 
 class GaussianMixture(object):
     """
-    .. note:: Experimental
-
     Learning algorithm for Gaussian Mixtures using the expectation-maximization algorithm.
 
     .. versionadded:: 1.3.0
@@ -568,20 +552,18 @@ class GaussianMixture(object):
 class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """
-    .. note:: Experimental
-
     Model produced by [[PowerIterationClustering]].
 
     >>> import math
     >>> def genCircle(r, n):
-    ...   points = []
-    ...   for i in range(0, n):
-    ...     theta = 2.0 * math.pi * i / n
-    ...     points.append((r * math.cos(theta), r * math.sin(theta)))
-    ...   return points
+    ...     points = []
+    ...     for i in range(0, n):
+    ...         theta = 2.0 * math.pi * i / n
+    ...         points.append((r * math.cos(theta), r * math.sin(theta)))
+    ...     return points
     >>> def sim(x, y):
-    ...   dist2 = (x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1])
-    ...   return math.exp(-dist2 / 2.0)
+    ...     dist2 = (x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1])
+    ...     return math.exp(-dist2 / 2.0)
     >>> r1 = 1.0
     >>> n1 = 10
     >>> r2 = 4.0
@@ -641,16 +623,15 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         Load a model from the given path.
         """
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.PowerIterationClusteringModelWrapper(model)
+        wrapper =\
+            sc._jvm.org.apache.spark.mllib.api.python.PowerIterationClusteringModelWrapper(model)
         return PowerIterationClusteringModel(wrapper)
 
 
 class PowerIterationClustering(object):
     """
-    .. note:: Experimental
-
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm
-    developed by [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]].
+    developed by [[http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf Lin and Cohen]].
     From the abstract: PIC finds a very low-dimensional embedding of a
     dataset using truncated power iteration on a normalized pair-wise
     similarity matrix of the data.
@@ -661,7 +642,7 @@ class PowerIterationClustering(object):
     @classmethod
     @since('1.5.0')
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
-        """
+        r"""
         :param rdd:
           An RDD of (i, j, s\ :sub:`ij`\) tuples representing the
           affinity matrix, which is the matrix A in the PIC paper.  The
@@ -695,8 +676,6 @@ class PowerIterationClustering(object):
 
 class StreamingKMeansModel(KMeansModel):
     """
-    .. note:: Experimental
-
     Clustering model which can perform an online update of the centroids.
 
     The update formula for each centroid is given by
@@ -715,9 +694,9 @@ class StreamingKMeansModel(KMeansModel):
     * n_t+1: New number of weights.
     * a: Decay Factor, which gives the forgetfulness.
 
-    Note that if a is set to 1, it is the weighted mean of the previous
-    and new data. If it set to zero, the old centroids are completely
-    forgotten.
+    .. note:: If a is set to 1, it is the weighted mean of the previous
+        and new data. If it set to zero, the old centroids are completely
+        forgotten.
 
     :param clusterCenters:
       Initial cluster centers.
@@ -796,8 +775,6 @@ class StreamingKMeansModel(KMeansModel):
 
 class StreamingKMeans(object):
     """
-    .. note:: Experimental
-
     Provides methods to set k, decayFactor, timeUnit to configure the
     KMeans algorithm for fitting and predicting on incoming dstreams.
     More details on how the centroids are updated are provided under the
@@ -1060,13 +1037,19 @@ class LDA(object):
 
 def _test():
     import doctest
+    import numpy
     import pyspark.mllib.clustering
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.mllib.clustering.__dict__.copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -17,16 +17,22 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.hadoop.fs.Path
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.ml.r.RWrapperUtils._
+import org.apache.spark.ml.util._
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class NaiveBayesWrapper private (
-    pipeline: PipelineModel,
+    val pipeline: PipelineModel,
     val labels: Array[String],
-    val features: Array[String]) {
+    val features: Array[String]) extends MLWritable {
 
   import NaiveBayesWrapper._
 
@@ -36,40 +42,85 @@ private[r] class NaiveBayesWrapper private (
 
   lazy val tables: Array[Double] = naiveBayesModel.theta.toArray.map(math.exp)
 
-  def transform(dataset: DataFrame): DataFrame = {
-    pipeline.transform(dataset).drop(PREDICTED_LABEL_INDEX_COL)
+  def transform(dataset: Dataset[_]): DataFrame = {
+    pipeline.transform(dataset)
+      .drop(PREDICTED_LABEL_INDEX_COL)
+      .drop(naiveBayesModel.getFeaturesCol)
+      .drop(naiveBayesModel.getLabelCol)
   }
+
+  override def write: MLWriter = new NaiveBayesWrapper.NaiveBayesWrapperWriter(this)
 }
 
-private[r] object NaiveBayesWrapper {
+private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
 
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
-  def fit(formula: String, data: DataFrame, laplace: Double): NaiveBayesWrapper = {
+  def fit(
+      formula: String,
+      data: DataFrame,
+      smoothing: Double,
+      handleInvalid: String): NaiveBayesWrapper = {
     val rFormula = new RFormula()
       .setFormula(formula)
-      .fit(data)
+      .setForceIndexLabel(true)
+      .setHandleInvalid(handleInvalid)
+    checkDataColumns(rFormula, data)
+    val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
-    val schema = rFormula.transform(data).schema
-    val labelAttr = Attribute.fromStructField(schema(rFormula.getLabelCol))
-      .asInstanceOf[NominalAttribute]
-    val labels = labelAttr.values.get
-    val featureAttrs = AttributeGroup.fromStructField(schema(rFormula.getFeaturesCol))
-      .attributes.get
-    val features = featureAttrs.map(_.name.get)
+    val (features, labels) = getFeaturesAndLabels(rFormulaModel, data)
     // assemble and fit the pipeline
     val naiveBayes = new NaiveBayes()
-      .setSmoothing(laplace)
+      .setSmoothing(smoothing)
       .setModelType("bernoulli")
+      .setFeaturesCol(rFormula.getFeaturesCol)
+      .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
     val idxToStr = new IndexToString()
       .setInputCol(PREDICTED_LABEL_INDEX_COL)
       .setOutputCol(PREDICTED_LABEL_COL)
       .setLabels(labels)
     val pipeline = new Pipeline()
-      .setStages(Array(rFormula, naiveBayes, idxToStr))
+      .setStages(Array(rFormulaModel, naiveBayes, idxToStr))
       .fit(data)
     new NaiveBayesWrapper(pipeline, labels, features)
+  }
+
+  override def read: MLReader[NaiveBayesWrapper] = new NaiveBayesWrapperReader
+
+  override def load(path: String): NaiveBayesWrapper = super.load(path)
+
+  class NaiveBayesWrapperWriter(instance: NaiveBayesWrapper) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      val rMetadataPath = new Path(path, "rMetadata").toString
+      val pipelinePath = new Path(path, "pipeline").toString
+
+      val rMetadata = ("class" -> instance.getClass.getName) ~
+        ("labels" -> instance.labels.toSeq) ~
+        ("features" -> instance.features.toSeq)
+      val rMetadataJson: String = compact(render(rMetadata))
+      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+
+      instance.pipeline.save(pipelinePath)
+    }
+  }
+
+  class NaiveBayesWrapperReader extends MLReader[NaiveBayesWrapper] {
+
+    override def load(path: String): NaiveBayesWrapper = {
+      implicit val format = DefaultFormats
+      val rMetadataPath = new Path(path, "rMetadata").toString
+      val pipelinePath = new Path(path, "pipeline").toString
+
+      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadata = parse(rMetadataStr)
+      val labels = (rMetadata \ "labels").extract[Array[String]]
+      val features = (rMetadata \ "features").extract[Array[String]]
+
+      val pipeline = PipelineModel.load(pipelinePath)
+      new NaiveBayesWrapper(pipeline, labels, features)
+    }
   }
 }

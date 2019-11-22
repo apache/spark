@@ -222,7 +222,7 @@ class EdgePartition[
    *
    * @param f an external state mutating user defined function.
    */
-  def foreach(f: Edge[ED] => Unit) {
+  def foreach(f: Edge[ED] => Unit): Unit = {
     iterator.foreach(f)
   }
 
@@ -388,7 +388,7 @@ class EdgePartition[
     val aggregates = new Array[A](vertexAttrs.length)
     val bitset = new BitSet(vertexAttrs.length)
 
-    var ctx = new AggregatingEdgeContext[VD, ED, A](mergeMsg, aggregates, bitset)
+    val ctx = new AggregatingEdgeContext[VD, ED, A](mergeMsg, aggregates, bitset)
     var i = 0
     while (i < size) {
       val localSrcId = localSrcIds(i)
@@ -433,7 +433,7 @@ class EdgePartition[
     val aggregates = new Array[A](vertexAttrs.length)
     val bitset = new BitSet(vertexAttrs.length)
 
-    var ctx = new AggregatingEdgeContext[VD, ED, A](mergeMsg, aggregates, bitset)
+    val ctx = new AggregatingEdgeContext[VD, ED, A](mergeMsg, aggregates, bitset)
     index.iterator.foreach { cluster =>
       val clusterSrcId = cluster._1
       val clusterPos = cluster._2
@@ -495,7 +495,7 @@ private class AggregatingEdgeContext[VD, ED, A](
       srcId: VertexId, dstId: VertexId,
       localSrcId: Int, localDstId: Int,
       srcAttr: VD, dstAttr: VD,
-      attr: ED) {
+      attr: ED): Unit = {
     _srcId = srcId
     _dstId = dstId
     _localSrcId = localSrcId
@@ -505,13 +505,13 @@ private class AggregatingEdgeContext[VD, ED, A](
     _attr = attr
   }
 
-  def setSrcOnly(srcId: VertexId, localSrcId: Int, srcAttr: VD) {
+  def setSrcOnly(srcId: VertexId, localSrcId: Int, srcAttr: VD): Unit = {
     _srcId = srcId
     _localSrcId = localSrcId
     _srcAttr = srcAttr
   }
 
-  def setRest(dstId: VertexId, localDstId: Int, dstAttr: VD, attr: ED) {
+  def setRest(dstId: VertexId, localDstId: Int, dstAttr: VD, attr: ED): Unit = {
     _dstId = dstId
     _localDstId = localDstId
     _dstAttr = dstAttr
@@ -524,14 +524,14 @@ private class AggregatingEdgeContext[VD, ED, A](
   override def dstAttr: VD = _dstAttr
   override def attr: ED = _attr
 
-  override def sendToSrc(msg: A) {
+  override def sendToSrc(msg: A): Unit = {
     send(_localSrcId, msg)
   }
-  override def sendToDst(msg: A) {
+  override def sendToDst(msg: A): Unit = {
     send(_localDstId, msg)
   }
 
-  @inline private def send(localId: Int, msg: A) {
+  @inline private def send(localId: Int, msg: A): Unit = {
     if (bitset.get(localId)) {
       aggregates(localId) = mergeMsg(aggregates(localId), msg)
     } else {

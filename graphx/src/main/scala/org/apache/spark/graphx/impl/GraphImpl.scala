@@ -42,7 +42,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   @transient override val edges: EdgeRDDImpl[ED, VD] = replicatedVertexView.edges
 
-  /** Return a RDD that brings edges together with their source and destination vertices. */
+  /** Return an RDD that brings edges together with their source and destination vertices. */
   @transient override lazy val triplets: RDD[EdgeTriplet[VD, ED]] = {
     replicatedVertexView.upgrade(vertices, true, true)
     replicatedVertexView.edges.partitionsRDD.mapPartitions(_.flatMap {
@@ -74,17 +74,17 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   override def getCheckpointFiles: Seq[String] = {
     Seq(vertices.getCheckpointFile, replicatedVertexView.edges.getCheckpointFile).flatMap {
       case Some(path) => Seq(path)
-      case None => Seq()
+      case None => Seq.empty
     }
   }
 
-  override def unpersist(blocking: Boolean = true): Graph[VD, ED] = {
+  override def unpersist(blocking: Boolean = false): Graph[VD, ED] = {
     unpersistVertices(blocking)
     replicatedVertexView.edges.unpersist(blocking)
     this
   }
 
-  override def unpersistVertices(blocking: Boolean = true): Graph[VD, ED] = {
+  override def unpersistVertices(blocking: Boolean = false): Graph[VD, ED] = {
     vertices.unpersist(blocking)
     // TODO: unpersist the replicated vertices in `replicatedVertexView` but leave the edges alone
     this
@@ -103,15 +103,16 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       (part, (e.srcId, e.dstId, e.attr))
     }
       .partitionBy(new HashPartitioner(numPartitions))
-      .mapPartitionsWithIndex( { (pid, iter) =>
-        val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
-        iter.foreach { message =>
-          val data = message._2
-          builder.add(data._1, data._2, data._3)
-        }
-        val edgePartition = builder.toEdgePartition
-        Iterator((pid, edgePartition))
-      }, preservesPartitioning = true)).cache()
+      .mapPartitionsWithIndex(
+        { (pid: Int, iter: Iterator[(PartitionID, (VertexId, VertexId, ED))]) =>
+          val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
+          iter.foreach { message =>
+            val data = message._2
+            builder.add(data._1, data._2, data._3)
+          }
+          val edgePartition = builder.toEdgePartition
+          Iterator((pid, edgePartition))
+        }, preservesPartitioning = true)).cache()
     GraphImpl.fromExistingRDDs(vertices.withEdges(newEdges), newEdges)
   }
 
@@ -277,7 +278,9 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
 object GraphImpl {
 
-  /** Create a graph from edges, setting referenced vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from edges, setting referenced vertices to `defaultVertexAttr`.
+   */
   def apply[VD: ClassTag, ED: ClassTag](
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD,
@@ -286,7 +289,9 @@ object GraphImpl {
     fromEdgeRDD(EdgeRDD.fromEdges(edges), defaultVertexAttr, edgeStorageLevel, vertexStorageLevel)
   }
 
-  /** Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`.
+   */
   def fromEdgePartitions[VD: ClassTag, ED: ClassTag](
       edgePartitions: RDD[(PartitionID, EdgePartition[ED, VD])],
       defaultVertexAttr: VD,
@@ -296,7 +301,9 @@ object GraphImpl {
       vertexStorageLevel)
   }
 
-  /** Create a graph from vertices and edges, setting missing vertices to `defaultVertexAttr`. */
+  /**
+   * Create a graph from vertices and edges, setting missing vertices to `defaultVertexAttr`.
+   */
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: RDD[(VertexId, VD)],
       edges: RDD[Edge[ED]],

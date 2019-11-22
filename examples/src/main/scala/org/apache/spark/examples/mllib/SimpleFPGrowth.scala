@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 
 object SimpleFPGrowth {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("SimpleFPGrowth")
     val sc = new SparkContext(conf)
@@ -42,17 +42,17 @@ object SimpleFPGrowth {
     val model = fpg.run(transactions)
 
     model.freqItemsets.collect().foreach { itemset =>
-      println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
+      println(s"${itemset.items.mkString("[", ",", "]")},${itemset.freq}")
     }
 
     val minConfidence = 0.8
     model.generateAssociationRules(minConfidence).collect().foreach { rule =>
-      println(
-        rule.antecedent.mkString("[", ",", "]")
-          + " => " + rule.consequent .mkString("[", ",", "]")
-          + ", " + rule.confidence)
+      println(s"${rule.antecedent.mkString("[", ",", "]")}=> " +
+        s"${rule.consequent .mkString("[", ",", "]")},${rule.confidence}")
     }
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

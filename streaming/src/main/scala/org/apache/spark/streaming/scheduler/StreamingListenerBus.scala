@@ -33,7 +33,7 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
    * Post a StreamingListenerEvent to the Spark listener bus asynchronously. This event will be
    * dispatched to all StreamingListeners in the thread of the Spark listener bus.
    */
-  def post(event: StreamingListenerEvent) {
+  def post(event: StreamingListenerEvent): Unit = {
     sparkListenerBus.post(new WrappedStreamingListenerEvent(event))
   }
 
@@ -65,6 +65,8 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
         listener.onOutputOperationStarted(outputOperationStarted)
       case outputOperationCompleted: StreamingListenerOutputOperationCompleted =>
         listener.onOutputOperationCompleted(outputOperationCompleted)
+      case streamingStarted: StreamingListenerStreamingStarted =>
+        listener.onStreamingStarted(streamingStarted)
       case _ =>
     }
   }
@@ -74,7 +76,7 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
    * forward them to StreamingListeners.
    */
   def start(): Unit = {
-    sparkListenerBus.addListener(this) // for getting callbacks on spark events
+    sparkListenerBus.addToStatusQueue(this)
   }
 
   /**

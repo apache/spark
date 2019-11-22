@@ -22,19 +22,20 @@ import org.apache.spark.examples.streaming.StreamingExamples
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 // scalastyle:off
-/** Analyses a streaming dataset of web page views. This class demonstrates several types of
-  * operators available in Spark streaming.
-  *
-  * This should be used in tandem with PageViewStream.scala. Example:
-  * To run the generator
-  * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
-  * To process the generated stream
-  * `$ bin/run-example \
-  *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
-  */
+/**
+ * Analyses a streaming dataset of web page views. This class demonstrates several types of
+ * operators available in Spark streaming.
+ *
+ * This should be used in tandem with PageViewStream.scala. Example:
+ * To run the generator
+ * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
+ * To process the generated stream
+ * `$ bin/run-example \
+ *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
+ */
 // scalastyle:on
 object PageViewStream {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 3) {
       System.err.println("Usage: PageViewStream <metric> <host> <port>")
       System.err.println("<metric> must be one of pageCounts, slidingPageCounts," +
@@ -103,8 +104,8 @@ object PageViewStream {
           .foreachRDD((rdd, time) => rdd.join(userList)
             .map(_._2._2)
             .take(10)
-            .foreach(u => println("Saw user %s at time %s".format(u, time))))
-      case _ => println("Invalid metric entered: " + metric)
+            .foreach(u => println(s"Saw user $u at time $time")))
+      case _ => println(s"Invalid metric entered: $metric")
     }
 
     ssc.start()

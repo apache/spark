@@ -46,17 +46,15 @@ private[mllib] object LocalKMeans extends Logging {
 
     // Initialize centers by sampling using the k-means++ procedure.
     centers(0) = pickWeighted(rand, points, weights).toDense
+    val costArray = points.map(EuclideanDistanceMeasure.fastSquaredDistance(_, centers(0)))
+
     for (i <- 1 until k) {
-      // Pick the next center with a probability proportional to cost under current centers
-      val curCenters = centers.view.take(i)
-      val sum = points.view.zip(weights).map { case (p, w) =>
-        w * KMeans.pointCost(curCenters, p)
-      }.sum
+      val sum = costArray.zip(weights).map(p => p._1 * p._2).sum
       val r = rand.nextDouble() * sum
       var cumulativeScore = 0.0
       var j = 0
       while (j < points.length && cumulativeScore < r) {
-        cumulativeScore += weights(j) * KMeans.pointCost(curCenters, points(j))
+        cumulativeScore += weights(j) * costArray(j)
         j += 1
       }
       if (j == 0) {
@@ -66,7 +64,17 @@ private[mllib] object LocalKMeans extends Logging {
       } else {
         centers(i) = points(j - 1).toDense
       }
+
+      // update costArray
+      for (p <- points.indices) {
+        costArray(p) = math.min(
+          EuclideanDistanceMeasure.fastSquaredDistance(points(p), centers(i)),
+          costArray(p))
+      }
+
     }
+
+    val distanceMeasureInstance = new EuclideanDistanceMeasure
 
     // Run up to maxIterations iterations of Lloyd's algorithm
     val oldClosest = Array.fill(points.length)(-1)
@@ -79,7 +87,7 @@ private[mllib] object LocalKMeans extends Logging {
       var i = 0
       while (i < points.length) {
         val p = points(i)
-        val index = KMeans.findClosest(centers, p)._1
+        val index = distanceMeasureInstance.findClosest(centers, p)._1
         axpy(weights(i), p.vector, sums(index))
         counts(index) += weights(i)
         if (index != oldClosest(i)) {

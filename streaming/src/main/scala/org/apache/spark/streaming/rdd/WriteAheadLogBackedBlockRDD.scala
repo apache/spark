@@ -27,7 +27,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
@@ -120,7 +120,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     val blockId = partition.blockId
 
     def getBlockFromBlockManager(): Option[Iterator[T]] = {
-      blockManager.get(blockId).map(_.data.asInstanceOf[Iterator[T]])
+      blockManager.get[T](blockId).map(_.data.asInstanceOf[Iterator[T]])
     }
 
     def getBlockFromWriteAheadLog(): Iterator[T] = {
@@ -136,7 +136,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         // this dummy directory should not already exist otherwise the WAL will try to recover
         // past events from the directory and throw errors.
         val nonExistentDirectory = new File(
-          System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getAbsolutePath
+          System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).toURI.toString
         writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
           SparkEnv.get.conf, nonExistentDirectory, hadoopConf)
         dataRead = writeAheadLog.read(partition.walRecordHandle)
@@ -162,7 +162,10 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
-      serializerManager.dataDeserialize(blockId, new ChunkedByteBuffer(dataRead))
+      serializerManager
+        .dataDeserializeStream(
+          blockId,
+          new ChunkedByteBuffer(dataRead).toInputStream())(elementClassTag)
         .asInstanceOf[Iterator[T]]
     }
 

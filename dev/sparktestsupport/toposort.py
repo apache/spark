@@ -43,8 +43,8 @@ def toposort(data):
     """Dependencies are expressed as a dictionary whose keys are items
 and whose values are a set of dependent items. Output is a list of
 sets in topological order. The first set consists of items with no
-dependences, each subsequent set consists of items that depend upon
-items in the preceeding sets.
+dependencies, each subsequent set consists of items that depend upon
+items in the preceding sets.
 """
 
     # Special case empty input.
@@ -59,7 +59,7 @@ items in the preceeding sets.
         v.discard(k)
     # Find all items that don't depend on anything.
     extra_items_in_deps = _reduce(set.union, data.values()) - set(data.keys())
-    # Add empty dependences where needed.
+    # Add empty dependencies where needed.
     data.update({item: set() for item in extra_items_in_deps})
     while True:
         ordered = set(item for item, dep in data.items() if len(dep) == 0)

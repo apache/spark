@@ -27,11 +27,12 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.HiveResult.hiveResultString
 
-private[hive] class SparkSQLDriver(
-    val context: HiveContext = SparkSQLEnv.hiveContext)
+
+private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlContext)
   extends Driver
   with Logging {
 
@@ -41,14 +42,14 @@ private[hive] class SparkSQLDriver(
   override def init(): Unit = {
   }
 
-  private def getResultSetSchema(query: context.QueryExecution): Schema = {
+  private def getResultSetSchema(query: QueryExecution): Schema = {
     val analyzed = query.analyzed
     logDebug(s"Result Schema: ${analyzed.output}")
     if (analyzed.output.isEmpty) {
       new Schema(Arrays.asList(new FieldSchema("Response code", "string", "")), null)
     } else {
       val fieldSchemas = analyzed.output.map { attr =>
-        new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
+        new FieldSchema(attr.name, attr.dataType.catalogString, "")
       }
 
       new Schema(fieldSchemas.asJava, null)
@@ -59,8 +60,10 @@ private[hive] class SparkSQLDriver(
     // TODO unify the error code
     try {
       context.sparkContext.setJobDescription(command)
-      val execution = context.executePlan(context.sql(command).logicalPlan)
-      hiveResponse = execution.stringResult()
+      val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
+      hiveResponse = SQLExecution.withNewExecutionId(context.sparkSession, execution) {
+        hiveResultString(execution.executedPlan)
+      }
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
@@ -91,7 +94,7 @@ private[hive] class SparkSQLDriver(
 
   override def getSchema: Schema = tableSchema
 
-  override def destroy() {
+  override def destroy(): Unit = {
     super.destroy()
     hiveResponse = null
     tableSchema = null

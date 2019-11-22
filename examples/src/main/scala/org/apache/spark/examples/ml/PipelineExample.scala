@@ -18,26 +18,26 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.Row
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object PipelineExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("PipelineExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("PipelineExample")
+      .getOrCreate()
 
     // $example on$
     // Prepare training documents from a list of (id, text, label) tuples.
-    val training = sqlContext.createDataFrame(Seq(
+    val training = spark.createDataFrame(Seq(
       (0L, "a b c d e spark", 1.0),
       (1L, "b d", 0.0),
       (2L, "spark f g h", 1.0),
@@ -54,7 +54,7 @@ object PipelineExample {
       .setOutputCol("features")
     val lr = new LogisticRegression()
       .setMaxIter(10)
-      .setRegParam(0.01)
+      .setRegParam(0.001)
     val pipeline = new Pipeline()
       .setStages(Array(tokenizer, hashingTF, lr))
 
@@ -71,10 +71,10 @@ object PipelineExample {
     val sameModel = PipelineModel.load("/tmp/spark-logistic-regression-model")
 
     // Prepare test documents, which are unlabeled (id, text) tuples.
-    val test = sqlContext.createDataFrame(Seq(
+    val test = spark.createDataFrame(Seq(
       (4L, "spark i j k"),
       (5L, "l m n"),
-      (6L, "mapreduce spark"),
+      (6L, "spark hadoop spark"),
       (7L, "apache hadoop")
     )).toDF("id", "text")
 
@@ -87,7 +87,7 @@ object PipelineExample {
       }
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

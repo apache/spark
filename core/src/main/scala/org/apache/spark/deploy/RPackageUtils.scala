@@ -92,6 +92,9 @@ private[deploy] object RPackageUtils extends Logging {
    * Exposed for testing.
    */
   private[deploy] def checkManifestForR(jar: JarFile): Boolean = {
+    if (jar.getManifest == null) {
+      return false
+    }
     val manifest = jar.getManifest.getMainAttributes
     manifest.getValue(hasRPackage) != null && manifest.getValue(hasRPackage).trim == "true"
   }
@@ -176,26 +179,31 @@ private[deploy] object RPackageUtils extends Logging {
       val file = new File(Utils.resolveURI(jarPath))
       if (file.exists()) {
         val jar = new JarFile(file)
-        if (checkManifestForR(jar)) {
-          print(s"$file contains R source code. Now installing package.", printStream, Level.INFO)
-          val rSource = extractRFolder(jar, printStream, verbose)
-          if (RUtils.rPackages.isEmpty) {
-            RUtils.rPackages = Some(Utils.createTempDir().getAbsolutePath)
-          }
-          try {
-            if (!rPackageBuilder(rSource, printStream, verbose, RUtils.rPackages.get)) {
-              print(s"ERROR: Failed to build R package in $file.", printStream)
-              print(RJarDoc, printStream)
+        Utils.tryWithSafeFinally {
+          if (checkManifestForR(jar)) {
+            print(s"$file contains R source code. Now installing package.", printStream, Level.INFO)
+            val rSource = extractRFolder(jar, printStream, verbose)
+            if (RUtils.rPackages.isEmpty) {
+              RUtils.rPackages = Some(Utils.createTempDir().getAbsolutePath)
             }
-          } finally { // clean up
-            if (!rSource.delete()) {
-              logWarning(s"Error deleting ${rSource.getPath()}")
+            try {
+              if (!rPackageBuilder(rSource, printStream, verbose, RUtils.rPackages.get)) {
+                print(s"ERROR: Failed to build R package in $file.", printStream)
+                print(RJarDoc, printStream)
+              }
+            } finally {
+              // clean up
+              if (!rSource.delete()) {
+                logWarning(s"Error deleting ${rSource.getPath()}")
+              }
+            }
+          } else {
+            if (verbose) {
+              print(s"$file doesn't contain R source code, skipping...", printStream)
             }
           }
-        } else {
-          if (verbose) {
-            print(s"$file doesn't contain R source code, skipping...", printStream)
-          }
+        } {
+          jar.close()
         }
       } else {
         print(s"WARN: $file resolved as dependency, but not found.", printStream, Level.WARNING)
@@ -231,8 +239,12 @@ private[deploy] object RPackageUtils extends Logging {
     val zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile, false))
     try {
       filesToBundle.foreach { file =>
-        // get the relative paths for proper naming in the zip file
-        val relPath = file.getAbsolutePath.replaceFirst(dir.getAbsolutePath, "")
+        // Get the relative paths for proper naming in the ZIP file. Note that
+        // we convert dir to URI to force / and then remove trailing / that show up for
+        // directories because the separator should always be / for according to ZIP
+        // specification and therefore `relPath` here should be, for example,
+        // "/packageTest/def.R" or "/test.R".
+        val relPath = file.toURI.toString.replaceFirst(dir.toURI.toString.stripSuffix("/"), "")
         val fis = new FileInputStream(file)
         val zipEntry = new ZipEntry(relPath)
         zipOutputStream.putNextEntry(zipEntry)

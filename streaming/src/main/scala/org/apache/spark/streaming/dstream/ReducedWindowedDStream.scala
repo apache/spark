@@ -87,7 +87,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
 
     logDebug("Window time = " + windowDuration)
     logDebug("Slide time = " + slideDuration)
-    logDebug("ZeroTime = " + zeroTime)
+    logDebug("Zero time = " + zeroTime)
     logDebug("Current window = " + currentWindow)
     logDebug("Previous window = " + previousWindow)
 

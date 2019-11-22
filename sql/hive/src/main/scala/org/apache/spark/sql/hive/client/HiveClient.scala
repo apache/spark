@@ -21,7 +21,9 @@ import java.io.PrintStream
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -36,6 +38,12 @@ private[hive] trait HiveClient {
 
   /** Returns the configuration for the given key in the current session. */
   def getConf(key: String, defaultValue: String): String
+
+  /**
+   * Return the associated Hive SessionState of this [[HiveClientImpl]]
+   * @return `Any` not SessionState to avoid linkage error
+   */
+  def getState: Any
 
   /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
@@ -57,17 +65,18 @@ private[hive] trait HiveClient {
   def setCurrentDatabase(databaseName: String): Unit
 
   /** Returns the metadata for specified database, throwing an exception if it doesn't exist */
-  final def getDatabase(name: String): CatalogDatabase = {
-    getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException(name))
-  }
+  def getDatabase(name: String): CatalogDatabase
 
-  /** Returns the metadata for a given database, or None if it doesn't exist. */
-  def getDatabaseOption(name: String): Option[CatalogDatabase]
+  /** Return whether a table/view with the specified name exists. */
+  def databaseExists(dbName: String): Boolean
 
   /** List the names of all the databases that match the specified pattern. */
   def listDatabases(pattern: String): Seq[String]
 
-  /** Returns the specified table, or throws [[NoSuchTableException]]. */
+  /** Return whether a table/view with the specified name exists. */
+  def tableExists(dbName: String, tableName: String): Boolean
+
+  /** Returns the specified table, or throws `NoSuchTableException`. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
   }
@@ -75,23 +84,35 @@ private[hive] trait HiveClient {
   /** Returns the metadata for the specified table or None if it doesn't exist. */
   def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
 
-  /** Creates a view with the given metadata. */
-  def createView(view: CatalogTable): Unit
-
-  /** Updates the given view with new metadata. */
-  def alertView(view: CatalogTable): Unit
+  /** Returns metadata of existing permanent tables/views for given names. */
+  def getTablesByName(dbName: String, tableNames: Seq[String]): Seq[CatalogTable]
 
   /** Creates a table with the given metadata. */
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 
   /** Drop the specified table. */
-  def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit
+  def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
   /** Alter a table whose name matches the one specified in `table`, assuming it exists. */
-  final def alterTable(table: CatalogTable): Unit = alterTable(table.identifier.table, table)
+  final def alterTable(table: CatalogTable): Unit = {
+    alterTable(table.database, table.identifier.table, table)
+  }
 
-  /** Updates the given table with new metadata, optionally renaming the table. */
-  def alterTable(tableName: String, table: CatalogTable): Unit
+  /**
+   * Updates the given table with new metadata, optionally renaming the table or
+   * moving across different database.
+   */
+  def alterTable(dbName: String, tableName: String, table: CatalogTable): Unit
+
+  /**
+   * Updates the given table with a new data schema and table properties, and keep everything else
+   * unchanged.
+   *
+   * TODO(cloud-fan): it's a little hacky to introduce the schema table properties here in
+   * `HiveClient`, but we don't have a cleaner solution now.
+   */
+  def alterTableDataSchema(dbName: String, tableName: String, newDataSchema: StructType,
+    schemaProps: Map[String, String]): Unit
 
   /** Creates a new database with the given name. */
   def createDatabase(database: CatalogDatabase, ignoreIfExists: Boolean): Unit
@@ -120,16 +141,15 @@ private[hive] trait HiveClient {
       ignoreIfExists: Boolean): Unit
 
   /**
-   * Drop one or many partitions in the given table.
-   *
-   * Note: Unfortunately, Hive does not currently provide a way to ignore this call if the
-   * partitions do not already exist. The seemingly relevant flag `ifExists` in
-   * [[org.apache.hadoop.hive.metastore.PartitionDropOptions]] is not read anywhere.
+   * Drop one or many partitions in the given table, assuming they exist.
    */
   def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec]): Unit
+      specs: Seq[TablePartitionSpec],
+      ignoreIfNotExists: Boolean,
+      purge: Boolean,
+      retainData: Boolean): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.
@@ -137,8 +157,8 @@ private[hive] trait HiveClient {
   def renamePartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec],
-      newSpecs: Seq[ExternalCatalog.TablePartitionSpec]): Unit
+      specs: Seq[TablePartitionSpec],
+      newSpecs: Seq[TablePartitionSpec]): Unit
 
   /**
    * Alter one or more table partitions whose specs match the ones specified in `newParts`,
@@ -149,73 +169,93 @@ private[hive] trait HiveClient {
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit
 
-  /** Returns the specified partition, or throws [[NoSuchPartitionException]]. */
+  /** Returns the specified partition, or throws `NoSuchPartitionException`. */
   final def getPartition(
       dbName: String,
       tableName: String,
-      spec: ExternalCatalog.TablePartitionSpec): CatalogTablePartition = {
+      spec: TablePartitionSpec): CatalogTablePartition = {
     getPartitionOption(dbName, tableName, spec).getOrElse {
       throw new NoSuchPartitionException(dbName, tableName, spec)
     }
   }
 
+  /**
+   * Returns the partition names for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   *
+   * The returned sequence is sorted as strings.
+   */
+  def getPartitionNames(
+      table: CatalogTable,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String]
+
   /** Returns the specified partition or None if it does not exist. */
   final def getPartitionOption(
       db: String,
       table: String,
-      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition] = {
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = {
     getPartitionOption(getTable(db, table), spec)
   }
 
   /** Returns the specified partition or None if it does not exist. */
   def getPartitionOption(
       table: CatalogTable,
-      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition]
+      spec: TablePartitionSpec): Option[CatalogTablePartition]
 
-  /** Returns all partitions for the given table. */
-  final def getAllPartitions(db: String, table: String): Seq[CatalogTablePartition] = {
-    getAllPartitions(getTable(db, table))
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  final def getPartitions(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
+    getPartitions(getTable(db, table), partialSpec)
   }
 
-  /** Returns all partitions for the given table. */
-  def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition]
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  def getPartitions(
+      catalogTable: CatalogTable,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(
-      table: CatalogTable,
+      catalogTable: CatalogTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition]
 
   /** Loads a static partition into an existing table. */
   def loadPartition(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit
+      isSrcLocal: Boolean): Unit
 
   /** Loads data into an existing table. */
   def loadTable(
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean): Unit
+      isSrcLocal: Boolean): Unit
 
   /** Loads new dynamic partitions into an existing table. */
   def loadDynamicPartitions(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean,
-      listBucketingEnabled: Boolean): Unit
+      numDP: Int): Unit
 
   /** Create a function in an existing database. */
   def createFunction(db: String, func: CatalogFunction): Unit
 
-  /** Drop an existing function an the database. */
+  /** Drop an existing function in the database. */
   def dropFunction(db: String, name: String): Unit
 
   /** Rename an existing function in the database. */
@@ -226,11 +266,16 @@ private[hive] trait HiveClient {
 
   /** Return an existing function in the database, assuming it exists. */
   final def getFunction(db: String, name: String): CatalogFunction = {
-    getFunctionOption(db, name).getOrElse(throw new NoSuchFunctionException(db, name))
+    getFunctionOption(db, name).getOrElse(throw new NoSuchPermanentFunctionException(db, name))
   }
 
   /** Return an existing function in the database, or None if it doesn't exist. */
   def getFunctionOption(db: String, name: String): Option[CatalogFunction]
+
+  /** Return whether a function exists in the specified database. */
+  final def functionExists(db: String, name: String): Boolean = {
+    getFunctionOption(db, name).isDefined
+  }
 
   /** Return the names of all functions that match the given pattern in the database. */
   def listFunctions(db: String, pattern: String): Seq[String]
@@ -247,4 +292,6 @@ private[hive] trait HiveClient {
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
 
+  /** Returns the user name which is used as owner for Hive table. */
+  def userName: String
 }

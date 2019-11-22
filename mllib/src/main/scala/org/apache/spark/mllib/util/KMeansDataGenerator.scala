@@ -65,7 +65,7 @@ object KMeansDataGenerator {
   }
 
   @Since("0.8.0")
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 6) {
       // scalastyle:off println
       println("Usage: KMeansGenerator " +
@@ -86,6 +86,7 @@ object KMeansDataGenerator {
     val data = generateKMeansRDD(sc, numPoints, k, d, r, parts)
     data.map(_.mkString(" ")).saveAsTextFile(outputPath)
 
+    sc.stop()
     System.exit(0)
   }
 }

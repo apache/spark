@@ -22,73 +22,22 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.types.StructType
 
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
+abstract class LogicalPlan
+  extends QueryPlan[LogicalPlan]
+  with AnalysisHelper
+  with LogicalPlanStats
+  with QueryPlanConstraints
+  with Logging {
 
-  private var _analyzed: Boolean = false
+  /** Returns true if this subtree has data from a streaming data source. */
+  def isStreaming: Boolean = children.exists(_.isStreaming)
 
-  /**
-   * Marks this plan as already analyzed.  This should only be called by CheckAnalysis.
-   */
-  private[catalyst] def setAnalyzed(): Unit = { _analyzed = true }
-
-  /**
-   * Returns true if this node and its children have already been gone through analysis and
-   * verification.  Note that this is only an optimization used to avoid analyzing trees that
-   * have already been analyzed, and can be reset by transformations.
-   */
-  def analyzed: Boolean = _analyzed
-
-  /**
-   * Returns a copy of this node where `rule` has been recursively applied first to all of its
-   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
-   * unchanged.  This function is similar to `transformUp`, but skips sub-trees that have already
-   * been marked as analyzed.
-   *
-   * @param rule the function use to transform this nodes children
-   */
-  def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
-    if (!analyzed) {
-      val afterRuleOnChildren = transformChildren(rule, (t, r) => t.resolveOperators(r))
-      if (this fastEquals afterRuleOnChildren) {
-        CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(this, identity[LogicalPlan])
-        }
-      } else {
-        CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
-        }
-      }
-    } else {
-      this
-    }
-  }
-
-  /**
-   * Recursively transforms the expressions of a tree, skipping nodes that have already
-   * been analyzed.
-   */
-  def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
-    this resolveOperators  {
-      case p => p.transformExpressions(r)
-    }
-  }
-
-  /**
-   * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
-   * of cartesian joins.
-   *
-   * [[LeafNode]]s must override this.
-   */
-  def statistics: Statistics = {
-    if (children.size == 0) {
-      throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
-    }
-    Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
+  override def verboseStringWithSuffix(maxFields: Int): String = {
+    super.verboseString(maxFields) + statsCache.map(", " + _.toString).getOrElse("")
   }
 
   /**
@@ -98,6 +47,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * Any operator that can push through a Limit should override this function (e.g., Project).
    */
   def maxRows: Option[Long] = None
+
+  /**
+   * Returns the maximum number of rows this plan may compute on each partition.
+   */
+  def maxRowsPerPartition: Option[Long] = maxRows
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
@@ -115,8 +69,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
-  override lazy val canonicalized: LogicalPlan = EliminateSubqueryAliases(this)
-
   /**
    * Resolves a given schema to concrete [[Attribute]] references in this query plan. This function
    * should only be called on analyzed plans since it will throw [[AnalysisException]] for
@@ -124,9 +76,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def resolve(schema: StructType, resolver: Resolver): Seq[Attribute] = {
     schema.map { field =>
-      resolveQuoted(field.name, resolver).map {
+      resolve(field.name :: Nil, resolver).map {
         case a: AttributeReference => a
-        case other => sys.error(s"can not handle nested schema yet...  plan $this")
+        case _ => sys.error(s"can not handle nested schema yet...  plan $this")
       }.getOrElse {
         throw new AnalysisException(
           s"Unable to resolve ${field.name} given [${output.map(_.name).mkString(", ")}]")
@@ -134,15 +86,19 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
   }
 
+  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+
+  private[this] lazy val outputAttributes = AttributeSeq(output)
+
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
    * nodes of this LogicalPlan. The attribute is expressed as
-   * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
+   * string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolveChildren(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    resolve(nameParts, children.flatMap(_.output), resolver)
+    childAttributes.resolve(nameParts, resolver)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -152,7 +108,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolve(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    resolve(nameParts, output, resolver)
+    outputAttributes.resolve(nameParts, resolver)
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -162,104 +118,30 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    resolve(UnresolvedAttribute.parseAttributeName(name), output, resolver)
+    outputAttributes.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
   }
 
   /**
-   * Resolve the given `name` string against the given attribute, returning either 0 or 1 match.
-   *
-   * This assumes `name` has multiple parts, where the 1st part is a qualifier
-   * (i.e. table name, alias, or subquery alias).
-   * See the comment above `candidates` variable in resolve() for semantics the returned data.
+   * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
    */
-  private def resolveAsTableColumn(
-      nameParts: Seq[String],
-      resolver: Resolver,
-      attribute: Attribute): Option[(Attribute, List[String])] = {
-    assert(nameParts.length > 1)
-    if (attribute.qualifier.exists(resolver(_, nameParts.head))) {
-      // At least one qualifier matches. See if remaining parts match.
-      val remainingParts = nameParts.tail
-      resolveAsColumn(remainingParts, resolver, attribute)
-    } else {
-      None
-    }
-  }
+  def refresh(): Unit = children.foreach(_.refresh())
 
   /**
-   * Resolve the given `name` string against the given attribute, returning either 0 or 1 match.
-   *
-   * Different from resolveAsTableColumn, this assumes `name` does NOT start with a qualifier.
-   * See the comment above `candidates` variable in resolve() for semantics the returned data.
+   * Returns the output ordering that this plan generates.
    */
-  private def resolveAsColumn(
-      nameParts: Seq[String],
-      resolver: Resolver,
-      attribute: Attribute): Option[(Attribute, List[String])] = {
-    if (!attribute.isGenerated && resolver(attribute.name, nameParts.head)) {
-      Option((attribute.withName(nameParts.head), nameParts.tail.toList))
-    } else {
-      None
-    }
-  }
+  def outputOrdering: Seq[SortOrder] = Nil
 
-  /** Performs attribute resolution given a name and a sequence of possible attributes. */
-  protected def resolve(
-      nameParts: Seq[String],
-      input: Seq[Attribute],
-      resolver: Resolver): Option[NamedExpression] = {
-
-    // A sequence of possible candidate matches.
-    // Each candidate is a tuple. The first element is a resolved attribute, followed by a list
-    // of parts that are to be resolved.
-    // For example, consider an example where "a" is the table name, "b" is the column name,
-    // and "c" is the struct field name, i.e. "a.b.c". In this case, Attribute will be "a.b",
-    // and the second element will be List("c").
-    var candidates: Seq[(Attribute, List[String])] = {
-      // If the name has 2 or more parts, try to resolve it as `table.column` first.
-      if (nameParts.length > 1) {
-        input.flatMap { option =>
-          resolveAsTableColumn(nameParts, resolver, option)
-        }
-      } else {
-        Seq.empty
-      }
-    }
-
-    // If none of attributes match `table.column` pattern, we try to resolve it as a column.
-    if (candidates.isEmpty) {
-      candidates = input.flatMap { candidate =>
-        resolveAsColumn(nameParts, resolver, candidate)
-      }
-    }
-
-    def name = UnresolvedAttribute(nameParts).name
-
-    candidates.distinct match {
-      // One match, no nested fields, use it.
-      case Seq((a, Nil)) => Some(a)
-
-      // One match, but we also need to extract the requested nested field.
-      case Seq((a, nestedFields)) =>
-        // The foldLeft adds ExtractValues for every remaining parts of the identifier,
-        // and aliased it with the last part of the name.
-        // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
-        // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
-        // expression as "c".
-        val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
-          ExtractValue(expr, Literal(fieldName), resolver))
-        Some(Alias(fieldExprs, nestedFields.last)())
-
-      // No matches.
-      case Seq() =>
-        logTrace(s"Could not find $name in ${input.mkString(", ")}")
-        None
-
-      // More than one match.
-      case ambiguousReferences =>
-        val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
-        throw new AnalysisException(
-          s"Reference '$name' is ambiguous, could be: $referenceNames.")
+  /**
+   * Returns true iff `other`'s output is semantically the same, ie.:
+   *  - it contains the same number of `Attribute`s;
+   *  - references are the same;
+   *  - the order is equal too.
+   */
+  def sameOutput(other: LogicalPlan): Boolean = {
+    val thisOutput = this.output
+    val otherOutput = other.output
+    thisOutput.length == otherOutput.length && thisOutput.zip(otherOutput).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
     }
   }
 }
@@ -268,8 +150,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
  * A logical plan node with no children.
  */
 abstract class LeafNode extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Nil
+  override final def children: Seq[LogicalPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
+
+  /** Leaf nodes that can survive analysis must define their own statistics. */
+  def computeStats(): Statistics = throw new UnsupportedOperationException
 }
 
 /**
@@ -278,40 +163,31 @@ abstract class LeafNode extends LogicalPlan {
 abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = child :: Nil
+  override final def children: Seq[LogicalPlan] = child :: Nil
 
   /**
-   * Generates an additional set of aliased constraints by replacing the original constraint
-   * expressions with the corresponding alias
+   * Generates all valid constraints including an set of aliased constraints by replacing the
+   * original constraint expressions with the corresponding alias
    */
-  protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
-    projectList.flatMap {
+  protected def getAllValidConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
+    var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
+    projectList.foreach {
+      case a @ Alias(l: Literal, _) =>
+        allConstraints += EqualNullSafe(a.toAttribute, l)
       case a @ Alias(e, _) =>
-        child.constraints.map(_ transform {
+        // For every alias in `projectList`, replace the reference in constraints by its attribute.
+        allConstraints ++= allConstraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
-        }).union(Set(EqualNullSafe(e, a.toAttribute)))
-      case _ =>
-        Set.empty[Expression]
-    }.toSet
-  }
-
-  override protected def validConstraints: Set[Expression] = child.constraints
-
-  override def statistics: Statistics = {
-    // There should be some overhead in Row object, the size should not be zero when there is
-    // no columns, this help to prevent divide-by-zero error.
-    val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
-    val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
-    // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
-    if (sizeInBytes == 0) {
-      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
-      // (product of children).
-      sizeInBytes = 1
+        })
+        allConstraints += EqualNullSafe(e, a.toAttribute)
+      case _ => // Don't change.
     }
-    Statistics(sizeInBytes = sizeInBytes)
+
+    allConstraints
   }
+
+  override protected lazy val validConstraints: Set[Expression] = child.constraints
 }
 
 /**
@@ -321,5 +197,9 @@ abstract class BinaryNode extends LogicalPlan {
   def left: LogicalPlan
   def right: LogicalPlan
 
-  override def children: Seq[LogicalPlan] = Seq(left, right)
+  override final def children: Seq[LogicalPlan] = Seq(left, right)
+}
+
+abstract class OrderPreservingUnaryNode extends UnaryNode {
+  override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }

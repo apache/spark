@@ -17,14 +17,14 @@
 
 package org.apache.spark.streaming
 
-import java.io.{IOException, ObjectInputStream}
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.io.{File, IOException, ObjectInputStream}
+import java.util.concurrent.{ConcurrentLinkedQueue, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually.timeout
 import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.time.{Seconds => ScalaTestSeconds, Span}
@@ -62,9 +62,9 @@ private[streaming] class DummyInputDStream(ssc: StreamingContext) extends InputD
 class TestInputStream[T: ClassTag](_ssc: StreamingContext, input: Seq[Seq[T]], numPartitions: Int)
   extends InputDStream[T](_ssc) {
 
-  def start() {}
+  def start(): Unit = {}
 
-  def stop() {}
+  def stop(): Unit = {}
 
   def compute(validTime: Time): Option[RDD[T]] = {
     logInfo("Computing RDD for time " + validTime)
@@ -211,7 +211,7 @@ class BatchCounter(ssc: StreamingContext) {
  * This is the base trait for Spark Streaming testsuites. This provides basic functionality
  * to run user-defined set of input on user-defined stream operations, and verify the output.
  */
-trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
+trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
 
   // Name of the framework for Spark context
   def framework: String = this.getClass.getSimpleName
@@ -250,8 +250,8 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
   val eventuallyTimeout: PatienceConfiguration.Timeout = timeout(Span(10, ScalaTestSeconds))
 
   // Default before function for any streaming test suite. Override this
-  // if you want to add your stuff to "before" (i.e., don't call before { } )
-  def beforeFunction() {
+  // if you want to add your stuff to "beforeEach"
+  def beforeFunction(): Unit = {
     if (useManualClock) {
       logInfo("Using manual clock")
       conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
@@ -262,13 +262,24 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
   }
 
   // Default after function for any streaming test suite. Override this
-  // if you want to add your stuff to "after" (i.e., don't call after { } )
-  def afterFunction() {
+  // if you want to add your stuff to "afterEach"
+  def afterFunction(): Unit = {
     System.clearProperty("spark.streaming.clock")
   }
 
-  before(beforeFunction)
-  after(afterFunction)
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    beforeFunction()
+  }
+
+  override def afterEach(): Unit = {
+    try {
+      afterFunction()
+    } finally {
+      super.afterEach()
+    }
+
+  }
 
   /**
    * Run a block of code with the given StreamingContext and automatically
@@ -278,12 +289,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     try {
       block(ssc)
     } finally {
-      try {
-        ssc.stop(stopSparkContext = true)
-      } catch {
-        case e: Exception =>
-          logError("Error stopping StreamingContext", e)
-      }
+      LocalStreamingContext.stop(ssc, stopSparkContext = true)
     }
   }
 
@@ -359,14 +365,20 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
    * output data has been collected or timeout (set by `maxWaitTimeMillis`) is reached.
    *
    * Returns a sequence of items for each RDD.
+   *
+   * @param ssc The StreamingContext
+   * @param numBatches The number of batches should be run
+   * @param numExpectedOutput The number of expected output
+   * @param preStop The function to run before stopping StreamingContext
    */
   def runStreams[V: ClassTag](
       ssc: StreamingContext,
       numBatches: Int,
-      numExpectedOutput: Int
+      numExpectedOutput: Int,
+      preStop: () => Unit = () => {}
     ): Seq[Seq[V]] = {
     // Flatten each RDD into a single Seq
-    runStreamsWithPartitions(ssc, numBatches, numExpectedOutput).map(_.flatten.toSeq)
+    runStreamsWithPartitions(ssc, numBatches, numExpectedOutput, preStop).map(_.flatten.toSeq)
   }
 
   /**
@@ -376,11 +388,17 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
    *
    * Returns a sequence of RDD's. Each RDD is represented as several sequences of items, each
    * representing one partition.
+   *
+   * @param ssc The StreamingContext
+   * @param numBatches The number of batches should be run
+   * @param numExpectedOutput The number of expected output
+   * @param preStop The function to run before stopping StreamingContext
    */
   def runStreamsWithPartitions[V: ClassTag](
       ssc: StreamingContext,
       numBatches: Int,
-      numExpectedOutput: Int
+      numExpectedOutput: Int,
+      preStop: () => Unit = () => {}
     ): Seq[Seq[Seq[V]]] = {
     assert(numBatches > 0, "Number of batches to run stream computation is zero")
     assert(numExpectedOutput > 0, "Number of expected outputs after " + numBatches + " is zero")
@@ -411,19 +429,20 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       logInfo("Manual clock after advancing = " + clock.getTimeMillis())
 
       // Wait until expected number of output items have been generated
-      val startTime = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       while (output.size < numExpectedOutput &&
-        System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
+        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs) < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
         ssc.awaitTerminationOrTimeout(50)
       }
-      val timeTaken = System.currentTimeMillis() - startTime
+      val timeTaken = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
       logInfo("Output generated in " + timeTaken + " milliseconds")
       output.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
 
       Thread.sleep(100) // Give some time for the forgetting old RDDs to complete
+      preStop()
     } finally {
       ssc.stop(stopSparkContext = true)
     }
@@ -439,7 +458,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       output: Seq[Seq[V]],
       expectedOutput: Seq[Seq[V]],
       useSet: Boolean
-    ) {
+    ): Unit = {
     logInfo("--------------------------------")
     logInfo("output.size = " + output.size)
     logInfo("output")
@@ -479,7 +498,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       operation: DStream[U] => DStream[V],
       expectedOutput: Seq[Seq[V]],
       useSet: Boolean = false
-    ) {
+    ): Unit = {
     testOperation[U, V](input, operation, expectedOutput, -1, useSet)
   }
 
@@ -498,7 +517,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       expectedOutput: Seq[Seq[V]],
       numBatches: Int,
       useSet: Boolean
-    ) {
+    ): Unit = {
     val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
     withStreamingContext(setupStreams[U, V](input, operation)) { ssc =>
       val output = runStreams[V](ssc, numBatches_, expectedOutput.size)
@@ -516,7 +535,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       operation: (DStream[U], DStream[V]) => DStream[W],
       expectedOutput: Seq[Seq[W]],
       useSet: Boolean
-    ) {
+    ): Unit = {
     testOperation[U, V, W](input1, input2, operation, expectedOutput, -1, useSet)
   }
 
@@ -537,7 +556,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       expectedOutput: Seq[Seq[W]],
       numBatches: Int,
       useSet: Boolean
-    ) {
+    ): Unit = {
     val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
     withStreamingContext(setupStreams[U, V, W](input1, input2, operation)) { ssc =>
       val output = runStreams[W](ssc, numBatches_, expectedOutput.size)

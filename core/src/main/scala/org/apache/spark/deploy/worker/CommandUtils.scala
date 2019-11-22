@@ -29,7 +29,7 @@ import org.apache.spark.launcher.WorkerCommandBuilder
 import org.apache.spark.util.Utils
 
 /**
- ** Utilities for running commands with the spark classpath.
+ * Utilities for running commands with the spark classpath.
  */
 private[deploy]
 object CommandUtils extends Logging {
@@ -44,7 +44,7 @@ object CommandUtils extends Logging {
       memory: Int,
       sparkHome: String,
       substituteArguments: String => String,
-      classPaths: Seq[String] = Seq[String](),
+      classPaths: Seq[String] = Seq.empty,
       env: Map[String, String] = sys.env): ProcessBuilder = {
     val localCommand = buildLocalCommand(
       command, securityMgr, substituteArguments, classPaths, env)
@@ -73,7 +73,7 @@ object CommandUtils extends Logging {
       command: Command,
       securityMgr: SecurityManager,
       substituteArguments: String => String,
-      classPath: Seq[String] = Seq[String](),
+      classPath: Seq[String] = Seq.empty,
       env: Map[String, String]): Command = {
     val libraryPathName = Utils.libraryPathEnvName
     val libraryPathEntries = command.libraryPathEntries
@@ -96,18 +96,18 @@ object CommandUtils extends Logging {
       command.arguments.map(substituteArguments),
       newEnvironment,
       command.classPathEntries ++ classPath,
-      Seq[String](), // library path already captured in environment variable
+      Seq.empty, // library path already captured in environment variable
       // filter out auth secret from java options
       command.javaOpts.filterNot(_.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF)))
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
-  def redirectStream(in: InputStream, file: File) {
+  def redirectStream(in: InputStream, file: File): Unit = {
     val out = new FileOutputStream(file, true)
     // TODO: It would be nice to add a shutdown hook here that explains why the output is
     //       terminating. Otherwise if the worker dies the executor logs will silently stop.
     new Thread("redirect output to " + file) {
-      override def run() {
+      override def run(): Unit = {
         try {
           Utils.copyStream(in, out, true)
         } catch {

@@ -6,12 +6,15 @@
   "numTasks" : 8,
   "numActiveTasks" : 0,
   "numCompletedTasks" : 8,
-  "numSkippedTasks" : 8,
+  "numSkippedTasks" : 0,
   "numFailedTasks" : 0,
+  "numKilledTasks" : 0,
+  "numCompletedIndices" : 8,
   "numActiveStages" : 0,
   "numCompletedStages" : 1,
   "numSkippedStages" : 0,
-  "numFailedStages" : 0
+  "numFailedStages" : 0,
+  "killedTasksSummary" : { }
 }, {
   "jobId" : 0,
   "name" : "count at <console>:15",
@@ -20,10 +23,13 @@
   "numTasks" : 8,
   "numActiveTasks" : 0,
   "numCompletedTasks" : 8,
-  "numSkippedTasks" : 8,
+  "numSkippedTasks" : 0,
   "numFailedTasks" : 0,
+  "numKilledTasks" : 0,
+  "numCompletedIndices" : 8,
   "numActiveStages" : 0,
   "numCompletedStages" : 1,
   "numSkippedStages" : 0,
-  "numFailedStages" : 0
+  "numFailedStages" : 0,
+  "killedTasksSummary" : { }
 } ]

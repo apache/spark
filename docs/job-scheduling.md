@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Job Scheduling
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -23,7 +38,7 @@ run tasks and store data for that application. If multiple users need to share y
 different options to manage allocation, depending on the cluster manager.
 
 The simplest option, available on all cluster managers, is _static partitioning_ of resources. With
-this approach, each application is given a maximum amount of resources it can use, and holds onto them
+this approach, each application is given a maximum amount of resources it can use and holds onto them
 for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html)
 and [YARN](running-on-yarn.html) modes, as well as the
 [coarse-grained Mesos mode](running-on-mesos.html#mesos-run-modes).
@@ -83,18 +98,7 @@ In Mesos coarse-grained mode, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.
 slave nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
 through Marathon.
 
-In YARN mode, start the shuffle service on each `NodeManager` as follows:
-
-1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
-pre-packaged distribution.
-2. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
-`$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under
-`lib` if you are using a distribution.
-2. Add this jar to the classpath of all `NodeManager`s in your cluster.
-3. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
-then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
-`org.apache.spark.network.yarn.YarnShuffleService`.
-4. Restart all `NodeManager`s in your cluster.
+In YARN mode, follow the instructions [here](running-on-yarn.html#configuring-the-external-shuffle-service).
 
 All other relevant configurations are optional and under the `spark.dynamicAllocation.*` and
 `spark.shuffle.service.*` namespaces. For more detail, see the
@@ -158,8 +162,9 @@ executors will fetch shuffle files from the service instead of from each other. 
 shuffle state written by an executor may continue to be served beyond the executor's lifetime.
 
 In addition to writing shuffle files, executors also cache data either on disk or in memory.
-When an executor is removed, however, all cached data will no longer be accessible. There is
-currently not yet a solution for this in Spark 1.2. In future releases, the cached data may be
+When an executor is removed, however, all cached data will no longer be accessible.  To mitigate this,
+by default executors containing cached data are never removed.  You can configure this behavior with
+`spark.dynamicAllocation.cachedExecutorIdleTimeout`.  In future releases, the cached data may be
 preserved through an off-heap storage similar in spirit to how shuffle files are preserved through
 the external shuffle service.
 
@@ -240,12 +245,12 @@ properties:
 * `minShare`: Apart from an overall weight, each pool can be given a _minimum shares_ (as a number of
   CPU cores) that the administrator would like it to have. The fair scheduler always attempts to meet
   all active pools' minimum shares before redistributing extra resources according to the weights.
-  The `minShare` property can therefore be another way to ensure that a pool can always get up to a
+  The `minShare` property can, therefore, be another way to ensure that a pool can always get up to a
   certain number of resources (e.g. 10 cores) quickly without giving it a high priority for the rest
   of the cluster. By default, each pool's `minShare` is 0.
 
 The pool properties can be set by creating an XML file, similar to `conf/fairscheduler.xml.template`,
-and setting a `spark.scheduler.allocation.file` property in your
+and either putting a file named `fairscheduler.xml` on the classpath, or setting `spark.scheduler.allocation.file` property in your
 [SparkConf](configuration.html#spark-properties).
 
 {% highlight scala %}
@@ -274,3 +279,29 @@ within it for the various settings. For example:
 A full example is also available in `conf/fairscheduler.xml.template`. Note that any pools not
 configured in the XML file will simply get default values for all settings (scheduling mode FIFO,
 weight 1, and minShare 0).
+
+## Scheduling using JDBC Connections
+To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
+users can set the `spark.sql.thriftserver.scheduler.pool` variable:
+
+{% highlight SQL %}
+SET spark.sql.thriftserver.scheduler.pool=accounting;
+{% endhighlight %}
+
+## Concurrent Jobs in PySpark
+
+PySpark, by default, does not support to synchronize PVM threads with JVM threads and 
+launching multiple jobs in multiple PVM threads does not guarantee to launch each job
+in each corresponding JVM thread. Due to this limitation, it is unable to set a different job group
+via `sc.setJobGroup` in a separate PVM thread, which also disallows to cancel the job via `sc.cancelJobGroup`
+later.
+
+In order to synchronize PVM threads with JVM threads, you should set `PYSPARK_PIN_THREAD` environment variable
+to `true`. This pinned thread mode allows one PVM thread has one corresponding JVM thread.
+
+However, currently it cannot inherit the local properties from the parent thread although it isolates
+each thread with its own local properties. To work around this, you should manually copy and set the
+local properties from the parent thread to the child thread when you create another thread in PVM.
+
+Note that `PYSPARK_PIN_THREAD` is currently experimental and not recommended for use in production.
+

@@ -1,11 +1,33 @@
 ---
 layout: global
 title: Running Spark on YARN
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
 Support for running on [YARN (Hadoop
 NextGen)](http://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-site/YARN.html)
 was added to Spark in version 0.6.0, and improved in subsequent releases.
+
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
 
 # Launching Spark on YARN
 
@@ -18,7 +40,9 @@ Spark application's configuration (driver, executors, and the AM when running in
 
 There are two deploy modes that can be used to launch Spark applications on YARN. In `cluster` mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In `client` mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
 
-Unlike [Spark standalone](spark-standalone.html) and [Mesos](running-on-mesos.html) modes, in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn`.
+Unlike other cluster managers supported by Spark in which the master's address is specified in the `--master`
+parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration.
+Thus, the `--master` parameter is `yarn`.
 
 To launch a Spark application in `cluster` mode:
 
@@ -33,7 +57,7 @@ For example:
         --executor-memory 2g \
         --executor-cores 1 \
         --queue thequeue \
-        lib/spark-examples*.jar \
+        examples/jars/spark-examples*.jar \
         10
 
 The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Debugging your Application" section below for how to see driver and executor logs.
@@ -57,8 +81,10 @@ In `cluster` mode, the driver runs on a different machine than the client, so `S
 # Preparations
 
 Running Spark on YARN requires a binary distribution of Spark which is built with YARN support.
-Binary distributions can be downloaded from the [downloads page](http://spark.apache.org/downloads.html) of the project website.
+Binary distributions can be downloaded from the [downloads page](https://spark.apache.org/downloads.html) of the project website.
 To build Spark yourself, refer to [Building Spark](building-spark.html).
+
+To make Spark runtime jars accessible from YARN side, you can specify `spark.yarn.archive` or `spark.yarn.jars`. For details please refer to [Spark Properties](running-on-yarn.html#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will create a zip file with all jars under `$SPARK_HOME/jars` and upload it to the distributed cache.
 
 # Configuration
 
@@ -99,6 +125,8 @@ to the same log file).
 
 If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use `spark.yarn.app.container.log.dir` in your `log4j.properties`. For example, `log4j.appender.file_appender.File=${spark.yarn.app.container.log.dir}/spark.log`. For streaming applications, configuring `RollingFileAppender` and setting file location to YARN's log directory will avoid disk overflow caused by large log files, and logs can be accessed using YARN's log utility.
 
+To use a custom metrics.properties for the application master and executors, update the `$SPARK_CONF_DIR/metrics.properties` file. It will automatically be uploaded with other configurations, so you don't need to specify it manually with `--files`.
+
 #### Spark Properties
 
 <table class="table">
@@ -114,26 +142,41 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.driver.memory</code></td>
-  <td>1g</td>
+  <td><code>spark.yarn.am.resource.{resource-type}.amount</code></td>
+  <td><code>(none)</code></td>
   <td>
-    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
-    (e.g. <code>1g</code>, <code>2g</code>).
-
-    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
-    directly in your application, because the driver JVM has already started at that point.
-    Instead, please set this through the <code>--driver-memory</code> command line option
-    or in your default properties file.
+    Amount of resource to use for the YARN Application Master in client mode.
+    In cluster mode, use <code>spark.yarn.driver.resource.&lt;resource-type&gt;.amount</code> instead.
+    Please note that this feature can be used only with YARN 3.0+
+    For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
+    <p/>
+    Example: 
+    To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu.amount</code>
   </td>
 </tr>
 <tr>
-  <td><code>spark.driver.cores</code></td>
-  <td><code>1</code></td>
+  <td><code>spark.yarn.driver.resource.{resource-type}.amount</code></td>
+  <td><code>(none)</code></td>
   <td>
-    Number of cores used by the driver in YARN cluster mode.
-    Since the driver is run in the same JVM as the YARN Application Master in cluster mode, this also controls the cores used by the YARN Application Master.
-    In client mode, use <code>spark.yarn.am.cores</code> to control the number of cores used by the YARN Application Master instead.
+    Amount of resource to use for the YARN Application Master in cluster mode.
+    Please note that this feature can be used only with YARN 3.0+
+    For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
+    <p/>
+    Example: 
+    To request GPU resources from YARN, use: <code>spark.yarn.driver.resource.yarn.io/gpu.amount</code>
   </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.resource.{resource-type}.amount</code></td>
+  <td><code>(none)</code></td>
+ <td>
+     Amount of resource to use per executor process.
+     Please note that this feature can be used only with YARN 3.0+
+     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
+     <p/>
+     Example: 
+     To request GPU resources from YARN, use: <code>spark.yarn.executor.resource.yarn.io/gpu.amount</code>
+ </td>
 </tr>
 <tr>
   <td><code>spark.yarn.am.cores</code></td>
@@ -147,9 +190,8 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td><code>spark.yarn.am.waitTime</code></td>
   <td><code>100s</code></td>
   <td>
-    In <code>cluster</code> mode, time for the YARN Application Master to wait for the
-    SparkContext to be initialized. In <code>client</code> mode, time for the YARN Application Master to wait
-    for the driver to connect to it.
+    Only used in <code>cluster</code> mode. Time for the YARN Application Master to wait for the
+    SparkContext to be initialized.
   </td>
 </tr>
 <tr>
@@ -157,6 +199,13 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>The default HDFS replication (usually <code>3</code>)</td>
   <td>
     HDFS replication level for the files uploaded into HDFS for the application. These include things like the Spark jar, the app jar, and any distributed cache files/archives.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.stagingDir</code></td>
+  <td>Current user's home directory in the filesystem</td>
+  <td>
+    Staging directory used while submitting applications.
   </td>
 </tr>
 <tr>
@@ -216,52 +265,34 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.cores</code></td>
-  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
+  <td><code>spark.yarn.dist.jars</code></td>
+  <td>(none)</td>
   <td>
-    The number of cores to use on each executor. For YARN and standalone mode only.
+    Comma-separated list of jars to be placed in the working directory of each executor.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.dist.forceDownloadSchemes</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Comma-separated list of schemes for which resources will be downloaded to the local disk prior to
+    being added to YARN's distributed cache. For use in cases where the YARN service does not
+    support schemes that are supported by Spark, like http, https and ftp, or jars required to be in the
+    local YARN client's classpath. Wildcard '*' is denoted to download resources for all the schemes.
   </td>
 </tr>
 <tr>
  <td><code>spark.executor.instances</code></td>
   <td><code>2</code></td>
   <td>
-    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>. If both <code>spark.dynamicAllocation.enabled</code> and <code>spark.executor.instances</code> are specified, dynamic allocation is turned off and the specified number of <code>spark.executor.instances</code> is used.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>1g</td>
-  <td>
-    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
-  </td>
-</tr>
-<tr>
- <td><code>spark.yarn.executor.memoryOverhead</code></td>
-  <td>executorMemory * 0.10, with minimum of 384 </td>
-  <td>
-    The amount of off-heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.driver.memoryOverhead</code></td>
-  <td>driverMemory * 0.10, with minimum of 384 </td>
-  <td>
-    The amount of off-heap memory (in megabytes) to be allocated per driver in cluster mode. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
+    The number of executors for static allocation. With <code>spark.dynamicAllocation.enabled</code>, the initial set of executors will be at least this large.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.am.memoryOverhead</code></td>
   <td>AM memory * 0.10, with minimum of 384 </td>
   <td>
-    Same as <code>spark.yarn.driver.memoryOverhead</code>, but for the YARN Application Master in client mode.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.am.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the YARN Application Master to listen on. In YARN client mode, this is used to communicate between the Spark driver running on a gateway and the YARN Application Master running on YARN. In YARN cluster mode, this is used for the dynamic executor feature, where it handles the kill from the scheduler backend.
+    Same as <code>spark.driver.memoryOverhead</code>, but for the YARN Application Master in client mode.
   </td>
 </tr>
 <tr>
@@ -294,18 +325,6 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.access.namenodes</code></td>
-  <td>(none)</td>
-  <td>
-    A comma-separated list of secure HDFS namenodes your Spark application is going to access. For
-    example, <code>spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
-    webhdfs://nn3.com:50070</code>. The Spark application must have access to the namenodes listed
-    and Kerberos must be properly configured to be able to access them (either in the same realm
-    or in a trusted realm). Spark acquires security tokens for each of the namenodes so that
-    the Spark application can access those remote HDFS clusters.
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.appMasterEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
@@ -328,7 +347,9 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>(none)</td>
   <td>
   A string of extra JVM options to pass to the YARN Application Master in client mode.
-  In cluster mode, use <code>spark.driver.extraJavaOptions</code> instead.
+  In cluster mode, use <code>spark.driver.extraJavaOptions</code> instead. Note that it is illegal
+  to set maximum heap size (-Xmx) settings with this option. Maximum heap size settings can be set
+  with <code>spark.yarn.am.memory</code>
   </td>
 </tr>
 <tr>
@@ -352,7 +373,15 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>
   Defines the validity interval for AM failure tracking.
   If the AM has been running for at least the defined interval, the AM failure count will be reset.
-  This feature is not enabled if not configured, and only supported in Hadoop 2.6+.
+  This feature is not enabled if not configured.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+  Defines the validity interval for executor failure tracking.
+  Executor failures which are older than the validity interval will be ignored.
   </td>
 </tr>
 <tr>
@@ -391,19 +420,12 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.keytab</code></td>
+  <td><code>spark.yarn.priority</code></td>
   <td>(none)</td>
   <td>
-  The full path to the file that contains the keytab for the principal specified above.
-  This keytab will be copied to the node running the YARN Application Master via the Secure Distributed Cache,
-  for renewing the login tickets and the delegation tokens periodically. (Works also with the "local" master)
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.principal</code></td>
-  <td>(none)</td>
-  <td>
-  Principal to be used to login to KDC, while running on secure HDFS. (Works also with the "local" master)
+  Application priority for YARN to define pending applications ordering policy, those with higher
+  integer value have a better opportunity to be activated. Currently, YARN only supports application
+  priority when using FIFO ordering policy.
   </td>
 </tr>
 <tr>
@@ -433,22 +455,275 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.security.tokens.${service}.enabled</code></td>
-  <td><code>true</code></td>
+  <td><code>spark.yarn.rolledLog.includePattern</code></td>
+  <td>(none)</td>
   <td>
-  Controls whether to retrieve delegation tokens for non-HDFS services when security is enabled.
-  By default, delegation tokens for all supported services are retrieved when those services are
-  configured, but it's possible to disable that behavior if it somehow conflicts with the
-  application being run.
-  <p/>
-  Currently supported services are: <code>hive</code>, <code>hbase</code>
+  Java Regex to filter the log files which match the defined include pattern
+  and those log files will be aggregated in a rolling fashion.
+  This will be used with YARN's rolling log aggregation, to enable this feature in YARN side
+  <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
+  configured in yarn-site.xml. The Spark log4j appender needs be changed to use
+  FileAppender or another appender that can handle the files being removed while it is running. Based
+  on the file name configured in the log4j configuration (like spark.log), the user should set the
+  regex (spark*) to include all the log files that need to be aggregated.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.rolledLog.excludePattern</code></td>
+  <td>(none)</td>
+  <td>
+  Java Regex to filter the log files which match the defined exclude pattern
+  and those log files will not be aggregated in a rolling fashion. If the log file
+  name matches both the include and the exclude pattern, this file will be excluded eventually.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.blacklist.executor.launch.blacklisting.enabled</code></td>
+  <td>false</td>
+  <td>
+  Flag to enable blacklisting of nodes having YARN resource allocation problems.
+  The error limit for blacklisting can be configured by
+  <code>spark.blacklist.application.maxFailedExecutorsPerNode</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.exclude.nodes</code></td>
+  <td>(none)</td>
+  <td>
+  Comma-separated list of YARN node names which are excluded from resource allocation.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.metrics.namespace</code></td>
+  <td>(none)</td>
+  <td>
+  The root namespace for AM metrics reporting. 
+  If it is not set then the YARN application ID is used.
   </td>
 </tr>
 </table>
+
+#### Available patterns for SHS custom executor log URL
+
+<table class="table">
+    <tr><th>Pattern</th><th>Meaning</th></tr>
+    <tr>
+      <td>{{HTTP_SCHEME}}</td>
+      <td>`http://` or `https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)</td>
+    </tr>
+    <tr>
+      <td>{{NM_HOST}}</td>
+      <td>The "host" of node where container was run.</td>
+    </tr>
+    <tr>
+      <td>{{NM_PORT}}</td>
+      <td>The "port" of node manager where container was run.</td>
+    </tr>
+    <tr>
+      <td>{{NM_HTTP_PORT}}</td>
+      <td>The "port" of node manager's http server where container was run.</td>
+    </tr>
+    <tr>
+      <td>{{NM_HTTP_ADDRESS}}</td>
+      <td>Http URI of the node on which the container is allocated.</td>
+    </tr>
+    <tr>
+      <td>{{CLUSTER_ID}}</td>
+      <td>The cluster ID of Resource Manager. (Configured via `yarn.resourcemanager.cluster-id`)</td>
+    </tr>
+    <tr>
+      <td>{{CONTAINER_ID}}</td>
+      <td>The ID of container.</td>
+    </tr>
+    <tr>
+      <td>{{USER}}</td>
+      <td>'SPARK_USER' on system environment.</td>
+    </tr>
+    <tr>
+      <td>{{FILE_NAME}}</td>
+      <td>`stdout`, `stderr`.</td>
+    </tr>
+</table>
+
+For example, suppose you would like to point log url link to Job History Server directly instead of let NodeManager http server redirects it, you can configure `spark.history.custom.executor.log.url` as below:
+
+ `{{HTTP_SCHEME}}<JHS_HOST>:<JHS_PORT>/jobhistory/logs/{{NM_HOST}}:{{NM_PORT}}/{{CONTAINER_ID}}/{{CONTAINER_ID}}/{{USER}}/{{FILE_NAME}}?start=-4096`
+
+ NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
+
+# Resource Allocation and Configuration Overview
+
+Please make sure to have read the Custom Resource Scheduling and Configuration Overview section on the [configuration page](configuration.html). This section only talks about the YARN specific aspects of resource scheduling.
+
+YARN needs to be configured to support any resources the user wants to use with Spark. Resource scheduling on YARN was added in YARN 3.1.0. See the YARN documentation for more information on configuring resources and properly setting up isolation. Ideally the resources are setup isolated so that an executor can only see the resources it was allocated. If you do not have isolation enabled, the user is responsible for creating a discovery script that ensures the resource is not shared between executors.
+
+YARN currently supports any user defined resource type but has built in types for GPU (<code>yarn.io/gpu</code>) and FPGA (<code>yarn.io/fpga</code>). For that reason, if you are using either of those resources, Spark can translate your request for spark resources into YARN resources and you only have to specify the <code>spark.{driver/executor}.resource.</code> configs. If you are using a resource other then FPGA or GPU, the user is responsible for specifying the configs for both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>).
+
+For example, the user wants to request 2 GPUs for each executor. The user can just specify <code>spark.executor.resource.gpu.amount=2</code> and Spark will handle requesting <code>yarn.io/gpu</code> resource type from YARN.
+
+If the user has a user defined YARN resource, lets call it `acceleratorX` then the user must specify <code>spark.yarn.executor.resource.acceleratorX.amount=2</code> and <code>spark.executor.resource.acceleratorX.amount=2</code>.
+
+YARN does not tell Spark the addresses of the resources allocated to each container. For that reason, the user must specify a discovery script that gets run by the executor on startup to discover what resources are available to that executor. You can find an example scripts in `examples/src/main/scripts/getGpusResources.sh`. The script must have execute permissions set and the user should setup permissions to not allow malicious users to modify it. The script should write to STDOUT a JSON string in the format of the ResourceInformation class. This has the resource name and an array of resource addresses available to just that executor.
 
 # Important notes
 
 - Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
 - In `cluster` mode, the local directories used by the Spark executors and the Spark driver will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored. In `client` mode, the Spark executors will use the local directories configured for YARN while the Spark driver will use those defined in `spark.local.dir`. This is because the Spark driver does not run on the YARN cluster in `client` mode, only the Spark executors do.
-- The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named `localtest.txt` into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
+- The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example, you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named `localtest.txt` into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
 - The `--jars` option allows the `SparkContext.addJar` function to work if you are using it with local files and running in `cluster` mode. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.
+
+# Kerberos
+
+Standard Kerberos support in Spark is covered in the [Security](security.html#kerberos) page.
+
+In YARN mode, when accessing Hadoop file systems, aside from the default file system in the hadoop
+configuration, Spark will also automatically obtain delegation tokens for the service hosting the
+staging directory of the Spark application.
+
+## YARN-specific Kerberos Configuration
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.kerberos.keytab</code></td>
+  <td>(none)</td>
+  <td>
+  The full path to the file that contains the keytab for the principal specified above. This keytab
+  will be copied to the node running the YARN Application Master via the YARN Distributed Cache, and
+  will be used for renewing the login tickets and the delegation tokens periodically. Equivalent to
+  the <code>--keytab</code> command line argument.
+
+  <br /> (Works also with the "local" master.)
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kerberos.principal</code></td>
+  <td>(none)</td>
+  <td>
+  Principal to be used to login to KDC, while running on secure clusters. Equivalent to the
+  <code>--principal</code> command line argument.
+
+  <br /> (Works also with the "local" master.)
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.kerberos.relogin.period</code></td>
+  <td>1m</td>
+  <td>
+  How often to check whether the kerberos TGT should be renewed. This should be set to a value
+  that is shorter than the TGT renewal period (or the TGT lifetime if TGT renewal is not enabled).
+  The default value should be enough for most deployments.
+  </td>
+</tr>
+</table>
+
+## Troubleshooting Kerberos
+
+Debugging Hadoop/Kerberos problems can be "difficult". One useful technique is to
+enable extra logging of Kerberos operations in Hadoop by setting the `HADOOP_JAAS_DEBUG`
+environment variable.
+
+```bash
+export HADOOP_JAAS_DEBUG=true
+```
+
+The JDK classes can be configured to enable extra logging of their Kerberos and
+SPNEGO/REST authentication via the system properties `sun.security.krb5.debug`
+and `sun.security.spnego.debug=true`
+
+```
+-Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
+```
+
+All these options can be enabled in the Application Master:
+
+```
+spark.yarn.appMasterEnv.HADOOP_JAAS_DEBUG true
+spark.yarn.am.extraJavaOptions -Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
+```
+
+Finally, if the log level for `org.apache.spark.deploy.yarn.Client` is set to `DEBUG`, the log
+will include a list of all tokens obtained, and their expiry details
+
+
+# Configuring the External Shuffle Service
+
+To start the Spark Shuffle Service on each `NodeManager` in your YARN cluster, follow these
+instructions:
+
+1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
+pre-packaged distribution.
+1. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
+`$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under
+`yarn` if you are using a distribution.
+1. Add this jar to the classpath of all `NodeManager`s in your cluster.
+1. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
+then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
+`org.apache.spark.network.yarn.YarnShuffleService`.
+1. Increase `NodeManager's` heap size by setting `YARN_HEAPSIZE` (1000 by default) in `etc/hadoop/yarn-env.sh`
+to avoid garbage collection issues during shuffle.
+1. Restart all `NodeManager`s in your cluster.
+
+The following extra configuration options are available when the shuffle service is running on YARN:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.yarn.shuffle.stopOnFailure</code></td>
+  <td><code>false</code></td>
+  <td>
+    Whether to stop the NodeManager when there's a failure in the Spark Shuffle Service's
+    initialization. This prevents application failures caused by running containers on
+    NodeManagers where the Spark Shuffle Service is not running.
+  </td>
+</tr>
+</table>
+
+# Launching your application with Apache Oozie
+
+Apache Oozie can launch Spark applications as part of a workflow.
+In a secure cluster, the launched application will need the relevant tokens to access the cluster's
+services. If Spark is launched with a keytab, this is automatic.
+However, if Spark is to be launched without a keytab, the responsibility for setting up security
+must be handed over to Oozie.
+
+The details of configuring Oozie for secure clusters and obtaining
+credentials for a job can be found on the [Oozie web site](http://oozie.apache.org/)
+in the "Authentication" section of the specific release's documentation.
+
+For Spark applications, the Oozie workflow must be set up for Oozie to request all tokens which
+the application needs, including:
+
+- The YARN resource manager.
+- The local Hadoop filesystem.
+- Any remote Hadoop filesystems used as a source or destination of I/O.
+- Hive —if used.
+- HBase —if used.
+- The YARN timeline server, if the application interacts with this.
+
+To avoid Spark attempting —and then failing— to obtain Hive, HBase and remote HDFS tokens,
+the Spark configuration must be set to disable token collection for the services.
+
+The Spark configuration must include the lines:
+
+```
+spark.security.credentials.hive.enabled   false
+spark.security.credentials.hbase.enabled  false
+```
+
+The configuration option `spark.kerberos.access.hadoopFileSystems` must be unset.
+
+# Using the Spark History Server to replace the Spark Web UI
+
+It is possible to use the Spark History Server application page as the tracking URL for running
+applications when the application UI is disabled. This may be desirable on secure clusters, or to
+reduce the memory usage of the Spark driver. To set up tracking through the Spark History Server,
+do the following:
+
+- On the application side, set <code>spark.yarn.historyServer.allowTracking=true</code> in Spark's
+  configuration. This will tell Spark to use the history server's URL as the tracking URL if
+  the application's UI is disabled.
+- On the Spark History Server, add <code>org.apache.spark.deploy.yarn.YarnProxyRedirectFilter</code>
+  to the list of filters in the <code>spark.ui.filters</code> configuration.
+
+Be aware that the history server information may not be up-to-date with the application's state.

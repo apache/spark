@@ -1,30 +1,29 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.sources
 
-import scala.language.existentials
+import java.util.Locale
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -32,13 +31,15 @@ class FilteredScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimpleFilteredScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
+    SimpleFilteredScan(parameters("from").toInt, parameters("to").toInt)(sqlContext.sparkSession)
   }
 }
 
-case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
+case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(
@@ -49,13 +50,13 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     def unhandled(filter: Filter): Boolean = {
       filter match {
-        case EqualTo(col, v) => col == "b"
-        case EqualNullSafe(col, v) => col == "b"
-        case LessThan(col, v: Int) => col == "b"
-        case LessThanOrEqual(col, v: Int) => col == "b"
-        case GreaterThan(col, v: Int) => col == "b"
-        case GreaterThanOrEqual(col, v: Int) => col == "b"
-        case In(col, values) => col == "b"
+        case EqualTo(col, _) => col == "b"
+        case EqualNullSafe(col, _) => col == "b"
+        case LessThan(col, _: Int) => col == "b"
+        case LessThanOrEqual(col, _: Int) => col == "b"
+        case GreaterThan(col, _: Int) => col == "b"
+        case GreaterThanOrEqual(col, _: Int) => col == "b"
+        case In(col, _) => col == "b"
         case IsNull(col) => col == "b"
         case IsNotNull(col) => col == "b"
         case Not(pred) => unhandled(pred)
@@ -74,7 +75,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       case "b" => (i: Int) => Seq(i * 2)
       case "c" => (i: Int) =>
         val c = (i - 1 + 'a').toChar.toString
-        Seq(c * 5 + c.toUpperCase * 5)
+        Seq(c * 5 + c.toUpperCase(Locale.ROOT) * 5)
     }
 
     FiltersPushed.list = filters
@@ -105,17 +106,18 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       case StringEndsWith("c", v) => _.endsWith(v)
       case StringContains("c", v) => _.contains(v)
       case EqualTo("c", v: String) => _.equals(v)
-      case EqualTo("c", v: UTF8String) => sys.error("UTF8String should not appear in filters")
+      case EqualTo("c", _: UTF8String) => sys.error("UTF8String should not appear in filters")
       case In("c", values) => (s: String) => values.map(_.asInstanceOf[String]).toSet.contains(s)
       case _ => (c: String) => true
     }
 
     def eval(a: Int) = {
-      val c = (a - 1 + 'a').toChar.toString * 5 + (a - 1 + 'a').toChar.toString.toUpperCase * 5
+      val c = (a - 1 + 'a').toChar.toString * 5 +
+        (a - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5
       filters.forall(translateFilterOnA(_)(a)) && filters.forall(translateFilterOnC(_)(c))
     }
 
-    sqlContext.sparkContext.parallelize(from to to).filter(eval).map(i =>
+    sparkSession.sparkContext.parallelize(from to to).filter(eval).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
@@ -130,14 +132,14 @@ object ColumnsRequired {
   var set: Set[String] = Set.empty
 }
 
-class FilteredScanSuite extends DataSourceTest with SharedSQLContext with PredicateHelper {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
+  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenFiltered
+        |CREATE TEMPORARY VIEW oneToTenFiltered
         |USING org.apache.spark.sql.sources.FilteredScanSource
         |OPTIONS (
         |  from '1',
@@ -149,39 +151,39 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
   sqlTest(
     "SELECT * FROM oneToTenFiltered",
     (1 to 10).map(i => Row(i, i * 2, (i - 1 + 'a').toChar.toString * 5
-      + (i - 1 + 'a').toChar.toString.toUpperCase * 5)).toSeq)
+      + (i - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i, i * 2)).toSeq)
+    (1 to 10).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT b, a FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i * 2, i)).toSeq)
+    (1 to 10).map(i => Row(i * 2, i)))
 
   sqlTest(
     "SELECT a FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i)).toSeq)
+    (1 to 10).map(i => Row(i)))
 
   sqlTest(
     "SELECT b FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i * 2)).toSeq)
+    (1 to 10).map(i => Row(i * 2)))
 
   sqlTest(
     "SELECT a * 2 FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i * 2)).toSeq)
+    (1 to 10).map(i => Row(i * 2)))
 
   sqlTest(
     "SELECT A AS b FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i)).toSeq)
+    (1 to 10).map(i => Row(i)))
 
   sqlTest(
     "SELECT x.b, y.a FROM oneToTenFiltered x JOIN oneToTenFiltered y ON x.a = y.b",
-    (1 to 5).map(i => Row(i * 4, i)).toSeq)
+    (1 to 5).map(i => Row(i * 4, i)))
 
   sqlTest(
     "SELECT x.a, y.b FROM oneToTenFiltered x JOIN oneToTenFiltered y ON x.a = y.b",
-    (2 to 10 by 2).map(i => Row(i, i)).toSeq)
+    (2 to 10 by 2).map(i => Row(i, i)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a = 1",
@@ -205,11 +207,11 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a IS NOT NULL",
-    (1 to 10).map(i => Row(i, i * 2)).toSeq)
+    (1 to 10).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a < 5 AND a > 1",
-    (2 to 4).map(i => Row(i, i * 2)).toSeq)
+    (2 to 4).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a < 3 OR a > 8",
@@ -217,7 +219,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE NOT (a < 6)",
-    (6 to 10).map(i => Row(i, i * 2)).toSeq)
+    (6 to 10).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b, c FROM oneToTenFiltered WHERE c like 'c%'",
@@ -308,11 +310,11 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
 
     test(s"PushDown Returns $expectedCount: $sqlString") {
       // These tests check a particular plan, disable whole stage codegen.
-      caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
+      spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, false)
       try {
         val queryExecution = sql(sqlString).queryExecution
         val rawPlan = queryExecution.executedPlan.collect {
-          case p: execution.DataSourceScan => p
+          case p: execution.DataSourceScanExec => p
         } match {
           case Seq(p) => p
           case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
@@ -320,9 +322,9 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
         val rawCount = rawPlan.execute().count()
         assert(ColumnsRequired.set === requiredColumnNames)
 
-        val table = caseInsensitiveContext.table("oneToTenFiltered")
-        val relation = table.queryExecution.logical.collectFirst {
-          case LogicalRelation(r, _, _) => r
+        val table = spark.table("oneToTenFiltered")
+        val relation = table.queryExecution.analyzed.collectFirst {
+          case LogicalRelation(r, _, _, _) => r
         }.get
 
         assert(
@@ -335,7 +337,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
               queryExecution)
         }
       } finally {
-        caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
+        spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }

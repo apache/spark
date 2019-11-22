@@ -20,9 +20,11 @@ package org.apache.spark.storage
 import java.io.{File, IOException}
 import java.util.UUID
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
@@ -34,7 +36,7 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  */
 private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolean) extends Logging {
 
-  private[spark] val subDirsPerLocalDir = conf.getInt("spark.diskStore.subDirectories", 64)
+  private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
@@ -44,6 +46,9 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
+
+  private[spark] val localDirsString: Array[String] = localDirs.map(_.toString)
+
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
@@ -52,7 +57,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** Looks up a file by hashing it into one of our local subdirectories. */
   // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
+  // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFile().
   def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
@@ -100,25 +105,52 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** List all the blocks currently stored on disk by the disk manager. */
   def getAllBlocks(): Seq[BlockId] = {
-    getAllFiles().map(f => BlockId(f.getName))
+    getAllFiles().flatMap { f =>
+      try {
+        Some(BlockId(f.getName))
+      } catch {
+        case _: UnrecognizedBlockId =>
+          // Skip files which do not correspond to blocks, for example temporary
+          // files created by [[SortShuffleWriter]].
+          None
+      }
+    }
   }
 
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
-    var blockId = new TempLocalBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
-      blockId = new TempLocalBlockId(UUID.randomUUID())
+    var blockId = TempLocalBlockId(UUID.randomUUID())
+    var tempLocalFile = getFile(blockId)
+    var count = 0
+    while (!canCreateFile(tempLocalFile) && count < Utils.MAX_DIR_CREATION_ATTEMPTS) {
+      blockId = TempLocalBlockId(UUID.randomUUID())
+      tempLocalFile = getFile(blockId)
+      count += 1
     }
-    (blockId, getFile(blockId))
+    (blockId, tempLocalFile)
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
-    var blockId = new TempShuffleBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
-      blockId = new TempShuffleBlockId(UUID.randomUUID())
+    var blockId = TempShuffleBlockId(UUID.randomUUID())
+    var tempShuffleFile = getFile(blockId)
+    var count = 0
+    while (!canCreateFile(tempShuffleFile) && count < Utils.MAX_DIR_CREATION_ATTEMPTS) {
+      blockId = TempShuffleBlockId(UUID.randomUUID())
+      tempShuffleFile = getFile(blockId)
+      count += 1
     }
-    (blockId, getFile(blockId))
+    (blockId, tempShuffleFile)
+  }
+
+  private def canCreateFile(file: File): Boolean = {
+    try {
+      file.createNewFile()
+    } catch {
+      case NonFatal(_) =>
+        logError("Failed to create temporary block file: " + file.getAbsoluteFile)
+        false
+    }
   }
 
   /**
@@ -141,6 +173,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   private def addShutdownHook(): AnyRef = {
+    logDebug("Adding shutdown hook") // force eager creation of logger
     ShutdownHookManager.addShutdownHook(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
       logInfo("Shutdown hook called")
       DiskBlockManager.this.doStop()
@@ -148,7 +181,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   /** Cleanup local dirs and stop shuffle sender. */
-  private[spark] def stop() {
+  private[spark] def stop(): Unit = {
     // Remove the shutdown hook.  It causes memory leaks if we leave it around.
     try {
       ShutdownHookManager.removeShutdownHook(shutdownHook)

@@ -42,8 +42,8 @@ class SlidingRDDPartition[T](val idx: Int, val prev: Partition, val tail: Seq[T]
  * @param windowSize the window size, must be greater than 1
  * @param step step size for windows
  *
- * @see [[org.apache.spark.mllib.rdd.RDDFunctions.sliding(Int, Int)*]]
- * @see [[scala.collection.IterableLike.sliding(Int, Int)*]]
+ * @see `org.apache.spark.mllib.rdd.RDDFunctions.sliding(Int, Int)*`
+ * @see `scala.collection.IterableLike.sliding(Int, Int)*`
  */
 private[mllib]
 class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int, val step: Int)

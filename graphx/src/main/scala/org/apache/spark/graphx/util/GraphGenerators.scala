@@ -18,6 +18,7 @@
 package org.apache.spark.graphx.util
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util._
 
@@ -119,7 +120,7 @@ object GraphGenerators extends Logging {
    * A random graph generator using the R-MAT model, proposed in
    * "R-MAT: A Recursive Model for Graph Mining" by Chakrabarti et al.
    *
-   * See [[http://www.cs.cmu.edu/~christos/PUBLICATIONS/siam04.pdf]].
+   * See http://www.cs.cmu.edu/~christos/PUBLICATIONS/siam04.pdf.
    */
   def rmatGraph(sc: SparkContext, requestedNumVertices: Int, numEdges: Int): Graph[Int, Int] = {
     // let N = requestedNumVertices
@@ -133,7 +134,7 @@ object GraphGenerators extends Logging {
       throw new IllegalArgumentException(
         s"numEdges must be <= $numEdgesUpperBound but was $numEdges")
     }
-    var edges: Set[Edge[Int]] = Set()
+    var edges = mutable.Set.empty[Edge[Int]]
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {
         logDebug(edges.size + " edges")
@@ -209,7 +210,6 @@ object GraphGenerators extends Logging {
     }
   }
 
-  // TODO(crankshaw) turn result into an enum (or case class for pattern matching}
   private def pickQuadrant(a: Double, b: Double, c: Double, d: Double): Int = {
     if (a + b + c + d != 1.0) {
       throw new IllegalArgumentException("R-MAT probability parameters sum to " + (a + b + c + d)

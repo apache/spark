@@ -17,11 +17,18 @@
 
 package org.apache.spark.memory;
 
+import com.google.common.annotations.VisibleForTesting;
+
+import org.apache.spark.unsafe.memory.MemoryBlock;
+
 import java.io.IOException;
 
 public class TestMemoryConsumer extends MemoryConsumer {
+  public TestMemoryConsumer(TaskMemoryManager memoryManager, MemoryMode mode) {
+    super(memoryManager, 1024L, mode);
+  }
   public TestMemoryConsumer(TaskMemoryManager memoryManager) {
-    super(memoryManager);
+    this(memoryManager, MemoryMode.ON_HEAP);
   }
 
   @Override
@@ -31,20 +38,20 @@ public class TestMemoryConsumer extends MemoryConsumer {
     return used;
   }
 
-  void use(long size) {
-    long got = taskMemoryManager.acquireExecutionMemory(
-      size,
-      taskMemoryManager.tungstenMemoryMode,
-      this);
+  public void use(long size) {
+    long got = taskMemoryManager.acquireExecutionMemory(size, this);
     used += got;
   }
 
-  void free(long size) {
+  public void free(long size) {
     used -= size;
-    taskMemoryManager.releaseExecutionMemory(
-      size,
-      taskMemoryManager.tungstenMemoryMode,
-      this);
+    taskMemoryManager.releaseExecutionMemory(size, this);
+  }
+
+  @VisibleForTesting
+  public void freePage(MemoryBlock page) {
+    used -= page.size();
+    taskMemoryManager.freePage(page, this);
   }
 }
 

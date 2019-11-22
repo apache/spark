@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.util;
 
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 /**
@@ -25,6 +26,9 @@ import java.util.NoSuchElementException;
 public abstract class ConfigProvider {
   /** Obtains the value of the given config, throws NoSuchElementException if it doesn't exist. */
   public abstract String get(String name);
+
+  /** Returns all the config values in the provider. */
+  public abstract Iterable<Map.Entry<String, String>> getAll();
 
   public String get(String name, String defaultValue) {
     try {
@@ -49,4 +53,5 @@ public abstract class ConfigProvider {
   public boolean getBoolean(String name, boolean defaultValue) {
     return Boolean.parseBoolean(get(name, Boolean.toString(defaultValue)));
   }
+
 }

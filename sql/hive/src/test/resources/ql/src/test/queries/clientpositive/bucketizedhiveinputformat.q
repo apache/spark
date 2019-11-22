@@ -1,5 +1,5 @@
 set hive.input.format=org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
-set mapred.min.split.size = 64;
+set mapreduce.input.fileinputformat.split.minsize = 64;
 
 CREATE TABLE T1(name STRING) STORED AS TEXTFILE;
 

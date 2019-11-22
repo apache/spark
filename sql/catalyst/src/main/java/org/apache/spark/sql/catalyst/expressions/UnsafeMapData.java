@@ -17,20 +17,34 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.nio.ByteBuffer;
+
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.Platform;
 
+import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
+
 /**
  * An Unsafe implementation of Map which is backed by raw memory instead of Java objects.
  *
- * Currently we just use 2 UnsafeArrayData to represent UnsafeMapData, with extra 4 bytes at head
+ * Currently we just use 2 UnsafeArrayData to represent UnsafeMapData, with extra 8 bytes at head
  * to indicate the number of bytes of the unsafe key array.
  * [unsafe key array numBytes] [unsafe key array] [unsafe value array]
+ *
+ * Note that, user is responsible to guarantee that the key array does not have duplicated
+ * elements, otherwise the behavior is undefined.
  */
 // TODO: Use a more efficient format which doesn't depend on unsafe array.
-public class UnsafeMapData extends MapData {
+public final class UnsafeMapData extends MapData implements Externalizable, KryoSerializable {
 
   private Object baseObject;
   private long baseOffset;
@@ -65,14 +79,16 @@ public class UnsafeMapData extends MapData {
    * @param sizeInBytes the size of this map's backing data, in bytes
    */
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
-    // Read the numBytes of key array from the first 4 bytes.
-    final int keyArraySize = Platform.getInt(baseObject, baseOffset);
-    final int valueArraySize = sizeInBytes - keyArraySize - 4;
+    // Read the numBytes of key array from the first 8 bytes.
+    final long keyArraySize = Platform.getLong(baseObject, baseOffset);
     assert keyArraySize >= 0 : "keyArraySize (" + keyArraySize + ") should >= 0";
+    assert keyArraySize <= Integer.MAX_VALUE :
+      "keyArraySize (" + keyArraySize + ") should <= Integer.MAX_VALUE";
+    final int valueArraySize = sizeInBytes - (int)keyArraySize - 8;
     assert valueArraySize >= 0 : "valueArraySize (" + valueArraySize + ") should >= 0";
 
-    keys.pointTo(baseObject, baseOffset + 4, keyArraySize);
-    values.pointTo(baseObject, baseOffset + 4 + keyArraySize, valueArraySize);
+    keys.pointTo(baseObject, baseOffset + 8, (int)keyArraySize);
+    values.pointTo(baseObject, baseOffset + 8 + keyArraySize, valueArraySize);
 
     assert keys.numElements() == values.numElements();
 
@@ -117,5 +133,37 @@ public class UnsafeMapData extends MapData {
       baseObject, baseOffset, mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     mapCopy.pointTo(mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return mapCopy;
+  }
+
+  @Override
+  public void writeExternal(ObjectOutput out) throws IOException {
+    byte[] bytes = UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
+    out.writeInt(bytes.length);
+    out.write(bytes);
+  }
+
+  @Override
+  public void readExternal(ObjectInput in) throws IOException {
+    this.baseOffset = BYTE_ARRAY_OFFSET;
+    this.sizeInBytes = in.readInt();
+    this.baseObject = new byte[sizeInBytes];
+    in.readFully((byte[]) baseObject);
+    pointTo(baseObject, baseOffset, sizeInBytes);
+  }
+
+  @Override
+  public void write(Kryo kryo, Output output) {
+    byte[] bytes = UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
+    output.writeInt(bytes.length);
+    output.write(bytes);
+  }
+
+  @Override
+  public void read(Kryo kryo, Input input) {
+    this.baseOffset = BYTE_ARRAY_OFFSET;
+    this.sizeInBytes = input.readInt();
+    this.baseObject = new byte[sizeInBytes];
+    input.read((byte[]) baseObject);
+    pointTo(baseObject, baseOffset, sizeInBytes);
   }
 }

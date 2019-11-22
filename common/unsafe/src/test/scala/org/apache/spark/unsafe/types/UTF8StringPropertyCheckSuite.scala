@@ -17,9 +17,9 @@
 
 package org.apache.spark.unsafe.types
 
-import org.apache.commons.lang3.StringUtils
+import org.apache.commons.text.similarity.LevenshteinDistance
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 // scalastyle:off
 import org.scalatest.{FunSuite, Matchers}
 
@@ -28,7 +28,7 @@ import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 /**
  * This TestSuite utilize ScalaCheck to generate randomized inputs for UTF8String testing.
  */
-class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenPropertyChecks with Matchers {
+class UTF8StringPropertyCheckSuite extends FunSuite with ScalaCheckDrivenPropertyChecks with Matchers {
 // scalastyle:on
 
   test("toString") {
@@ -63,6 +63,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     }
   }
 
+  // scalastyle:off caselocale
   test("toUpperCase") {
     forAll { (s: String) =>
       assert(toUTF8(s).toUpperCase === toUTF8(s.toUpperCase))
@@ -74,6 +75,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
       assert(toUTF8(s).toLowerCase === toUTF8(s.toLowerCase))
     }
   }
+  // scalastyle:on caselocale
 
   test("compare") {
     forAll { (s1: String, s2: String) =>
@@ -98,7 +100,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     }
   }
 
-  val whitespaceChar: Gen[Char] = Gen.choose(0x00, 0x20).map(_.toChar)
+  val whitespaceChar: Gen[Char] = Gen.const(0x20.toChar)
   val whitespaceString: Gen[String] = Gen.listOf(whitespaceChar).map(_.mkString)
   val randomString: Gen[String] = Arbitrary.arbString.arbitrary
 
@@ -107,7 +109,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     def lTrim(s: String): String = {
       var st = 0
       val array: Array[Char] = s.toCharArray
-      while ((st < s.length) && (array(st) <= ' ')) {
+      while ((st < s.length) && (array(st) == ' ')) {
         st += 1
       }
       if (st > 0) s.substring(st, s.length) else s
@@ -115,7 +117,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     def rTrim(s: String): String = {
       var len = s.length
       val array: Array[Char] = s.toCharArray
-      while ((len > 0) && (array(len - 1) <= ' ')) {
+      while ((len > 0) && (array(len - 1) == ' ')) {
         len -= 1
       }
       if (len < s.length) s.substring(0, len) else s
@@ -127,7 +129,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
         whitespaceString
     ) { (start: String, middle: String, end: String) =>
       val s = start + middle + end
-      assert(toUTF8(s).trim() === toUTF8(s.trim()))
+      assert(toUTF8(s).trim() === toUTF8(rTrim(lTrim(s))))
       assert(toUTF8(s).trimLeft() === toUTF8(lTrim(s)))
       assert(toUTF8(s).trimRight() === toUTF8(rTrim(s)))
     }
@@ -164,7 +166,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     def padding(origin: String, pad: String, length: Int, isLPad: Boolean): String = {
       if (length <= 0) return ""
       if (length <= origin.length) {
-        if (length <= 0) "" else origin.substring(0, length)
+        origin.substring(0, length)
       } else {
         if (pad.length == 0) return origin
         val toPad = length - origin.length
@@ -192,8 +194,8 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
   val nullalbeSeq = Gen.listOf(Gen.oneOf[String](null: String, randomString))
 
   test("concat") {
-    def concat(orgin: Seq[String]): String =
-      if (orgin.contains(null)) null else orgin.mkString
+    def concat(origin: Seq[String]): String =
+      if (origin.contains(null)) null else origin.mkString
 
     forAll { (inputs: Seq[String]) =>
       assert(UTF8String.concat(inputs.map(toUTF8): _*) === toUTF8(inputs.mkString))
@@ -230,7 +232,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
   test("levenshteinDistance") {
     forAll { (one: String, another: String) =>
       assert(toUTF8(one).levenshteinDistance(toUTF8(another)) ===
-        StringUtils.getLevenshteinDistance(one, another))
+        LevenshteinDistance.getDefaultInstance.apply(one, another))
     }
   }
 

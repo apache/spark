@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
 class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -42,7 +43,36 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     val pca_transform = pca.transform(dataRDD).collect()
     val mat_multiply = mat.multiply(pc).rows.collect()
 
-    assert(pca_transform.toSet === mat_multiply.toSet)
-    assert(pca.explainedVariance === explainedVariance)
+    pca_transform.zip(mat_multiply).foreach { case (calculated, expected) =>
+      assert(calculated ~== expected relTol 1e-8)
+    }
+    assert(pca.explainedVariance ~== explainedVariance relTol 1e-8)
+  }
+
+  test("memory cost computation") {
+    assert(PCAUtil.memoryCost(10, 100) < Int.MaxValue)
+    // check overflowing
+    assert(PCAUtil.memoryCost(40000, 60000) > Int.MaxValue)
+  }
+
+  test("number of features more than 65535") {
+    val data1 = sc.parallelize(Array(
+      Vectors.dense(Array.fill(100000)(2.0)),
+      Vectors.dense(Array.fill(100000)(0.0))
+    ), 2)
+
+    val pca = new PCA(2).fit(data1)
+    // Eigen values should not be negative
+    assert(pca.explainedVariance.values.forall(_ >= 0))
+    // Norm of the principal component should be 1.0
+    assert(Math.sqrt(pca.pc.values.slice(0, 100000)
+      .map(Math.pow(_, 2)).sum) ~== 1.0 relTol 1e-8)
+    // Leading explainedVariance is 1.0
+    assert(pca.explainedVariance(0) ~== 1.0 relTol 1e-12)
+
+    // Leading principal component is '1' vector
+    val firstValue = pca.pc.values(0)
+    pca.pc.values.slice(0, 100000).map(values =>
+      assert(values ~== firstValue relTol 1e-12))
   }
 }

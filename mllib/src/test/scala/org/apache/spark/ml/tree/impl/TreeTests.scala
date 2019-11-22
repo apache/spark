@@ -22,30 +22,41 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 private[ml] object TreeTests extends SparkFunSuite {
 
   /**
    * Convert the given data to a DataFrame, and set the features and label metadata.
+   *
    * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
    *              This must be non-empty.
-   * @param categoricalFeatures  Map: categorical feature index -> number of distinct values
+   * @param categoricalFeatures  Map: categorical feature index to number of distinct values
    * @param numClasses  Number of classes label can take.  If 0, mark as continuous.
    * @return DataFrame with metadata
    */
   def setMetadata(
-      data: RDD[LabeledPoint],
+      data: RDD[_],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
-    val sqlContext = SQLContext.getOrCreate(data.sparkContext)
-    import sqlContext.implicits._
-    val df = data.toDF()
-    val numFeatures = data.first().features.size
+    val dataOfInstance: RDD[Instance] = data.map {
+      _ match {
+        case instance: Instance => instance
+        case labeledPoint: LabeledPoint => labeledPoint.toInstance
+      }
+    }
+    val spark = SparkSession.builder()
+      .sparkContext(data.sparkContext)
+      .getOrCreate()
+    import spark.implicits._
+
+    val df = dataOfInstance.toDF()
+    val numFeatures = dataOfInstance.first().features.size
     val featuresAttributes = Range(0, numFeatures).map { feature =>
       if (categoricalFeatures.contains(feature)) {
         NominalAttribute.defaultAttr.withIndex(feature).withNumValues(categoricalFeatures(feature))
@@ -61,16 +72,42 @@ private[ml] object TreeTests extends SparkFunSuite {
     }
     val labelMetadata = labelAttribute.toMetadata()
     df.select(df("features").as("features", featuresMetadata),
-      df("label").as("label", labelMetadata))
+      df("label").as("label", labelMetadata), df("weight"))
   }
 
-  /** Java-friendly version of [[setMetadata()]] */
+  /**
+   * Java-friendly version of `setMetadata()`
+   */
   def setMetadata(
       data: JavaRDD[LabeledPoint],
       categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
       numClasses: Int): DataFrame = {
     setMetadata(data.rdd, categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numClasses)
+  }
+
+  /**
+   * Set label metadata (particularly the number of classes) on a DataFrame.
+   *
+   * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
+   *              This must be non-empty.
+   * @param numClasses  Number of classes label can take. If 0, mark as continuous.
+   * @param labelColName  Name of the label column on which to set the metadata.
+   * @param featuresColName  Name of the features column
+   * @return DataFrame with metadata
+   */
+  def setMetadata(
+      data: DataFrame,
+      numClasses: Int,
+      labelColName: String,
+      featuresColName: String): DataFrame = {
+    val labelAttribute = if (numClasses == 0) {
+      NumericAttribute.defaultAttr.withName(labelColName)
+    } else {
+      NominalAttribute.defaultAttr.withName(labelColName).withNumValues(numClasses)
+    }
+    val labelMetadata = labelAttribute.toMetadata()
+    data.select(data(featuresColName), data(labelColName).as(labelColName, labelMetadata))
   }
 
   /**
@@ -84,7 +121,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       checkEqual(a.rootNode, b.rootNode)
     } catch {
       case ex: Exception =>
-        throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
+        fail("checkEqual failed since the two trees were not identical.\n" +
           "TREE A:\n" + a.toDebugString + "\n" +
           "TREE B:\n" + b.toDebugString + "\n", ex)
     }
@@ -96,8 +133,8 @@ private[ml] object TreeTests extends SparkFunSuite {
    *       make mistakes such as creating loops of Nodes.
    */
   private def checkEqual(a: Node, b: Node): Unit = {
-    assert(a.prediction === b.prediction)
-    assert(a.impurity === b.impurity)
+    assert(a.prediction ~== b.prediction absTol 1e-8)
+    assert(a.impurity ~== b.impurity absTol 1e-8)
     (a, b) match {
       case (aye: InternalNode, bee: InternalNode) =>
         assert(aye.split === bee.split)
@@ -105,7 +142,7 @@ private[ml] object TreeTests extends SparkFunSuite {
         checkEqual(aye.rightChild, bee.rightChild)
       case (aye: LeafNode, bee: LeafNode) => // do nothing
       case _ =>
-        throw new AssertionError("Found mismatched nodes")
+        fail("Found mismatched nodes")
     }
   }
 
@@ -113,14 +150,14 @@ private[ml] object TreeTests extends SparkFunSuite {
    * Check if the two models are exactly the same.
    * If the models are not equal, this throws an exception.
    */
-  def checkEqual(a: TreeEnsembleModel, b: TreeEnsembleModel): Unit = {
+  def checkEqual[M <: DecisionTreeModel](a: TreeEnsembleModel[M], b: TreeEnsembleModel[M]): Unit = {
     try {
       a.trees.zip(b.trees).foreach { case (treeA, treeB) =>
         TreeTests.checkEqual(treeA, treeB)
       }
       assert(a.treeWeights === b.treeWeights)
     } catch {
-      case ex: Exception => throw new AssertionError(
+      case ex: Exception => fail(
         "checkEqual failed since the two tree ensembles were not identical")
     }
   }
@@ -128,6 +165,7 @@ private[ml] object TreeTests extends SparkFunSuite {
   /**
    * Helper method for constructing a tree for testing.
    * Given left, right children, construct a parent node.
+   *
    * @param split  Split for parent node
    * @return  Parent node with children attached
    */
@@ -135,8 +173,8 @@ private[ml] object TreeTests extends SparkFunSuite {
     val leftImp = left.impurityStats
     val rightImp = right.impurityStats
     val parentImp = leftImp.copy.add(rightImp)
-    val leftWeight = leftImp.count / parentImp.count.toDouble
-    val rightWeight = rightImp.count / parentImp.count.toDouble
+    val leftWeight = leftImp.count / parentImp.count
+    val rightWeight = rightImp.count / parentImp.count
     val gain = parentImp.calculate() -
       (leftWeight * leftImp.calculate() + rightWeight * rightImp.calculate())
     val pred = parentImp.predict
@@ -152,6 +190,18 @@ private[ml] object TreeTests extends SparkFunSuite {
     new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0)),
     new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
     new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0))
+  ))
+
+  /**
+   * Create some toy data for testing correctness of variance.
+   */
+  def varianceData(sc: SparkContext): RDD[LabeledPoint] = sc.parallelize(Seq(
+    new LabeledPoint(1.0, Vectors.dense(Array(0.0))),
+    new LabeledPoint(2.0, Vectors.dense(Array(1.0))),
+    new LabeledPoint(3.0, Vectors.dense(Array(2.0))),
+    new LabeledPoint(10.0, Vectors.dense(Array(3.0))),
+    new LabeledPoint(12.0, Vectors.dense(Array(4.0))),
+    new LabeledPoint(14.0, Vectors.dense(Array(5.0)))
   ))
 
   /**
@@ -185,4 +235,77 @@ private[ml] object TreeTests extends SparkFunSuite {
       LabeledPoint(1.0, Vectors.dense(1.0, 2.0)))
     sc.parallelize(arr)
   }
+
+  /**
+   * Feature vectors used in tree-based transformation.
+   */
+  val leafVectors = Array(
+    Vectors.dense(0, 1, 3),
+    Vectors.dense(-1, 2, 1),
+    Vectors.dense(1, 0, 2),
+    Vectors.dense(2, 1, 9),
+    Vectors.dense(0, 2, 6))
+
+  val root0 = {
+    /**
+     * A tree structure used in tree-based transformation.
+     *
+     *                         root
+     *                      /         \
+     *             x1 in [0, 2]   otherwise
+     *                    /            \
+     *               node1           leaf2
+     *               /    \
+     *          x0 <= 0  x0 > 0
+     *             /       \
+     *          leaf0      leaf1
+     */
+    val leaf0 = new LeafNode(0.0, Double.NaN, null)
+    val leaf1 = new LeafNode(1.0, Double.NaN, null)
+    val leaf2 = new LeafNode(0.0, Double.NaN, null)
+    val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, leaf1,
+      new ContinuousSplit(0, 0.0), null)
+    new InternalNode(0.0, Double.NaN, Double.NaN, node1, leaf2,
+      new CategoricalSplit(1, Array(0.0, 2.0), 3), null)
+  }
+
+  /**
+   * The leaf indices of vectors after transformation by root0.
+   */
+  val leafIndices0 = Array(2.0, 0.0, 1.0, 2.0, 0.0)
+
+  val root1 = {
+    /**
+     * A tree structure used in tree-based transformation.
+     *
+     *                          root
+     *                      /         \
+     *                 x2 <= 1      x2 > 1
+     *                    /            \
+     *                 leaf0          node1
+     *                               /    \
+     *                    x1 in [0, 1]   otherwise
+     *                             /       \
+     *                         leaf1     leaf2
+     */
+    val leaf0 = new LeafNode(0.0, Double.NaN, null)
+    val leaf1 = new LeafNode(1.0, Double.NaN, null)
+    val leaf2 = new LeafNode(0.0, Double.NaN, null)
+    val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf1, leaf2,
+      new CategoricalSplit(1, Array(0.0, 1.0), 3), null)
+    new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, node1,
+      new ContinuousSplit(2, 1.0), null)
+  }
+
+  /**
+   * The leaf indices of vectors after transformation by root1.
+   */
+  val leafIndices1 = Array(1.0, 0.0, 1.0, 1.0, 2.0)
+
+  def getSingleTreeLeafData: Array[(Double, Vector)] =
+    leafIndices0.zip(leafVectors)
+
+  def getTwoTreesLeafData: Array[(Vector, Vector)] =
+    leafIndices0.zip(leafIndices1).zip(leafVectors)
+      .map { case ((i0, i1), vec) => (Vectors.dense(i0, i1), vec) }
 }

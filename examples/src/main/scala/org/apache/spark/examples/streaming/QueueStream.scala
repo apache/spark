@@ -25,7 +25,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 object QueueStream {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     StreamingExamples.setStreamingLogLevels()
     val sparkConf = new SparkConf().setAppName("QueueStream")
@@ -43,7 +43,7 @@ object QueueStream {
     reducedStream.print()
     ssc.start()
 
-    // Create and push some RDDs into
+    // Create and push some RDDs into rddQueue
     for (i <- 1 to 30) {
       rddQueue.synchronized {
         rddQueue += ssc.sparkContext.makeRDD(1 to 1000, 10)

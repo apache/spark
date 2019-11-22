@@ -50,16 +50,6 @@ trait BaseGenericInternalRow extends InternalRow {
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
 
-  override def anyNull: Boolean = {
-    val len = numFields
-    var i = 0
-    while (i < len) {
-      if (isNullAt(i)) { return true }
-      i += 1
-    }
-    false
-  }
-
   override def toString: String = {
     if (numFields == 0) {
       "[empty row]"
@@ -77,6 +67,17 @@ trait BaseGenericInternalRow extends InternalRow {
       sb.append("]")
       sb.toString()
     }
+  }
+
+  override def copy(): GenericInternalRow = {
+    val len = numFields
+    val newValues = new Array[Any](len)
+    var i = 0
+    while (i < len) {
+      newValues(i) = InternalRow.copyValue(genericGet(i))
+      i += 1
+    }
+    new GenericInternalRow(newValues)
   }
 
   override def equals(o: Any): Boolean = {
@@ -158,33 +159,6 @@ trait BaseGenericInternalRow extends InternalRow {
 }
 
 /**
- * An extended interface to [[InternalRow]] that allows the values for each column to be updated.
- * Setting a value through a primitive function implicitly marks that column as not null.
- */
-abstract class MutableRow extends InternalRow {
-  def setNullAt(i: Int): Unit
-
-  def update(i: Int, value: Any)
-
-  // default implementation (slow)
-  def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
-  def setByte(i: Int, value: Byte): Unit = { update(i, value) }
-  def setShort(i: Int, value: Short): Unit = { update(i, value) }
-  def setInt(i: Int, value: Int): Unit = { update(i, value) }
-  def setLong(i: Int, value: Long): Unit = { update(i, value) }
-  def setFloat(i: Int, value: Float): Unit = { update(i, value) }
-  def setDouble(i: Int, value: Double): Unit = { update(i, value) }
-
-  /**
-   * Update the decimal column at `i`.
-   *
-   * Note: In order to support update decimal with precision > 18 in UnsafeRow,
-   * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
-   */
-  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
-}
-
-/**
  * A row implementation that uses an array of objects as the underlying storage.  Note that, while
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
@@ -214,11 +188,11 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
 }
 
 /**
- * A internal row implementation that uses an array of objects as the underlying storage.
+ * An internal row implementation that uses an array of objects as the underlying storage.
  * Note that, while the array is not copied, and thus could technically be mutated after creation,
  * this is not allowed.
  */
-class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGenericInternalRow {
+class GenericInternalRow(val values: Array[Any]) extends BaseGenericInternalRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
@@ -230,24 +204,7 @@ class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGeneri
 
   override def numFields: Int = values.length
 
-  override def copy(): GenericInternalRow = this
-}
-
-class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericInternalRow {
-  /** No-arg constructor for serialization. */
-  protected def this() = this(null)
-
-  def this(size: Int) = this(new Array[Any](size))
-
-  override protected def genericGet(ordinal: Int) = values(ordinal)
-
-  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values
-
-  override def numFields: Int = values.length
-
   override def setNullAt(i: Int): Unit = { values(i) = null}
 
   override def update(i: Int, value: Any): Unit = { values(i) = value }
-
-  override def copy(): InternalRow = new GenericInternalRow(values.clone())
 }

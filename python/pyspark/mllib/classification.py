@@ -16,14 +16,14 @@
 #
 
 from math import exp
+import sys
+import warnings
 
 import numpy
-from numpy import array
 
 from pyspark import RDD, since
-from pyspark.streaming import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
-from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.regression import (
     LabeledPoint, LinearModel, _regression_train_wrapper,
     StreamingLinearAlgorithm)
@@ -47,11 +47,9 @@ class LinearClassificationModel(LinearModel):
     @since('1.4.0')
     def setThreshold(self, value):
         """
-        .. note:: Experimental
-
         Sets the threshold that separates positive predictions from
         negative predictions. An example with prediction score greater
-        than or equal to this threshold is identified as an positive,
+        than or equal to this threshold is identified as a positive,
         and negative otherwise. It is used for binary classification
         only.
         """
@@ -61,8 +59,6 @@ class LinearClassificationModel(LinearModel):
     @since('1.4.0')
     def threshold(self):
         """
-        .. note:: Experimental
-
         Returns the threshold (if any) used for converting raw
         prediction scores into 0/1 predictions. It is used for
         binary classification only.
@@ -72,8 +68,6 @@ class LinearClassificationModel(LinearModel):
     @since('1.4.0')
     def clearThreshold(self):
         """
-        .. note:: Experimental
-
         Clears the threshold so that `predict` will output raw
         prediction scores. It is used for binary classification only.
         """
@@ -130,9 +124,9 @@ class LogisticRegressionModel(LinearClassificationModel):
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
     >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data), iterations=10)
-    >>> lrm.predict(array([0.0, 1.0]))
+    >>> lrm.predict(numpy.array([0.0, 1.0]))
     1
-    >>> lrm.predict(array([1.0, 0.0]))
+    >>> lrm.predict(numpy.array([1.0, 0.0]))
     0
     >>> lrm.predict(SparseVector(2, {1: 1.0}))
     1
@@ -142,7 +136,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
     >>> sameModel = LogisticRegressionModel.load(sc, path)
-    >>> sameModel.predict(array([0.0, 1.0]))
+    >>> sameModel.predict(numpy.array([0.0, 1.0]))
     1
     >>> sameModel.predict(SparseVector(2, {0: 1.0}))
     0
@@ -176,7 +170,7 @@ class LogisticRegressionModel(LinearClassificationModel):
             self._dataWithBiasSize = None
             self._weightsMatrix = None
         else:
-            self._dataWithBiasSize = self._coeff.size / (self._numClasses - 1)
+            self._dataWithBiasSize = self._coeff.size // (self._numClasses - 1)
             self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
                                                                 self._dataWithBiasSize)
 
@@ -262,10 +256,15 @@ class LogisticRegressionModel(LinearClassificationModel):
         model.setThreshold(threshold)
         return model
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 class LogisticRegressionWithSGD(object):
     """
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.classification.LogisticRegression or
+            LogisticRegressionWithLBFGS.
     """
     @classmethod
     @since('0.9.0')
@@ -312,6 +311,10 @@ class LogisticRegressionWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.classification.LogisticRegression or "
+            "LogisticRegressionWithLBFGS.", DeprecationWarning)
+
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,
@@ -419,7 +422,7 @@ class SVMModel(LinearClassificationModel):
     >>> svm.predict(sc.parallelize([[1.0]])).collect()
     [1]
     >>> svm.clearThreshold()
-    >>> svm.predict(array([1.0]))
+    >>> svm.predict(numpy.array([1.0]))
     1.44...
 
     >>> sparse_data = [
@@ -572,9 +575,9 @@ class NaiveBayesModel(Saveable, Loader):
     ...     LabeledPoint(1.0, [1.0, 0.0]),
     ... ]
     >>> model = NaiveBayes.train(sc.parallelize(data))
-    >>> model.predict(array([0.0, 1.0]))
+    >>> model.predict(numpy.array([0.0, 1.0]))
     0.0
-    >>> model.predict(array([1.0, 0.0]))
+    >>> model.predict(numpy.array([1.0, 0.0]))
     1.0
     >>> model.predict(sc.parallelize([[1.0, 0.0]])).collect()
     [1.0]
@@ -656,11 +659,11 @@ class NaiveBayes(object):
         Train a Naive Bayes model given an RDD of (label, features)
         vectors.
 
-        This is the Multinomial NB (U{http://tinyurl.com/lsdw6p}) which
+        This is the `Multinomial NB <http://tinyurl.com/lsdw6p>`_ which
         can handle all kinds of discrete data.  For example, by
         converting documents into TF-IDF vectors, it can be used for
         document classification. By making every vector a 0-1 vector,
-        it can also be used as Bernoulli NB (U{http://tinyurl.com/p7c96j6}).
+        it can also be used as `Bernoulli NB <http://tinyurl.com/p7c96j6>`_.
         The input feature values must be nonnegative.
 
         :param data:
@@ -749,14 +752,18 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
 
 def _test():
     import doctest
-    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
     import pyspark.mllib.classification
     globs = pyspark.mllib.classification.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.classification tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

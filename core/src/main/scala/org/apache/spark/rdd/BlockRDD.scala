@@ -30,24 +30,24 @@ private[spark]
 class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[BlockId])
   extends RDD[T](sc, Nil) {
 
-  @transient lazy val _locations = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get)
+  @transient lazy val _locations = BlockManager.blockIdsToLocations(blockIds, SparkEnv.get)
   @volatile private var _isValid = true
 
   override def getPartitions: Array[Partition] = {
     assertValid()
-    (0 until blockIds.length).map(i => {
+    (0 until blockIds.length).map { i =>
       new BlockRDDPartition(blockIds(i), i).asInstanceOf[Partition]
-    }).toArray
+    }.toArray
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     assertValid()
     val blockManager = SparkEnv.get.blockManager
     val blockId = split.asInstanceOf[BlockRDDPartition].blockId
-    blockManager.get(blockId) match {
+    blockManager.get[T](blockId) match {
       case Some(block) => block.data.asInstanceOf[Iterator[T]]
       case None =>
-        throw new Exception("Could not compute split, block " + blockId + " not found")
+        throw new Exception(s"Could not compute split, block $blockId of RDD $id not found")
     }
   }
 
@@ -61,7 +61,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
    * irreversible operation, as the data in the blocks cannot be recovered back
    * once removed. Use it with caution.
    */
-  private[spark] def removeBlocks() {
+  private[spark] def removeBlocks(): Unit = {
     blockIds.foreach { blockId =>
       sparkContext.env.blockManager.master.removeBlock(blockId)
     }
@@ -77,7 +77,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
   }
 
   /** Check if this BlockRDD is valid. If not valid, exception is thrown. */
-  private[spark] def assertValid() {
+  private[spark] def assertValid(): Unit = {
     if (!isValid) {
       throw new SparkException(
         "Attempted to use %s after its blocks have been removed!".format(toString))

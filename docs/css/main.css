@@ -81,6 +81,20 @@ code {
   color: #444444;
 }
 
+dt code {
+  white-space: nowrap;
+  max-width: 100%;
+  border: solid 1px #e1e4e5;
+  font-size: .8rem;
+  padding: 0 5px;
+  font-family: "Menlo", "Lucida Console", monospace;
+  overflow-x: auto;
+}
+
+dd { 
+  margin: 0 1.5em 1.5em;
+}
+
 div .highlight pre {
   font-size: 12px;
 }
@@ -195,12 +209,15 @@ a.anchorjs-link:hover { text-decoration: none; }
   margin-top: 0px;
   width: 210px;
   float: left;
-  position: absolute;
+  position: fixed;
+  overflow-y: scroll;
+  top: 0;
+  bottom: 0;
 }
 
 .left-menu {
   padding: 0px;
-  width: 199px;
+  width: 399px;
 }
 
 .left-menu h3 {

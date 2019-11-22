@@ -50,7 +50,7 @@ object GradientDescentSuite {
     val unifRand = new Random(45)
     val rLogis = (0 until nPoints).map { i =>
       val u = unifRand.nextDouble()
-      math.log(u) - math.log(1.0-u)
+      math.log(u) - math.log1p(-u)
     }
 
     val y: Seq[Int] = (0 until nPoints).map { i =>
@@ -131,7 +131,7 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
     assert(
       loss1(0) ~= (loss0(0) + (math.pow(initialWeightsWithIntercept(0), 2) +
         math.pow(initialWeightsWithIntercept(1), 2)) / 2) absTol 1E-5,
-      """For non-zero weights, the regVal should be \frac{1}{2}\sum_i w_i^2.""")
+      """For non-zero weights, the regVal should be 0.5 * sum(w_i ^ 2).""")
 
     assert(
       (newWeights1(0) ~= (newWeights0(0) - initialWeightsWithIntercept(0)) absTol 1E-5) &&
@@ -190,7 +190,7 @@ class GradientDescentClusterSuite extends SparkFunSuite with LocalClusterSparkCo
       iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
-    // greater than 1MB and hence Spark would throw an error.
+    // greater than 1MiB and hence Spark would throw an error.
     val (weights, loss) = GradientDescent.runMiniBatchSGD(
       points,
       new LogisticGradient,

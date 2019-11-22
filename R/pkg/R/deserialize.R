@@ -43,7 +43,7 @@ readObject <- function(con) {
 }
 
 readTypedObject <- function(con, type) {
-  switch (type,
+  switch(type,
     "i" = readInt(con),
     "c" = readString(con),
     "b" = readBoolean(con),
@@ -60,12 +60,16 @@ readTypedObject <- function(con, type) {
     stop(paste("Unsupported type for deserialization", type)))
 }
 
-readString <- function(con) {
-  stringLen <- readInt(con)
-  raw <- readBin(con, raw(), stringLen, endian = "big")
+readStringData <- function(con, len) {
+  raw <- readBin(con, raw(), len, endian = "big")
   string <- rawToChar(raw)
   Encoding(string) <- "UTF-8"
   string
+}
+
+readString <- function(con) {
+  stringLen <- readInt(con)
+  readStringData(con, stringLen)
 }
 
 readInt <- function(con) {
@@ -139,7 +143,7 @@ readEnv <- function(con) {
   env
 }
 
-# Read a field of StructType from DataFrame
+# Read a field of StructType from SparkDataFrame
 # into a named list in R whose class is "struct"
 readStruct <- function(con) {
   names <- readObject(con)
@@ -195,6 +199,70 @@ readMultipleObjects <- function(inputCon) {
     data[[length(data) + 1L]] <- readTypedObject(inputCon, type)
   }
   data # this is a list of named lists now
+}
+
+readMultipleObjectsWithKeys <- function(inputCon) {
+  # readMultipleObjectsWithKeys will read multiple continuous objects from
+  # a DataOutputStream. There is no preceding field telling the count
+  # of the objects, so the number of objects varies, we try to read
+  # all objects in a loop until the end of the stream. This function
+  # is for use by gapply. Each group of rows is followed by the grouping
+  # key for this group which is then followed by next group.
+  keys <- list()
+  data <- list()
+  subData <- list()
+  while (TRUE) {
+    # If reaching the end of the stream, type returned should be "".
+    type <- readType(inputCon)
+    if (type == "") {
+      break
+    } else if (type == "r") {
+      type <- readType(inputCon)
+      # A grouping boundary detected
+      key <- readTypedObject(inputCon, type)
+      index <- length(data) + 1L
+      data[[index]] <- subData
+      keys[[index]] <- key
+      subData <- list()
+    } else {
+      subData[[length(subData) + 1L]] <- readTypedObject(inputCon, type)
+    }
+  }
+  list(keys = keys, data = data) # this is a list of keys and corresponding data
+}
+
+readDeserializeInArrow <- function(inputCon) {
+  if (requireNamespace("arrow", quietly = TRUE)) {
+    # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
+    useAsTibble <- exists("as_tibble", envir = asNamespace("arrow"))
+
+
+    # Currently, there looks no way to read batch by batch by socket connection in R side,
+    # See ARROW-4512. Therefore, it reads the whole Arrow streaming-formatted binary at once
+    # for now.
+    dataLen <- readInt(inputCon)
+    arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
+    batches <- arrow::RecordBatchStreamReader$create(arrowData)$batches()
+
+    if (useAsTibble) {
+      as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
+      # Read all groupped batches. Tibble -> data.frame is cheap.
+      lapply(batches, function(batch) as.data.frame(as_tibble(batch)))
+    } else {
+      lapply(batches, function(batch) as.data.frame(batch))
+    }
+  } else {
+    stop("'arrow' package should be installed.")
+  }
+}
+
+readDeserializeWithKeysInArrow <- function(inputCon) {
+  data <- readDeserializeInArrow(inputCon)
+
+  keys <- readMultipleObjects(inputCon)
+
+  # Read keys to map with each groupped batch later.
+  list(keys = keys, data = data)
 }
 
 readRowList <- function(obj) {

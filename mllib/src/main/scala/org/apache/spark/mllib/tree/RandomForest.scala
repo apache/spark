@@ -18,11 +18,13 @@
 package org.apache.spark.mllib.tree
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.tree.{DecisionTreeModel => NewDTModel, RandomForestParams => NewRFParams}
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.tree.{DecisionTreeModel => NewDTModel, TreeEnsembleParams => NewRFParams}
 import org.apache.spark.ml.tree.impl.{RandomForest => NewRandomForest}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -35,7 +37,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * A class that implements a [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]]
+ * A class that implements a <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a>
  * learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
  *
@@ -44,21 +46,27 @@ import org.apache.spark.util.Utils
  *  - sqrt: recommended by Breiman manual for random forests
  *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
  *    package.
- * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
- * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
- *     random forests]]
  *
+ * @see <a href="http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf">Breiman (2001)</a>
+ * @see <a href="http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf">
+ * Breiman manual for random forests</a>
  * @param strategy The configuration parameters for the random forest algorithm which specify
  *                 the type of random forest (classification or regression), feature type
  *                 (continuous, categorical), depth of the tree, quantile calculation strategy,
  *                 etc.
- * @param numTrees If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
+ * @param numTrees If 1, then no bootstrapping is used.  If greater than 1, then bootstrapping is
+ *                 done.
  * @param featureSubsetStrategy Number of features to consider for splits at each node.
  *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
+ *                              Supported numerical values: "(0.0-1.0]", "[1-n]".
  *                              If "auto" is set, this parameter is set based on numTrees:
  *                                if numTrees == 1, set to "all";
- *                                if numTrees > 1 (forest) set to "sqrt" for classification and
- *                                  to "onethird" for regression.
+ *                                if numTrees is greater than 1 (forest) set to "sqrt" for
+ *                                  classification and to "onethird" for regression.
+ *                              If a real value "n" in the range (0, 1.0] is set,
+ *                                use n * number of features.
+ *                              If an integer value "n" in the range (1, num features) is set,
+ *                                use n features.
  * @param seed Random seed for bootstrapping and choosing feature subsets.
  */
 private class RandomForest (
@@ -70,9 +78,12 @@ private class RandomForest (
 
   strategy.assertValid()
   require(numTrees > 0, s"RandomForest requires numTrees > 0, but was given numTrees = $numTrees.")
-  require(RandomForest.supportedFeatureSubsetStrategies.contains(featureSubsetStrategy),
+  require(RandomForest.supportedFeatureSubsetStrategies.contains(featureSubsetStrategy)
+    || Try(featureSubsetStrategy.toInt).filter(_ > 0).isSuccess
+    || Try(featureSubsetStrategy.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess,
     s"RandomForest given invalid featureSubsetStrategy: $featureSubsetStrategy." +
-    s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}.")
+    s" Supported values: ${NewRFParams.supportedFeatureSubsetStrategies.mkString(", ")}," +
+    s" (0.0-1.0], [1-n].")
 
   /**
    * Method to train a decision tree model over an RDD
@@ -102,7 +113,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt".
+   *                                if numTrees is greater than 1 (forest) set to "sqrt".
    * @param seed Random seed for bootstrapping and choosing feature subsets.
    * @return RandomForestModel that can be used for prediction.
    */
@@ -125,7 +136,7 @@ object RandomForest extends Serializable with Logging {
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels should take values {0, 1, ..., numClasses-1}.
    * @param numClasses Number of classes for classification.
-   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n to k)
    *                                indicates that feature n is categorical with k categories
    *                                indexed from 0: {0, 1, ..., k-1}.
    * @param numTrees Number of trees in the random forest.
@@ -133,7 +144,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt".
+   *                                if numTrees is greater than 1 (forest) set to "sqrt".
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "gini" (recommended) or "entropy".
    * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node, depth 1 means
@@ -162,7 +173,7 @@ object RandomForest extends Serializable with Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.RandomForest$#trainClassifier]]
+   * Java-friendly API for `org.apache.spark.mllib.tree.RandomForest.trainClassifier`
    */
   @Since("1.2.0")
   def trainClassifier(
@@ -191,7 +202,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "onethird".
+   *                                if numTrees is greater than 1 (forest) set to "onethird".
    * @param seed Random seed for bootstrapping and choosing feature subsets.
    * @return RandomForestModel that can be used for prediction.
    */
@@ -213,7 +224,7 @@ object RandomForest extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels are real numbers.
-   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n to k)
    *                                indicates that feature n is categorical with k categories
    *                                indexed from 0: {0, 1, ..., k-1}.
    * @param numTrees Number of trees in the random forest.
@@ -221,7 +232,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "onethird".
+   *                                if numTrees is greater than 1 (forest) set to "onethird".
    * @param impurity Criterion used for information gain calculation.
    *                 The only supported value for regression is "variance".
    * @param maxDepth Maximum depth of the tree. (e.g., depth 0 means 1 leaf node, depth 1 means
@@ -249,7 +260,7 @@ object RandomForest extends Serializable with Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.RandomForest$#trainRegressor]]
+   * Java-friendly API for `org.apache.spark.mllib.tree.RandomForest.trainRegressor`
    */
   @Since("1.2.0")
   def trainRegressor(

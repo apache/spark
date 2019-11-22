@@ -29,22 +29,12 @@ import org.apache.spark.util.ReturnStatementInClosureException
 /**
  * Test that closures passed to DStream operations are actually cleaned.
  */
-class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
-  private var ssc: StreamingContext = null
+class DStreamClosureSuite extends SparkFunSuite with LocalStreamingContext with BeforeAndAfterAll {
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
     val sc = new SparkContext("local", "test")
     ssc = new StreamingContext(sc, Seconds(1))
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      ssc.stop(stopSparkContext = true)
-      ssc = null
-    } finally {
-      super.afterAll()
-    }
   }
 
   test("user provided closures are actually cleaned") {
@@ -164,6 +154,10 @@ class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
   private def testUpdateStateByKey(ds: DStream[(Int, Int)]): Unit = {
     val updateF1 = (_: Seq[Int], _: Option[Int]) => { return; Some(1) }
     val updateF2 = (_: Iterator[(Int, Seq[Int], Option[Int])]) => { return; Seq((1, 1)).toIterator }
+    val updateF3 = (_: Time, _: Int, _: Seq[Int], _: Option[Int]) => {
+      return
+      Option(1)
+    }
     val initialRDD = ds.ssc.sparkContext.emptyRDD[Int].map { i => (i, i) }
     expectCorrectException { ds.updateStateByKey(updateF1) }
     expectCorrectException { ds.updateStateByKey(updateF1, 5) }
@@ -176,6 +170,14 @@ class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
     expectCorrectException {
       ds.updateStateByKey(updateF2, new HashPartitioner(5), true, initialRDD)
+    }
+    expectCorrectException {
+      ds.updateStateByKey(
+        updateFunc = updateF3,
+        partitioner = new HashPartitioner(5),
+        rememberPartitioner = true,
+        initialRDD = Option(initialRDD)
+      )
     }
   }
   private def testMapValues(ds: DStream[(Int, Int)]): Unit = expectCorrectException {

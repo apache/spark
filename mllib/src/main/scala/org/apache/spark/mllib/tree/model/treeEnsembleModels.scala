@@ -36,7 +36,7 @@ import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy._
 import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
 /**
@@ -66,14 +66,10 @@ class RandomForestModel @Since("1.2.0") (
     TreeEnsembleModel.SaveLoadV1_0.save(sc, path, this,
       RandomForestModel.SaveLoadV1_0.thisClassName)
   }
-
-  override protected def formatVersion: String = RandomForestModel.formatVersion
 }
 
 @Since("1.3.0")
 object RandomForestModel extends Loader[RandomForestModel] {
-
-  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   /**
    *
@@ -151,34 +147,25 @@ class GradientBoostedTreesModel @Since("1.2.0") (
       case _ => data
     }
 
-    val numIterations = trees.length
-    val evaluationArray = Array.fill(numIterations)(0.0)
-    val localTreeWeights = treeWeights
-
-    var predictionAndError = GradientBoostedTreesModel.computeInitialPredictionAndError(
-      remappedData, localTreeWeights(0), trees(0), loss)
-
-    evaluationArray(0) = predictionAndError.values.mean()
-
     val broadcastTrees = sc.broadcast(trees)
-    (1 until numIterations).foreach { nTree =>
-      predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
-        val currentTree = broadcastTrees.value(nTree)
-        val currentTreeWeight = localTreeWeights(nTree)
-        iter.map { case (point, (pred, error)) =>
-          val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
-          val newError = loss.computeError(newPred, point.label)
-          (newPred, newError)
-        }
-      }
-      evaluationArray(nTree) = predictionAndError.values.mean()
+    val localTreeWeights = treeWeights
+    val treesIndices = trees.indices
+
+    val dataCount = remappedData.count()
+    val evaluation = remappedData.map { point =>
+      treesIndices
+        .map(idx => broadcastTrees.value(idx).predict(point.features) * localTreeWeights(idx))
+        .scanLeft(0.0)(_ + _).drop(1)
+        .map(prediction => loss.computeError(prediction, point.label))
     }
+    .aggregate(treesIndices.map(_ => 0.0))(
+      (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
+      (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
+    .map(_ / dataCount)
 
-    broadcastTrees.unpersist()
-    evaluationArray
+    broadcastTrees.destroy()
+    evaluation.toArray
   }
-
-  override protected def formatVersion: String = GradientBoostedTreesModel.formatVersion
 }
 
 /**
@@ -194,7 +181,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
    */
   @Since("1.4.0")
@@ -220,7 +207,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param treeWeight: Learning rate.
    * @param tree: Tree using which the prediction and error should be updated.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
    */
   @Since("1.4.0")
@@ -241,8 +228,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
     }
     newPredError
   }
-
-  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   /**
    * @param sc  Spark context used for loading model files.
@@ -348,7 +333,7 @@ private[tree] sealed class TreeEnsembleModel(
   def predict(features: RDD[Vector]): RDD[Double] = features.map(x => predict(x))
 
   /**
-   * Java-friendly version of [[org.apache.spark.mllib.tree.model.TreeEnsembleModel#predict]].
+   * Java-friendly version of `org.apache.spark.mllib.tree.model.TreeEnsembleModel.predict`.
    */
   def predict(features: JavaRDD[Vector]): JavaRDD[java.lang.Double] = {
     predict(features.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
@@ -413,8 +398,7 @@ private[tree] object TreeEnsembleModel extends Logging {
     case class EnsembleNodeData(treeId: Int, node: NodeData)
 
     def save(sc: SparkContext, path: String, model: TreeEnsembleModel, className: String): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
       //             when they run the ML guide example.
@@ -450,8 +434,8 @@ private[tree] object TreeEnsembleModel extends Logging {
       // Create Parquet data.
       val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
         tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
-      }.toDF()
-      dataRDD.write.parquet(Loader.dataPath(path))
+      }
+      spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
     /**
@@ -472,10 +456,10 @@ private[tree] object TreeEnsembleModel extends Logging {
         sc: SparkContext,
         path: String,
         treeAlgo: String): Array[DecisionTreeModel] = {
-      val datapath = Loader.dataPath(path)
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val nodes = sqlContext.read.parquet(datapath).rdd.map(NodeData.apply)
-      val trees = constructTrees(nodes)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      import spark.implicits._
+      val nodes = spark.read.parquet(Loader.dataPath(path)).map(NodeData.apply)
+      val trees = constructTrees(nodes.rdd)
       trees.map(new DecisionTreeModel(_, Algo.fromString(treeAlgo)))
     }
   }

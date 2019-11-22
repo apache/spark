@@ -17,28 +17,29 @@
 
 package org.apache.spark.ml.feature
 
-import edu.emory.mathcs.jtransforms.dct._
+import org.jtransforms.dct._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.BooleanParam
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.types.DataType
 
 /**
- * :: Experimental ::
  * A feature transformer that takes the 1D discrete cosine transform of a real vector. No zero
  * padding is performed on the input vector.
  * It returns a real vector of the same length representing the DCT. The return vector is scaled
  * such that the transform matrix is unitary (aka scaled DCT-II).
  *
- * More information on [[https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia]].
+ * More information on <a href="https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II">
+ * DCT-II in Discrete cosine transform (Wikipedia)</a>.
  */
-@Experimental
-class DCT(override val uid: String)
+@Since("1.5.0")
+class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, DCT] with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("dct"))
 
   /**
@@ -46,13 +47,16 @@ class DCT(override val uid: String)
    * Default: false
    * @group param
    */
+  @Since("1.5.0")
   def inverse: BooleanParam = new BooleanParam(
     this, "inverse", "Set transformer to perform inverse DCT")
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInverse(value: Boolean): this.type = set(inverse, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getInverse: Boolean = $(inverse)
 
   setDefault(inverse -> false)
@@ -65,10 +69,16 @@ class DCT(override val uid: String)
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
-    require(inputType.isInstanceOf[VectorUDT], s"Input type must be VectorUDT but got $inputType.")
+    require(inputType.isInstanceOf[VectorUDT],
+      s"Input type must be ${(new VectorUDT).catalogString} but got ${inputType.catalogString}.")
   }
 
   override protected def outputDataType: DataType = new VectorUDT
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"DCT: uid=$uid, inverse=$inverse"
+  }
 }
 
 @Since("1.6.0")

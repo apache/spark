@@ -17,13 +17,42 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{ExprId, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SessionState
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
+
+/**
+ * The base class for subquery that is used in SparkPlan.
+ */
+abstract class ExecSubqueryExpression extends PlanExpression[BaseSubqueryExec] {
+  /**
+   * Fill the expression with collected result from executed plan.
+   */
+  def updateResult(): Unit
+
+  /** Updates the expression with a new plan. */
+  override def withNewPlan(plan: BaseSubqueryExec): ExecSubqueryExpression
+}
+
+object ExecSubqueryExpression {
+  /**
+   * Returns true when an expression contains a subquery
+   */
+  def hasSubquery(e: Expression): Boolean = {
+    e.find {
+      case _: ExecSubqueryExpression => true
+      case _ => false
+    }.isDefined
+  }
+}
 
 /**
  * A subquery that will return only one row and one column.
@@ -31,44 +60,167 @@ import org.apache.spark.sql.types.DataType
  * This is the physical copy of ScalarSubquery to be used inside SparkPlan.
  */
 case class ScalarSubquery(
-    @transient executedPlan: SparkPlan,
+    plan: BaseSubqueryExec,
     exprId: ExprId)
-  extends SubqueryExpression {
+  extends ExecSubqueryExpression {
 
-  override def query: LogicalPlan = throw new UnsupportedOperationException
-  override def withNewPlan(plan: LogicalPlan): SubqueryExpression = {
-    throw new UnsupportedOperationException
-  }
-  override def plan: SparkPlan = Subquery(simpleString, executedPlan)
-
-  override def dataType: DataType = executedPlan.schema.fields.head.dataType
+  override def dataType: DataType = plan.schema.fields.head.dataType
+  override def children: Seq[Expression] = Nil
   override def nullable: Boolean = true
-  override def toString: String = s"subquery#${exprId.id}"
+  override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
+  override def withNewPlan(query: BaseSubqueryExec): ScalarSubquery = copy(plan = query)
+
+  override def semanticEquals(other: Expression): Boolean = other match {
+    case s: ScalarSubquery => plan.sameResult(s.plan)
+    case _ => false
+  }
 
   // the first column in first row from `query`.
-  private var result: Any = null
+  @volatile private var result: Any = _
+  @volatile private var updated: Boolean = false
 
-  def updateResult(v: Any): Unit = {
-    result = v
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
+    if (rows.length > 1) {
+      sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
+    }
+    if (rows.length == 1) {
+      assert(rows(0).numFields == 1,
+        s"Expects 1 field, but got ${rows(0).numFields}; something went wrong in analysis")
+      result = rows(0).get(0, dataType)
+    } else {
+      // If there is no rows returned, the result should be null.
+      result = null
+    }
+    updated = true
   }
 
-  override def eval(input: InternalRow): Any = result
+  override def eval(input: InternalRow): Any = {
+    require(updated, s"$this has not finished")
+    result
+  }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    Literal.create(result, dataType).genCode(ctx, ev)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    require(updated, s"$this has not finished")
+    Literal.create(result, dataType).doGenCode(ctx, ev)
   }
 }
 
 /**
- * Convert the subquery from logical plan into executed plan.
+ * The physical node of in-subquery. This is for Dynamic Partition Pruning only, as in-subquery
+ * coming from the original query will always be converted to joins.
  */
-case class PlanSubqueries(sessionState: SessionState) extends Rule[SparkPlan] {
+case class InSubqueryExec(
+    child: Expression,
+    plan: BaseSubqueryExec,
+    exprId: ExprId,
+    private var resultBroadcast: Broadcast[Array[Any]] = null) extends ExecSubqueryExpression {
+
+  @transient private var result: Array[Any] = _
+
+  override def dataType: DataType = BooleanType
+  override def children: Seq[Expression] = child :: Nil
+  override def nullable: Boolean = child.nullable
+  override def toString: String = s"$child IN ${plan.name}"
+  override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec = copy(plan = plan)
+
+  override def semanticEquals(other: Expression): Boolean = other match {
+    case in: InSubqueryExec => child.semanticEquals(in.child) && plan.sameResult(in.plan)
+    case _ => false
+  }
+
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
+    result = child.dataType match {
+      case _: StructType => rows.toArray
+      case _ => rows.map(_.get(0, child.dataType))
+    }
+    resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
+  }
+
+  def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
+
+  private def prepareResult(): Unit = {
+    require(resultBroadcast != null, s"$this has not finished")
+    if (result == null) {
+      result = resultBroadcast.value
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    prepareResult()
+    val v = child.eval(input)
+    if (v == null) {
+      null
+    } else {
+      result.contains(v)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    prepareResult()
+    InSet(child, result.toSet).doGenCode(ctx, ev)
+  }
+
+  override lazy val canonicalized: InSubqueryExec = {
+    copy(
+      child = child.canonicalized,
+      plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
+      exprId = ExprId(0),
+      resultBroadcast = null)
+  }
+}
+
+/**
+ * Plans subqueries that are present in the given [[SparkPlan]].
+ */
+case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
-        val sparkPlan = sessionState.planner.plan(ReturnAnswer(subquery.query)).next()
-        val executedPlan = sessionState.prepareForExecution.execute(sparkPlan)
-        ScalarSubquery(executedPlan, subquery.exprId)
+        val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
+        ScalarSubquery(
+          SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
+          subquery.exprId)
+      case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
+        val expr = if (values.length == 1) {
+          values.head
+        } else {
+          CreateNamedStruct(
+            values.zipWithIndex.flatMap { case (v, index) =>
+              Seq(Literal(s"col_$index"), v)
+            }
+          )
+        }
+        val executedPlan = new QueryExecution(sparkSession, query).executedPlan
+        InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
+    }
+  }
+}
+
+/**
+ * Find out duplicated subqueries in the spark plan, then use the same subquery result for all the
+ * references.
+ */
+case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
+
+  def apply(plan: SparkPlan): SparkPlan = {
+    if (!conf.subqueryReuseEnabled) {
+      return plan
+    }
+    // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.
+    val subqueries = mutable.HashMap[StructType, ArrayBuffer[BaseSubqueryExec]]()
+    plan transformAllExpressions {
+      case sub: ExecSubqueryExpression =>
+        val sameSchema =
+          subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[BaseSubqueryExec]())
+        val sameResult = sameSchema.find(_.sameResult(sub.plan))
+        if (sameResult.isDefined) {
+          sub.withNewPlan(ReusedSubqueryExec(sameResult.get))
+        } else {
+          sameSchema += sub.plan
+          sub
+        }
     }
   }
 }

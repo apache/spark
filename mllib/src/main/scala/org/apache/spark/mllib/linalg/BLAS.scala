@@ -31,7 +31,7 @@ private[spark] object BLAS extends Serializable with Logging {
   @transient private var _nativeBLAS: NetlibBLAS = _
 
   // For level-1 routines, we use Java implementation.
-  private def f2jBLAS: NetlibBLAS = {
+  private[mllib] def f2jBLAS: NetlibBLAS = {
     if (_f2jBLAS == null) {
       _f2jBLAS = new F2jBLAS
     }
@@ -237,7 +237,7 @@ private[spark] object BLAS extends Serializable with Logging {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix in a [[DenseVector]](column major)
    */
@@ -246,7 +246,7 @@ private[spark] object BLAS extends Serializable with Logging {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)
    */
@@ -267,7 +267,6 @@ private[spark] object BLAS extends Serializable with Logging {
           col = indices(j)
           // Skip empty columns.
           colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
-          col = indices(j)
           av = alpha * values(j)
           i = 0
           while (i <= j) {
@@ -286,7 +285,7 @@ private[spark] object BLAS extends Serializable with Logging {
    * @param x the vector x that contains the n elements.
    * @param A the symmetric matrix A. Size of n x n.
    */
-  def syr(alpha: Double, x: Vector, A: DenseMatrix) {
+  def syr(alpha: Double, x: Vector, A: DenseMatrix): Unit = {
     val mA = A.numRows
     val nA = A.numCols
     require(mA == nA, s"A is not a square matrix (and hence is not symmetric). A: $mA x $nA")
@@ -300,7 +299,7 @@ private[spark] object BLAS extends Serializable with Logging {
     }
   }
 
-  private def syr(alpha: Double, x: DenseVector, A: DenseMatrix) {
+  private def syr(alpha: Double, x: DenseVector, A: DenseMatrix): Unit = {
     val nA = A.numRows
     val mA = A.numCols
 
@@ -318,7 +317,7 @@ private[spark] object BLAS extends Serializable with Logging {
     }
   }
 
-  private def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
+  private def syr(alpha: Double, x: SparseVector, A: DenseMatrix): Unit = {
     val mA = A.numCols
     val xIndices = x.indices
     val xValues = x.values
@@ -638,12 +637,16 @@ private[spark] object BLAS extends Serializable with Logging {
         val indEnd = Arows(rowCounter + 1)
         var sum = 0.0
         var k = 0
-        while (k < xNnz && i < indEnd) {
+        while (i < indEnd && k < xNnz) {
           if (xIndices(k) == Acols(i)) {
             sum += Avals(i) * xValues(k)
+            k += 1
+            i += 1
+          } else if (xIndices(k) < Acols(i)) {
+            k += 1
+          } else {
             i += 1
           }
-          k += 1
         }
         yValues(rowCounter) = sum * alpha + beta * yValues(rowCounter)
         rowCounter += 1

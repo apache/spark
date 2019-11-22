@@ -40,7 +40,20 @@ private[spark] object RpcEnv {
       conf: SparkConf,
       securityManager: SecurityManager,
       clientMode: Boolean = false): RpcEnv = {
-    val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode)
+    create(name, host, host, port, conf, securityManager, 0, clientMode)
+  }
+
+  def create(
+      name: String,
+      bindAddress: String,
+      advertiseAddress: String,
+      port: Int,
+      conf: SparkConf,
+      securityManager: SecurityManager,
+      numUsableCores: Int,
+      clientMode: Boolean): RpcEnv = {
+    val config = RpcEnvConfig(conf, name, bindAddress, advertiseAddress, port, securityManager,
+      numUsableCores, clientMode)
     new NettyRpcEnvFactory().create(config)
   }
 }
@@ -134,7 +147,6 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * @param uri URI with location of the file.
    */
   def openChannel(uri: String): ReadableByteChannel
-
 }
 
 /**
@@ -186,7 +198,9 @@ private[spark] trait RpcEnvFileServer {
 private[spark] case class RpcEnvConfig(
     conf: SparkConf,
     name: String,
-    host: String,
+    bindAddress: String,
+    advertiseAddress: String,
     port: Int,
     securityManager: SecurityManager,
+    numUsableCores: Int,
     clientMode: Boolean)

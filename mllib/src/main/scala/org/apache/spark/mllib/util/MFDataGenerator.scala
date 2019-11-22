@@ -19,7 +19,6 @@ package org.apache.spark.mllib.util
 
 import java.{util => ju}
 
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.SparkContext
@@ -55,7 +54,7 @@ import org.apache.spark.rdd.RDD
 @Since("0.8.0")
 object MFDataGenerator {
   @Since("0.8.0")
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       // scalastyle:off println
       println("Usage: MFDataGenerator " +

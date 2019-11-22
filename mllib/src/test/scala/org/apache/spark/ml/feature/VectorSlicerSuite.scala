@@ -17,16 +17,16 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{StructField, StructType}
 
-class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class VectorSlicerSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   test("params") {
     val slicer = new VectorSlicer().setInputCol("feature")
@@ -79,17 +79,17 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext with De
     val resultAttrGroup = new AttributeGroup("expected", resultAttrs.asInstanceOf[Array[Attribute]])
 
     val rdd = sc.parallelize(data.zip(expected)).map { case (a, b) => Row(a, b) }
-    val df = sqlContext.createDataFrame(rdd,
+    val df = spark.createDataFrame(rdd,
       StructType(Array(attrGroup.toStructField(), resultAttrGroup.toStructField())))
 
     val vectorSlicer = new VectorSlicer().setInputCol("features").setOutputCol("result")
 
-    def validateResults(df: DataFrame): Unit = {
-      df.select("result", "expected").collect().foreach { case Row(vec1: Vector, vec2: Vector) =>
+    def validateResults(rows: Seq[Row]): Unit = {
+      rows.foreach { case Row(vec1: Vector, vec2: Vector) =>
         assert(vec1 === vec2)
       }
-      val resultMetadata = AttributeGroup.fromStructField(df.schema("result"))
-      val expectedMetadata = AttributeGroup.fromStructField(df.schema("expected"))
+      val resultMetadata = AttributeGroup.fromStructField(rows.head.schema("result"))
+      val expectedMetadata = AttributeGroup.fromStructField(rows.head.schema("expected"))
       assert(resultMetadata.numAttributes === expectedMetadata.numAttributes)
       resultMetadata.attributes.get.zip(expectedMetadata.attributes.get).foreach { case (a, b) =>
         assert(a === b)
@@ -97,13 +97,16 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext with De
     }
 
     vectorSlicer.setIndices(Array(1, 4)).setNames(Array.empty)
-    validateResults(vectorSlicer.transform(df))
+    testTransformerByGlobalCheckFunc[(Vector, Vector)](df, vectorSlicer, "result", "expected")(
+      validateResults)
 
     vectorSlicer.setIndices(Array(1)).setNames(Array("f4"))
-    validateResults(vectorSlicer.transform(df))
+    testTransformerByGlobalCheckFunc[(Vector, Vector)](df, vectorSlicer, "result", "expected")(
+      validateResults)
 
     vectorSlicer.setIndices(Array.empty).setNames(Array("f1", "f4"))
-    validateResults(vectorSlicer.transform(df))
+    testTransformerByGlobalCheckFunc[(Vector, Vector)](df, vectorSlicer, "result", "expected")(
+      validateResults)
   }
 
   test("read/write") {

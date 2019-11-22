@@ -22,19 +22,22 @@ import java.io.File
 
 import scala.io.Source._
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.sql.SparkSession
 
 /**
-  * Simple test for reading and writing to a distributed
-  * file system.  This example does the following:
-  *
-  *   1. Reads local file
-  *   2. Computes word count on local file
-  *   3. Writes local file to a DFS
-  *   4. Reads the file back from the DFS
-  *   5. Computes word count on the file using Spark
-  *   6. Compares the word count results
-  */
+ * Simple test for reading and writing to a distributed
+ * file system.  This example does the following:
+ *
+ *   1. Reads local file
+ *   2. Computes word count on local file
+ *   3. Writes local file to a DFS
+ *   4. Reads the file back from the DFS
+ *   5. Computes word count on the file using Spark
+ *   6. Compares the word count results
+ */
 object DFSReadWriteTest {
 
   private var localFilePath: File = new File(".")
@@ -49,12 +52,10 @@ object DFSReadWriteTest {
   }
 
   private def printUsage(): Unit = {
-    val usage: String = "DFS Read-Write Test\n" +
-    "\n" +
-    "Usage: localFile dfsDir\n" +
-    "\n" +
-    "localFile - (string) local file to use in test\n" +
-    "dfsDir - (string) DFS directory for read/write tests\n"
+    val usage = """DFS Read-Write Test
+    |Usage: localFile dfsDir
+    |localFile - (string) local file to use in test
+    |dfsDir - (string) DFS directory for read/write tests""".stripMargin
 
     println(usage)
   }
@@ -69,13 +70,13 @@ object DFSReadWriteTest {
 
     localFilePath = new File(args(i))
     if (!localFilePath.exists) {
-      System.err.println("Given path (" + args(i) + ") does not exist.\n")
+      System.err.println(s"Given path (${args(i)}) does not exist")
       printUsage()
       System.exit(1)
     }
 
     if (!localFilePath.isFile) {
-      System.err.println("Given path (" + args(i) + ") is not a file.\n")
+      System.err.println(s"Given path (${args(i)}) is not a file")
       printUsage()
       System.exit(1)
     }
@@ -101,19 +102,26 @@ object DFSReadWriteTest {
     val fileContents = readFile(localFilePath.toString())
     val localWordCount = runLocalWordCount(fileContents)
 
-    println("Creating SparkConf")
-    val conf = new SparkConf().setAppName("DFS Read Write Test")
-
-    println("Creating SparkContext")
-    val sc = new SparkContext(conf)
+    println("Creating SparkSession")
+    val spark = SparkSession
+      .builder
+      .appName("DFS Read Write Test")
+      .getOrCreate()
 
     println("Writing local file to DFS")
-    val dfsFilename = dfsDirPath + "/dfs_read_write_test"
-    val fileRDD = sc.parallelize(fileContents)
+    val dfsFilename = s"$dfsDirPath/dfs_read_write_test"
+
+    // delete file if exists
+    val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+    if (fs.exists(new Path(dfsFilename))) {
+        fs.delete(new Path(dfsFilename), true)
+    }
+
+    val fileRDD = spark.sparkContext.parallelize(fileContents)
     fileRDD.saveAsTextFile(dfsFilename)
 
     println("Reading file from DFS and running Word Count")
-    val readFileRDD = sc.textFile(dfsFilename)
+    val readFileRDD = spark.sparkContext.textFile(dfsFilename)
 
     val dfsWordCount = readFileRDD
       .flatMap(_.split(" "))
@@ -124,16 +132,14 @@ object DFSReadWriteTest {
       .values
       .sum
 
-    sc.stop()
-
+    spark.stop()
     if (localWordCount == dfsWordCount) {
-      println(s"Success! Local Word Count ($localWordCount) " +
-        s"and DFS Word Count ($dfsWordCount) agree.")
+      println(s"Success! Local Word Count $localWordCount and " +
+        s"DFS Word Count $dfsWordCount agree.")
     } else {
-      println(s"Failure! Local Word Count ($localWordCount) " +
-        s"and DFS Word Count ($dfsWordCount) disagree.")
+      println(s"Failure! Local Word Count $localWordCount " +
+        s"and DFS Word Count $dfsWordCount disagree.")
     }
-
   }
 }
 // scalastyle:on println

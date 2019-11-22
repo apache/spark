@@ -22,12 +22,7 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * Information about an [[org.apache.spark.Accumulable]] modified during a task or stage.
- *
- * Note: once this is JSON serialized the types of `update` and `value` will be lost and be
- * cast to strings. This is because the user can define an accumulator of any type and it will
- * be difficult to preserve the type in consumers of the event log. This does not apply to
- * internal accumulators that represent task level metrics.
+ * Information about an [[org.apache.spark.util.AccumulatorV2]] modified during a task or stage.
  *
  * @param id accumulator ID
  * @param name accumulator name
@@ -36,6 +31,11 @@ import org.apache.spark.annotation.DeveloperApi
  * @param internal whether this accumulator was internal
  * @param countFailedValues whether to count this accumulator's partial value if the task failed
  * @param metadata internal metadata associated with this accumulator, if any
+ *
+ * @note Once this is JSON serialized the types of `update` and `value` will be lost and be
+ * cast to strings. This is because the user can define an accumulator of any type and it will
+ * be difficult to preserve the type in consumers of the event log. This does not apply to
+ * internal accumulators that represent task level metrics.
  */
 @DeveloperApi
 case class AccumulableInfo private[spark] (
@@ -47,33 +47,3 @@ case class AccumulableInfo private[spark] (
     private[spark] val countFailedValues: Boolean,
     // TODO: use this to identify internal task metrics instead of encoding it in the name
     private[spark] val metadata: Option[String] = None)
-
-
-/**
- * A collection of deprecated constructors. This will be removed soon.
- */
-object AccumulableInfo {
-
-  @deprecated("do not create AccumulableInfo", "2.0.0")
-  def apply(
-      id: Long,
-      name: String,
-      update: Option[String],
-      value: String,
-      internal: Boolean): AccumulableInfo = {
-    new AccumulableInfo(
-      id, Option(name), update, Option(value), internal, countFailedValues = false)
-  }
-
-  @deprecated("do not create AccumulableInfo", "2.0.0")
-  def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
-    new AccumulableInfo(
-      id, Option(name), update, Option(value), internal = false, countFailedValues = false)
-  }
-
-  @deprecated("do not create AccumulableInfo", "2.0.0")
-  def apply(id: Long, name: String, value: String): AccumulableInfo = {
-    new AccumulableInfo(
-      id, Option(name), None, Option(value), internal = false, countFailedValues = false)
-  }
-}

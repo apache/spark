@@ -20,21 +20,20 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
-  <artifactId>spark-repl_2.11</artifactId>
+  <artifactId>spark-repl_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project REPL</name>
   <url>http://spark.apache.org/</url>
 
   <properties>
     <sbt.project.name>repl</sbt.project.name>
-    <extra.source.dir>scala-2.10/src/main/scala</extra.source.dir>
-    <extra.testsource.dir>scala-2.10/src/test/scala</extra.testsource.dir>
+    <extra.source.dir>src/main/scala-${scala.binary.version}</extra.source.dir>
+    <extra.testsource.dir>src/test/scala-${scala.binary.version}</extra.testsource.dir>
   </properties>
 
   <dependencies>
@@ -71,7 +70,7 @@
       <artifactId>scala-reflect</artifactId>
       <version>${scala.version}</version>
     </dependency>
-    <dependency>
+     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>jul-to-slf4j</artifactId>
     </dependency>
@@ -87,11 +86,23 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
+
+    <!--
+      This spark-tags test-dep is needed even though it isn't used in this module, otherwise testing-cmds that exclude
+      them will yield errors.
+    -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
     <dependency>
       <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-asm5-shaded</artifactId>
+      <artifactId>xbean-asm7-shaded</artifactId>
     </dependency>
 
     <!-- Explicit listing of transitive deps that are shaded. Otherwise, odd compiler crashes. -->
@@ -155,30 +166,5 @@
       </plugin>
     </plugins>
   </build>
-  <profiles>
-    <profile>
-      <id>scala-2.10</id>
-      <activation>
-        <property><name>scala-2.10</name></property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>${jline.groupid}</groupId>
-          <artifactId>jline</artifactId>
-          <version>${jline.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
 
-    <profile>
-      <id>scala-2.11</id>
-      <activation>
-        <property><name>!scala-2.10</name></property>
-      </activation>
-      <properties>
-        <extra.source.dir>scala-2.11/src/main/scala</extra.source.dir>
-        <extra.testsource.dir>scala-2.11/src/test/scala</extra.testsource.dir>
-      </properties>
-    </profile>
-  </profiles>
 </project>

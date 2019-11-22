@@ -17,13 +17,19 @@
 
 package org.apache.spark.unsafe;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 
 import sun.misc.Unsafe;
 
 public final class Platform {
 
   private static final Unsafe _UNSAFE;
+
+  public static final int BOOLEAN_ARRAY_OFFSET;
 
   public static final int BYTE_ARRAY_OFFSET;
 
@@ -36,6 +42,72 @@ public final class Platform {
   public static final int FLOAT_ARRAY_OFFSET;
 
   public static final int DOUBLE_ARRAY_OFFSET;
+
+  private static final boolean unaligned;
+
+  // Access fields and constructors once and store them, for performance:
+
+  private static final Constructor<?> DBB_CONSTRUCTOR;
+  private static final Field DBB_CLEANER_FIELD;
+  static {
+    try {
+      Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
+      Constructor<?> constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
+      constructor.setAccessible(true);
+      Field cleanerField = cls.getDeclaredField("cleaner");
+      cleanerField.setAccessible(true);
+      DBB_CONSTRUCTOR = constructor;
+      DBB_CLEANER_FIELD = cleanerField;
+    } catch (ClassNotFoundException | NoSuchMethodException | NoSuchFieldException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  // Split java.version on non-digit chars:
+  private static final int majorVersion =
+    Integer.parseInt(System.getProperty("java.version").split("\\D+")[0]);
+
+  private static final Method CLEANER_CREATE_METHOD;
+  static {
+    // The implementation of Cleaner changed from JDK 8 to 9
+    String cleanerClassName;
+    if (majorVersion < 9) {
+      cleanerClassName = "sun.misc.Cleaner";
+    } else {
+      cleanerClassName = "jdk.internal.ref.Cleaner";
+    }
+    try {
+      Class<?> cleanerClass = Class.forName(cleanerClassName);
+      Method createMethod = cleanerClass.getMethod("create", Object.class, Runnable.class);
+      // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9+,
+      // unfortunately, unless the user has allowed access with something like
+      // --add-opens java.base/java.lang=ALL-UNNAMED  If not, we can't really use the Cleaner
+      // hack below. It doesn't break, just means the user might run into the default JVM limit
+      // on off-heap memory and increase it or set the flag above. This tests whether it's
+      // available:
+      try {
+        createMethod.invoke(null, null, null);
+      } catch (IllegalAccessException e) {
+        // Don't throw an exception, but can't log here?
+        createMethod = null;
+      } catch (InvocationTargetException ite) {
+        // shouldn't happen; report it
+        throw new IllegalStateException(ite);
+      }
+      CLEANER_CREATE_METHOD = createMethod;
+    } catch (ClassNotFoundException | NoSuchMethodException e) {
+      throw new IllegalStateException(e);
+    }
+
+  }
+
+  /**
+   * @return true when running JVM is having sun's Unsafe package available in it and underlying
+   *         system having unaligned-access capability.
+   */
+  public static boolean unaligned() {
+    return unaligned;
+  }
 
   public static int getInt(Object object, long offset) {
     return _UNSAFE.getInt(object, offset);
@@ -116,6 +188,45 @@ public final class Platform {
     return newMemory;
   }
 
+  /**
+   * Allocate a DirectByteBuffer, potentially bypassing the JVM's MaxDirectMemorySize limit.
+   */
+  public static ByteBuffer allocateDirectBuffer(int size) {
+    try {
+      if (CLEANER_CREATE_METHOD == null) {
+        // Can't set a Cleaner (see comments on field), so need to allocate via normal Java APIs
+        try {
+          return ByteBuffer.allocateDirect(size);
+        } catch (OutOfMemoryError oome) {
+          // checkstyle.off: RegexpSinglelineJava
+          throw new OutOfMemoryError("Failed to allocate direct buffer (" + oome.getMessage() +
+              "); try increasing -XX:MaxDirectMemorySize=... to, for example, your heap size");
+          // checkstyle.on: RegexpSinglelineJava
+        }
+      }
+      // Otherwise, use internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
+      // MaxDirectMemorySize limit (the default limit is too low and we do not want to
+      // require users to increase it).
+      long memory = allocateMemory(size);
+      ByteBuffer buffer = (ByteBuffer) DBB_CONSTRUCTOR.newInstance(memory, size);
+      try {
+        DBB_CLEANER_FIELD.set(buffer,
+            CLEANER_CREATE_METHOD.invoke(null, buffer, (Runnable) () -> freeMemory(memory)));
+      } catch (IllegalAccessException | InvocationTargetException e) {
+        freeMemory(memory);
+        throw new IllegalStateException(e);
+      }
+      return buffer;
+    } catch (Exception e) {
+      throwException(e);
+    }
+    throw new IllegalStateException("unreachable");
+  }
+
+  public static void setMemory(Object object, long offset, long size, byte value) {
+    _UNSAFE.setMemory(object, offset, size, value);
+  }
+
   public static void setMemory(long address, byte value, long size) {
     _UNSAFE.setMemory(address, size, value);
   }
@@ -171,6 +282,7 @@ public final class Platform {
     _UNSAFE = unsafe;
 
     if (_UNSAFE != null) {
+      BOOLEAN_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(boolean[].class);
       BYTE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(byte[].class);
       SHORT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(short[].class);
       INT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(int[].class);
@@ -178,6 +290,7 @@ public final class Platform {
       FLOAT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(float[].class);
       DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
     } else {
+      BOOLEAN_ARRAY_OFFSET = 0;
       BYTE_ARRAY_OFFSET = 0;
       SHORT_ARRAY_OFFSET = 0;
       INT_ARRAY_OFFSET = 0;
@@ -185,5 +298,37 @@ public final class Platform {
       FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
     }
+  }
+
+  // This requires `majorVersion` and `_UNSAFE`.
+  static {
+    boolean _unaligned;
+    String arch = System.getProperty("os.arch", "");
+    if (arch.equals("ppc64le") || arch.equals("ppc64") || arch.equals("s390x")) {
+      // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but
+      // ppc64 and ppc64le support it
+      _unaligned = true;
+    } else {
+      try {
+        Class<?> bitsClass =
+          Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
+        if (_UNSAFE != null && majorVersion >= 9) {
+          // Java 9/10 and 11/12 have different field names.
+          Field unalignedField =
+            bitsClass.getDeclaredField(majorVersion >= 11 ? "UNALIGNED" : "unaligned");
+          _unaligned = _UNSAFE.getBoolean(
+            _UNSAFE.staticFieldBase(unalignedField), _UNSAFE.staticFieldOffset(unalignedField));
+        } else {
+          Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
+          unalignedMethod.setAccessible(true);
+          _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
+        }
+      } catch (Throwable t) {
+        // We at least know x86 and x64 support unaligned access.
+        //noinspection DynamicRegexReplaceableByCompiledPattern
+        _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
+      }
+    }
+    unaligned = _unaligned;
   }
 }

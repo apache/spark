@@ -37,7 +37,7 @@ import org.apache.spark.rdd.RDD
 object SVMDataGenerator {
 
   @Since("0.8.0")
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       // scalastyle:off println
       println("Usage: SVMGenerator " +
@@ -55,7 +55,7 @@ object SVMDataGenerator {
     val sc = new SparkContext(sparkMaster, "SVMGenerator")
 
     val globalRnd = new Random(94720)
-    val trueWeights = Array.fill[Double](nfeatures + 1)(globalRnd.nextGaussian())
+    val trueWeights = Array.fill[Double](nfeatures)(globalRnd.nextGaussian())
 
     val data: RDD[LabeledPoint] = sc.parallelize(0 until nexamples, parts).map { idx =>
       val rnd = new Random(42 + idx)

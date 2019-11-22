@@ -19,21 +19,19 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Union}
 import org.apache.spark.sql.types._
 
 
-class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
-  private val conf = new SimpleCatalystConf(caseSensitiveAnalysis = true)
+class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-  private val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
+  private val analyzer = new Analyzer(catalog, conf)
 
   private val relation = LocalRelation(
     AttributeReference("i", IntegerType)(),
@@ -52,7 +50,7 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
   private val b: Expression = UnresolvedAttribute("b")
 
   before {
-    catalog.createTempTable("table", relation, overrideIfExists = true)
+    catalog.createTempView("table", relation, overrideIfExists = true)
   }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {
@@ -92,8 +90,14 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
     checkType(Average(d1), DecimalType(6, 5))
 
     checkType(Add(Add(d1, d2), d1), DecimalType(7, 2))
+    checkType(Add(Add(d1, d1), d1), DecimalType(4, 1))
+    checkType(Add(d1, Add(d1, d1)), DecimalType(4, 1))
     checkType(Add(Add(Add(d1, d2), d1), d2), DecimalType(8, 2))
     checkType(Add(Add(d1, d2), Add(d1, d2)), DecimalType(7, 2))
+    checkType(Subtract(Subtract(d2, d1), d1), DecimalType(7, 2))
+    checkType(Multiply(Multiply(d1, d1), d2), DecimalType(11, 4))
+    checkType(Divide(d2, Add(d1, d1)), DecimalType(10, 6))
+    checkType(Sum(Add(d1, d1)), DecimalType(13, 1))
   }
 
   test("Comparison operations") {
@@ -132,19 +136,19 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
 
   test("maximum decimals") {
     for (expr <- Seq(d1, d2, i, u)) {
-      checkType(Add(expr, u), DecimalType.SYSTEM_DEFAULT)
-      checkType(Subtract(expr, u), DecimalType.SYSTEM_DEFAULT)
+      checkType(Add(expr, u), DecimalType(38, 17))
+      checkType(Subtract(expr, u), DecimalType(38, 17))
     }
 
-    checkType(Multiply(d1, u), DecimalType(38, 19))
-    checkType(Multiply(d2, u), DecimalType(38, 20))
-    checkType(Multiply(i, u), DecimalType(38, 18))
-    checkType(Multiply(u, u), DecimalType(38, 36))
+    checkType(Multiply(d1, u), DecimalType(38, 16))
+    checkType(Multiply(d2, u), DecimalType(38, 14))
+    checkType(Multiply(i, u), DecimalType(38, 7))
+    checkType(Multiply(u, u), DecimalType(38, 6))
 
-    checkType(Divide(u, d1), DecimalType(38, 18))
-    checkType(Divide(u, d2), DecimalType(38, 19))
-    checkType(Divide(u, i), DecimalType(38, 23))
-    checkType(Divide(u, u), DecimalType(38, 18))
+    checkType(Divide(u, d1), DecimalType(38, 17))
+    checkType(Divide(u, d2), DecimalType(38, 16))
+    checkType(Divide(u, i), DecimalType(38, 18))
+    checkType(Divide(u, u), DecimalType(38, 6))
 
     checkType(Remainder(d1, u), DecimalType(19, 18))
     checkType(Remainder(d2, u), DecimalType(21, 18))
@@ -170,18 +174,18 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
     assert(d0.isWiderThan(d1) === false)
     assert(d1.isWiderThan(d0) === false)
     assert(d1.isWiderThan(d2) === false)
-    assert(d2.isWiderThan(d1) === true)
+    assert(d2.isWiderThan(d1))
     assert(d2.isWiderThan(d3) === false)
-    assert(d3.isWiderThan(d2) === true)
-    assert(d4.isWiderThan(d3) === true)
+    assert(d3.isWiderThan(d2))
+    assert(d4.isWiderThan(d3))
 
     assert(d1.isWiderThan(ByteType) === false)
-    assert(d2.isWiderThan(ByteType) === true)
+    assert(d2.isWiderThan(ByteType))
     assert(d2.isWiderThan(ShortType) === false)
-    assert(d3.isWiderThan(ShortType) === true)
-    assert(d3.isWiderThan(IntegerType) === true)
+    assert(d3.isWiderThan(ShortType))
+    assert(d3.isWiderThan(IntegerType))
     assert(d3.isWiderThan(LongType) === false)
-    assert(d4.isWiderThan(LongType) === true)
+    assert(d4.isWiderThan(LongType))
     assert(d4.isWiderThan(FloatType) === false)
     assert(d4.isWiderThan(DoubleType) === false)
   }
@@ -266,6 +270,15 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
       ruleTest(minValue <= int, Literal(Long.MinValue) <= int)
       ruleTest(underflow <= int, TrueLiteral)
     }
+  }
+
+  test("SPARK-24468: operations on decimals with negative scale") {
+    val a = AttributeReference("a", DecimalType(3, -10))()
+    val b = AttributeReference("b", DecimalType(1, -1))()
+    val c = AttributeReference("c", DecimalType(35, 1))()
+    checkType(Multiply(a, b), DecimalType(5, -11))
+    checkType(Multiply(a, c), DecimalType(38, -9))
+    checkType(Multiply(b, c), DecimalType(37, 0))
   }
 
   /** strength reduction for integer/decimal comparisons */

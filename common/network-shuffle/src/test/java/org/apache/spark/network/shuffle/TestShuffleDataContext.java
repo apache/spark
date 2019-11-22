@@ -27,12 +27,18 @@ import com.google.common.io.Closeables;
 import com.google.common.io.Files;
 
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.util.JavaUtils;
+import org.junit.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * Manages some sort- and hash-based shuffle data, including the creation
+ * Manages some sort-shuffle data, including the creation
  * and cleanup of directories that can be read by the {@link ExternalShuffleBlockResolver}.
  */
 public class TestShuffleDataContext {
+  private static final Logger logger = LoggerFactory.getLogger(TestShuffleDataContext.class);
+
   public final String[] localDirs;
   public final int subDirsPerLocalDir;
 
@@ -53,7 +59,11 @@ public class TestShuffleDataContext {
 
   public void cleanup() {
     for (String localDir : localDirs) {
-      deleteRecursively(new File(localDir));
+      try {
+        JavaUtils.deleteRecursively(new File(localDir));
+      } catch (IOException e) {
+        logger.warn("Unable to cleanup localDir = " + localDir, e);
+      }
     }
   }
 
@@ -67,9 +77,9 @@ public class TestShuffleDataContext {
 
     try {
       dataStream = new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
       indexStream = new DataOutputStream(new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
 
       long offset = 0;
       indexStream.writeLong(offset);
@@ -85,12 +95,41 @@ public class TestShuffleDataContext {
     }
   }
 
-  /** Creates reducer blocks in a hash-based data format within our local dirs. */
-  public void insertHashShuffleData(int shuffleId, int mapId, byte[][] blocks) throws IOException {
-    for (int i = 0; i < blocks.length; i ++) {
-      String blockId = "shuffle_" + shuffleId + "_" + mapId + "_" + i;
-      Files.write(blocks[i],
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId));
+  /** Creates spill file(s) within the local dirs. */
+  public void insertSpillData() throws IOException {
+    String filename = "temp_local_uuid";
+    insertFile(filename);
+  }
+
+  public void insertBroadcastData() throws IOException {
+    String filename = "broadcast_12_uuid";
+    insertFile(filename);
+  }
+
+  public void insertTempShuffleData() throws IOException {
+    String filename = "temp_shuffle_uuid";
+    insertFile(filename);
+  }
+
+  public void insertCachedRddData(int rddId, int splitId, byte[] block) throws IOException {
+    String blockId = "rdd_" + rddId + "_" + splitId;
+    insertFile(blockId, block);
+  }
+
+  private void insertFile(String filename) throws IOException {
+    insertFile(filename, new byte[] { 42 });
+  }
+
+  private void insertFile(String filename, byte[] block) throws IOException {
+    OutputStream dataStream = null;
+    File file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename);
+    Assert.assertFalse("this test file has been already generated", file.exists());
+    try {
+      dataStream = new FileOutputStream(
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename));
+      dataStream.write(block);
+    } finally {
+      Closeables.close(dataStream, false);
     }
   }
 
@@ -100,18 +139,5 @@ public class TestShuffleDataContext {
    */
   public ExecutorShuffleInfo createExecutorInfo(String shuffleManager) {
     return new ExecutorShuffleInfo(localDirs, subDirsPerLocalDir, shuffleManager);
-  }
-
-  private static void deleteRecursively(File f) {
-    assert f != null;
-    if (f.isDirectory()) {
-      File[] children = f.listFiles();
-      if (children != null) {
-        for (File child : children) {
-          deleteRecursively(child);
-        }
-      }
-    }
-    f.delete();
   }
 }

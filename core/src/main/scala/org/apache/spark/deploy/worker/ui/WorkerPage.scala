@@ -23,10 +23,12 @@ import scala.xml.Node
 
 import org.json4s.JValue
 
+import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
-import org.apache.spark.deploy.JsonProtocol
+import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourcesAddresses, formatResourcesDetails}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -34,14 +36,29 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   private val workerEndpoint = parent.worker.self
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    val workerState = workerEndpoint.askWithRetry[WorkerStateResponse](RequestWorkerState)
+    val workerState = workerEndpoint.askSync[WorkerStateResponse](RequestWorkerState)
     JsonProtocol.writeWorkerState(workerState)
   }
 
-  def render(request: HttpServletRequest): Seq[Node] = {
-    val workerState = workerEndpoint.askWithRetry[WorkerStateResponse](RequestWorkerState)
+  private def formatWorkerResourcesDetails(workerState: WorkerStateResponse): String = {
+    val totalInfo = workerState.resources
+    val usedInfo = workerState.resourcesUsed
+    val freeInfo = totalInfo.map { case (rName, rInfo) =>
+      val freeAddresses = if (usedInfo.contains(rName)) {
+        rInfo.addresses.diff(usedInfo(rName).addresses)
+      } else {
+        rInfo.addresses
+      }
+      rName -> new ResourceInformation(rName, freeAddresses)
+    }
+    formatResourcesDetails(usedInfo, freeInfo)
+  }
 
-    val executorHeaders = Seq("ExecutorID", "Cores", "State", "Memory", "Job Details", "Logs")
+  def render(request: HttpServletRequest): Seq[Node] = {
+    val workerState = workerEndpoint.askSync[WorkerStateResponse](RequestWorkerState)
+
+    val executorHeaders = Seq("ExecutorID", "State", "Cores", "Memory", "Resources",
+      "Job Details", "Logs")
     val runningExecutors = workerState.executors
     val runningExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, runningExecutors)
@@ -49,11 +66,14 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     val finishedExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, finishedExecutors)
 
-    val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Logs", "Notes")
+    val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Resources",
+      "Logs", "Notes")
     val runningDrivers = workerState.drivers.sortBy(_.driverId).reverse
-    val runningDriverTable = UIUtils.listingTable(driverHeaders, driverRow, runningDrivers)
+    val runningDriverTable = UIUtils.listingTable[DriverRunner](driverHeaders,
+      driverRow(workerState.workerId, _), runningDrivers)
     val finishedDrivers = workerState.finishedDrivers.sortBy(_.driverId).reverse
-    val finishedDriverTable = UIUtils.listingTable(driverHeaders, driverRow, finishedDrivers)
+    val finishedDriverTable = UIUtils.listingTable[DriverRunner](driverHeaders,
+      driverRow(workerState.workerId, _), finishedDrivers)
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
@@ -69,64 +89,117 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
             <li><strong>Cores:</strong> {workerState.cores} ({workerState.coresUsed} Used)</li>
             <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
               ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
+            <li><strong>Resources:</strong>
+              {formatWorkerResourcesDetails(workerState)}</li>
           </ul>
           <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
         </div>
       </div>
       <div class="row-fluid"> <!-- Executors and Drivers -->
         <div class="span12">
-          <h4> Running Executors ({runningExecutors.size}) </h4>
-          {runningExecutorTable}
+          <span class="collapse-aggregated-runningExecutors collapse-table"
+              onClick="collapseTable('collapse-aggregated-runningExecutors',
+              'aggregated-runningExecutors')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Running Executors ({runningExecutors.size})</a>
+            </h4>
+          </span>
+          <div class="aggregated-runningExecutors collapsible-table">
+            {runningExecutorTable}
+          </div>
           {
             if (runningDrivers.nonEmpty) {
-              <h4> Running Drivers ({runningDrivers.size}) </h4> ++
-              runningDriverTable
+              <span class="collapse-aggregated-runningDrivers collapse-table"
+                  onClick="collapseTable('collapse-aggregated-runningDrivers',
+                  'aggregated-runningDrivers')">
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Running Drivers ({runningDrivers.size})</a>
+                </h4>
+              </span> ++
+              <div class="aggregated-runningDrivers collapsible-table">
+                {runningDriverTable}
+              </div>
             }
           }
           {
             if (finishedExecutors.nonEmpty) {
-              <h4>Finished Executors ({finishedExecutors.size}) </h4> ++
-              finishedExecutorTable
+              <span class="collapse-aggregated-finishedExecutors collapse-table"
+                  onClick="collapseTable('collapse-aggregated-finishedExecutors',
+                  'aggregated-finishedExecutors')">
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Finished Executors ({finishedExecutors.size})</a>
+                </h4>
+              </span> ++
+              <div class="aggregated-finishedExecutors collapsible-table">
+                {finishedExecutorTable}
+              </div>
             }
           }
           {
             if (finishedDrivers.nonEmpty) {
-              <h4> Finished Drivers ({finishedDrivers.size}) </h4> ++
-              finishedDriverTable
+              <span class="collapse-aggregated-finishedDrivers collapse-table"
+                  onClick="collapseTable('collapse-aggregated-finishedDrivers',
+                  'aggregated-finishedDrivers')">
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Finished Drivers ({finishedDrivers.size})</a>
+                </h4>
+              </span> ++
+              <div class="aggregated-finishedDrivers collapsible-table">
+                {finishedDriverTable}
+              </div>
             }
           }
         </div>
       </div>;
-    UIUtils.basicSparkPage(content, "Spark Worker at %s:%s".format(
+    UIUtils.basicSparkPage(request, content, "Spark Worker at %s:%s".format(
       workerState.host, workerState.port))
   }
 
   def executorRow(executor: ExecutorRunner): Seq[Node] = {
+    val workerUrlRef = UIUtils.makeHref(parent.worker.reverseProxy, executor.workerId,
+      parent.webUrl)
+    val appUrlRef = UIUtils.makeHref(parent.worker.reverseProxy, executor.appId,
+      executor.appDesc.appUiUrl)
+
     <tr>
       <td>{executor.execId}</td>
-      <td>{executor.cores}</td>
       <td>{executor.state}</td>
+      <td>{executor.cores}</td>
       <td sorttable_customkey={executor.memory.toString}>
         {Utils.megabytesToString(executor.memory)}
       </td>
+      <td>{formatResourcesAddresses(executor.resources)}</td>
       <td>
         <ul class="unstyled">
           <li><strong>ID:</strong> {executor.appId}</li>
-          <li><strong>Name:</strong> {executor.appDesc.name}</li>
+          <li><strong>Name:</strong>
+          {
+            if ({executor.state == ExecutorState.RUNNING} && executor.appDesc.appUiUrl.nonEmpty) {
+              <a href={appUrlRef}> {executor.appDesc.name}</a>
+            } else {
+              {executor.appDesc.name}
+            }
+          }
+          </li>
           <li><strong>User:</strong> {executor.appDesc.user}</li>
         </ul>
       </td>
       <td>
-     <a href={"logPage?appId=%s&executorId=%s&logType=stdout"
-        .format(executor.appId, executor.execId)}>stdout</a>
-     <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
-        .format(executor.appId, executor.execId)}>stderr</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor
+          .appId}&executorId=${executor.execId}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor
+          .appId}&executorId=${executor.execId}&logType=stderr"}>stderr</a>
       </td>
     </tr>
 
   }
 
-  def driverRow(driver: DriverRunner): Seq[Node] = {
+  def driverRow(workerId: String, driver: DriverRunner): Seq[Node] = {
+    val workerUrlRef = UIUtils.makeHref(parent.worker.reverseProxy, workerId, parent.webUrl)
     <tr>
       <td>{driver.driverId}</td>
       <td>{driver.driverDesc.command.arguments(2)}</td>
@@ -137,9 +210,10 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.driverDesc.mem.toString}>
         {Utils.megabytesToString(driver.driverDesc.mem)}
       </td>
+      <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>
-        <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
-        <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
+        <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
       </td>
       <td>
         {driver.finalException.getOrElse("")}

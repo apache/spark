@@ -60,4 +60,10 @@ private[spark] class ActiveJob(
   val finished = Array.fill[Boolean](numPartitions)(false)
 
   var numFinished = 0
+
+  /** Resets the status of all partitions in this stage so they are marked as not finished. */
+  def resetAllPartitions(): Unit = {
+    (0 until numPartitions).foreach(finished.update(_, false))
+    numFinished = 0
+  }
 }

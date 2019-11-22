@@ -54,6 +54,7 @@ private[spark] object ShutdownHookManager extends Logging {
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
 
   // Add a shutdown hook to delete the temp dirs when the JVM exits
+  logDebug("Adding shutdown hook") // force eager creation of logger
   addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
     logInfo("Shutdown hook called")
     // we need to materialize the paths to delete because deleteRecursively removes items from
@@ -69,7 +70,7 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   // Register the path to be deleted via shutdown hook
-  def registerShutdownDeleteDir(file: File) {
+  def registerShutdownDeleteDir(file: File): Unit = {
     val absolutePath = file.getAbsolutePath()
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths += absolutePath
@@ -77,7 +78,7 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   // Remove the path to be deleted via shutdown hook
-  def removeShutdownDeleteDir(file: File) {
+  def removeShutdownDeleteDir(file: File): Unit = {
     val absolutePath = file.getAbsolutePath()
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths.remove(absolutePath)
@@ -119,7 +120,7 @@ private[spark] object ShutdownHookManager extends Logging {
   def inShutdown(): Boolean = {
     try {
       val hook = new Thread {
-        override def run() {}
+        override def run(): Unit = {}
       }
       // scalastyle:off runtimeaddshutdownhook
       Runtime.getRuntime.addShutdownHook(hook)
@@ -142,7 +143,7 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   /**
-   * Adds a shutdown hook with the given priority. Hooks with lower priority values run
+   * Adds a shutdown hook with the given priority. Hooks with higher priority values run
    * first.
    *
    * @param hook The code to run during shutdown.
@@ -170,9 +171,7 @@ private [util] class SparkShutdownHookManager {
   @volatile private var shuttingDown = false
 
   /**
-   * Install a hook to run at shutdown and run all registered hooks in order. Hadoop 1.x does not
-   * have `ShutdownHookManager`, so in that case we just use the JVM's `Runtime` object and hope for
-   * the best.
+   * Install a hook to run at shutdown and run all registered hooks in order.
    */
   def install(): Unit = {
     val hookTask = new Runnable() {

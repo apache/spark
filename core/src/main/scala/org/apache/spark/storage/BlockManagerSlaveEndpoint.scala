@@ -21,7 +21,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{MapOutputTracker, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEnv}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -34,10 +34,10 @@ class BlockManagerSlaveEndpoint(
     override val rpcEnv: RpcEnv,
     blockManager: BlockManager,
     mapOutputTracker: MapOutputTracker)
-  extends ThreadSafeRpcEndpoint with Logging {
+  extends IsolatedRpcEndpoint with Logging {
 
   private val asyncThreadPool =
-    ThreadUtils.newDaemonCachedThreadPool("block-manager-slave-async-thread-pool")
+    ThreadUtils.newDaemonCachedThreadPool("block-manager-slave-async-thread-pool", 100)
   private implicit val asyncExecutionContext = ExecutionContext.fromExecutorService(asyncThreadPool)
 
   // Operations that involve removing blocks may be slow and should be done asynchronously
@@ -74,20 +74,24 @@ class BlockManagerSlaveEndpoint(
 
     case TriggerThreadDump =>
       context.reply(Utils.getThreadDump())
+
+    case ReplicateBlock(blockId, replicas, maxReplicas) =>
+      context.reply(blockManager.replicateBlock(blockId, replicas.toSet, maxReplicas))
+
   }
 
-  private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T) {
+  private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T): Unit = {
     val future = Future {
       logDebug(actionMessage)
       body
     }
-    future.onSuccess { case response =>
-      logDebug("Done " + actionMessage + ", response is " + response)
+    future.foreach { response =>
+      logDebug(s"Done $actionMessage, response is $response")
       context.reply(response)
-      logDebug("Sent response: " + response + " to " + context.senderAddress)
+      logDebug(s"Sent response: $response to ${context.senderAddress}")
     }
-    future.onFailure { case t: Throwable =>
-      logError("Error in " + actionMessage, t)
+    future.failed.foreach { t =>
+      logError(s"Error in $actionMessage", t)
       context.sendFailure(t)
     }
   }

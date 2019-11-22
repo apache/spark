@@ -62,7 +62,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       assert( graph.edges.count() === rawEdges.size )
       // Vertices not explicitly provided but referenced by edges should be created automatically
       assert( graph.vertices.count() === 100)
-      graph.triplets.collect().map { et =>
+      graph.triplets.collect().foreach { et =>
         assert((et.srcId < 10 && et.srcAttr) || (et.srcId >= 10 && !et.srcAttr))
         assert((et.dstId < 10 && et.dstAttr) || (et.dstId >= 10 && !et.dstAttr))
       }
@@ -164,12 +164,12 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
 
   test("mapVertices changing type with same erased type") {
     withSpark { sc =>
-      val vertices = sc.parallelize(Array[(Long, Option[java.lang.Integer])](
+      val vertices = sc.parallelize(Seq[(Long, Option[java.lang.Integer])](
         (1L, Some(1)),
         (2L, Some(2)),
         (3L, Some(3))
       ))
-      val edges = sc.parallelize(Array(
+      val edges = sc.parallelize(Seq(
         Edge(1L, 2L, 0),
         Edge(2L, 3L, 0),
         Edge(3L, 1L, 0)
@@ -218,8 +218,8 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
 
   test("reverse with join elimination") {
     withSpark { sc =>
-      val vertices: RDD[(VertexId, Int)] = sc.parallelize(Array((1L, 1), (2L, 2)))
-      val edges: RDD[Edge[Int]] = sc.parallelize(Array(Edge(1L, 2L, 0)))
+      val vertices: RDD[(VertexId, Int)] = sc.parallelize(Seq((1L, 1), (2L, 2)))
+      val edges: RDD[Edge[Int]] = sc.parallelize(Seq(Edge(1L, 2L, 0)))
       val graph = Graph(vertices, edges).reverse
       val result = GraphXUtils.mapReduceTriplets[Int, Int, Int](
         graph, et => Iterator((et.dstId, et.srcAttr)), _ + _)
@@ -396,11 +396,11 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val g = g0.partitionBy(PartitionStrategy.EdgePartition2D, 2)
       val cc = g.connectedComponents()
       assert(sc.getPersistentRDDs.nonEmpty)
-      cc.unpersist()
-      g.unpersist()
-      g0.unpersist()
-      vert.unpersist()
-      edges.unpersist()
+      cc.unpersist(blocking = true)
+      g.unpersist(blocking = true)
+      g0.unpersist(blocking = true)
+      vert.unpersist(blocking = true)
+      edges.unpersist(blocking = true)
       assert(sc.getPersistentRDDs.isEmpty)
     }
   }

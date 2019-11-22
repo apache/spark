@@ -19,11 +19,12 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.Join
-import org.apache.spark.sql.execution.joins.BroadcastHashJoin
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
+class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("join - join using") {
@@ -83,70 +84,46 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.join(df2, Seq("int", "str"), "left_semi"),
       Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "semi"),
+      Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "left_anti"),
+      Row(3, "3", 4) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "anti"),
+      Row(3, "3", 4) :: Nil)
   }
 
-  test("join - join using self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
+  test("join - cross join") {
+    val df1 = Seq((1, "1"), (3, "3")).toDF("int", "str")
+    val df2 = Seq((2, "2"), (4, "4")).toDF("int", "str")
 
-    // self join
     checkAnswer(
-      df.join(df, "int"),
-      Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
+      df1.crossJoin(df2),
+      Row(1, "1", 2, "2") :: Row(1, "1", 4, "4") ::
+        Row(3, "3", 2, "2") :: Row(3, "3", 4, "4") :: Nil)
+
+    checkAnswer(
+      df2.crossJoin(df1),
+      Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
+        Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
   }
 
-  test("join - self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
-
-    checkAnswer(
-      df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key")
-        .collect().toSeq)
-  }
-
-  test("join - using aliases after self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-  }
-
-  test("[SPARK-6231] join - self join auto resolve ambiguity") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    checkAnswer(
-      df.join(df, df("key") === df("key")),
-      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
-
-    checkAnswer(
-      df.join(df.filter($"value" === "2"), df("key") === df("key")),
-      Row(2, "2", 2, "2") :: Nil)
-
-    checkAnswer(
-      df.join(df, df("key") === df("key") && df("value") === 1),
-      Row(1, "1", 1, "1") :: Nil)
-
-    val left = df.groupBy("key").agg(count("*"))
-    val right = df.groupBy("key").agg(sum("key"))
-    checkAnswer(
-      left.join(right, left("key") === right("key")),
-      Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
-  }
-
-  test("broadcast join hint") {
+  test("broadcast join hint using broadcast function") {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
 
     // equijoin - should be converted into broadcast join
     val plan1 = df1.join(broadcast(df2), "key").queryExecution.sparkPlan
-    assert(plan1.collect { case p: BroadcastHashJoin => p }.size === 1)
+    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 1)
 
     // no join key -- should not be a broadcast join
-    val plan2 = df1.join(broadcast(df2)).queryExecution.sparkPlan
-    assert(plan2.collect { case p: BroadcastHashJoin => p }.size === 0)
+    val plan2 = df1.crossJoin(broadcast(df2)).queryExecution.sparkPlan
+    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
     // planner should not crash without a join
     broadcast(df1).queryExecution.sparkPlan
@@ -154,9 +131,25 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     // SPARK-12275: no physical plan for BroadcastHint in some condition
     withTempPath { path =>
       df1.write.parquet(path.getCanonicalPath)
-      val pf1 = sqlContext.read.parquet(path.getCanonicalPath)
-      assert(df1.join(broadcast(pf1)).count() === 4)
+      val pf1 = spark.read.parquet(path.getCanonicalPath)
+      assert(df1.crossJoin(broadcast(pf1)).count() === 4)
     }
+  }
+
+  test("broadcast join hint using Dataset.hint") {
+    // make sure a giant join is not broadcastable
+    val plan1 =
+      spark.range(10e10.toLong)
+        .join(spark.range(10e10.toLong), "id")
+        .queryExecution.executedPlan
+    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size == 0)
+
+    // now with a hint it should be broadcasted
+    val plan2 =
+      spark.range(10e10.toLong)
+        .join(spark.range(10e10.toLong).hint("broadcast"), "id")
+        .queryExecution.executedPlan
+    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size == 1)
   }
 
   test("join - outer join conversion") {
@@ -164,17 +157,17 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
 
     // outer -> left
-    val outerJoin2Left = df.join(df2, $"a.int" === $"b.int", "outer").where($"a.int" === 3)
+    val outerJoin2Left = df.join(df2, $"a.int" === $"b.int", "outer").where($"a.int" >= 3)
     assert(outerJoin2Left.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, LeftOuter, _) => j }.size === 1)
+      case j @ Join(_, _, LeftOuter, _, _) => j }.size === 1)
     checkAnswer(
       outerJoin2Left,
       Row(3, 4, "3", null, null, null) :: Nil)
 
     // outer -> right
-    val outerJoin2Right = df.join(df2, $"a.int" === $"b.int", "outer").where($"b.int" === 5)
+    val outerJoin2Right = df.join(df2, $"a.int" === $"b.int", "outer").where($"b.int" >= 3)
     assert(outerJoin2Right.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, RightOuter, _) => j }.size === 1)
+      case j @ Join(_, _, RightOuter, _, _) => j }.size === 1)
     checkAnswer(
       outerJoin2Right,
       Row(null, null, null, 5, 6, "5") :: Nil)
@@ -183,25 +176,84 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     val outerJoin2Inner = df.join(df2, $"a.int" === $"b.int", "outer").
       where($"a.int" === 1 && $"b.int2" === 3)
     assert(outerJoin2Inner.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, Inner, _) => j }.size === 1)
+      case j @ Join(_, _, Inner, _, _) => j }.size === 1)
     checkAnswer(
       outerJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)
 
     // right -> inner
-    val rightJoin2Inner = df.join(df2, $"a.int" === $"b.int", "right").where($"a.int" === 1)
+    val rightJoin2Inner = df.join(df2, $"a.int" === $"b.int", "right").where($"a.int" > 0)
     assert(rightJoin2Inner.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, Inner, _) => j }.size === 1)
+      case j @ Join(_, _, Inner, _, _) => j }.size === 1)
     checkAnswer(
       rightJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)
 
     // left -> inner
-    val leftJoin2Inner = df.join(df2, $"a.int" === $"b.int", "left").where($"b.int2" === 3)
+    val leftJoin2Inner = df.join(df2, $"a.int" === $"b.int", "left").where($"b.int2" > 0)
     assert(leftJoin2Inner.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, _, Inner, _) => j }.size === 1)
+      case j @ Join(_, _, Inner, _, _) => j }.size === 1)
     checkAnswer(
       leftJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)
+  }
+
+  test("process outer join results using the non-nullable columns in the join input") {
+    // Filter data using a non-nullable column from a right table
+    val df1 = Seq((0, 0), (1, 0), (2, 0), (3, 0), (4, 0)).toDF("id", "count")
+    val df2 = Seq(Tuple1(0), Tuple1(1)).toDF("id").groupBy("id").count
+    checkAnswer(
+      df1.join(df2, df1("id") === df2("id"), "left_outer").filter(df2("count").isNull),
+      Row(2, 0, null, null) ::
+      Row(3, 0, null, null) ::
+      Row(4, 0, null, null) :: Nil
+    )
+
+    // Coalesce data using non-nullable columns in input tables
+    val df3 = Seq((1, 1)).toDF("a", "b")
+    val df4 = Seq((2, 2)).toDF("a", "b")
+    checkAnswer(
+      df3.join(df4, df3("a") === df4("a"), "outer")
+        .select(coalesce(df3("a"), df3("b")), coalesce(df4("a"), df4("b"))),
+      Row(1, null) :: Row(null, 2) :: Nil
+    )
+  }
+
+  test("SPARK-16991: Full outer join followed by inner join produces wrong results") {
+    val a = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val b = Seq((2, 5), (3, 4)).toDF("a", "c")
+    val c = Seq((3, 1)).toDF("a", "d")
+    val ab = a.join(b, Seq("a"), "fullouter")
+    checkAnswer(ab.join(c, "a"), Row(3, null, 4, 1) :: Nil)
+  }
+
+  test("SPARK-17685: WholeStageCodegenExec throws IndexOutOfBoundsException") {
+    val df = Seq((1, 1, "1"), (2, 2, "3")).toDF("int", "int2", "str")
+    val df2 = Seq((1, 1, "1"), (2, 3, "5")).toDF("int", "int2", "str")
+    val limit = 1310721
+    val innerJoin = df.limit(limit).join(df2.limit(limit), Seq("int", "int2"), "inner")
+      .agg(count($"int"))
+    checkAnswer(innerJoin, Row(1) :: Nil)
+  }
+
+  test("SPARK-23087: don't throw Analysis Exception in CheckCartesianProduct when join condition " +
+    "is false or null") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val df = spark.range(10)
+      val dfNull = spark.range(10).select(lit(null).as("b"))
+      df.join(dfNull, $"id" === $"b", "left").queryExecution.optimizedPlan
+
+      val dfOne = df.select(lit(1).as("a"))
+      val dfTwo = spark.range(10).select(lit(2).as("b"))
+      dfOne.join(dfTwo, $"a" === $"b", "left").queryExecution.optimizedPlan
+    }
+  }
+
+  test("SPARK-24385: Resolve ambiguity in self-joins with EqualNullSafe") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val df = spark.range(2)
+      // this throws an exception before the fix
+      df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
+    }
   }
 }

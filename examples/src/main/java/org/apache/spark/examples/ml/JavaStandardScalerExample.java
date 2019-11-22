@@ -17,9 +17,7 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import org.apache.spark.ml.feature.StandardScaler;
@@ -30,12 +28,14 @@ import org.apache.spark.sql.Row;
 
 public class JavaStandardScalerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaStandardScalerExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaStandardScalerExample")
+      .getOrCreate();
 
     // $example on$
-    Dataset<Row> dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> dataFrame =
+      spark.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     StandardScaler scaler = new StandardScaler()
       .setInputCol("features")
@@ -50,6 +50,6 @@ public class JavaStandardScalerExample {
     Dataset<Row> scaledData = scalerModel.transform(dataFrame);
     scaledData.show();
     // $example off$
-    jsc.stop();
+    spark.stop();
   }
 }

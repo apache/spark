@@ -71,7 +71,7 @@ object NaiveBayesSuite {
           counts.toArray.sortBy(_._1).map(_._2)
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: $modelType.")
+          throw new IllegalArgumentException(s"Invalid modelType: $modelType.")
       }
 
       LabeledPoint(y, Vectors.dense(xi))
@@ -91,7 +91,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import NaiveBayes.{Multinomial, Bernoulli}
 
-  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]): Unit = {
     val numOfPredictions = predictions.zip(input).count {
       case (prediction, expected) =>
         prediction != expected.label
@@ -182,7 +182,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val piVector = new BDV(model.pi)
     // model.theta is row-major; treat it as col-major representation of transpose, and transpose:
     val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
-    val logClassProbs: BV[Double] = piVector + (thetaMatrix * testData.toBreeze)
+    val logClassProbs: BV[Double] = piVector + (thetaMatrix * testData.asBreeze)
     val classProbs = logClassProbs.toArray.map(math.exp)
     val classProbsSum = classProbs.sum
     classProbs.map(_ / classProbsSum)
@@ -233,8 +233,8 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val piVector = new BDV(model.pi)
     val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
     val negThetaMatrix = new BDM(model.theta(0).length, model.theta.length,
-      model.theta.flatten.map(v => math.log(1.0 - math.exp(v)))).t
-    val testBreeze = testData.toBreeze
+      model.theta.flatten.map(v => math.log1p(-math.exp(v)))).t
+    val testBreeze = testData.asBreeze
     val negTestBreeze = new BDV(Array.fill(testBreeze.size)(1.0)) - testBreeze
     val piTheta: BV[Double] = piVector + (thetaMatrix * testBreeze)
     val logClassProbs: BV[Double] = piTheta + (negThetaMatrix * negTestBreeze)
@@ -307,7 +307,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
-    Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).map {
+    Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).foreach {
       model =>
         // Save model, load it back, and compare.
         try {

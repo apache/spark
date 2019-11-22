@@ -24,8 +24,6 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression.impl.GLMRegressionModel
 import org.apache.spark.mllib.util.{Loader, Saveable}
-import org.apache.spark.rdd.RDD
-
 
 /**
  * Regression model trained using RidgeRegression.
@@ -45,15 +43,13 @@ class RidgeRegressionModel @Since("1.1.0") (
       dataMatrix: Vector,
       weightMatrix: Vector,
       intercept: Double): Double = {
-    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
+    weightMatrix.asBreeze.dot(dataMatrix.asBreeze) + intercept
   }
 
   @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     GLMRegressionModel.SaveLoadV1_0.save(sc, path, this.getClass.getName, weights, intercept)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 @Since("1.3.0")
@@ -86,7 +82,7 @@ object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
  * See also the documentation for the precise formulation.
  */
 @Since("0.8.0")
-class RidgeRegressionWithSGD private (
+class RidgeRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
@@ -102,109 +98,7 @@ class RidgeRegressionWithSGD private (
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
-  /**
-   * Construct a RidgeRegression object with default parameters: {stepSize: 1.0, numIterations: 100,
-   * regParam: 0.01, miniBatchFraction: 1.0}.
-   */
-  @Since("0.8.0")
-  def this() = this(1.0, 100, 0.01, 1.0)
-
   override protected def createModel(weights: Vector, intercept: Double) = {
     new RidgeRegressionModel(weights, intercept)
-  }
-}
-
-/**
- * Top-level methods for calling RidgeRegression.
- *
- */
-@Since("0.8.0")
-object RidgeRegressionWithSGD {
-
-  /**
-   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient. The weights used
-   * in gradient descent are initialized using the initial weights provided.
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param regParam Regularization parameter.
-   * @param miniBatchFraction Fraction of data to be used per iteration.
-   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
-   *        the number of features in the data.
-   *
-   */
-  @Since("1.0.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double,
-      regParam: Double,
-      miniBatchFraction: Double,
-      initialWeights: Vector): RidgeRegressionModel = {
-    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(
-      input, initialWeights)
-  }
-
-  /**
-   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient.
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param regParam Regularization parameter.
-   * @param miniBatchFraction Fraction of data to be used per iteration.
-   *
-   */
-  @Since("0.8.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double,
-      regParam: Double,
-      miniBatchFraction: Double): RidgeRegressionModel = {
-    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
-  }
-
-  /**
-   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. We use the entire data set to
-   * compute the true gradient in each iteration.
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param stepSize Step size to be used for each iteration of Gradient Descent.
-   * @param regParam Regularization parameter.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @return a RidgeRegressionModel which has the weights and offset from training.
-   *
-   */
-  @Since("0.8.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double,
-      regParam: Double): RidgeRegressionModel = {
-    train(input, numIterations, stepSize, regParam, 1.0)
-  }
-
-  /**
-   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
-   * compute the true gradient in each iteration.
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @return a RidgeRegressionModel which has the weights and offset from training.
-   *
-   */
-  @Since("0.8.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int): RidgeRegressionModel = {
-    train(input, numIterations, 1.0, 0.01, 1.0)
   }
 }

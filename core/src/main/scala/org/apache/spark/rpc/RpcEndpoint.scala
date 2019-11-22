@@ -35,7 +35,7 @@ private[spark] trait RpcEnvFactory {
  *
  * The life-cycle of an endpoint is:
  *
- * constructor -> onStart -> receive* -> onStop
+ * {@code constructor -> onStart -> receive* -> onStop}
  *
  * Note: `receive` can be called concurrently. If you want `receive` to be thread-safe, please use
  * [[ThreadSafeRpcEndpoint]]
@@ -63,16 +63,16 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.send]] or [[RpcCallContext.reply)]]. If receiving a
-   * unmatched message, [[SparkException]] will be thrown and sent to `onError`.
+   * Process messages from `RpcEndpointRef.send` or `RpcCallContext.reply`. If receiving a
+   * unmatched message, `SparkException` will be thrown and sent to `onError`.
    */
   def receive: PartialFunction[Any, Unit] = {
     case _ => throw new SparkException(self + " does not implement 'receive'")
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.ask]]. If receiving a unmatched message,
-   * [[SparkException]] will be thrown and sent to `onError`.
+   * Process messages from `RpcEndpointRef.ask`. If receiving a unmatched message,
+   * `SparkException` will be thrown and sent to `onError`.
    */
   def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case _ => context.sendFailure(new SparkException(self + " won't reply anything"))
@@ -146,3 +146,19 @@ private[spark] trait RpcEndpoint {
  * [[ThreadSafeRpcEndpoint]] for different messages.
  */
 private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
+
+/**
+ * An endpoint that uses a dedicated thread pool for delivering messages.
+ */
+private[spark] trait IsolatedRpcEndpoint extends RpcEndpoint {
+
+  /**
+   * How many threads to use for delivering messages. By default, use a single thread.
+   *
+   * Note that requesting more than one thread means that the endpoint should be able to handle
+   * messages arriving from many threads at once, and all the things that entails (including
+   * messages being delivered to the endpoint out of order).
+   */
+  def threadCount(): Int = 1
+
+}

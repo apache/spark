@@ -18,23 +18,23 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
+import org.apache.spark.ml.classification.LogisticRegression
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.max
 
 object LogisticRegressionSummaryExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("LogisticRegressionSummaryExample")
-    val sc = new SparkContext(conf)
-    val sqlCtx = new SQLContext(sc)
-    import sqlCtx.implicits._
+    val spark = SparkSession
+      .builder
+      .appName("LogisticRegressionSummaryExample")
+      .getOrCreate()
+    import spark.implicits._
 
     // Load training data
-    val training = sqlCtx.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val training = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     val lr = new LogisticRegression()
       .setMaxIter(10)
@@ -47,31 +47,27 @@ object LogisticRegressionSummaryExample {
     // $example on$
     // Extract the summary from the returned LogisticRegressionModel instance trained in the earlier
     // example
-    val trainingSummary = lrModel.summary
+    val trainingSummary = lrModel.binarySummary
 
     // Obtain the objective per iteration.
     val objectiveHistory = trainingSummary.objectiveHistory
+    println("objectiveHistory:")
     objectiveHistory.foreach(loss => println(loss))
 
-    // Obtain the metrics useful to judge performance on test data.
-    // We cast the summary to a BinaryLogisticRegressionSummary since the problem is a
-    // binary classification problem.
-    val binarySummary = trainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
-
     // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
-    val roc = binarySummary.roc
+    val roc = trainingSummary.roc
     roc.show()
-    println(binarySummary.areaUnderROC)
+    println(s"areaUnderROC: ${trainingSummary.areaUnderROC}")
 
     // Set the model threshold to maximize F-Measure
-    val fMeasure = binarySummary.fMeasureByThreshold
+    val fMeasure = trainingSummary.fMeasureByThreshold
     val maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0)
     val bestThreshold = fMeasure.where($"F-Measure" === maxFMeasure)
       .select("threshold").head().getDouble(0)
     lrModel.setThreshold(bestThreshold)
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

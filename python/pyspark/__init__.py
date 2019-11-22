@@ -34,21 +34,33 @@ Public classes:
       Access files shipped with jobs.
   - :class:`StorageLevel`:
       Finer-grained cache persistence levels.
-
+  - :class:`TaskContext`:
+      Information about the current running task, available on the workers and experimental.
+  - :class:`RDDBarrier`:
+      Wraps an RDD under a barrier stage for barrier execution.
+  - :class:`BarrierTaskContext`:
+      A :class:`TaskContext` that provides extra info and tooling for barrier execution.
+  - :class:`BarrierTaskInfo`:
+      Information about a barrier task.
 """
 
+from functools import wraps
 import types
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, RDDBarrier
 from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
+from pyspark.resourceinformation import ResourceInformation
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.status import *
+from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
+from pyspark.version import __version__
+from pyspark._globals import _NoValue
 
 
 def since(version):
@@ -84,11 +96,28 @@ def copy_func(f, name=None, sinceversion=None, doc=None):
     return fn
 
 
+def keyword_only(func):
+    """
+    A decorator that forces keyword arguments in the wrapped method
+    and saves actual input keyword arguments in `_input_kwargs`.
+
+    .. note:: Should only be used to wrap a method where first arg is `self`
+    """
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if len(args) > 0:
+            raise TypeError("Method %s forces keyword arguments." % func.__name__)
+        self._input_kwargs = kwargs
+        return func(self, **kwargs)
+    return wrapper
+
+
 # for back compatibility
-from pyspark.sql import SQLContext, HiveContext, Row
+from pyspark.sql import SQLContext, Row
 
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
-    "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler",
+    "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
+    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "ResourceInformation",
 ]

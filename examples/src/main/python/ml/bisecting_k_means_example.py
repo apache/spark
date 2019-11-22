@@ -15,43 +15,47 @@
 # limitations under the License.
 #
 
+"""
+An example demonstrating bisecting k-means clustering.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/bisecting_k_means_example.py
+"""
 from __future__ import print_function
 
-from pyspark import SparkContext
 # $example on$
-from pyspark.ml.clustering import BisectingKMeans, BisectingKMeansModel
-from pyspark.mllib.linalg import VectorUDT, _convert_to_vector, Vectors
-from pyspark.mllib.linalg import Vectors
-from pyspark.sql.types import Row
+from pyspark.ml.clustering import BisectingKMeans
+from pyspark.ml.evaluation import ClusteringEvaluator
 # $example off$
-from pyspark.sql import SQLContext
-
-"""
-A simple example demonstrating a bisecting k-means clustering.
-"""
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-
-    sc = SparkContext(appName="PythonBisectingKMeansExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("BisectingKMeansExample")\
+        .getOrCreate()
 
     # $example on$
-    data = sc.textFile("data/mllib/kmeans_data.txt")
-    parsed = data.map(lambda l: Row(features=Vectors.dense([float(x) for x in l.split(' ')])))
-    training = sqlContext.createDataFrame(parsed)
+    # Loads data.
+    dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    kmeans = BisectingKMeans().setK(2).setSeed(1).setFeaturesCol("features")
+    # Trains a bisecting k-means model.
+    bkm = BisectingKMeans().setK(2).setSeed(1)
+    model = bkm.fit(dataset)
 
-    model = kmeans.fit(training)
+    # Make predictions
+    predictions = model.transform(dataset)
 
-    # Evaluate clustering
-    cost = model.computeCost(training)
-    print("Bisecting K-means Cost = " + str(cost))
+    # Evaluate clustering by computing Silhouette score
+    evaluator = ClusteringEvaluator()
 
-    centers = model.clusterCenters()
+    silhouette = evaluator.evaluate(predictions)
+    print("Silhouette with squared euclidean distance = " + str(silhouette))
+
+    # Shows the result.
     print("Cluster Centers: ")
+    centers = model.clusterCenters()
     for center in centers:
         print(center)
     # $example off$
 
-    sc.stop()
+    spark.stop()

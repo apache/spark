@@ -21,7 +21,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 
 /**
- * Provides a method to run tests against a {@link SparkContext} variable that is correctly stopped
+ * Provides a method to run tests against a `SparkContext` variable that is correctly stopped
  * after each test.
 */
 trait LocalSparkContext {

@@ -188,6 +188,13 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext {
     testALS(100, 200, 2, 15, 0.7, 0.4, false, false, false, -1, -1, false)
   }
 
+  test("SPARK-18268: ALS with empty RDD should fail with better message") {
+    val ratings = sc.parallelize(Array.empty[Rating])
+    intercept[IllegalArgumentException] {
+      new ALS().run(ratings)
+    }
+  }
+
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.
    *
@@ -217,7 +224,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext {
       negativeWeights: Boolean = false,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
-      negativeFactors: Boolean = true) {
+      negativeFactors: Boolean = true): Unit = {
     // scalastyle:on
 
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,

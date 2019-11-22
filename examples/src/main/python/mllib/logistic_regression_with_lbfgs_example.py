@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     # Evaluating the model on training data
     labelsAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
-    trainErr = labelsAndPreds.filter(lambda (v, p): v != p).count() / float(parsedData.count())
+    trainErr = labelsAndPreds.filter(lambda lp: lp[0] != lp[1]).count() / float(parsedData.count())
     print("Training Error = " + str(trainErr))
 
     # Save and load model

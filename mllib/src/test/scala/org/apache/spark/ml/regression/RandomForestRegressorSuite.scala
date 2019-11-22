@@ -18,35 +18,38 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Test suite for [[RandomForestRegressor]].
  */
-class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
+class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
 
   import RandomForestRegressorSuite.compareAPIs
+  import testImplicits._
 
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     orderedLabeledPoints50_1000 =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000))
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+        .map(_.asML))
   }
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
-  def regressionTestWithContinuousFeatures(rf: RandomForestRegressor) {
+  def regressionTestWithContinuousFeatures(rf: RandomForestRegressor): Unit = {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val newRF = rf
       .setImpurity("variance")
@@ -71,6 +74,20 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     regressionTestWithContinuousFeatures(rf)
   }
 
+  test("prediction on single instance") {
+    val rf = new RandomForestRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(10)
+      .setNumTrees(1)
+      .setFeatureSubsetStrategy("auto")
+      .setSeed(123)
+
+    val df = orderedLabeledPoints50_1000.toDF()
+    val model = rf.fit(df)
+    testPredictionModelSinglePrediction(model, df)
+  }
+
   test("Feature importance with toy data") {
     val rf = new RandomForestRegressor()
       .setImpurity("variance")
@@ -87,6 +104,8 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
 
     val model = rf.fit(df)
 
+    MLTestingUtils.checkCopyAndUids(rf, model)
+
     val importances = model.featureImportances
     val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
@@ -94,30 +113,73 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(importances.toArray.forall(_ >= 0.0))
   }
 
+  test("model support predict leaf index") {
+    val model0 = new DecisionTreeRegressionModel("dtc", TreeTests.root0, 3)
+    val model1 = new DecisionTreeRegressionModel("dtc", TreeTests.root1, 3)
+    val model = new RandomForestRegressionModel("rfr", Array(model0, model1), 3)
+    model.setLeafCol("predictedLeafId")
+      .setPredictionCol("")
+
+    val data = TreeTests.getTwoTreesLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
+        assert(leafId === predictedLeafId)
+    }
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val rf = new RandomForestRegressor().setMaxDepth(1)
+    MLTestingUtils.checkNumericTypes[RandomForestRegressionModel, RandomForestRegressor](
+      rf, spark, isClassification = false) { (expected, actual) =>
+        TreeTests.checkEqual(expected, actual)
+      }
+  }
+
+  test("tree params") {
+    val rf = new RandomForestRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(10)
+      .setNumTrees(3)
+      .setSeed(123)
+
+    val df = orderedLabeledPoints50_1000.toDF()
+    val model = rf.fit(df)
+
+    model.trees.foreach (i => {
+      assert(i.getMaxDepth === model.getMaxDepth)
+      assert(i.getSeed === model.getSeed)
+      assert(i.getImpurity === model.getImpurity)
+      assert(i.getMaxBins === model.getMaxBins)
+    })
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented  SPARK-6725
-  /*
-  test("model save/load") {
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-
-    val trees = Range(0, 3).map(_ => OldDecisionTreeSuite.createModel(OldAlgo.Regression)).toArray
-    val oldModel = new OldRandomForestModel(OldAlgo.Regression, trees)
-    val newModel = RandomForestRegressionModel.fromOld(oldModel)
-
-    // Save model, load it back, and compare.
-    try {
-      newModel.save(sc, path)
-      val sameNewModel = RandomForestRegressionModel.load(sc, path)
-      TreeTests.checkEqual(newModel, sameNewModel)
-    } finally {
-      Utils.deleteRecursively(tempDir)
+  test("read/write") {
+    def checkModelData(
+        model: RandomForestRegressionModel,
+        model2: RandomForestRegressionModel): Unit = {
+      TreeTests.checkEqual(model, model2)
+      assert(model.numFeatures === model2.numFeatures)
     }
+
+    val rf = new RandomForestRegressor().setNumTrees(2)
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+
+    val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "variance")
+
+    val continuousData: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
+    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
+      allParamSettings, checkModelData)
   }
-  */
 }
 
 private object RandomForestRegressorSuite extends SparkFunSuite {
@@ -133,8 +195,8 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
     val numFeatures = data.first().features.size
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, rf.getOldImpurity)
-    val oldModel = OldRandomForest.trainRegressor(
-      data, oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
+    val oldModel = OldRandomForest.trainRegressor(data.map(OldLabeledPoint.fromML), oldStrategy,
+      rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.

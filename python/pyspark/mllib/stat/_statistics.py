@@ -98,10 +98,10 @@ class Statistics(object):
         """
         Compute the correlation (matrix) for the input RDD(s) using the
         specified method.
-        Methods currently supported: I{pearson (default), spearman}.
+        Methods currently supported: `pearson (default), spearman`.
 
         If a single RDD of Vectors is passed in, a correlation matrix
-        comparing the columns in the input RDD is returned. Use C{method=}
+        comparing the columns in the input RDD is returned. Use `method`
         to specify the method to be used for single RDD inout.
         If two RDDs of floats are passed in, a single float is returned.
 
@@ -160,13 +160,10 @@ class Statistics(object):
     @ignore_unicode_prefix
     def chiSqTest(observed, expected=None):
         """
-        .. note:: Experimental
-
         If `observed` is Vector, conduct Pearson's chi-squared goodness
         of fit test of the observed data against the expected distribution,
         or againt the uniform distribution (by default), with each category
         having an expected frequency of `1 / len(observed)`.
-        (Note: `observed` cannot contain negative values)
 
         If `observed` is matrix, conduct Pearson's independence test on the
         input contingency matrix, which cannot contain negative entries or
@@ -177,6 +174,8 @@ class Statistics(object):
         For each feature, the (feature, label) pairs are converted into a
         contingency matrix for which the chi-squared statistic is computed.
         All label and feature values must be categorical.
+
+        .. note:: `observed` cannot contain negative values
 
         :param observed: it could be a vector containing the observed categorical
                          counts/relative frequencies, or the contingency matrix
@@ -246,8 +245,6 @@ class Statistics(object):
     @ignore_unicode_prefix
     def kolmogorovSmirnovTest(data, distName="norm", *params):
         """
-        .. note:: Experimental
-
         Performs the Kolmogorov-Smirnov (KS) test for data sampled from
         a continuous distribution. It tests the null hypothesis that
         the data is generated from a particular distribution.
@@ -262,7 +259,7 @@ class Statistics(object):
 
         The KS statistic gives us the maximum distance between the
         ECDF and the CDF. Intuitively if this statistic is large, the
-        probabilty that the null hypothesis is true becomes small.
+        probability that the null hypothesis is true becomes small.
         For specific details of the implementation, please have a look
         at the Scala documentation.
 
@@ -306,13 +303,23 @@ class Statistics(object):
 
 def _test():
     import doctest
-    from pyspark import SparkContext
+    import numpy
+    from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.stat.statistics tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

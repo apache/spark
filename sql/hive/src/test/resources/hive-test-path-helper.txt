@@ -1,0 +1,1 @@
+This file is here so we can match on it and find the path to the current folder.

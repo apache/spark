@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.catalyst.expressions.MutableRow
+import org.apache.spark.sql.catalyst.InternalRow
 
 private[columnar] trait NullableColumnAccessor extends ColumnAccessor {
   private var nullsBuffer: ByteBuffer = _
@@ -35,11 +35,11 @@ private[columnar] trait NullableColumnAccessor extends ColumnAccessor {
     nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
     pos = 0
 
-    underlyingBuffer.position(underlyingBuffer.position + 4 + nullCount * 4)
+    underlyingBuffer.position(underlyingBuffer.position() + 4 + nullCount * 4)
     super.initialize()
   }
 
-  abstract override def extractTo(row: MutableRow, ordinal: Int): Unit = {
+  abstract override def extractTo(row: InternalRow, ordinal: Int): Unit = {
     if (pos == nextNullIndex) {
       seenNulls += 1
 

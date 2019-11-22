@@ -20,13 +20,13 @@ package org.apache.spark.examples
 
 import org.apache.commons.math3.linear._
 
-import org.apache.spark._
+import org.apache.spark.sql.SparkSession
 
 /**
  * Alternating least squares matrix factorization.
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
- * please refer to org.apache.spark.mllib.recommendation.ALS
+ * please refer to org.apache.spark.ml.recommendation.ALS.
  */
 object SparkALS {
 
@@ -78,15 +78,15 @@ object SparkALS {
     new CholeskyDecomposition(XtX).getSolver.solve(Xty)
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of ALS and is given as an example!
-        |Please use the ALS method found in org.apache.spark.mllib.recommendation
+        |Please use org.apache.spark.ml.recommendation.ALS
         |for more conventional use.
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     var slices = 0
 
@@ -100,7 +100,7 @@ object SparkALS {
         ITERATIONS = iters.getOrElse("5").toInt
         slices = slices_.getOrElse("2").toInt
       case _ =>
-        System.err.println("Usage: SparkALS [M] [U] [F] [iters] [slices]")
+        System.err.println("Usage: SparkALS [M] [U] [F] [iters] [partitions]")
         System.exit(1)
     }
 
@@ -108,8 +108,12 @@ object SparkALS {
 
     println(s"Running with M=$M, U=$U, F=$F, iters=$ITERATIONS")
 
-    val sparkConf = new SparkConf().setAppName("SparkALS")
-    val sc = new SparkContext(sparkConf)
+    val spark = SparkSession
+      .builder
+      .appName("SparkALS")
+      .getOrCreate()
+
+    val sc = spark.sparkContext
 
     val R = generateR()
 
@@ -131,11 +135,9 @@ object SparkALS {
                 .map(i => update(i, usb.value(i), msb.value, Rc.value.transpose()))
                 .collect()
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
-      println("RMSE = " + rmse(R, ms, us))
-      println()
+      println(s"RMSE = ${rmse(R, ms, us)}")
     }
-
-    sc.stop()
+    spark.stop()
   }
 
   private def randomVector(n: Int): RealVector =

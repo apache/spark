@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.util.Locale
+
 import org.apache.spark.sql.types._
 
 
 private object MsSqlServerDialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -30,12 +33,22 @@ private object MsSqlServerDialect extends JdbcDialect {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
       Option(StringType)
     } else {
-      None
+      sqlType match {
+        case java.sql.Types.SMALLINT => Some(ShortType)
+        case java.sql.Types.REAL => Some(FloatType)
+        case _ => None
+      }
     }
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case StringType => Some(JdbcType("NVARCHAR(MAX)", java.sql.Types.NVARCHAR))
+    case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
+    case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
+    case ShortType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case _ => None
   }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 }

@@ -24,7 +24,7 @@ import org.apache.commons.math3.linear._
  * Alternating least squares matrix factorization.
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
- * please refer to org.apache.spark.mllib.recommendation.ALS
+ * please refer to org.apache.spark.ml.recommendation.ALS.
  */
 object LocalALS {
 
@@ -93,27 +93,25 @@ object LocalALS {
     new CholeskyDecomposition(XtX).getSolver.solve(Xty)
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of ALS and is given as an example!
-        |Please use the ALS method found in org.apache.spark.mllib.recommendation
+        |Please use org.apache.spark.ml.recommendation.ALS
         |for more conventional use.
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     args match {
-      case Array(m, u, f, iters) => {
+      case Array(m, u, f, iters) =>
         M = m.toInt
         U = u.toInt
         F = f.toInt
         ITERATIONS = iters.toInt
-      }
-      case _ => {
+      case _ =>
         System.err.println("Usage: LocalALS <M> <U> <F> <iters>")
         System.exit(1)
-      }
     }
 
     showWarning()
@@ -131,8 +129,7 @@ object LocalALS {
       println(s"Iteration $iter:")
       ms = (0 until M).map(i => updateMovie(i, ms(i), us, R)).toArray
       us = (0 until U).map(j => updateUser(j, us(j), ms, R)).toArray
-      println("RMSE = " + rmse(R, ms, us))
-      println()
+      println(s"RMSE = ${rmse(R, ms, us)}")
     }
   }
 

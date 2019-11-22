@@ -17,34 +17,38 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
- * :: Experimental ::
  * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
  *
  * @see [[RegexTokenizer]]
  */
-@Experimental
-class Tokenizer(override val uid: String)
+@Since("1.2.0")
+class Tokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[String, Seq[String], Tokenizer] with DefaultParamsWritable {
 
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("tok"))
 
   override protected def createTransformFunc: String => Seq[String] = {
+    // scalastyle:off caselocale
     _.toLowerCase.split("\\s")
+    // scalastyle:on caselocale
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
-    require(inputType == StringType, s"Input type must be string type but got $inputType.")
+    require(inputType == StringType,
+      s"Input type must be ${StringType.catalogString} type but got ${inputType.catalogString}.")
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
 }
 
@@ -56,30 +60,33 @@ object Tokenizer extends DefaultParamsReadable[Tokenizer] {
 }
 
 /**
- * :: Experimental ::
  * A regex based tokenizer that extracts tokens either by using the provided regex pattern to split
  * the text (default) or repeatedly matching the regex (if `gaps` is false).
  * Optional parameters also allow filtering tokens using a minimal length.
  * It returns an array of strings that can be empty.
  */
-@Experimental
-class RegexTokenizer(override val uid: String)
+@Since("1.4.0")
+class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[String, Seq[String], RegexTokenizer] with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("regexTok"))
 
   /**
-   * Minimum token length, >= 0.
+   * Minimum token length, greater than or equal to 0.
    * Default: 1, to avoid returning empty strings
    * @group param
    */
+  @Since("1.4.0")
   val minTokenLength: IntParam = new IntParam(this, "minTokenLength", "minimum token length (>= 0)",
     ParamValidators.gtEq(0))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMinTokenLength(value: Int): this.type = set(minTokenLength, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getMinTokenLength: Int = $(minTokenLength)
 
   /**
@@ -87,12 +94,15 @@ class RegexTokenizer(override val uid: String)
    * Default: true
    * @group param
    */
+  @Since("1.4.0")
   val gaps: BooleanParam = new BooleanParam(this, "gaps", "Set regex to match gaps or tokens")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setGaps(value: Boolean): this.type = set(gaps, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getGaps: Boolean = $(gaps)
 
   /**
@@ -100,12 +110,15 @@ class RegexTokenizer(override val uid: String)
    * Default: `"\\s+"`
    * @group param
    */
+  @Since("1.4.0")
   val pattern: Param[String] = new Param(this, "pattern", "regex pattern used for tokenizing")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setPattern(value: String): this.type = set(pattern, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getPattern: String = $(pattern)
 
   /**
@@ -113,20 +126,25 @@ class RegexTokenizer(override val uid: String)
    * Default: true
    * @group param
    */
+  @Since("1.6.0")
   final val toLowercase: BooleanParam = new BooleanParam(this, "toLowercase",
     "whether to convert all characters to lowercase before tokenizing.")
 
   /** @group setParam */
+  @Since("1.6.0")
   def setToLowercase(value: Boolean): this.type = set(toLowercase, value)
 
   /** @group getParam */
+  @Since("1.6.0")
   def getToLowercase: Boolean = $(toLowercase)
 
   setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+", toLowercase -> true)
 
   override protected def createTransformFunc: String => Seq[String] = { originStr =>
     val re = $(pattern).r
+    // scalastyle:off caselocale
     val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
+    // scalastyle:on caselocale
     val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
     val minLength = $(minTokenLength)
     tokens.filter(_.length >= minLength)
@@ -138,6 +156,7 @@ class RegexTokenizer(override val uid: String)
 
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
 }
 

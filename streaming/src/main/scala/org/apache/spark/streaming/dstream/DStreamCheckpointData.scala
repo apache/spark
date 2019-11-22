@@ -29,7 +29,7 @@ import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
 
 private[streaming]
-class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
+class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
   extends Serializable with Logging {
   protected val data = new HashMap[Time, AnyRef]()
 
@@ -39,15 +39,14 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   // in that batch's checkpoint data
   @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time]
 
-  @transient private var fileSystem: FileSystem = null
   protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]]
 
   /**
    * Updates the checkpoint data of the DStream. This gets called every time
    * the graph checkpoint is initiated. Default implementation records the
-   * checkpoint files to which the generate RDDs of the DStream has been saved.
+   * checkpoint files at which the generated RDDs of the DStream have been saved.
    */
-  def update(time: Time) {
+  def update(time: Time): Unit = {
 
     // Get the checkpointed RDDs from the generated RDDs
     val checkpointFiles = dstream.generatedRDDs.filter(_._2.getCheckpointFile.isDefined)
@@ -70,7 +69,7 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
    * Cleanup old checkpoint data. This gets called after a checkpoint of `time` has been
    * written to the checkpoint directory.
    */
-  def cleanup(time: Time) {
+  def cleanup(time: Time): Unit = {
     // Get the time of the oldest checkpointed RDD that was written as part of the
     // checkpoint of `time`
     timeToOldestCheckpointFileTime.remove(time) match {
@@ -80,6 +79,7 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
         // even after master fails, as the checkpoint data of `time` does not refer to those files
         val filesToDelete = timeToCheckpointFile.filter(_._1 < lastCheckpointFileTime)
         logDebug("Files to delete:\n" + filesToDelete.mkString(","))
+        var fileSystem: FileSystem = null
         filesToDelete.foreach {
           case (time, file) =>
             try {
@@ -87,9 +87,12 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
               if (fileSystem == null) {
                 fileSystem = path.getFileSystem(dstream.ssc.sparkContext.hadoopConfiguration)
               }
-              fileSystem.delete(path, true)
+              if (fileSystem.delete(path, true)) {
+                logInfo("Deleted checkpoint file '" + file + "' for time " + time)
+              } else {
+                logWarning(s"Error deleting old checkpoint file '$file' for time $time")
+              }
               timeToCheckpointFile -= time
-              logInfo("Deleted checkpoint file '" + file + "' for time " + time)
             } catch {
               case e: Exception =>
                 logWarning("Error deleting old checkpoint file '" + file + "' for time " + time, e)
@@ -103,16 +106,15 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
 
   /**
    * Restore the checkpoint data. This gets called once when the DStream graph
-   * (along with its DStreams) are being restored from a graph checkpoint file.
+   * (along with its output DStreams) is being restored from a graph checkpoint file.
    * Default implementation restores the RDDs from their checkpoint files.
    */
-  def restore() {
+  def restore(): Unit = {
     // Create RDDs from the checkpoint data
     currentCheckpointFiles.foreach {
-      case(time, file) => {
+      case(time, file) =>
         logInfo("Restoring checkpointed RDD for time " + time + " from file '" + file + "'")
         dstream.generatedRDDs += ((time, dstream.context.sparkContext.checkpointFile[T](file)))
-      }
     }
   }
 

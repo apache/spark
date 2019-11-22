@@ -20,18 +20,25 @@ package org.apache.spark.deploy.master
 import scala.annotation.tailrec
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.MASTER_UI_PORT
 import org.apache.spark.util.{IntParam, Utils}
 
 /**
  * Command-line parser for the master.
  */
-private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
+private[master] class MasterArguments(args: Array[String], conf: SparkConf) extends Logging {
   var host = Utils.localHostName()
   var port = 7077
   var webUiPort = 8080
   var propertiesFile: String = null
 
   // Check for settings in environment variables
+  if (System.getenv("SPARK_MASTER_IP") != null) {
+    logWarning("SPARK_MASTER_IP is deprecated, please use SPARK_MASTER_HOST")
+    host = System.getenv("SPARK_MASTER_IP")
+  }
+
   if (System.getenv("SPARK_MASTER_HOST") != null) {
     host = System.getenv("SPARK_MASTER_HOST")
   }
@@ -47,19 +54,19 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
-  if (conf.contains("spark.master.ui.port")) {
-    webUiPort = conf.get("spark.master.ui.port").toInt
+  if (conf.contains(MASTER_UI_PORT.key)) {
+    webUiPort = conf.get(MASTER_UI_PORT)
   }
 
   @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
-      Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
+      Utils.checkHost(value)
       host = value
       parse(tail)
 
     case ("--host" | "-h") :: value :: tail =>
-      Utils.checkHost(value, "Please use hostname " + value)
+      Utils.checkHost(value)
       host = value
       parse(tail)
 
@@ -78,7 +85,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
     case ("--help") :: tail =>
       printUsageAndExit(0)
 
-    case Nil => {}
+    case Nil => // No-op
 
     case _ =>
       printUsageAndExit(1)
@@ -87,7 +94,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
   /**
    * Print usage and exit JVM with the given exit code.
    */
-  private def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int): Unit = {
     // scalastyle:off println
     System.err.println(
       "Usage: Master [options]\n" +

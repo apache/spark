@@ -1,7 +1,22 @@
 ---
 layout: global
-title: Basic Statistics - spark.mllib
-displayTitle: Basic Statistics - spark.mllib
+title: Basic Statistics - RDD-based API
+displayTitle: Basic Statistics - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -80,7 +95,7 @@ correlation methods are currently Pearson's and Spearman's correlation.
 calculate correlations between series. Depending on the type of input, two `RDD[Double]`s or
 an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` respectively.
 
-Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
+Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/CorrelationsExample.scala %}
 </div>
@@ -210,7 +225,7 @@ message.
 run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
 and interpret the hypothesis tests.
 
-Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
+Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/HypothesisTestingKolmogorovSmirnovTestExample.scala %}
 </div>
@@ -239,7 +254,7 @@ Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.ml
 ### Streaming Significance Testing
 `spark.mllib` provides online implementations of some tests to support use cases
 like A/B testing. These tests may be performed on a Spark Streaming
-`DStream[(Boolean,Double)]` where the first element of each tuple
+`DStream[(Boolean, Double)]` where the first element of each tuple
 indicates control group (`false`) or treatment group (`true`) and the
 second element is the value of an observation.
 
@@ -277,12 +292,12 @@ uniform, standard normal, or Poisson.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`RandomRDDs`](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs) provides factory
+[`RandomRDDs`](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs$) provides factory
 methods to generate random double RDDs or vector RDDs.
 The following example generates a random double RDD, whose values follows the standard normal
 distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
-Refer to the [`RandomRDDs` Scala docs](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs) for details on the API.
+Refer to the [`RandomRDDs` Scala docs](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs$) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
@@ -317,12 +332,7 @@ JavaSparkContext jsc = ...
 // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
 JavaDoubleRDD u = normalJavaRDD(jsc, 1000000L, 10);
 // Apply a transform to get a random double RDD following `N(1, 4)`.
-JavaDoubleRDD v = u.map(
-  new Function<Double, Double>() {
-    public Double call(Double x) {
-      return 1.0 + 2.0 * x;
-    }
-  });
+JavaDoubleRDD v = u.mapToDouble(x -> 1.0 + 2.0 * x);
 {% endhighlight %}
 </div>
 
@@ -354,7 +364,7 @@ v = u.map(lambda x: 1.0 + 2.0 * x)
 useful for visualizing empirical probability distributions without requiring assumptions about the
 particular distribution that the observed samples are drawn from. It computes an estimate of the
 probability density function of a random variables, evaluated at a given set of points. It achieves
-this estimate by expressing the PDF of the empirical distribution at a particular point as the the
+this estimate by expressing the PDF of the empirical distribution at a particular point as the
 mean of PDFs of normal distributions centered around each of the samples.
 
 <div class="codetabs">

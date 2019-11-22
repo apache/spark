@@ -26,7 +26,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart, TaskLo
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.dstream.{ConstantInputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.receiver._
 
 /** Testsuite for receiver scheduling */
@@ -41,7 +41,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       try {
         // we wait until the Receiver has registered with the tracker,
         // otherwise our rate update is lost
-        eventually(timeout(5 seconds)) {
+        eventually(timeout(5.seconds)) {
           assert(RateTestReceiver.getActive().nonEmpty)
         }
 
@@ -49,13 +49,15 @@ class ReceiverTrackerSuite extends TestSuiteBase {
         // Verify that the rate of the block generator in the receiver get updated
         val activeReceiver = RateTestReceiver.getActive().get
         tracker.sendRateUpdate(inputDStream.id, newRateLimit)
-        eventually(timeout(5 seconds)) {
+        eventually(timeout(5.seconds)) {
           assert(activeReceiver.getDefaultBlockGeneratorRateLimit() === newRateLimit,
             "default block generator did not receive rate update")
           assert(activeReceiver.getCustomBlockGeneratorRateLimit() === newRateLimit,
             "other block generator did not receive rate update")
         }
       } finally {
+        tracker.stop(false)
+        // Make sure it is idempotent.
         tracker.stop(false)
       }
     }
@@ -74,7 +76,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       output.register()
       ssc.start()
       StoppableReceiver.shouldStop = true
-      eventually(timeout(10 seconds), interval(10 millis)) {
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
         // The receiver is stopped once, so if it's restarted, it should be started twice.
         assert(startTimes === 2)
       }
@@ -96,10 +98,31 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       val output = new TestOutputStream(input)
       output.register()
       ssc.start()
-      eventually(timeout(10 seconds), interval(10 millis)) {
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
         // If preferredLocations is set correctly, receiverTaskLocality should be PROCESS_LOCAL
         assert(receiverTaskLocality === TaskLocality.PROCESS_LOCAL)
       }
+    }
+  }
+
+  test("get allocated executors") {
+    // Test get allocated executors when 1 receiver is registered
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      val input = ssc.receiverStream(new TestReceiver)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      assert(ssc.scheduler.receiverTracker.allocatedExecutors().size === 1)
+    }
+
+    // Test get allocated executors when there's no receiver registered
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      val rdd = ssc.sc.parallelize(1 to 10)
+      val input = new ConstantInputDStream(ssc, rdd)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      assert(ssc.scheduler.receiverTracker.allocatedExecutors() === Map.empty)
     }
   }
 }
@@ -182,9 +205,9 @@ class StoppableReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
   var receivingThreadOption: Option[Thread] = None
 
-  def onStart() {
+  def onStart(): Unit = {
     val thread = new Thread() {
-      override def run() {
+      override def run(): Unit = {
         while (!StoppableReceiver.shouldStop) {
           Thread.sleep(10)
         }
@@ -194,7 +217,7 @@ class StoppableReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
     thread.start()
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     StoppableReceiver.shouldStop = true
     receivingThreadOption.foreach(_.join())
     // Reset it so as to restart it

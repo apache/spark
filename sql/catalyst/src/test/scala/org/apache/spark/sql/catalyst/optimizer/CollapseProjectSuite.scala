@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Rand
+import org.apache.spark.sql.catalyst.expressions.{Alias, Rand}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.MetadataBuilder
 
 class CollapseProjectSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -118,5 +119,55 @@ class CollapseProjectSuite extends PlanTest {
     val correctAnswer = query.analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("preserve top-level alias metadata while collapsing projects") {
+    def hasMetadata(logicalPlan: LogicalPlan): Boolean = {
+      logicalPlan.asInstanceOf[Project].projectList.exists(_.metadata.contains("key"))
+    }
+
+    val metadata = new MetadataBuilder().putLong("key", 1).build()
+    val analyzed =
+      Project(Seq(Alias('a_with_metadata, "b")()),
+        Project(Seq(Alias('a, "a_with_metadata")(explicitMetadata = Some(metadata))),
+          testRelation.logicalPlan)).analyze
+    require(hasMetadata(analyzed))
+
+    val optimized = Optimize.execute(analyzed)
+    val projects = optimized.collect { case p: Project => p }
+    assert(projects.size === 1)
+    assert(hasMetadata(optimized))
+  }
+
+  test("collapse redundant alias through limit") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = relation.select('a as 'b).limit(1).select('b as 'c).analyze
+    val optimized = Optimize.execute(query)
+    val expected = relation.select('a as 'c).limit(1).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("collapse redundant alias through local limit") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = LocalLimit(1, relation.select('a as 'b)).select('b as 'c).analyze
+    val optimized = Optimize.execute(query)
+    val expected = LocalLimit(1, relation.select('a as 'c)).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("collapse redundant alias through repartition") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = relation.select('a as 'b).repartition(1).select('b as 'c).analyze
+    val optimized = Optimize.execute(query)
+    val expected = relation.select('a as 'c).repartition(1).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("collapse redundant alias through sample") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = Sample(0.0, 0.6, false, 11L, relation.select('a as 'b)).select('b as 'c).analyze
+    val optimized = Optimize.execute(query)
+    val expected = Sample(0.0, 0.6, false, 11L, relation.select('a as 'c)).analyze
+    comparePlans(optimized, expected)
   }
 }

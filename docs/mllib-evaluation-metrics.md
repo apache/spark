@@ -1,7 +1,22 @@
 ---
 layout: global
-title: Evaluation Metrics - spark.mllib
-displayTitle: Evaluation Metrics - spark.mllib
+title: Evaluation Metrics - RDD-based API
+displayTitle: Evaluation Metrics - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -13,7 +28,7 @@ of the model on some criteria, which depends on the application and its requirem
 suite of metrics for the purpose of evaluating the performance of machine learning models.
 
 Specific machine learning algorithms fall under broader types of machine learning applications like classification,
-regression, clustering, etc. Each of these types have well established metrics for performance evaluation and those
+regression, clustering, etc. Each of these types have well-established metrics for performance evaluation and those
 metrics that are currently available in `spark.mllib` are detailed in this section.
 
 ## Classification model evaluation
@@ -140,7 +155,7 @@ definitions of positive and negative labels is straightforward.
 #### Label based metrics
 
 Opposed to binary classification where there are only two possible labels, multiclass classification problems have many
-possible labels and so the concept of label-based metrics is introduced. Overall precision measures precision across all
+possible labels and so the concept of label-based metrics is introduced. Accuracy measures precision across all
 labels -  the number of times any class was predicted correctly (true positives) normalized by the number of data
 points. Precision by label considers only one class, and measures the number of time a specific label was predicted
 correctly normalized by the number of times that label appears in the output.
@@ -182,19 +197,9 @@ $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.
       </td>
     </tr>
     <tr>
-      <td>Overall Precision</td>
-      <td>$PPV = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
+      <td>Accuracy</td>
+      <td>$ACC = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
         \mathbf{y}_i\right)$</td>
-    </tr>
-    <tr>
-      <td>Overall Recall</td>
-      <td>$TPR = \frac{TP}{TP + FN} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
-        \mathbf{y}_i\right)$</td>
-    </tr>
-    <tr>
-      <td>Overall F1-measure</td>
-      <td>$F1 = 2 \cdot \left(\frac{PPV \cdot TPR}
-          {PPV + TPR}\right)$</td>
     </tr>
     <tr>
       <td>Precision by label</td>
@@ -423,13 +428,13 @@ A ranking system usually deals with a set of $M$ users
 
 $$U = \left\{u_0, u_1, ..., u_{M-1}\right\}$$
 
-Each user ($u_i$) having a set of $N$ ground truth relevant documents
+Each user ($u_i$) having a set of $N_i$ ground truth relevant documents
 
-$$D_i = \left\{d_0, d_1, ..., d_{N-1}\right\}$$
+$$D_i = \left\{d_0, d_1, ..., d_{N_i-1}\right\}$$
 
-And a list of $Q$ recommended documents, in order of decreasing relevance
+And a list of $Q_i$ recommended documents, in order of decreasing relevance
 
-$$R_i = \left[r_0, r_1, ..., r_{Q-1}\right]$$
+$$R_i = \left[r_0, r_1, ..., r_{Q_i-1}\right]$$
 
 The goal of the ranking system is to produce the most relevant set of documents for each user. The relevance of the
 sets and the effectiveness of the algorithms can be measured using the metrics listed below.
@@ -449,10 +454,10 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
         Precision at k
       </td>
       <td>
-        $p(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} rel_{D_i}(R_i(j))}$
+        $p(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{\text{min}(Q_i, k) - 1} rel_{D_i}(R_i(j))}$
       </td>
       <td>
-        <a href="https://en.wikipedia.org/wiki/Information_retrieval#Precision_at_K">Precision at k</a> is a measure of
+        <a href="https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Precision_at_K">Precision at k</a> is a measure of
          how many of the first k recommended documents are in the set of true relevant documents averaged across all
          users. In this metric, the order of the recommendations is not taken into account.
       </td>
@@ -460,10 +465,10 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
     <tr>
       <td>Mean Average Precision</td>
       <td>
-        $MAP=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{\left|D_i\right|} \sum_{j=0}^{Q-1} \frac{rel_{D_i}(R_i(j))}{j + 1}}$
+        $MAP=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{N_i} \sum_{j=0}^{Q_i-1} \frac{rel_{D_i}(R_i(j))}{j + 1}}$
       </td>
       <td>
-        <a href="https://en.wikipedia.org/wiki/Information_retrieval#Mean_average_precision">MAP</a> is a measure of how
+        <a href="https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Mean_average_precision">MAP</a> is a measure of how
          many of the recommended documents are in the set of true relevant documents, where the
         order of the recommendations is taken into account (i.e. penalty for highly relevant documents is higher).
       </td>
@@ -472,13 +477,13 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
       <td>Normalized Discounted Cumulative Gain</td>
       <td>
         $NDCG(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{IDCG(D_i, k)}\sum_{j=0}^{n-1}
-          \frac{rel_{D_i}(R_i(j))}{\text{ln}(j+1)}} \\
+          \frac{rel_{D_i}(R_i(j))}{\text{log}(j+2)}} \\
         \text{Where} \\
-        \hspace{5 mm} n = \text{min}\left(\text{max}\left(|R_i|,|D_i|\right),k\right) \\
-        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{\text{ln}(j+1)}$
+        \hspace{5 mm} n = \text{min}\left(\text{max}\left(Q_i, N_i\right),k\right) \\
+        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{\text{log}(j+2)}$
       </td>
       <td>
-        <a href="https://en.wikipedia.org/wiki/Information_retrieval#Discounted_cumulative_gain">NDCG at k</a> is a
+        <a href="https://en.wikipedia.org/wiki/Discounted_cumulative_gain#Normalized_DCG">NDCG at k</a> is a
         measure of how many of the first k recommended documents are in the set of true relevant documents averaged
         across all users. In contrast to precision at k, this metric takes into account the order of the recommendations
         (documents are assumed to be in order of decreasing relevance).
@@ -559,7 +564,7 @@ variable from a number of independent variables.
     </tr>
     <tr>
       <td>Mean Absolute Error (MAE)</td>
-      <td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
+      <td>$MAE=\frac{1}{N}\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
     </tr>
     <tr>
       <td>Coefficient of Determination $(R^2)$</td>
@@ -572,31 +577,3 @@ variable from a number of independent variables.
     </tr>
   </tbody>
 </table>
-
-**Examples**
-
-<div class="codetabs">
-The following code snippets illustrate how to load a sample dataset, train a linear regression algorithm on the data,
-and evaluate the performance of the algorithm by several regression metrics.
-
-<div data-lang="scala" markdown="1">
-Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) for details on the API.
-
-{% include_example scala/org/apache/spark/examples/mllib/RegressionMetricsExample.scala %}
-
-</div>
-
-<div data-lang="java" markdown="1">
-Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) for details on the API.
-
-{% include_example java/org/apache/spark/examples/mllib/JavaRegressionMetricsExample.java %}
-
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) for more details on the API.
-
-{% include_example python/mllib/regression_metrics_example.py %}
-
-</div>
-</div>

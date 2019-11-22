@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers with Logging {
 
   test("sortByKey") {
-    val pairs = sc.parallelize(Array((1, 0), (2, 0), (0, 0), (3, 0)), 2)
+    val pairs = sc.parallelize(Seq((1, 0), (2, 0), (0, 0), (3, 0)), 2)
     assert(pairs.sortByKey().collect() === Array((0, 0), (1, 0), (2, 0), (3, 0)))
   }
 
@@ -135,7 +135,7 @@ class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers w
   }
 
   test("get a range of elements in an array not partitioned by a range partitioner") {
-    val pairArr = util.Random.shuffle((1 to 1000).toList).map(x => (x, x))
+    val pairArr = scala.util.Random.shuffle((1 to 1000).toList).map(x => (x, x))
     val pairs = sc.parallelize(pairArr, 10)
     val range = pairs.filterByRange(200, 800).collect()
     assert((800 to 200 by -1).toArray.sorted === range.map(_._1).sorted)

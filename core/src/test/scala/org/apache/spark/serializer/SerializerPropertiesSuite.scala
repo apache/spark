@@ -24,12 +24,13 @@ import scala.util.Random
 import org.scalatest.Assertions
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.serializer.KryoTest.RegistratorWithoutAutoReset
 
 /**
  * Tests to ensure that [[Serializer]] implementations obey the API contracts for methods that
  * describe properties of the serialized stream, such as
- * [[Serializer.supportsRelocationOfSerializedObjects]].
+ * `Serializer.supportsRelocationOfSerializedObjects`.
  */
 class SerializerPropertiesSuite extends SparkFunSuite {
 
@@ -50,7 +51,7 @@ class SerializerPropertiesSuite extends SparkFunSuite {
   }
 
   test("KryoSerializer does not support relocation when auto-reset is disabled") {
-    val conf = new SparkConf().set("spark.kryo.registrator",
+    val conf = new SparkConf().set(KRYO_USER_REGISTRATORS,
       classOf[RegistratorWithoutAutoReset].getName)
     val ser = new KryoSerializer(conf)
     assert(!ser.newInstance().asInstanceOf[KryoSerializerInstance].getAutoReset())

@@ -17,37 +17,21 @@
 
 package org.apache.spark.ml.feature;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.feature.VectorIndexerSuite.FeatureData;
-import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
 
 
-public class JavaVectorIndexerSuite implements Serializable {
-  private transient JavaSparkContext sc;
-
-  @Before
-  public void setUp() {
-    sc = new JavaSparkContext("local", "JavaVectorIndexerSuite");
-  }
-
-  @After
-  public void tearDown() {
-    sc.stop();
-    sc = null;
-  }
+public class JavaVectorIndexerSuite extends SharedSparkSession {
 
   @Test
   public void vectorIndexerAPI() {
@@ -57,16 +41,15 @@ public class JavaVectorIndexerSuite implements Serializable {
       new FeatureData(Vectors.dense(1.0, 3.0)),
       new FeatureData(Vectors.dense(1.0, 4.0))
     );
-    SQLContext sqlContext = new SQLContext(sc);
-    Dataset<Row> data = sqlContext.createDataFrame(sc.parallelize(points, 2), FeatureData.class);
+    Dataset<Row> data = spark.createDataFrame(jsc.parallelize(points, 2), FeatureData.class);
     VectorIndexer indexer = new VectorIndexer()
       .setInputCol("features")
       .setOutputCol("indexed")
       .setMaxCategories(2);
     VectorIndexerModel model = indexer.fit(data);
-    Assert.assertEquals(model.numFeatures(), 2);
+    Assert.assertEquals(2, model.numFeatures());
     Map<Integer, Map<Double, Integer>> categoryMaps = model.javaCategoryMaps();
-    Assert.assertEquals(categoryMaps.size(), 1);
+    Assert.assertEquals(1, categoryMaps.size());
     Dataset<Row> indexedData = model.transform(data);
   }
 }

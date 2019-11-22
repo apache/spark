@@ -17,6 +17,11 @@
 
 package org.apache.spark
 
+import java.util.Arrays
+
+import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.api.v1.StageStatus
+
 /**
  * Low-level status reporting APIs for monitoring job and stage progress.
  *
@@ -31,9 +36,7 @@ package org.apache.spark
  *
  * NOTE: this class's constructor should be considered private and may be subject to change.
  */
-class SparkStatusTracker private[spark] (sc: SparkContext) {
-
-  private val jobProgressListener = sc.jobProgressListener
+class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore) {
 
   /**
    * Return a list of all known jobs in a particular job group.  If `jobGroup` is `null`, then
@@ -44,9 +47,8 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
    * its result.
    */
   def getJobIdsForGroup(jobGroup: String): Array[Int] = {
-    jobProgressListener.synchronized {
-      jobProgressListener.jobGroupToJobIds.getOrElse(jobGroup, Seq.empty).toArray
-    }
+    val expected = Option(jobGroup)
+    store.jobsList(null).filter(_.jobGroup == expected).map(_.jobId).toArray
   }
 
   /**
@@ -55,9 +57,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
    * This method does not guarantee the order of the elements in its result.
    */
   def getActiveStageIds(): Array[Int] = {
-    jobProgressListener.synchronized {
-      jobProgressListener.activeStages.values.map(_.stageId).toArray
-    }
+    store.stageList(Arrays.asList(StageStatus.ACTIVE)).map(_.stageId).toArray
   }
 
   /**
@@ -66,19 +66,15 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
    * This method does not guarantee the order of the elements in its result.
    */
   def getActiveJobIds(): Array[Int] = {
-    jobProgressListener.synchronized {
-      jobProgressListener.activeJobs.values.map(_.jobId).toArray
-    }
+    store.jobsList(Arrays.asList(JobExecutionStatus.RUNNING)).map(_.jobId).toArray
   }
 
   /**
    * Returns job information, or `None` if the job info could not be found or was garbage collected.
    */
   def getJobInfo(jobId: Int): Option[SparkJobInfo] = {
-    jobProgressListener.synchronized {
-      jobProgressListener.jobIdToData.get(jobId).map { data =>
-        new SparkJobInfoImpl(jobId, data.stageIds.toArray, data.status)
-      }
+    store.asOption(store.job(jobId)).map { job =>
+      new SparkJobInfoImpl(jobId, job.stageIds.toArray, job.status)
     }
   }
 
@@ -87,21 +83,43 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
    * garbage collected.
    */
   def getStageInfo(stageId: Int): Option[SparkStageInfo] = {
-    jobProgressListener.synchronized {
-      for (
-        info <- jobProgressListener.stageIdToInfo.get(stageId);
-        data <- jobProgressListener.stageIdToData.get((stageId, info.attemptId))
-      ) yield {
-        new SparkStageInfoImpl(
-          stageId,
-          info.attemptId,
-          info.submissionTime.getOrElse(0),
-          info.name,
-          info.numTasks,
-          data.numActiveTasks,
-          data.numCompleteTasks,
-          data.numFailedTasks)
-      }
+    store.asOption(store.lastStageAttempt(stageId)).map { stage =>
+      new SparkStageInfoImpl(
+        stageId,
+        stage.attemptId,
+        stage.submissionTime.map(_.getTime()).getOrElse(0L),
+        stage.name,
+        stage.numTasks,
+        stage.numActiveTasks,
+        stage.numCompleteTasks,
+        stage.numFailedTasks)
     }
+  }
+
+  /**
+   * Returns information of all known executors, including host, port, cacheSize, numRunningTasks
+   * and memory metrics.
+   * Note this include information for both the driver and executors.
+   */
+  def getExecutorInfos: Array[SparkExecutorInfo] = {
+    store.executorList(true).map { exec =>
+      val (host, port) = exec.hostPort.split(":", 2) match {
+        case Array(h, p) => (h, p.toInt)
+        case Array(h) => (h, -1)
+      }
+      val cachedMem = exec.memoryMetrics.map { mem =>
+        mem.usedOnHeapStorageMemory + mem.usedOffHeapStorageMemory
+      }.getOrElse(0L)
+
+      new SparkExecutorInfoImpl(
+        host,
+        port,
+        cachedMem,
+        exec.activeTasks,
+        exec.memoryMetrics.map(_.usedOffHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.usedOnHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L))
+    }.toArray
   }
 }

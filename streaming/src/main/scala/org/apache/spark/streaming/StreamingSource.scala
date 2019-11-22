@@ -87,11 +87,11 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
   // Gauge for last received batch, useful for monitoring the streaming job's running status,
   // displayed data -1 for any abnormal condition.
   registerGaugeWithOption("lastReceivedBatch_submissionTime",
-    _.lastCompletedBatch.map(_.submissionTime), -1L)
+    _.lastReceivedBatch.map(_.submissionTime), -1L)
   registerGaugeWithOption("lastReceivedBatch_processingStartTime",
-    _.lastCompletedBatch.flatMap(_.processingStartTime), -1L)
+    _.lastReceivedBatch.flatMap(_.processingStartTime), -1L)
   registerGaugeWithOption("lastReceivedBatch_processingEndTime",
-    _.lastCompletedBatch.flatMap(_.processingEndTime), -1L)
+    _.lastReceivedBatch.flatMap(_.processingEndTime), -1L)
 
   // Gauge for last received batch records.
   registerGauge("lastReceivedBatch_records", _.lastReceivedBatchRecords.values.sum, 0L)

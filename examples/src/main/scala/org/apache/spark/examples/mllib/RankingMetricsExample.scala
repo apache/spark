@@ -18,22 +18,22 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.evaluation.{RankingMetrics, RegressionMetrics}
 import org.apache.spark.mllib.recommendation.{ALS, Rating}
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object RankingMetricsExample {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("RankingMetricsExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession
+      .builder
+      .appName("RankingMetricsExample")
+      .getOrCreate()
+    import spark.implicits._
     // $example on$
     // Read in the ratings data
-    val ratings = sc.textFile("data/mllib/sample_movielens_data.txt").map { line =>
+    val ratings = spark.read.textFile("data/mllib/sample_movielens_data.txt").rdd.map { line =>
       val fields = line.split("::")
       Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
     }.cache()
@@ -84,9 +84,17 @@ object RankingMetricsExample {
     // Mean average precision
     println(s"Mean average precision = ${metrics.meanAveragePrecision}")
 
+    // Mean average precision at k
+    println(s"Mean average precision at 2 = ${metrics.meanAveragePrecisionAt(2)}")
+
     // Normalized discounted cumulative gain
     Array(1, 3, 5).foreach { k =>
       println(s"NDCG at $k = ${metrics.ndcgAt(k)}")
+    }
+
+    // Recall at K
+    Array(1, 3, 5).foreach { k =>
+      println(s"Recall at $k = ${metrics.recallAt(k)}")
     }
 
     // Get predictions for each data point

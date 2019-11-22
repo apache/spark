@@ -21,9 +21,10 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Unresol
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD
 import org.apache.spark.sql.types._
 
 class OptimizeInSuite extends PlanTest {
@@ -40,6 +41,30 @@ class OptimizeInSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+
+  test("OptimizedIn test: Remove deterministic repetitions") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"),
+          Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("b"),
+          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
+            Rand(0), Rand(0))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("b"),
+          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
+            Rand(0), Rand(0))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 
   test("OptimizedIn test: In clause not optimized to InSet when less than 10 items") {
     val originalQuery =
@@ -96,6 +121,21 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("OptimizedIn test: NULL IN (subquery) gets transformed to Filter(null)") {
+    val subquery = ListQuery(testRelation.select(UnresolvedAttribute("a")))
+    val originalQuery =
+      testRelation
+        .where(InSubquery(Seq(Literal.create(null, NullType)), subquery))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(Literal.create(null, BooleanType))
+        .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("OptimizedIn test: Inset optimization disabled as " +
     "list expression contains attribute)") {
     val originalQuery =
@@ -128,4 +168,74 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("OptimizedIn test: Setting the threshold for turning Set into InSet.") {
+    val plan =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), Literal(3))))
+        .analyze
+
+    withSQLConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "10") {
+      val notOptimizedPlan = OptimizeIn(plan)
+      comparePlans(notOptimizedPlan, plan)
+    }
+
+    // Reduce the threshold to turning into InSet.
+    withSQLConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "2") {
+      val optimizedPlan = OptimizeIn(plan)
+      optimizedPlan match {
+        case Filter(cond, _)
+          if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].set.size == 3 =>
+        // pass
+        case _ => fail("Unexpected result for OptimizedIn")
+      }
+    }
+  }
+
+  test("OptimizedIn test: one element in list gets transformed to EqualTo.") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      testRelation
+        .where(EqualTo(UnresolvedAttribute("a"), Literal(1)))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("OptimizedIn test: In empty list gets transformed to FalseLiteral " +
+    "when value is not nullable") {
+    val originalQuery =
+      testRelation
+        .where(In(Literal("a"), Nil))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      testRelation
+        .where(Literal(false))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("OptimizedIn test: In empty list gets transformed to `If` expression " +
+    "when value is nullable") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Nil))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      testRelation
+        .where(If(IsNotNull(UnresolvedAttribute("a")),
+          Literal(false), Literal.create(null, BooleanType)))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }

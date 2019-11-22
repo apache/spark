@@ -17,28 +17,26 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.hadoop.fs.Path
 
+import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.sql._
 
 object LDASuite {
   def generateLDAData(
-      sql: SQLContext,
+      spark: SparkSession,
       rows: Int,
       k: Int,
       vocabSize: Int): DataFrame = {
     val avgWC = 1  // average instances of each word in a doc
-    val sc = sql.sparkContext
-    val rng = new java.util.Random()
-    rng.setSeed(1)
+    val sc = spark.sparkContext
     val rdd = sc.parallelize(1 to rows).map { i =>
+      val rng = new java.util.Random(i)
       Vectors.dense(Array.fill(vocabSize)(rng.nextInt(2 * avgWC).toDouble))
     }.map(v => new TestRow(v))
-    sql.createDataFrame(rdd)
+    spark.createDataFrame(rdd)
   }
 
   /**
@@ -58,7 +56,9 @@ object LDASuite {
 }
 
 
-class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class LDASuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   val k: Int = 5
   val vocabSize: Int = 30
@@ -66,7 +66,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    dataset = LDASuite.generateLDAData(sqlContext, 50, k, vocabSize)
+    dataset = LDASuite.generateLDAData(spark, 50, k, vocabSize)
   }
 
   test("default parameters") {
@@ -138,8 +138,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       new LDA().setTopicConcentration(-1.1)
     }
 
-    val dummyDF = sqlContext.createDataFrame(Seq(
-      (1, Vectors.dense(1.0, 2.0)))).toDF("id", "features")
+    val dummyDF = Seq((1, Vectors.dense(1.0, 2.0))).toDF("id", "features")
+
     // validate parameters
     lda.transformSchema(dummyDF.schema)
     lda.setDocConcentration(1.1)
@@ -172,7 +172,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val lda = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2)
     val model = lda.fit(dataset)
 
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(lda, model)
 
     assert(model.isInstanceOf[LocalLDAModel])
     assert(model.vocabSize === vocabSize)
@@ -181,16 +181,11 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     assert(model.topicsMatrix.numCols === k)
     assert(!model.isDistributed)
 
-    // transform()
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", lda.getTopicDistributionCol)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
-    transformed.select(lda.getTopicDistributionCol).collect().foreach { r =>
-      val topicDistribution = r.getAs[Vector](0)
-      assert(topicDistribution.size === k)
-      assert(topicDistribution.toArray.forall(w => w >= 0.0 && w <= 1.0))
+    testTransformer[Tuple1[Vector]](dataset.toDF(), model,
+      "features", lda.getTopicDistributionCol) {
+      case Row(_, topicDistribution: Vector) =>
+        assert(topicDistribution.size === k)
+        assert(topicDistribution.toArray.forall(w => w >= 0.0 && w <= 1.0))
     }
 
     // logLikelihood, logPerplexity
@@ -217,7 +212,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val lda = new LDA().setK(k).setSeed(1).setOptimizer("em").setMaxIter(2)
     val model_ = lda.fit(dataset)
 
-    MLTestingUtils.checkCopy(model_)
+    MLTestingUtils.checkCopyAndUids(lda, model_)
 
     assert(model_.isInstanceOf[DistributedLDAModel])
     val model = model_.asInstanceOf[DistributedLDAModel]
@@ -246,7 +241,14 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
         Vectors.dense(model2.getDocConcentration) absTol 1e-6)
     }
     val lda = new LDA()
-    testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings,
+      LDASuite.allParamSettings, checkModelData)
+
+    // Make sure the result is deterministic after saving and loading the model
+    val model = lda.fit(dataset)
+    val model2 = testDefaultReadWrite(model)
+    assert(model.logLikelihood(dataset) ~== model2.logLikelihood(dataset) absTol 1e-6)
+    assert(model.logPerplexity(dataset) ~== model2.logPerplexity(dataset) absTol 1e-6)
   }
 
   test("read/write DistributedLDAModel") {
@@ -256,9 +258,82 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
         Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
       assert(Vectors.dense(model.getDocConcentration) ~==
         Vectors.dense(model2.getDocConcentration) absTol 1e-6)
+      val logPrior = model.asInstanceOf[DistributedLDAModel].logPrior
+      val logPrior2 = model2.asInstanceOf[DistributedLDAModel].logPrior
+      val trainingLogLikelihood =
+        model.asInstanceOf[DistributedLDAModel].trainingLogLikelihood
+      val trainingLogLikelihood2 =
+        model2.asInstanceOf[DistributedLDAModel].trainingLogLikelihood
+      assert(logPrior ~== logPrior2 absTol 1e-6)
+      assert(trainingLogLikelihood ~== trainingLogLikelihood2 absTol 1e-6)
     }
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset,
+      LDASuite.allParamSettings ++ Map("optimizer" -> "em"),
       LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData)
+  }
+
+  test("EM LDA checkpointing: save last checkpoint") {
+    // Checkpoint dir is set by MLlibTestSparkContext
+    val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3).setCheckpointInterval(1)
+    val model_ = lda.fit(dataset)
+    assert(model_.isInstanceOf[DistributedLDAModel])
+    val model = model_.asInstanceOf[DistributedLDAModel]
+
+    // There should be 1 checkpoint remaining.
+    assert(model.getCheckpointFiles.length === 1)
+    val checkpointFile = new Path(model.getCheckpointFiles.head)
+    val fs = checkpointFile.getFileSystem(spark.sessionState.newHadoopConf())
+    assert(fs.exists(checkpointFile))
+    model.deleteCheckpointFiles()
+    assert(model.getCheckpointFiles.isEmpty)
+  }
+
+  test("EM LDA checkpointing: remove last checkpoint") {
+    // Checkpoint dir is set by MLlibTestSparkContext
+    val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3).setCheckpointInterval(1)
+      .setKeepLastCheckpoint(false)
+    val model_ = lda.fit(dataset)
+    assert(model_.isInstanceOf[DistributedLDAModel])
+    val model = model_.asInstanceOf[DistributedLDAModel]
+
+    assert(model.getCheckpointFiles.isEmpty)
+  }
+
+  test("EM LDA disable checkpointing") {
+    // Checkpoint dir is set by MLlibTestSparkContext
+    val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3)
+      .setCheckpointInterval(-1)
+    val model_ = lda.fit(dataset)
+    assert(model_.isInstanceOf[DistributedLDAModel])
+    val model = model_.asInstanceOf[DistributedLDAModel]
+
+    assert(model.getCheckpointFiles.isEmpty)
+  }
+
+  test("string params should be case-insensitive") {
+    val lda = new LDA()
+    Seq("eM", "oNLinE").foreach { optimizer =>
+      lda.setOptimizer(optimizer)
+      assert(lda.getOptimizer === optimizer)
+      val model = lda.fit(dataset)
+      assert(model.getOptimizer === optimizer)
+    }
+  }
+
+  test("LDA with Array input") {
+    def trainAndLogLikelihoodAndPerplexity(dataset: Dataset[_]): (Double, Double) = {
+      val model = new LDA().setK(k).setOptimizer("online").setMaxIter(1).setSeed(1).fit(dataset)
+      (model.logLikelihood(dataset), model.logPerplexity(dataset))
+    }
+
+    val (_, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val (llD, lpD) = trainAndLogLikelihoodAndPerplexity(newDatasetD)
+    val (llF, lpF) = trainAndLogLikelihoodAndPerplexity(newDatasetF)
+    // TODO: need to compare the results once we fix the seed issue for LDA (SPARK-22210)
+    assert(llD <= 0.0 && llD != Double.NegativeInfinity)
+    assert(llF <= 0.0 && llF != Double.NegativeInfinity)
+    assert(lpD >= 0.0 && lpD != Double.NegativeInfinity)
+    assert(lpF >= 0.0 && lpF != Double.NegativeInfinity)
   }
 }

@@ -140,15 +140,15 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
     var i = 1
     while (true) {
       val curKey = data(2 * pos)
-      if (k.eq(curKey) || k.equals(curKey)) {
-        val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
-        data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
-        return newValue
-      } else if (curKey.eq(null)) {
+      if (curKey.eq(null)) {
         val newValue = updateFunc(false, null.asInstanceOf[V])
         data(2 * pos) = k
         data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
         incrementSize()
+        return newValue
+      } else if (k.eq(curKey) || k.equals(curKey)) {
+        val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
+        data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
         return newValue
       } else {
         val delta = i
@@ -198,7 +198,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   override def size: Int = curSize
 
   /** Increase table size by 1, rehashing if necessary */
-  private def incrementSize() {
+  private def incrementSize(): Unit = {
     curSize += 1
     if (curSize > growThreshold) {
       growTable()
@@ -211,7 +211,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   private def rehash(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
 
   /** Double the table's size and re-hash everything */
-  protected def growTable() {
+  protected def growTable(): Unit = {
     // capacity < MAXIMUM_CAPACITY (2 ^ 29) so capacity * 2 won't overflow
     val newCapacity = capacity * 2
     require(newCapacity <= MAXIMUM_CAPACITY, s"Can't contain more than ${growThreshold} elements")

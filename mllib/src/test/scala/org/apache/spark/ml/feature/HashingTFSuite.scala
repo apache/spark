@@ -17,39 +17,89 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.feature.{HashingTF => MLlibHashingTF}
+import org.apache.spark.sql.Row
 import org.apache.spark.util.Utils
 
-class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class HashingTFSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
+  import HashingTFSuite.murmur3FeatureIdx
 
   test("params") {
     ParamsSuite.checkParams(new HashingTF)
   }
 
   test("hashingTF") {
-    val df = sqlContext.createDataFrame(Seq(
-      (0, "a a b b c d".split(" ").toSeq)
-    )).toDF("id", "words")
+    val numFeatures = 100
+    // Assume perfect hash when computing expected features.
+    def idx: Any => Int = murmur3FeatureIdx(numFeatures)
+    val data = Seq(
+      ("a a b b c d".split(" ").toSeq,
+        Vectors.sparse(numFeatures,
+          Seq((idx("a"), 2.0), (idx("b"), 2.0), (idx("c"), 1.0), (idx("d"), 1.0))))
+    )
+
+    val df = data.toDF("words", "expected")
+    val hashingTF = new HashingTF()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setNumFeatures(numFeatures)
+    val output = hashingTF.transform(df)
+    val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
+    require(attrGroup.numAttributes === Some(numFeatures))
+
+    testTransformer[(Seq[String], Vector)](df, hashingTF, "features", "expected") {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+  }
+
+  test("applying binary term freqs") {
+    val df = Seq((0, "a a b c c c".split(" ").toSeq)).toDF("id", "words")
+    val n = 100
+    val hashingTF = new HashingTF()
+        .setInputCol("words")
+        .setOutputCol("features")
+        .setNumFeatures(n)
+        .setBinary(true)
+    val output = hashingTF.transform(df)
+    val features = output.select("features").first().getAs[Vector](0)
+    def idx: Any => Int = murmur3FeatureIdx(n)  // Assume perfect hash on input features
+    val expected = Vectors.sparse(n,
+      Seq((idx("a"), 1.0), (idx("b"), 1.0), (idx("c"), 1.0)))
+    assert(features ~== expected absTol 1e-14)
+  }
+
+  test("indexOf method") {
     val n = 100
     val hashingTF = new HashingTF()
       .setInputCol("words")
       .setOutputCol("features")
       .setNumFeatures(n)
-    val output = hashingTF.transform(df)
-    val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
-    require(attrGroup.numAttributes === Some(n))
-    val features = output.select("features").first().getAs[Vector](0)
-    // Assume perfect hash on "a", "b", "c", and "d".
-    def idx(any: Any): Int = Utils.nonNegativeMod(any.##, n)
-    val expected = Vectors.sparse(n,
-      Seq((idx("a"), 2.0), (idx("b"), 2.0), (idx("c"), 1.0), (idx("d"), 1.0)))
-    assert(features ~== expected absTol 1e-14)
+    assert(hashingTF.indexOf("a") === 67)
+    assert(hashingTF.indexOf("b") === 65)
+    assert(hashingTF.indexOf("c") === 68)
+    assert(hashingTF.indexOf("d") === 90)
+  }
+
+  test("SPARK-23469: Load HashingTF prior to Spark 3.0") {
+    val hashingTFPath = testFile("test-data/hashingTF-pre3.0")
+    val loadedHashingTF = HashingTF.load(hashingTFPath)
+    val mLlibHashingTF = new MLlibHashingTF(100)
+    assert(loadedHashingTF.indexOf("a") === mLlibHashingTF.indexOf("a"))
+    assert(loadedHashingTF.indexOf("b") === mLlibHashingTF.indexOf("b"))
+    assert(loadedHashingTF.indexOf("c") === mLlibHashingTF.indexOf("c"))
+    assert(loadedHashingTF.indexOf("d") === mLlibHashingTF.indexOf("d"))
+
+    val metadata = spark.read.json(s"$hashingTFPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr == "2.3.0-SNAPSHOT")
   }
 
   test("read/write") {
@@ -59,4 +109,13 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       .setNumFeatures(10)
     testDefaultReadWrite(t)
   }
+
+}
+
+object HashingTFSuite {
+
+  private[feature] def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
+    Utils.nonNegativeMod(FeatureHasher.murmur3Hash(term), numFeatures)
+  }
+
 }

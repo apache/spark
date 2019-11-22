@@ -1,29 +1,28 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.parser.ng.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.types._
 
-abstract class AbstractDataTypeParserSuite extends SparkFunSuite {
+class DataTypeParserSuite extends SparkFunSuite {
 
-  def parse(sql: String): DataType
+  def parse(sql: String): DataType = CatalystSqlParser.parseDataType(sql)
 
   def checkDataType(dataTypeString: String, expectedDataType: DataType): Unit = {
     test(s"parse ${dataTypeString.replace("\n", "")}") {
@@ -31,7 +30,8 @@ abstract class AbstractDataTypeParserSuite extends SparkFunSuite {
     }
   }
 
-  def intercept(sql: String)
+  def intercept(sql: String): ParseException =
+    intercept[ParseException](CatalystSqlParser.parseDataType(sql))
 
   def unsupported(dataTypeString: String): Unit = {
     test(s"$dataTypeString is not supported") {
@@ -51,13 +51,17 @@ abstract class AbstractDataTypeParserSuite extends SparkFunSuite {
   checkDataType("dOUBle", DoubleType)
   checkDataType("decimal(10, 5)", DecimalType(10, 5))
   checkDataType("decimal", DecimalType.USER_DEFAULT)
+  checkDataType("Dec(10, 5)", DecimalType(10, 5))
+  checkDataType("deC", DecimalType.USER_DEFAULT)
   checkDataType("DATE", DateType)
   checkDataType("timestamp", TimestampType)
   checkDataType("string", StringType)
   checkDataType("ChaR(5)", StringType)
+  checkDataType("ChaRacter(5)", StringType)
   checkDataType("varchAr(20)", StringType)
   checkDataType("cHaR(27)", StringType)
   checkDataType("BINARY", BinaryType)
+  checkDataType("interval", CalendarIntervalType)
 
   checkDataType("array<doublE>", ArrayType(DoubleType, true))
   checkDataType("Array<map<int, tinYint>>", ArrayType(MapType(IntegerType, ByteType, true), true))
@@ -116,43 +120,26 @@ abstract class AbstractDataTypeParserSuite extends SparkFunSuite {
   unsupported("it is not a data type")
   unsupported("struct<x+y: int, 1.1:timestamp>")
   unsupported("struct<x: int")
-}
-
-class DataTypeParserSuite extends AbstractDataTypeParserSuite {
-  override def intercept(sql: String): Unit =
-    intercept[DataTypeException](DataTypeParser.parse(sql))
-
-  override def parse(sql: String): DataType =
-    DataTypeParser.parse(sql)
-
-  // A column name can be a reserved word in our DDL parser and SqlParser.
-  checkDataType(
-    "Struct<TABLE: string, CASE:boolean>",
-    StructType(
-      StructField("TABLE", StringType, true) ::
-        StructField("CASE", BooleanType, true) :: Nil)
-  )
-
   unsupported("struct<x int, y string>")
 
-  unsupported("struct<`x``y` int>")
-}
+  test("Do not print empty parentheses for no params") {
+    assert(intercept("unkwon").getMessage.contains("unkwon is not supported"))
+    assert(intercept("unkwon(1,2,3)").getMessage.contains("unkwon(1,2,3) is not supported"))
+  }
 
-class CatalystQlDataTypeParserSuite extends AbstractDataTypeParserSuite {
-  override def intercept(sql: String): Unit =
-    intercept[ParseException](CatalystSqlParser.parseDataType(sql))
-
-  override def parse(sql: String): DataType =
-    CatalystSqlParser.parseDataType(sql)
-
-  // A column name can be a reserved word in our DDL parser and SqlParser.
-  unsupported("Struct<TABLE: string, CASE:boolean>")
-
+  // DataType parser accepts certain reserved keywords.
   checkDataType(
-    "struct<x int, y string>",
-    (new StructType).add("x", IntegerType).add("y", StringType))
+    "Struct<TABLE: string, DATE:boolean>",
+    StructType(
+      StructField("TABLE", StringType, true) ::
+        StructField("DATE", BooleanType, true) :: Nil)
+  )
 
-  checkDataType(
-    "struct<`x``y` int>",
-    (new StructType).add("x`y", IntegerType))
+  // Use SQL keywords.
+  checkDataType("struct<end: long, select: int, from: string>",
+    (new StructType).add("end", LongType).add("select", IntegerType).add("from", StringType))
+
+  // DataType parser accepts comments.
+  checkDataType("Struct<x: INT, y: STRING COMMENT 'test'>",
+    (new StructType).add("x", IntegerType).add("y", StringType, true, "test"))
 }

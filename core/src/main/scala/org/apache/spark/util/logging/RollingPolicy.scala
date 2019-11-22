@@ -18,7 +18,7 @@
 package org.apache.spark.util.logging
 
 import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.util.{Calendar, Locale}
 
 import org.apache.spark.internal.Logging
 
@@ -32,10 +32,10 @@ private[spark] trait RollingPolicy {
   def shouldRollover(bytesToBeWritten: Long): Boolean
 
   /** Notify that rollover has occurred */
-  def rolledOver()
+  def rolledOver(): Unit
 
   /** Notify that bytes have been written */
-  def bytesWritten(bytes: Long)
+  def bytesWritten(bytes: Long): Unit
 
   /** Get the desired name of the rollover file */
   def generateRolledOverFileSuffix(): String
@@ -59,7 +59,7 @@ private[spark] class TimeBasedRollingPolicy(
   }
 
   @volatile private var nextRolloverTime = calculateNextRolloverTime()
-  private val formatter = new SimpleDateFormat(rollingFileSuffixPattern)
+  private val formatter = new SimpleDateFormat(rollingFileSuffixPattern, Locale.US)
 
   /** Should rollover if current time has exceeded next rollover time */
   def shouldRollover(bytesToBeWritten: Long): Boolean = {
@@ -67,12 +67,12 @@ private[spark] class TimeBasedRollingPolicy(
   }
 
   /** Rollover has occurred, so find the next time to rollover */
-  def rolledOver() {
+  def rolledOver(): Unit = {
     nextRolloverTime = calculateNextRolloverTime()
     logDebug(s"Current time: ${System.currentTimeMillis}, next rollover time: " + nextRolloverTime)
   }
 
-  def bytesWritten(bytes: Long) { }  // nothing to do
+  def bytesWritten(bytes: Long): Unit = { }  // nothing to do
 
   private def calculateNextRolloverTime(): Long = {
     val now = System.currentTimeMillis()
@@ -109,21 +109,21 @@ private[spark] class SizeBasedRollingPolicy(
   }
 
   @volatile private var bytesWrittenSinceRollover = 0L
-  val formatter = new SimpleDateFormat("--yyyy-MM-dd--HH-mm-ss--SSSS")
+  val formatter = new SimpleDateFormat("--yyyy-MM-dd--HH-mm-ss--SSSS", Locale.US)
 
   /** Should rollover if the next set of bytes is going to exceed the size limit */
   def shouldRollover(bytesToBeWritten: Long): Boolean = {
-    logInfo(s"$bytesToBeWritten + $bytesWrittenSinceRollover > $rolloverSizeBytes")
+    logDebug(s"$bytesToBeWritten + $bytesWrittenSinceRollover > $rolloverSizeBytes")
     bytesToBeWritten + bytesWrittenSinceRollover > rolloverSizeBytes
   }
 
   /** Rollover has occurred, so reset the counter */
-  def rolledOver() {
+  def rolledOver(): Unit = {
     bytesWrittenSinceRollover = 0
   }
 
   /** Increment the bytes that have been written in the current file */
-  def bytesWritten(bytes: Long) {
+  def bytesWritten(bytes: Long): Unit = {
     bytesWrittenSinceRollover += bytes
   }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import scala.xml.{Node, Text}
+import scala.xml.Utility.trim
 
 import org.apache.spark.SparkFunSuite
 
@@ -110,7 +111,7 @@ class UIUtilsSuite extends SparkFunSuite {
   }
 
   test("SPARK-11906: Progress bar should not overflow because of speculative tasks") {
-    val generated = makeProgressBar(2, 3, 0, 0, 4).head.child.filter(_.label == "div")
+    val generated = makeProgressBar(2, 3, 0, 0, Map.empty, 4).head.child.filter(_.label == "div")
     val expected = Seq(
       <div class="bar bar-completed" style="width: 75.0%"></div>,
       <div class="bar bar-running" style="width: 25.0%"></div>
@@ -122,15 +123,60 @@ class UIUtilsSuite extends SparkFunSuite {
   test("decodeURLParameter (SPARK-12708: Sorting task error in Stages Page when yarn mode.)") {
     val encoded1 = "%252F"
     val decoded1 = "/"
-    val encoded2 = "%253Cdriver%253E"
-    val decoded2 = "<driver>"
 
     assert(decoded1 === decodeURLParameter(encoded1))
-    assert(decoded2 === decodeURLParameter(encoded2))
 
     // verify that no affect to decoded URL.
     assert(decoded1 === decodeURLParameter(decoded1))
-    assert(decoded2 === decodeURLParameter(decoded2))
+  }
+
+  test("listingTable with tooltips") {
+
+    def generateDataRowValue: String => Seq[Node] = row => <a>{row}</a>
+    val header = Seq("Header1", "Header2")
+    val data = Seq("Data1", "Data2")
+    val tooltip = Seq(None, Some("tooltip"))
+
+    val generated = listingTable(header, generateDataRowValue, data, tooltipHeaders = tooltip)
+
+    val expected: Node =
+      <table class="table table-bordered table-condensed table-striped sortable">
+        <thead>
+          <th width="" class="">{header(0)}</th>
+          <th width="" class="">
+              <span data-toggle="tooltip" title="tooltip">
+                {header(1)}
+              </span>
+          </th>
+        </thead>
+      <tbody>
+        {data.map(generateDataRowValue)}
+      </tbody>
+    </table>
+
+    assert(trim(generated(0)) == trim(expected))
+  }
+
+  test("listingTable without tooltips") {
+
+    def generateDataRowValue: String => Seq[Node] = row => <a>{row}</a>
+    val header = Seq("Header1", "Header2")
+    val data = Seq("Data1", "Data2")
+
+    val generated = listingTable(header, generateDataRowValue, data)
+
+    val expected =
+      <table class="table table-bordered table-condensed table-striped sortable">
+        <thead>
+          <th width="" class="">{header(0)}</th>
+          <th width="" class="">{header(1)}</th>
+        </thead>
+        <tbody>
+          {data.map(generateDataRowValue)}
+        </tbody>
+      </table>
+
+    assert(trim(generated(0)) == trim(expected))
   }
 
   private def verify(

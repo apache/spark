@@ -32,7 +32,7 @@
   stroke-width: 1px;
 }
 
-/* Hightlight the SparkPlan node name */
+/* Highlight the SparkPlan node name */
 #plan-viz-graph svg text :first-child {
   font-weight: bold;
 }
@@ -40,4 +40,9 @@
 #plan-viz-graph svg path {
   stroke: #444;
   stroke-width: 1.5px;
+}
+
+/* Breaks the long string like file path when showing tooltips */
+.tooltip-inner {
+  word-wrap:break-word;
 }

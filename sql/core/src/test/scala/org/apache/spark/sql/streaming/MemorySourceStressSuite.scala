@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.test.SharedSQLContext
 
-class MemorySourceStressSuite extends StreamTest with SharedSQLContext {
+class MemorySourceStressSuite extends StreamTest {
   import testImplicits._
 
   test("memory stress test") {

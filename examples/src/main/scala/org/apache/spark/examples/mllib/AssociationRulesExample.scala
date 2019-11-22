@@ -26,7 +26,7 @@ import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 
 object AssociationRulesExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("AssociationRulesExample")
     val sc = new SparkContext(conf)
 
@@ -42,12 +42,14 @@ object AssociationRulesExample {
     val results = ar.run(freqItemsets)
 
     results.collect().foreach { rule =>
-      println("[" + rule.antecedent.mkString(",")
-        + "=>"
-        + rule.consequent.mkString(",") + "]," + rule.confidence)
+    println(s"[${rule.antecedent.mkString(",")}=>${rule.consequent.mkString(",")} ]" +
+        s" ${rule.confidence}")
     }
     // $example off$
+
+    sc.stop()
   }
 
 }
 // scalastyle:on println
+

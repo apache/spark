@@ -676,7 +676,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
     }
 
     int lastComparison = 0;
-    Complex typedOther = (Complex)other;
+    Complex typedOther = other;
 
     lastComparison = Boolean.valueOf(isSetAint()).compareTo(typedOther.isSetAint());
     if (lastComparison != 0) {

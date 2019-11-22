@@ -21,8 +21,12 @@ import java.io.File
 
 import scala.reflect.ClassTag
 
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
@@ -112,7 +116,7 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
    * RDDs partitions. So even if the parent RDD is checkpointed and its partitions changed,
    * the generated RDD will remember the partitions and therefore potentially the whole lineage.
    * This function should be called only those RDD whose partitions refer to parent RDD's
-   * partitions (i.e., do not call it on simple RDD like MappedRDD).
+   * partitions (i.e., do not call it on simple RDDs).
    *
    * @param op an operation to run on the RDD
    * @param reliableCheckpoint if true, use reliable checkpoints, otherwise use local checkpoints
@@ -386,7 +390,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     // the parent RDD has been checkpointed and parent partitions have been changed.
     // Note that this test is very specific to the current implementation of CartesianRDD.
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
-    checkpoint(ones, reliableCheckpoint) // checkpoint that MappedRDD
+    checkpoint(ones, reliableCheckpoint)
     val cartesian = new CartesianRDD(sc, ones, ones)
     val splitBeforeCheckpoint =
       serializeDeserialize(cartesian.partitions.head.asInstanceOf[CartesianPartition])
@@ -409,7 +413,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     // Note that this test is very specific to the current implementation of
     // CoalescedRDDPartitions.
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
-    checkpoint(ones, reliableCheckpoint) // checkpoint that MappedRDD
+    checkpoint(ones, reliableCheckpoint)
     val coalesced = new CoalescedRDD(ones, 2)
     val splitBeforeCheckpoint =
       serializeDeserialize(coalesced.partitions.head.asInstanceOf[CoalescedRDDPartition])
@@ -500,7 +504,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("CheckpointRDD with zero partitions") { reliableCheckpoint: Boolean =>
-    val rdd = new BlockRDD[Int](sc, Array[BlockId]())
+    val rdd = new BlockRDD[Int](sc, Array.empty[BlockId])
     assert(rdd.partitions.size === 0)
     assert(rdd.isCheckpointed === false)
     assert(rdd.isCheckpointedAndMaterialized === false)
@@ -508,8 +512,8 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     assert(rdd.isCheckpointed === false)
     assert(rdd.isCheckpointedAndMaterialized === false)
     assert(rdd.count() === 0)
-    assert(rdd.isCheckpointed === true)
-    assert(rdd.isCheckpointedAndMaterialized === true)
+    assert(rdd.isCheckpointed)
+    assert(rdd.isCheckpointedAndMaterialized)
     assert(rdd.partitions.size === 0)
   }
 
@@ -528,7 +532,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
       checkpoint(rdd2, reliableCheckpoint)
       rdd2.count()
       assert(rdd1.isCheckpointed === checkpointAllMarkedAncestors)
-      assert(rdd2.isCheckpointed === true)
+      assert(rdd2.isCheckpointed)
     } finally {
       sc.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, null)
     }
@@ -578,5 +582,64 @@ object CheckpointSuite {
       Seq(first.asInstanceOf[RDD[(K, _)]], second.asInstanceOf[RDD[(K, _)]]),
       part
     ).asInstanceOf[RDD[(K, Array[Iterable[V]])]]
+  }
+}
+
+class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
+
+  test("checkpoint compression") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set("spark.checkpoint.compress", "true")
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 1)
+      rdd.checkpoint()
+      assert(rdd.collect().toSeq === (1 to 20))
+
+      // Verify that RDD is checkpointed
+      assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+      val checkpointFile =
+        fs.listStatus(checkpointPath).map(_.getPath).find(_.getName.startsWith("part-")).get
+
+      // Verify the checkpoint file is compressed, in other words, can be decompressed
+      val compressedInputStream = CompressionCodec.createCodec(conf)
+        .compressedInputStream(fs.open(checkpointFile))
+      try {
+        ByteStreams.toByteArray(compressedInputStream)
+      } finally {
+        compressedInputStream.close()
+      }
+
+      // Verify that the compressed content can be read back
+      assert(rdd.collect().toSeq === (1 to 20))
+    }
+  }
+
+  test("cache checkpoint preferred location") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME.key, "10")
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 1)
+      rdd.checkpoint()
+      assert(rdd.collect().toSeq === (1 to 20))
+
+      // Verify that RDD is checkpointed
+      assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
+      val checkpointedRDD = rdd.firstParent.asInstanceOf[ReliableCheckpointRDD[_]]
+      val partiton = checkpointedRDD.partitions(0)
+      assert(!checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partiton))
+
+      val preferredLoc = checkpointedRDD.preferredLocations(partiton)
+      assert(checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partiton))
+      assert(preferredLoc == checkpointedRDD.cachedPreferredLocations.get(partiton))
+    }
   }
 }
