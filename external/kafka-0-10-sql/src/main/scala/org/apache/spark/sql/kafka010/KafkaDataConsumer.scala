@@ -587,8 +587,11 @@ private[kafka010] class KafkaDataConsumer(
     case ut: UninterruptibleThread =>
       ut.runUninterruptibly(body)
     case _ =>
-      logWarning("KafkaDataConsumer is not running in UninterruptibleThread. " +
-        "It may hang when KafkaDataConsumer's methods are interrupted because of KAFKA-1894")
+      val warned = _consumer.isDefined
+      if (!warned) {
+        logWarning("KafkaDataConsumer is not running in UninterruptibleThread. " +
+          "It may hang when KafkaDataConsumer's methods are interrupted because of KAFKA-1894")
+      }
       body
   }
 }
