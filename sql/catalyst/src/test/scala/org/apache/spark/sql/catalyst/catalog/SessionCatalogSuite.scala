@@ -1646,8 +1646,8 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val tableId = TableIdentifier("tbl1", Some("db2"))
       val qtn = QualifiedTableName("db2", "tbl1")
       catalog.getTableMetadata(tableId)
+      catalog.dropDatabase(qtn.database, false, true)
       val cct4 = catalog.getCachedCatalogTable(qtn)
-      catalog.dropDatabase(qtn.database, false, false)
       assert(cct4.isEmpty)
     }
   }

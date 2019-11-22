@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.util.Utils
 
@@ -73,8 +74,8 @@ object StaticSQLConf {
     buildStaticConf("spark.sql.filesourceTableCatalogCacheExpireSeconds")
       .internal()
       .doc("The maximum expire seconds time of cache table catalog.")
-      .intConf
-      .checkValue(cacheSize => cacheSize >= 0 && cacheSize < 8,
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(time => time >= 0 && time < 8,
         "The cache expire seconds threshold must be in [0,8].")
       .createWithDefault(2)
 
