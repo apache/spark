@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
@@ -357,7 +357,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       }
 
       // Make sure no other query with same id is active across all sessions
-      val activeOption = Option(sparkSession.sharedState.streamQueryStore.get(query.id))
+      val activeOption = Option(sparkSession.sharedState.streamQueryStore.getActive(query.id))
         .orElse(activeQueries.get(query.id)) // shouldn't be needed but paranoia ...
 
       val shouldStopActiveRun =
@@ -390,7 +390,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       // We still can have a race condition when two concurrent instances try to start the same
       // stream, while a third one was already active and stopped above. In this case, we throw a
       // ConcurrentModificationException.
-      val oldActiveQuery = sparkSession.sharedState.streamQueryStore.put(
+      val oldActiveQuery = sparkSession.sharedState.streamQueryStore.putActive(
         query.streamingQuery) // we need to put the StreamExecution, not the wrapper
       if (oldActiveQuery != null) {
         throw new ConcurrentModificationException(

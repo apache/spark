@@ -80,7 +80,6 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
   test("correctly display streaming query statistics page") {
     val id = UUID.randomUUID()
     val request = mock(classOf[HttpServletRequest])
-    val statusStore = createStatusStore
     val tab = mock(classOf[StreamingQueryTab], RETURNS_SMART_NULLS)
     val streamQueryStore = mock(classOf[StreamQueryStore], RETURNS_SMART_NULLS)
     when(request.getParameter("id")).thenReturn(id.toString)
@@ -92,9 +91,9 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     val html = renderStreamingQueryStatisticsPage(request, tab, streamQueryStore)
       .toString().toLowerCase(Locale.ROOT)
 
-    assert(html.contains("name = <strong>query</strong>"))
-    assert(html.contains("10.0"))
-    assert(html.contains("12.0"))
+    assert(html.contains("<strong>name: </strong>query<"))
+    assert(html.contains("""{"x": 1001898000100, "y": 10.0}"""))
+    assert(html.contains("""{"x": 1001898000100, "y": 12.0}"""))
     assert(html.contains("(<strong>3</strong> completed batches, <strong>1000</strong> records)"))
   }
 

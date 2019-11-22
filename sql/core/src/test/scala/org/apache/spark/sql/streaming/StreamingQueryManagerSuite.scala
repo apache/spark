@@ -315,7 +315,7 @@ class StreamingQueryManagerSuite extends StreamTest {
           try {
             ms2.addData(1, 2, 3)
             query2.processAllAvailable()
-            assert(spark.sharedState.activeStreamingQueries.get(query2.id) ===
+            assert(spark.sharedState.streamQueryStore.getActive(query2.id) ===
               query2.asInstanceOf[StreamingQueryWrapper].streamingQuery,
               "The correct streaming query is not being tracked in global state")
 
@@ -377,7 +377,7 @@ class StreamingQueryManagerSuite extends StreamTest {
           try {
             ms1.addData(1, 2, 3)
             query2.processAllAvailable()
-            assert(spark.sharedState.activeStreamingQueries.get(query2.id) ===
+            assert(spark.sharedState.streamQueryStore.getActive(query2.id) ===
               query2.asInstanceOf[StreamingQueryWrapper].streamingQuery,
               "The correct streaming execution is not being tracked in global state")
 

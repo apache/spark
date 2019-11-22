@@ -31,31 +31,32 @@ class StreamQueryStoreSuite extends SparkFunSuite with Matchers {
     val query1 = mock(classOf[StreamingQuery], RETURNS_SMART_NULLS)
     val query2 = mock(classOf[StreamingQuery], RETURNS_SMART_NULLS)
     val id1 = UUID.randomUUID()
+    val id2 = UUID.randomUUID()
     when(query1.id).thenReturn(id1)
-    when(query2.id).thenReturn(id1)
+    when(query2.id).thenReturn(id2)
     when(query1.name).thenReturn("query1")
     when(query2.name).thenReturn("query2")
     when(query1.isActive).thenReturn(true)
     when(query2.isActive).thenReturn(true)
-    store.putIfAbsent(query1)
-    store.putIfAbsent(query2)
 
+    store.putActive(query1)
     assertStore(store, Seq("query1"), Seq.empty)
-
-    val id2 = UUID.randomUUID()
-    when(query2.id).thenReturn(id2)
-    store.putIfAbsent(query2)
+    when(query1.isActive).thenReturn(false)
+    store.terminate(id1)
+    assertStore(store, Seq.empty, Seq("query1"))
+    store.putActive(query2)
+    assertStore(store, Seq("query2"), Seq("query1"))
+    when(query1.isActive).thenReturn(true)
+    store.putActive(query1)
     assertStore(store, Seq("query1", "query2"), Seq.empty)
-
-    store.terminate(id2)
-    when(query2.isActive).thenReturn(false)
-    assertStore(store, Seq("query1"), Seq("query1"))
   }
 
   private def assertStore(
       store: StreamQueryStore,
       activeQueryNames: Seq[String],
       inactiveQueryNames: Seq[String]): Unit = {
+    assert(store.getActiveQueries.map(_.name).toSet === activeQueryNames.toSet)
+    assert(store.getInactiveQueries.map(_.name).toSet === inactiveQueryNames.toSet)
     assert(store.allStreamQueries.size === activeQueryNames.length + inactiveQueryNames.length)
     assert(store.allStreamQueries.map(_._1.name).toSet ===
       (activeQueryNames ++ inactiveQueryNames).toSet)

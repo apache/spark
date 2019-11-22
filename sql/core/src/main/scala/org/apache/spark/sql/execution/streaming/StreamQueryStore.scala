@@ -34,23 +34,29 @@ private[sql] class StreamQueryStore {
   // stream query many times after it failed or terminated.
   private val inactiveStreamingQueries = new ConcurrentHashMap[(UUID, Long), StreamingQuery]()
 
-  def put(query: StreamingQuery): Option[StreamingQuery] = {
+  def putActive(query: StreamingQuery): StreamingQuery = {
     val curTime = System.currentTimeMillis()
-    val prevQuery = Option(activeStreamingQueries.put(query.id, (query, curTime))).map(_._1)
-    if (prevQuery.isEmpty) {
-      // if `prevQuery` is empty, it indicates this query start at first time or restart again.
+    val prevQueryAndTime = activeStreamingQueries.put(query.id, (query, curTime))
+    if (prevQueryAndTime == null) {
+      // if `prevQuery` is null, it indicates this query start at first time or restart again.
       // So it is safe to remove this query from `inactiveStreamingQueries`
       val candidates = inactiveStreamingQueries.asScala.toSeq.filter { case ((uuid, _), _) =>
         uuid.equals(query.id)
       }
-      candidates.foreach(cands => inactiveStreamingQueries.remove(cands._1))
+      candidates.foreach { case ((id, ts), _) => inactiveStreamingQueries.remove((id, ts)) }
+      null
+    } else {
+      prevQueryAndTime._1
     }
-
-    prevQuery
   }
 
-  def get(id: UUID): StreamingQuery = {
-    activeStreamingQueries.get(id)._1
+  def getActive(id: UUID): StreamingQuery = {
+    val queryAndTime = activeStreamingQueries.get(id)
+    if (queryAndTime == null) {
+      null
+    } else {
+      queryAndTime._1
+    }
   }
 
   def terminate(id: UUID): Unit = {
@@ -65,5 +71,15 @@ private[sql] class StreamQueryStore {
       inactiveStreamingQueries.asScala.toSeq.map { case ((_, startTime), query) =>
         (query, startTime)
       }
+  }
+
+  // only for test
+  private[sql] def getActiveQueries: Seq[StreamingQuery] = {
+    activeStreamingQueries.asScala.map(_._2._1).toSeq
+  }
+
+  // only for test
+  private[sql] def getInactiveQueries: Seq[StreamingQuery] = {
+    inactiveStreamingQueries.asScala.values.toSeq
   }
 }

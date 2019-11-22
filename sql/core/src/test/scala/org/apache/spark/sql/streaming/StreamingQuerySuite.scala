@@ -1127,7 +1127,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AddData(streamInput2, 4, 5, 6, 7),
       CheckLastBatch(1, 2, 3, 4, 5, 6, 7),
       AssertOnQuery { q =>
-        assertQuerySummary(q, TOTAL_INPUT_RECORDS, -1L, 9L)
+        assertQuerySummary(q, TOTAL_INPUT_RECORDS, -1L, 7L)
         true
       },
       AddData(streamInput2, 8, 9),
