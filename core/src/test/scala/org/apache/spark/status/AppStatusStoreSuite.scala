@@ -18,9 +18,8 @@
 package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.status.LiveEntityHelpers.makeNegative
-import org.apache.spark.status.api.v1
-import org.apache.spark.status.api.v1.{InputMetrics, OutputMetrics, ShuffleReadMetrics, ShuffleWriteMetrics}
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.{TaskInfo, TaskLocality}
 import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore._
 
@@ -79,50 +78,55 @@ class AppStatusStoreSuite extends SparkFunSuite {
     assert(store.count(classOf[CachedQuantile]) === 2)
   }
 
-  private def createAppStore(store: KVStore, live: Boolean = false): AppStatusStore = {
+  private def createAppStore(disk: Boolean, live: Boolean): AppStatusStore = {
     val conf = new SparkConf()
     if (live) {
-      AppStatusStore.createLiveStore(conf)
-    } else {
-      new AppStatusStore(store)
+      return AppStatusStore.createLiveStore(conf)
     }
+
+    val store: KVStore = if (disk) {
+      val testDir = Utils.createTempDir()
+      val diskStore = KVUtils.open(testDir, getClass.getName)
+      new ElementTrackingStore(diskStore, conf)
+    } else {
+      new ElementTrackingStore(new InMemoryStore, conf)
+    }
+    new AppStatusStore(store)
   }
 
-  test("SPARK-26260: task summary should contain only successful tasks' metrics") {
-    val testDir = Utils.createTempDir()
-    val diskStore = KVUtils.open(testDir, getClass.getName)
-    val inMemoryStore = new InMemoryStore
-
-    val historyDiskAppStore = createAppStore(diskStore)
-    val historyInMemoryAppStore = createAppStore(inMemoryStore)
-    val liveAppStore = createAppStore(inMemoryStore, live = true)
-
-    Seq(historyDiskAppStore, historyInMemoryAppStore, liveAppStore).foreach { appStore =>
+  Seq(
+    "disk" -> createAppStore(disk = true, live = false),
+    "in memory" -> createAppStore(disk = false, live = false),
+    "in memory live" -> createAppStore(disk = false, live = true)
+  ).foreach { case (hint, appStore) =>
+    test(s"SPARK-26260: summary should contain only successful tasks' metrics (store = $hint") {
       val store = appStore.store
+
       // Success and failed tasks metrics
       for (i <- 0 to 5) {
-        if (i % 2 == 1) {
-          store.write(newTaskData(i, status = "FAILED"))
+        if (i % 2 == 0) {
+          writeTaskDataToStore(i, store, "FAILED")
         } else {
-          store.write(newTaskData(i, status = "SUCCESS"))
+          writeTaskDataToStore(i, store, "SUCCESS")
         }
       }
-      // Running tasks metrics (default metrics, positive metrics)
+
+      // Running tasks metrics (-1 = no metrics reported, positive = metrics have been reported)
       Seq(-1, 6).foreach { metric =>
-        store.write(newTaskData(metric, status = "RUNNING"))
+        writeTaskDataToStore(metric, store, "RUNNING")
       }
 
       /**
        * Following are the tasks metrics,
-       * 0, 2, 4 => Success
-       * 1, 3, 5 => Failed
+       * 1, 3, 5 => Success
+       * 0, 2, 4 => Failed
        * -1, 6 => Running
        *
-       * Task summary will consider (0, 2, 4) only
+       * Task summary will consider (1, 3, 5) only
        */
       val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
 
-      val values = Array(0.0, 2.0, 4.0)
+      val values = Array(1.0, 3.0, 5.0)
 
       val dist = new Distribution(values, 0, values.length).getQuantiles(uiQuantiles.sorted)
       dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
@@ -130,27 +134,6 @@ class AppStatusStoreSuite extends SparkFunSuite {
       }
       appStore.close()
     }
-    Utils.deleteRecursively(testDir)
-  }
-
-  test("SPARK-26260: task summary should be empty for non-successful tasks") {
-    // This test will check for 0 metric value for failed task
-    val testDir = Utils.createTempDir()
-    val diskStore = KVUtils.open(testDir, getClass.getName)
-    val inMemoryStore = new InMemoryStore
-
-    val historyDiskAppStore = createAppStore(diskStore)
-    val historyInMemoryAppStore = createAppStore(inMemoryStore)
-    val liveAppStore = createAppStore(inMemoryStore, live = true)
-
-    Seq(historyDiskAppStore, historyInMemoryAppStore, liveAppStore).foreach { appStore =>
-      val store = appStore.store
-      (0 until 5).foreach { i => store.write(newTaskData(i, status = "FAILED")) }
-      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
-      assert(summary.size === 0)
-      appStore.close()
-    }
-    Utils.deleteRecursively(testDir)
   }
 
   private def compareQuantiles(count: Int, quantiles: Array[Double]): Unit = {
@@ -170,49 +153,55 @@ class AppStatusStoreSuite extends SparkFunSuite {
   }
 
   private def newTaskData(i: Int, status: String = "SUCCESS"): TaskDataWrapper = {
-
-    val metrics = new v1.TaskMetrics(
+    new TaskDataWrapper(
+      i.toLong, i, i, i, i, i, i.toString, i.toString, status, i.toString, false, Nil, None, true,
       i, i, i, i, i, i, i, i, i, i,
-      new InputMetrics(i, i),
-      new OutputMetrics(i, i),
-      new ShuffleReadMetrics(i, i, i, i, i, i, i),
-      new ShuffleWriteMetrics(i, i, i))
+      i, i, i, i, i, i, i, i, i, i,
+      i, i, i, i, stageId, attemptId)
+  }
 
-    val hasMetrics = i >= 0
+  private def writeTaskDataToStore(i: Int, store: KVStore, status: String): Unit = {
+   val liveTask = new LiveTask(new TaskInfo( i.toLong, i, i, i.toLong, i.toString,
+       i.toString, TaskLocality.ANY, false), stageId, attemptId, None)
 
-    val taskMetrics: v1.TaskMetrics = if (hasMetrics && status != "SUCCESS") {
-      makeNegative(metrics)
-    } else {
-      metrics
+    if (status == "SUCCESS") {
+      liveTask.info.finishTime = 1L
+    } else if (status == "FAILED") {
+      liveTask.info.failed = true
+      liveTask.info.finishTime = 1L
     }
 
-    new TaskDataWrapper(
-      i.toLong, i, i, i, i, i, i.toString, i.toString, status, i.toString, false, Nil, None,
-      hasMetrics,
-      taskMetrics.executorDeserializeTime,
-      taskMetrics.executorDeserializeCpuTime,
-      taskMetrics.executorRunTime,
-      taskMetrics.executorCpuTime,
-      taskMetrics.resultSize,
-      taskMetrics.jvmGcTime,
-      taskMetrics.resultSerializationTime,
-      taskMetrics.memoryBytesSpilled,
-      taskMetrics.diskBytesSpilled,
-      taskMetrics.peakExecutionMemory,
-      taskMetrics.inputMetrics.bytesRead,
-      taskMetrics.inputMetrics.recordsRead,
-      taskMetrics.outputMetrics.bytesWritten,
-      taskMetrics.outputMetrics.recordsWritten,
-      taskMetrics.shuffleReadMetrics.remoteBlocksFetched,
-      taskMetrics.shuffleReadMetrics.localBlocksFetched,
-      taskMetrics.shuffleReadMetrics.fetchWaitTime,
-      taskMetrics.shuffleReadMetrics.remoteBytesRead,
-      taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk,
-      taskMetrics.shuffleReadMetrics.localBytesRead,
-      taskMetrics.shuffleReadMetrics.recordsRead,
-      taskMetrics.shuffleWriteMetrics.bytesWritten,
-      taskMetrics.shuffleWriteMetrics.writeTime,
-      taskMetrics.shuffleWriteMetrics.recordsWritten,
-      stageId, attemptId)
+    val taskMetrics = getTaskMetrics(i)
+    liveTask.updateMetrics(taskMetrics)
+    liveTask.write(store.asInstanceOf[ElementTrackingStore], 1L)
+  }
+
+  private def getTaskMetrics(i: Int): TaskMetrics = {
+    val taskMetrics = new TaskMetrics()
+    taskMetrics.setExecutorDeserializeTime(i)
+    taskMetrics.setExecutorDeserializeCpuTime(i)
+    taskMetrics.setExecutorRunTime(i)
+    taskMetrics.setExecutorCpuTime(i)
+    taskMetrics.setResultSize(i)
+    taskMetrics.setJvmGCTime(i)
+    taskMetrics.setResultSerializationTime(i)
+    taskMetrics.incMemoryBytesSpilled(i)
+    taskMetrics.incDiskBytesSpilled(i)
+    taskMetrics.incPeakExecutionMemory(i)
+    taskMetrics.inputMetrics.incBytesRead(i)
+    taskMetrics.inputMetrics.incRecordsRead(i)
+    taskMetrics.outputMetrics.setBytesWritten(i)
+    taskMetrics.outputMetrics.setRecordsWritten(i)
+    taskMetrics.shuffleReadMetrics.incRemoteBlocksFetched(i)
+    taskMetrics.shuffleReadMetrics.incLocalBlocksFetched(i)
+    taskMetrics.shuffleReadMetrics.incFetchWaitTime(i)
+    taskMetrics.shuffleReadMetrics.incRemoteBytesRead(i)
+    taskMetrics.shuffleReadMetrics.incRemoteBytesReadToDisk(i)
+    taskMetrics.shuffleReadMetrics.incLocalBytesRead(i)
+    taskMetrics.shuffleReadMetrics.incRecordsRead(i)
+    taskMetrics.shuffleWriteMetrics.incBytesWritten(i)
+    taskMetrics.shuffleWriteMetrics.incWriteTime(i)
+    taskMetrics.shuffleWriteMetrics.incRecordsWritten(i)
+    taskMetrics
   }
 }
