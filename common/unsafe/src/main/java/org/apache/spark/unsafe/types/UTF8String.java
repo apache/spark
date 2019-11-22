@@ -538,14 +538,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trim() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    while (s < this.numBytes && getByte(s) == ' ') s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the space (0x20) in the right side
     int e = this.numBytes - 1;
-    while (e > s && getByte(e) == 0x20) e--;
+    while (e > s && getByte(e) == ' ') e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -557,7 +557,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Trims whitespaces (<= ASCII 32) from both ends of this string.
    *
    * Note that, this method is the same as java's {@link String#trim}, and different from
-   * {@link UTF8String#trim()} which only remove only spaces(= ASCII 32) from both ends.
+   * {@link UTF8String#trim()} which remove only spaces(= ASCII 32) from both ends.
    *
    * @return A UTF8String whose value is this UTF8String, with any leading and trailing white
    * space removed, or this UTF8String if it has no leading or trailing whitespace.
@@ -566,14 +566,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimAll() {
     int s = 0;
     // skip all of the whitespaces (<=0x20) in the left side
-    while (s < this.numBytes && getByte(s) <= 0x20) s++;
+    while (s < this.numBytes && getByte(s) <= ' ') s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the whitespaces (<=0x20) in the right side
     int e = this.numBytes - 1;
-    while (e > s && getByte(e) <= 0x20) e--;
+    while (e > s && getByte(e) <= ' ') e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
