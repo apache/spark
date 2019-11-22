@@ -1528,7 +1528,7 @@ class SessionCatalog(
       case e: ExecutionException =>
         // unpack ExecutionException to raw Exception
         throw e.getCause
-      case other =>
+      case other: Throwable =>
         // unexpected exception, should never happen
         throw other
     }
