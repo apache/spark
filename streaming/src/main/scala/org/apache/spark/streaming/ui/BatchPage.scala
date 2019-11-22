@@ -37,11 +37,14 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private def columns: Seq[Node] = {
     <th>Output Op Id</th>
       <th>Description</th>
-      <th>Output Op Duration {SparkUIUtils.tooltip("Time taken to handle all jobs of the batch",
-        "right")}</th>
+      <th>Output Op Duration {SparkUIUtils.tooltip("Time taken for all the jobs of this batch to" +
+        " finish processing from the time they were submitted.  Essentially, it is" +
+        " processingDelay + schedulingDelay.",
+        "top")}</th>
       <th>Status</th>
       <th>Job Id</th>
-      <th>Job Duration {SparkUIUtils.tooltip("Time taken to process the job", "right")}</th>
+      <th>Job Duration {SparkUIUtils.tooltip("Time taken from submission time to completion " +
+        "time of the job", "top")}</th>
       <th class="sorttable_nosort">Stages: Succeeded/Total</th>
       <th class="sorttable_nosort">Tasks (for all stages): Succeeded/Total</th>
       <th>Error</th>
