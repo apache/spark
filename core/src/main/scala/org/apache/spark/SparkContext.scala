@@ -444,7 +444,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _eventLogCodec = {
       val compress = _conf.get(EVENT_LOG_COMPRESS)
       if (compress && isEventLogEnabled) {
-        Some(CompressionCodec.getCodecName(_conf)).map(CompressionCodec.getShortName)
+        Some(_conf.get(EVENT_LOG_COMPRESSION_CODEC)).map(CompressionCodec.getShortName)
       } else {
         None
       }
