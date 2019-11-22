@@ -15,20 +15,6 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming;
+package org.apache.spark.sql.connector.write
 
-import java.util.Locale;
-
-import org.junit.Assert;
-import org.junit.Test;
-
-public class JavaOutputModeSuite {
-
-  @Test
-  public void testOutputModes() {
-    OutputMode o1 = OutputMode.Append();
-    Assert.assertTrue(o1.toString().toLowerCase(Locale.ROOT).contains("append"));
-    OutputMode o2 = OutputMode.Complete();
-    Assert.assertTrue(o2.toString().toLowerCase(Locale.ROOT).contains("complete"));
-  }
-}
+private[sql] case class PhysicalWriteInfoImpl(numPartitions: Int) extends PhysicalWriteInfo

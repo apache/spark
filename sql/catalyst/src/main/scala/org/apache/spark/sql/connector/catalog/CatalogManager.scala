@@ -71,7 +71,7 @@ class CatalogManager(
    * This happens when the source implementation extends the v2 TableProvider API and is not listed
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
-  private def v2SessionCatalog: CatalogPlugin = {
+  private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
         catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())

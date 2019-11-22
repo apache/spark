@@ -22,9 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.InternalCompilerException
-
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
@@ -32,13 +29,11 @@ import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 object SparkPlan {
@@ -71,16 +66,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def sparkContext = sqlContext.sparkContext
 
   val id: Int = SparkPlan.newPlanId()
-
-  // sqlContext will be null when SparkPlan nodes are created without the active sessions.
-  val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
-    sqlContext.conf.subexpressionEliminationEnabled
-  } else {
-    false
-  }
-
-  // whether we should fallback when hitting compilation errors caused by codegen
-  private val codeGenFallBack = (sqlContext == null) || sqlContext.conf.codegenFallback
 
   /**
    * Return true if this stage of the plan supports columnar execution.
@@ -460,29 +445,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       partsScanned += p.size
     }
     buf.toArray
-  }
-
-  protected def newMutableProjection(
-      expressions: Seq[Expression],
-      inputSchema: Seq[Attribute],
-      useSubexprElimination: Boolean = false): MutableProjection = {
-    log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
-    MutableProjection.create(expressions, inputSchema)
-  }
-
-  protected def newOrdering(
-      order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
-    GenerateOrdering.generate(order, inputSchema)
-  }
-
-  /**
-   * Creates a row ordering for the given schema, in natural ascending order.
-   */
-  protected def newNaturalAscendingOrdering(dataTypes: Seq[DataType]): Ordering[InternalRow] = {
-    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
-      case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
-    }
-    newOrdering(order, Seq.empty)
   }
 
   /**

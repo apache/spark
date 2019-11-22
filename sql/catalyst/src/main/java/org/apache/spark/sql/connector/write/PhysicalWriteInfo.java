@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming;
+package org.apache.spark.sql.connector.write;
 
-import java.util.Locale;
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory;
 
-import org.junit.Assert;
-import org.junit.Test;
-
-public class JavaOutputModeSuite {
-
-  @Test
-  public void testOutputModes() {
-    OutputMode o1 = OutputMode.Append();
-    Assert.assertTrue(o1.toString().toLowerCase(Locale.ROOT).contains("append"));
-    OutputMode o2 = OutputMode.Complete();
-    Assert.assertTrue(o2.toString().toLowerCase(Locale.ROOT).contains("complete"));
-  }
+/**
+ * This interface contains physical write information that data sources can use when
+ * generating a {@link DataWriterFactory} or a {@link StreamingDataWriterFactory}.
+ */
+@Evolving
+public interface PhysicalWriteInfo {
+  /**
+   * The number of partitions of the input data that is going to be written.
+   */
+  int numPartitions();
 }
