@@ -63,6 +63,7 @@ SELECT CAST(interval 3 month 1 hour AS string);
 
 -- trim string before cast to numeric
 select cast(' 1' as tinyint);
+select cast(' 1\t' as tinyint);
 select cast(' 1' as smallint);
 select cast(' 1' as INT);
 select cast(' 1' as bigint);

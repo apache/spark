@@ -1063,7 +1063,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses this UTF8String to long.
+   * Parses this UTF8String(trimmed if needed) to long.
    *
    * Note that, in this method we accumulate the result in negative format, and convert it to
    * positive format at the end, if this string is not started with '-'. This is because min value
@@ -1077,20 +1077,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toLong(LongWrapper toLongResult) {
-    if (this.numBytes == 0) return false;
     int offset = 0;
-    while (offset < this.numBytes && getByte(offset) == ' ') offset++;
+    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && getByte(end) == ' ') end--;
-
-    int numBytes = end - offset + 1;
+    while (end > offset && getByte(end) <= ' ') end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
     if (negative || b == '+') {
-      if (numBytes == 1) {
+      if (end - offset == 0) {
         return false;
       }
       offset++;
@@ -1156,7 +1153,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses this UTF8String to int.
+   * Parses this UTF8String(trimmed if needed) to int.
    *
    * Note that, in this method we accumulate the result in negative format, and convert it to
    * positive format at the end, if this string is not started with '-'. This is because min value
@@ -1173,20 +1170,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toInt(IntWrapper intWrapper) {
-    if (this.numBytes == 0) return false;
     int offset = 0;
-    while (offset < this.numBytes && getByte(offset) == ' ') offset++;
+    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && getByte(end) == ' ') end--;
-
-    int numBytes = end - offset + 1;
+    while (end > offset && getByte(end) <= ' ') end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
     if (negative || b == '+') {
-      if (numBytes == 1) {
+      if (end - offset == 0) {
         return false;
       }
       offset++;

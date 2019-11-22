@@ -4,6 +4,7 @@ select x'00' < x'ff';
 
 -- trim string to numeric
 select '1 ' = 1Y;
+select '\t1 ' = 1Y;
 select '1 ' = 1S;
 select '1 ' = 1;
 select ' 1' = 1L;
