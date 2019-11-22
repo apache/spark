@@ -160,7 +160,7 @@ abstract class FileStreamSourceTest
       val statuses = fs.listStatus(srcDir, new PathFilter {
         override def accept(path: Path): Boolean = pathFilter(path)
       })
-      sinkLog.add(batchId, statuses.map { s => SinkFileStatus(s) })
+      sinkLog.add(batchId, statuses.map(SinkFileStatus(_)))
     }
   }
 
