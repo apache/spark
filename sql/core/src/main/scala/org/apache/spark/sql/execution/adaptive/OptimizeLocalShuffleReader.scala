@@ -108,7 +108,7 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.getConf(SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED)) {
+    if (!conf.getConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED)) {
       return plan
     }
 
@@ -152,13 +152,14 @@ object OptimizeLocalShuffleReader {
  *
  * @param child It's usually `ShuffleQueryStageExec` or `ReusedQueryStageExec`, but can be the
  *              shuffle exchange node during canonicalization.
- * @param partitionStartIndices A mapper usually writes many shuffle blocks, and it's better to
- *                              launch multiple tasks to read shuffle blocks of one mapper. This
- *                              array contains the partition start indices for each mapper.
+ * @param partitionStartIndicesPerMapper A mapper usually writes many shuffle blocks, and it's
+ *                                       better to launch multiple tasks to read shuffle blocks of
+ *                                       one mapper. This array contains the partition start
+ *                                       indices for each mapper.
  */
 case class LocalShuffleReaderExec(
     child: SparkPlan,
-    partitionStartIndices: Array[Array[Int]]) extends UnaryExecNode {
+    partitionStartIndicesPerMapper: Array[Array[Int]]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -175,9 +176,9 @@ case class LocalShuffleReaderExec(
     if (cachedShuffleRDD == null) {
       cachedShuffleRDD = child match {
         case stage: ShuffleQueryStageExec =>
-          stage.plan.createLocalShuffleRDD(partitionStartIndices)
+          stage.plan.createLocalShuffleRDD(partitionStartIndicesPerMapper)
         case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-          stage.plan.createLocalShuffleRDD(partitionStartIndices)
+          stage.plan.createLocalShuffleRDD(partitionStartIndicesPerMapper)
       }
     }
     cachedShuffleRDD

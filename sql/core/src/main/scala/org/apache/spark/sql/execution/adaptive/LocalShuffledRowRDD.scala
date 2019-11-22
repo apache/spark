@@ -54,14 +54,14 @@ private final class LocalShuffledRowRDDPartition(
  * of partitions of the map output). The post-shuffle partition number is the same to the parent
  * RDD's partition number.
  *
- * @param partitionStartIndices A mapper usually writes many shuffle blocks, and it's better to
- *                              launch multiple tasks to read shuffle blocks of one mapper. This
- *                              array contains the partition start indices for each mapper.
+ * `partitionStartIndicesPerMapper` specifies how to split the shuffle blocks of each mapper into
+ * one or more partitions. For a mapper `i`, the `j`th partition includes shuffle blocks from
+ * `partitionStartIndicesPerMapper[i][j]` to `partitionStartIndicesPerMapper[i][j+1]` (exclusive).
  */
 class LocalShuffledRowRDD(
      var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
      metrics: Map[String, SQLMetric],
-     partitionStartIndices: Array[Array[Int]])
+     partitionStartIndicesPerMapper: Array[Array[Int]])
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   private[this] val numReducers = dependency.partitioner.numPartitions
@@ -72,7 +72,7 @@ class LocalShuffledRowRDD(
   override def getPartitions: Array[Partition] = {
     val partitions = ArrayBuffer[LocalShuffledRowRDDPartition]()
     for (mapIndex <- 0 until numMappers) {
-      (partitionStartIndices(mapIndex) :+ numReducers).sliding(2, 1).foreach {
+      (partitionStartIndicesPerMapper(mapIndex) :+ numReducers).sliding(2, 1).foreach {
         case Array(start, end) =>
           partitions += new LocalShuffledRowRDDPartition(partitions.length, mapIndex, start, end)
       }
