@@ -49,6 +49,16 @@ private [spark] case class HDFSCacheTaskLocation(override val host: String) exte
   override def toString: String = TaskLocation.inMemoryLocationTag + host
 }
 
+/**
+ * A location that can match any host. This can be used as the last location in the list of
+ * preferred locations to indicate that the task can be assigned to any host if it cannot get any
+ * desired location immediately.
+ */
+private [spark] case class WildcardLocation() extends TaskLocation {
+  override val host: String = "*"
+  override def toString: String = host
+}
+
 private[spark] object TaskLocation {
   // We identify hosts on which the block is cached with this prefix.  Because this prefix contains
   // underscores, which are not legal characters in hostnames, there should be no potential for
@@ -70,7 +80,9 @@ private[spark] object TaskLocation {
   def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
     if (hstr.equals(str)) {
-      if (str.startsWith(executorLocationTag)) {
+      if (str == "*") {
+        new WildcardLocation()
+      } else if (str.startsWith(executorLocationTag)) {
         val hostAndExecutorId = str.stripPrefix(executorLocationTag)
         val splits = hostAndExecutorId.split("_", 2)
         require(splits.length == 2, "Illegal executor location format: " + str)

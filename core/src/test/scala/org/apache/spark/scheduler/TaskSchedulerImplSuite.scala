@@ -1289,6 +1289,44 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.addresses)
   }
 
+  test("Tasks with wildcard location can run immediately if preferred location not available") {
+    val conf = new SparkConf()
+      .set(config.LOCALITY_WAIT.key, "3s")
+    sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
+
+    // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
+    val clock = new ManualClock()
+    val taskScheduler = new TaskSchedulerImpl(sc) {
+      override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
+        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+      }
+    }
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
+    }
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    // make an offer on the preferred host so the scheduler knows its alive.  This is necessary
+    // so that the taskset knows that it *could* take advantage of locality.
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+
+    // Submit a taskset with locality preferences.
+    val taskSet = FakeTask.createTaskSet(
+      1, stageId = 1, stageAttemptId = 0, Seq(TaskLocation("host1", "exec1"), TaskLocation("*")))
+    taskScheduler.submitTasks(taskSet)
+    val tsm = taskScheduler.taskSetManagerForAttempt(1, 0).get
+    // make sure we've setup our test correctly, so that the taskset knows it *could* use local
+    // offers.
+    assert(tsm.myLocalityLevels.contains(TaskLocality.NODE_LOCAL))
+    // make an offer on a non-preferred location.  Since the delay is 0, we should still schedule
+    // immediately.
+    val taskDescs =
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1))).flatten
+    assert(taskDescs.size === 1)
+    assert(taskDescs.head.executorId === "exec2")
+  }
+
   /**
    * Used by tests to simulate a task failure. This calls the failure handler explicitly, to ensure
    * that all the state is updated when this method returns. Otherwise, there's no way to know when
