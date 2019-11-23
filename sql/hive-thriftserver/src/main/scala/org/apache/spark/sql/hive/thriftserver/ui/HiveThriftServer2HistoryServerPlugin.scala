@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.sql.hive.thriftserver.ui
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SparkListener
-import org.apache.spark.sql.hive.thriftserver.ui.{HiveThriftServer2AppStatusStore, ThriftServerTab}
 import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
 import org.apache.spark.ui.SparkUI
 
 class HiveThriftServer2HistoryServerPlugin extends AppHistoryServerPlugin {
 
   override def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener] = {
-    Seq(new HiveThriftServer2Listener(store, None, None, None, Some(conf), false))
+    Seq(new HiveThriftServer2Listener(store, conf, None, false))
   }
 
   override def setupUI(ui: SparkUI): Unit = {

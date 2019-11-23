@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
-import java.util.Calendar
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._

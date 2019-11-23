@@ -23,10 +23,9 @@ import javax.servlet.http.HttpServletRequest
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.SparkListenerJobStart
 import org.apache.spark.sql.hive.thriftserver._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.kvstore.InMemoryStore
 
@@ -48,19 +47,18 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
   private def getStatusStore: HiveThriftServer2AppStatusStore = {
     kvstore = new ElementTrackingStore(new InMemoryStore, new SparkConf())
     val server = mock(classOf[HiveThriftServer2], RETURNS_SMART_NULLS)
-    val sc = mock(classOf[SparkContext])
-    val sqlConf = new SQLConf
+    val sparkConf = new SparkConf
 
-    val listener = new HiveThriftServer2Listener(kvstore, Some(server), Some(sqlConf), Some(sc))
+    val listener = new HiveThriftServer2Listener(kvstore, sparkConf, Some(server))
     val statusStore = new HiveThriftServer2AppStatusStore(kvstore, Some(listener))
 
     listener.onOtherEvent(SparkListenerSessionCreated("localhost", "sessionid", "user",
       System.currentTimeMillis()))
-    listener.onOtherEvent(SparkListenerStatementStart("id", "sessionid",
+    listener.onOtherEvent(SparkListenerOperationStart("id", "sessionid",
       "dummy query", "groupid", System.currentTimeMillis(), "user"))
-    listener.onOtherEvent(SparkListenerStatementParsed("id", "dummy plan"))
+    listener.onOtherEvent(SparkListenerOperationParsed("id", "dummy plan"))
     listener.onOtherEvent(SparkListenerJobStart(0, System.currentTimeMillis(), Seq()))
-    listener.onOtherEvent(SparkListenerStatementFinish("id", System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerOperationFinish("id", System.currentTimeMillis()))
     listener.onOtherEvent(SparkListenerOperationClosed("id", System.currentTimeMillis()))
     listener.onOtherEvent(SparkListenerSessionClosed("sessionid", System.currentTimeMillis()))
 
