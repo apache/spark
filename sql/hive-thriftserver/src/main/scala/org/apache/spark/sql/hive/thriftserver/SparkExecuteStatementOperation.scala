@@ -284,7 +284,8 @@ private[hive] class SparkExecuteStatementOperation(
             "in this session.")
         case _ =>
       }
-      HiveThriftServer2.eventManager.onStatementParsed(statementId, result.queryExecution.toString())
+      HiveThriftServer2.eventManager.onStatementParsed(statementId,
+        result.queryExecution.toString())
       iter = {
         if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
           resultList = None
