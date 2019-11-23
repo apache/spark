@@ -209,7 +209,7 @@
       </build>
     </profile>
     <profile>
-      <id>hadoop-3.2</id>
+      <id>hive-2.3</id>
       <dependencies>
         <dependency>
           <groupId>${hive.group}</groupId>
