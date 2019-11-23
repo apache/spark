@@ -349,9 +349,10 @@ private[arrow] class StructWriter(
   }
 }
 
-private[arrow] class MapWriter(val valueVector: MapVector,
-                               val keyWriter: ArrowFieldWriter,
-                               val valueWriter: ArrowFieldWriter) extends ArrowFieldWriter {
+private[arrow] class MapWriter(
+    val valueVector: MapVector,
+    val keyWriter: ArrowFieldWriter,
+    val valueWriter: ArrowFieldWriter) extends ArrowFieldWriter {
 
   override def setNull(): Unit = {}
 

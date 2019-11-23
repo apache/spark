@@ -97,7 +97,7 @@ object ArrowUtils {
           Seq(toArrowField(MapVector.DATA_VECTOR_NAME,
             new StructType()
               .add(MapVector.KEY_NAME, keyType, nullable = false)
-              .add(MapVector.VALUE_NAME, valueType, nullable = true),
+              .add(MapVector.VALUE_NAME, valueType, nullable = valueContainsNull),
             nullable = false,
             timeZoneId)).asJava)
       case dataType =>
