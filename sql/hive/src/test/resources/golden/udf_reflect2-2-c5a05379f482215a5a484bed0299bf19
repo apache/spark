@@ -1,0 +1,3 @@
+reflect2(arg0,method[,arg1[,arg2..]]) calls method of arg0 with reflection
+Use this UDF to call Java methods by matching the argument signature
+

@@ -1,0 +1,1 @@
+asin(x) - returns the arc sine of x if -1<=x<=1 or NULL otherwise

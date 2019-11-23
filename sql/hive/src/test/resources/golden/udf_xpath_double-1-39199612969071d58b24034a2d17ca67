@@ -1,0 +1,1 @@
+xpath_number(xml, xpath) - Returns a double value that matches the xpath expression

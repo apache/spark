@@ -1,0 +1,13 @@
+translate(input, from, to) - translates the input string by replacing the characters present in the from string with the corresponding characters in the to string
+translate(string input, string from, string to) is an equivalent function to translate in PostGreSQL. It works on a character by character basis on the input string (first parameter). A character in the input is checked for presence in the from string (second parameter). If a match happens, the character from to string (third parameter) which appears at the same index as the character in from string is obtained. This character is emitted in the output string  instead of the original character from the input string. If the to string is shorter than the from string, there may not be a character present at the same index in the to string. In such a case, nothing is emitted for the original character and it's deleted from the output string.
+For example,
+
+translate('abcdef', 'adc', '19') returns '1b9ef' replacing 'a' with '1', 'd' with '9' and removing 'c' from the input string
+
+translate('a b c d', ' ', '') return 'abcd' removing all spaces from the input string
+
+If the same character is present multiple times in the input string, the first occurrence of the character is the one that's considered for matching. However, it is not recommended to have the same character more than once in the from string since it's not required and adds to confusion.
+
+For example,
+
+translate('abcdef', 'ada', '192') returns '1bc9ef' replaces 'a' with '1' and 'd' with '9' ignoring the second occurrence of 'a' in the from string mapping it to '2'

@@ -1,0 +1,356 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.navbar {
+  font-size: 15px;
+  margin-bottom: 15px;
+  min-width: 600px;
+}
+
+.navbar .brand {
+  margin-right: 20px;
+  margin-bottom: 0;
+  margin-top: 0;
+  margin-left: 10px;
+  padding: 0;
+}
+
+.navbar .nav > li {
+  height: 50px;
+}
+
+.navbar .nav > li a {
+  height: 30px;
+  line-height: 2;
+}
+
+.navbar-text {
+  height: 50px;
+  line-height: 3.3;
+  white-space: nowrap;
+}
+
+table.sortable thead {
+  cursor: pointer;
+}
+
+table.sortable td {
+  word-wrap: break-word;
+  max-width: 600px;
+}
+
+.progress {
+  margin-bottom: 0px; position: relative
+}
+
+.progress-completed .bar,
+.progress .bar-completed {
+  background-color: #3EC0FF;
+  background-image: -moz-linear-gradient(top, #44CBFF, #34B0EE);
+  background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#44CBFF), to(#34B0EE));
+  background-image: -webkit-linear-gradient(top, #44CBFF, #34B0EE);
+  background-image: -o-linear-gradient(top, #44CBFF, #34B0EE);
+  background-image: linear-gradient(to bottom, #64CBFF, #54B0EE);
+  background-repeat: repeat-x;
+  filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FF44CBFF', endColorstr='#FF34B0EE', GradientType=0);
+}
+
+.progress-running .bar,
+.progress .bar-running {
+  background-color: #A0DFFF;
+  background-image: -moz-linear-gradient(top, #A4EDFF, #94DDFF);
+  background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#A4EDFF), to(#94DDFF));
+  background-image: -webkit-linear-gradient(top, #A4EDFF, #94DDFF);
+  background-image: -o-linear-gradient(top, #A4EDFF, #94DDFF);
+  background-image: linear-gradient(to bottom, #A4EDFF, #94DDFF);
+  background-repeat: repeat-x;
+  filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FFA4EDFF', endColorstr='#FF94DDFF', GradientType=0);
+}
+
+a.kill-link {
+  margin-right: 2px;
+  margin-left: 20px;
+  color: gray;
+  float: right;
+}
+
+a.name-link {
+  word-wrap: break-word;
+}
+
+span.expand-details {
+  font-size: 10pt;
+  cursor: pointer;
+  color: grey;
+  float: right;
+}
+
+span.rest-uri {
+  font-size: 10pt;
+  font-style: italic;
+  color: gray;
+}
+
+pre {
+  font-size: 12px;
+  line-height: 18px;
+  padding: 6px;
+  margin: 0;
+  word-break: break-word;
+  border-radius: 3px;
+}
+
+.stage-details {
+  overflow-y: auto;
+  margin: 0;
+  display: block;
+  transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+}
+
+.stage-details.collapsed {
+  padding-top: 0;
+  padding-bottom: 0;
+  border: none;
+  display: none;
+}
+
+.description-input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: nowrap;
+  display: block;
+}
+
+.description-input-full {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: normal;
+  display: block;
+}
+
+.stacktrace-details {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  display: block;
+  transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+}
+
+.stacktrace-details.collapsed {
+  padding-top: 0;
+  padding-bottom: 0;
+  border: none;
+  display: none;
+}
+
+span.expand-dag-viz, span.collapse-table {
+  cursor: pointer;
+}
+
+.collapsible-table.collapsed {
+  display: none;
+}
+
+.tooltip {
+  font-weight: normal;
+}
+
+.arrow-open {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #08c;
+  display: inline-block;
+  margin-bottom: 2px;
+}
+
+.arrow-closed {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 5px solid #08c;
+  display: inline-block;
+  margin-left: 2px;
+  margin-right: 3px;
+}
+
+.version {
+  line-height: 2.5;
+  vertical-align: bottom;
+  font-size: 12px;
+  padding: 0;
+  margin: 0;
+  font-weight: bold;
+  color: #777;
+}
+
+.accordion-inner {
+  background: #f5f5f5;
+}
+
+.accordion-inner pre {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+a.expandbutton {
+  cursor: pointer;
+}
+
+.threaddump-td-mouseover {
+  background-color: #49535a !important;
+  color: white;
+  cursor:pointer;
+}
+
+.table-head-clickable th a, .table-head-clickable th a:hover {
+  /* Make the entire header clickable, not just the text label */
+  display: block;
+  width: 100%;
+  /* Suppress the default link styling */
+  color: #333;
+  text-decoration: none;
+}
+
+.log-more-btn, .log-new-btn {
+  width: 100%
+}
+
+.no-new-alert {
+  text-align: center;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.table-cell-width-limited td {
+  max-width: 600px;
+}
+
+.paginate_button.active {
+  border: 1px solid #979797 !important;
+  background: white linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
+}
+
+.title-table {
+  clear: left;
+  display: inline-block;
+}
+
+.table-dataTable {
+  width: 100%;
+}
+
+.container-fluid-div {
+  width: 200px;
+}
+
+.select-all-div-checkbox-div {
+  width: 90px;
+}
+
+.scheduler-delay-checkbox-div {
+  width: 130px;
+}
+
+.task-deserialization-time-checkbox-div {
+  width: 190px;
+}
+
+.shuffle-read-blocked-time-checkbox-div {
+  width: 200px;
+}
+
+.shuffle-remote-reads-checkbox-div {
+  width: 170px;
+}
+
+.result-serialization-time-checkbox-div {
+  width: 185px;
+}
+
+.getting-result-time-checkbox-div {
+  width: 155px;
+}
+
+.peak-execution-memory-checkbox-div {
+  width: 180px;
+}
+
+#active-tasks-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#active-tasks-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#accumulator-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#accumulator-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-executor-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-executor-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-metrics-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-metrics-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-execs-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-execs-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#active-executors-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#active-executors-table th:first-child {
+  border-left: 1px solid #dddddd;
+}

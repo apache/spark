@@ -1,0 +1,4 @@
+trim(str) - Removes the leading and trailing space characters from str 
+Example:
+  > SELECT trim('   facebook  ') FROM src LIMIT 1;
+  'facebook'

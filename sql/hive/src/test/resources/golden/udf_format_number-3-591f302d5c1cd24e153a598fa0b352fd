@@ -1,0 +1,4 @@
+format_number(X, D) - Formats the number X to a format like '#,###,###.##', rounded to D decimal places, and returns the result as a string. If D is 0, the result has no decimal point or fractional part. This is supposed to function like MySQL's FORMAT
+Example:
+  > SELECT format_number(12332.123456, 4) FROM src LIMIT 1;
+  '12,332.1235'

@@ -1,0 +1,210 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+#  syntax: [instance].sink|source.[name].[options]=[value]
+
+#  This file configures Spark's internal metrics system. The metrics system is
+#  divided into instances which correspond to internal components.
+#  Each instance can be configured to report its metrics to one or more sinks.
+#  Accepted values for [instance] are "master", "worker", "executor", "driver",
+#  and "applications". A wildcard "*" can be used as an instance name, in
+#  which case all instances will inherit the supplied property.
+#
+#  Within an instance, a "source" specifies a particular set of grouped metrics.
+#  there are two kinds of sources:
+#    1. Spark internal sources, like MasterSource, WorkerSource, etc, which will
+#    collect a Spark component's internal state. Each instance is paired with a
+#    Spark source that is added automatically.
+#    2. Common sources, like JvmSource, which will collect low level state.
+#    These can be added through configuration options and are then loaded
+#    using reflection.
+#
+#  A "sink" specifies where metrics are delivered to. Each instance can be
+#  assigned one or more sinks.
+#
+#  The sink|source field specifies whether the property relates to a sink or
+#  source.
+#
+#  The [name] field specifies the name of source or sink.
+#
+#  The [options] field is the specific property of this source or sink. The
+#  source or sink is responsible for parsing this property.
+#
+#  Notes:
+#    1. To add a new sink, set the "class" option to a fully qualified class
+#    name (see examples below).
+#    2. Some sinks involve a polling period. The minimum allowed polling period
+#    is 1 second.
+#    3. Wildcard properties can be overridden by more specific properties.
+#    For example, master.sink.console.period takes precedence over
+#    *.sink.console.period.
+#    4. A metrics specific configuration
+#    "spark.metrics.conf=${SPARK_HOME}/conf/metrics.properties" should be
+#    added to Java properties using -Dspark.metrics.conf=xxx if you want to
+#    customize metrics system. You can also put the file in ${SPARK_HOME}/conf
+#    and it will be loaded automatically.
+#    5. The MetricsServlet sink is added by default as a sink in the master,
+#    worker and driver, and you can send HTTP requests to the "/metrics/json"
+#    endpoint to get a snapshot of all the registered metrics in JSON format.
+#    For master, requests to the "/metrics/master/json" and
+#    "/metrics/applications/json" endpoints can be sent separately to get
+#    metrics snapshots of the master instance and applications. This
+#    MetricsServlet does not have to be configured.
+#    6. The metrics system can also be configured using Spark configuration
+#    parameters. The relevant parameter names are formed by adding the
+#    prefix "spark.metrics.conf." to the configuration entries detailed in
+#    this file (see examples below).
+
+## List of available common sources and their properties.
+
+# org.apache.spark.metrics.source.JvmSource
+#   Note: Currently, JvmSource is the only available common source.
+#         It can be added to an instance by setting the "class" option to its
+#         fully qualified class name (see examples below).
+
+## List of available sinks and their properties.
+
+# org.apache.spark.metrics.sink.ConsoleSink
+#   Name:   Default:   Description:
+#   period  10         Poll period
+#   unit    seconds    Unit of the poll period
+
+# org.apache.spark.metrics.sink.CSVSink
+#   Name:     Default:   Description:
+#   period    10         Poll period
+#   unit      seconds    Unit of the poll period
+#   directory /tmp       Where to store CSV files
+
+# org.apache.spark.metrics.sink.GangliaSink
+#   Name:     Default:   Description:
+#   host      NONE       Hostname or multicast group of the Ganglia server,
+#                        must be set
+#   port      NONE       Port of the Ganglia server(s), must be set
+#   period    10         Poll period
+#   unit      seconds    Unit of the poll period
+#   ttl       1          TTL of messages sent by Ganglia
+#   dmax      0          Lifetime in seconds of metrics (0 never expired)
+#   mode      multicast  Ganglia network mode ('unicast' or 'multicast')
+
+# org.apache.spark.metrics.sink.JmxSink
+
+# org.apache.spark.metrics.sink.MetricsServlet
+#   Name:     Default:   Description:
+#   path      VARIES*    Path prefix from the web server root
+#   sample    false      Whether to show entire set of samples for histograms
+#                        ('false' or 'true')
+#
+# * Default path is /metrics/json for all instances except the master. The
+#   master has two paths:
+#     /metrics/applications/json # App information
+#     /metrics/master/json       # Master information
+
+# org.apache.spark.metrics.sink.PrometheusServlet
+#   Name:     Default:   Description:
+#   path      VARIES*    Path prefix from the web server root
+#
+# * Default path is /metrics/prometheus for all instances except the master. The
+#   master has two paths:
+#     /metrics/applications/prometheus # App information
+#     /metrics/master/prometheus       # Master information
+
+# org.apache.spark.metrics.sink.GraphiteSink
+#   Name:     Default:      Description:
+#   host      NONE          Hostname of the Graphite server, must be set
+#   port      NONE          Port of the Graphite server, must be set
+#   period    10            Poll period
+#   unit      seconds       Unit of the poll period
+#   prefix    EMPTY STRING  Prefix to prepend to every metric's name
+#   protocol  tcp           Protocol ("tcp" or "udp") to use
+#   regex     NONE          Optional filter to send only metrics matching this regex string
+
+# org.apache.spark.metrics.sink.StatsdSink
+#   Name:     Default:      Description:
+#   host      127.0.0.1     Hostname or IP of StatsD server
+#   port      8125          Port of StatsD server
+#   period    10            Poll period
+#   unit      seconds       Units of poll period
+#   prefix    EMPTY STRING  Prefix to prepend to metric name
+
+## Examples
+# Enable JmxSink for all instances by class name
+#*.sink.jmx.class=org.apache.spark.metrics.sink.JmxSink
+
+# Enable ConsoleSink for all instances by class name
+#*.sink.console.class=org.apache.spark.metrics.sink.ConsoleSink
+
+# Enable StatsdSink for all instances by class name
+#*.sink.statsd.class=org.apache.spark.metrics.sink.StatsdSink
+#*.sink.statsd.prefix=spark
+
+# Polling period for the ConsoleSink
+#*.sink.console.period=10
+# Unit of the polling period for the ConsoleSink
+#*.sink.console.unit=seconds
+
+# Polling period for the ConsoleSink specific for the master instance
+#master.sink.console.period=15
+# Unit of the polling period for the ConsoleSink specific for the master
+# instance
+#master.sink.console.unit=seconds
+
+# Enable CsvSink for all instances by class name
+#*.sink.csv.class=org.apache.spark.metrics.sink.CsvSink
+
+# Polling period for the CsvSink
+#*.sink.csv.period=1
+# Unit of the polling period for the CsvSink
+#*.sink.csv.unit=minutes
+
+# Polling directory for CsvSink
+#*.sink.csv.directory=/tmp/
+
+# Polling period for the CsvSink specific for the worker instance
+#worker.sink.csv.period=10
+# Unit of the polling period for the CsvSink specific for the worker instance
+#worker.sink.csv.unit=minutes
+
+# Enable Slf4jSink for all instances by class name
+#*.sink.slf4j.class=org.apache.spark.metrics.sink.Slf4jSink
+
+# Polling period for the Slf4JSink
+#*.sink.slf4j.period=1
+# Unit of the polling period for the Slf4jSink
+#*.sink.slf4j.unit=minutes
+
+# Example configuration for Graphite sink
+#*.sink.graphite.class=org.apache.spark.metrics.sink.GraphiteSink
+#*.sink.graphite.host=<graphiteEndPoint_hostName>
+#*.sink.graphite.port=<listening_port>
+#*.sink.graphite.period=10
+#*.sink.graphite.unit=seconds
+#*.sink.graphite.prefix=<optional_value>
+
+# Enable JvmSource for instance master, worker, driver and executor
+#master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+#worker.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+#driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+#executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+# Example configuration for PrometheusServlet
+#*.sink.prometheusServlet.class=org.apache.spark.metrics.sink.PrometheusServlet
+#*.sink.prometheusServlet.path=/metrics/prometheus
+#master.sink.prometheusServlet.path=/metrics/master/prometheus
+#applications.sink.prometheusServlet.path=/metrics/applications/prometheus

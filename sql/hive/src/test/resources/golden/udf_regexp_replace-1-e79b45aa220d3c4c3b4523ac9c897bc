@@ -1,0 +1,4 @@
+regexp_replace(str, regexp, rep) - replace all substrings of str that match regexp with rep
+Example:
+  > SELECT regexp_replace('100-200', '(\d+)', 'num') FROM src LIMIT 1;
+  'num-num'

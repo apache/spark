@@ -1,0 +1,1 @@
+to_date(expr) - Extracts the date part of the date or datetime expression expr

@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# define test binaries + versions
+PYDOCSTYLE_BUILD="pydocstyle"
+MINIMUM_PYDOCSTYLE="3.0.0"
+
+FLAKE8_BUILD="flake8"
+MINIMUM_FLAKE8="3.5.0"
+
+PYCODESTYLE_BUILD="pycodestyle"
+MINIMUM_PYCODESTYLE="2.4.0"
+
+SPHINX_BUILD="sphinx-build"
+
+function compile_python_test {
+    local COMPILE_STATUS=
+    local COMPILE_REPORT=
+
+    if [[ ! "$1" ]]; then
+        echo "No python files found!  Something is very wrong -- exiting."
+        exit 1;
+    fi
+
+    # compileall: https://docs.python.org/2/library/compileall.html
+    echo "starting python compilation test..."
+    COMPILE_REPORT=$( (python -B -mcompileall -q -l $1) 2>&1)
+    COMPILE_STATUS=$?
+
+    if [ $COMPILE_STATUS -ne 0 ]; then
+        echo "Python compilation failed with the following errors:"
+        echo "$COMPILE_REPORT"
+        echo "$COMPILE_STATUS"
+        exit "$COMPILE_STATUS"
+    else
+        echo "python compilation succeeded."
+        echo
+    fi
+}
+
+function pycodestyle_test {
+    local PYCODESTYLE_STATUS=
+    local PYCODESTYLE_REPORT=
+    local RUN_LOCAL_PYCODESTYLE=
+    local VERSION=
+    local EXPECTED_PYCODESTYLE=
+    local PYCODESTYLE_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-$MINIMUM_PYCODESTYLE.py"
+    local PYCODESTYLE_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$MINIMUM_PYCODESTYLE/pycodestyle.py"
+
+    if [[ ! "$1" ]]; then
+        echo "No python files found!  Something is very wrong -- exiting."
+        exit 1;
+    fi
+
+    # check for locally installed pycodestyle & version
+    RUN_LOCAL_PYCODESTYLE="False"
+    if hash "$PYCODESTYLE_BUILD" 2> /dev/null; then
+        VERSION=$( $PYCODESTYLE_BUILD --version 2> /dev/null)
+        EXPECTED_PYCODESTYLE=$( (python -c 'from distutils.version import LooseVersion;
+                                print(LooseVersion("""'${VERSION[0]}'""") >= LooseVersion("""'$MINIMUM_PYCODESTYLE'"""))')\
+                                2> /dev/null)
+
+        if [ "$EXPECTED_PYCODESTYLE" == "True" ]; then
+            RUN_LOCAL_PYCODESTYLE="True"
+        fi
+    fi
+
+    # download the right version or run locally
+    if [ $RUN_LOCAL_PYCODESTYLE == "False" ]; then
+        # Get pycodestyle at runtime so that we don't rely on it being installed on the build server.
+        # See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
+        # Updated to the latest official version of pep8. pep8 is formally renamed to pycodestyle.
+        echo "downloading pycodestyle from $PYCODESTYLE_SCRIPT_REMOTE_PATH..."
+        if [ ! -e "$PYCODESTYLE_SCRIPT_PATH" ]; then
+            curl --silent -o "$PYCODESTYLE_SCRIPT_PATH" "$PYCODESTYLE_SCRIPT_REMOTE_PATH"
+            local curl_status="$?"
+
+            if [ "$curl_status" -ne 0 ]; then
+                echo "Failed to download pycodestyle.py from $PYCODESTYLE_SCRIPT_REMOTE_PATH"
+                exit "$curl_status"
+            fi
+        fi
+
+        echo "starting pycodestyle test..."
+        PYCODESTYLE_REPORT=$( (python "$PYCODESTYLE_SCRIPT_PATH" --config=dev/tox.ini $1) 2>&1)
+        PYCODESTYLE_STATUS=$?
+    else
+        # we have the right version installed, so run locally
+        echo "starting pycodestyle test..."
+        PYCODESTYLE_REPORT=$( ($PYCODESTYLE_BUILD --config=dev/tox.ini $1) 2>&1)
+        PYCODESTYLE_STATUS=$?
+    fi
+
+    if [ $PYCODESTYLE_STATUS -ne 0 ]; then
+        echo "pycodestyle checks failed:"
+        echo "$PYCODESTYLE_REPORT"
+        exit "$PYCODESTYLE_STATUS"
+    else
+        echo "pycodestyle checks passed."
+        echo
+    fi
+}
+
+function flake8_test {
+    local FLAKE8_VERSION=
+    local VERSION=
+    local EXPECTED_FLAKE8=
+    local FLAKE8_REPORT=
+    local FLAKE8_STATUS=
+
+    if ! hash "$FLAKE8_BUILD" 2> /dev/null; then
+        echo "The flake8 command was not found."
+        echo "flake8 checks failed."
+        exit 1
+    fi
+
+    FLAKE8_VERSION="$($FLAKE8_BUILD --version  2> /dev/null)"
+    VERSION=($FLAKE8_VERSION)
+    EXPECTED_FLAKE8=$( (python -c 'from distutils.version import LooseVersion;
+                       print(LooseVersion("""'${VERSION[0]}'""") >= LooseVersion("""'$MINIMUM_FLAKE8'"""))') \
+                       2> /dev/null)
+
+    if [[ "$EXPECTED_FLAKE8" == "False" ]]; then
+        echo "\
+The minimum flake8 version needs to be $MINIMUM_FLAKE8. Your current version is $FLAKE8_VERSION
+
+flake8 checks failed."
+        exit 1
+    fi
+
+    echo "starting $FLAKE8_BUILD test..."
+    FLAKE8_REPORT=$( ($FLAKE8_BUILD . --count --select=E901,E999,F821,F822,F823 \
+                     --max-line-length=100 --show-source --statistics) 2>&1)
+    FLAKE8_STATUS=$?
+
+    if [ "$FLAKE8_STATUS" -ne 0 ]; then
+        echo "flake8 checks failed:"
+        echo "$FLAKE8_REPORT"
+        echo "$FLAKE8_STATUS"
+        exit "$FLAKE8_STATUS"
+    else
+        echo "flake8 checks passed."
+        echo
+    fi
+}
+
+function pydocstyle_test {
+    local PYDOCSTYLE_REPORT=
+    local PYDOCSTYLE_STATUS=
+    local PYDOCSTYLE_VERSION=
+    local EXPECTED_PYDOCSTYLE=
+
+    # Exclude auto-generated configuration file.
+    local DOC_PATHS_TO_CHECK="$( cd "${SPARK_ROOT_DIR}" && find . -name "*.py" | grep -vF 'functions.py' )"
+
+    # Check python document style, skip check if pydocstyle is not installed.
+    if ! hash "$PYDOCSTYLE_BUILD" 2> /dev/null; then
+        echo "The pydocstyle command was not found. Skipping pydocstyle checks for now."
+        echo
+        return
+    fi
+
+    PYDOCSTYLE_VERSION="$($PYDOCSTYLEBUILD --version 2> /dev/null)"
+    EXPECTED_PYDOCSTYLE=$(python -c 'from distutils.version import LooseVersion; \
+                             print(LooseVersion("""'$PYDOCSTYLE_VERSION'""") >= LooseVersion("""'$MINIMUM_PYDOCSTYLE'"""))' \
+                             2> /dev/null)
+
+    if [[ "$EXPECTED_PYDOCSTYLE" == "False" ]]; then
+        echo "\
+The minimum version of pydocstyle needs to be $MINIMUM_PYDOCSTYLE.
+Your current version is $PYDOCSTYLE_VERSION.
+Skipping pydocstyle checks for now."
+        echo
+        return
+    fi
+
+    echo "starting $PYDOCSTYLE_BUILD test..."
+    PYDOCSTYLE_REPORT=$( ($PYDOCSTYLE_BUILD --config=dev/tox.ini $DOC_PATHS_TO_CHECK) 2>&1)
+    PYDOCSTYLE_STATUS=$?
+
+    if [ "$PYDOCSTYLE_STATUS" -ne 0 ]; then
+        echo "pydocstyle checks failed:"
+        echo "$PYDOCSTYLE_REPORT"
+        exit "$PYDOCSTYLE_STATUS"
+    else
+        echo "pydocstyle checks passed."
+        echo
+    fi
+}
+
+function sphinx_test {
+    local SPHINX_REPORT=
+    local SPHINX_STATUS=
+
+    # Check that the documentation builds acceptably, skip check if sphinx is not installed.
+    if ! hash "$SPHINX_BUILD" 2> /dev/null; then
+        echo "The $SPHINX_BUILD command was not found. Skipping pydoc checks for now."
+        echo
+        return
+    fi
+
+    echo "starting $SPHINX_BUILD tests..."
+    pushd python/docs &> /dev/null
+    make clean &> /dev/null
+    # Treat warnings as errors so we stop correctly
+    SPHINX_REPORT=$( (SPHINXOPTS="-a -W" make html) 2>&1)
+    SPHINX_STATUS=$?
+
+    if [ "$SPHINX_STATUS" -ne 0 ]; then
+        echo "$SPHINX_BUILD checks failed:"
+        echo "$SPHINX_REPORT"
+        echo
+        echo "re-running make html to print full warning list:"
+        make clean &> /dev/null
+        SPHINX_REPORT=$( (SPHINXOPTS="-a" make html) 2>&1)
+        echo "$SPHINX_REPORT"
+        exit "$SPHINX_STATUS"
+    else
+        echo "$SPHINX_BUILD checks passed."
+        echo
+    fi
+
+    popd &> /dev/null
+}
+
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+
+pushd "$SPARK_ROOT_DIR" &> /dev/null
+
+PYTHON_SOURCE="$(find . -name "*.py")"
+
+compile_python_test "$PYTHON_SOURCE"
+pycodestyle_test "$PYTHON_SOURCE"
+flake8_test
+pydocstyle_test
+sphinx_test
+
+echo
+echo "all lint-python tests passed!"
+
+popd &> /dev/null

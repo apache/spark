@@ -1,0 +1,27 @@
+my_bool             	boolean             	from deserializer   
+my_byte             	tinyint             	from deserializer   
+my_16bit_int        	smallint            	from deserializer   
+my_32bit_int        	int                 	from deserializer   
+my_64bit_int        	bigint              	from deserializer   
+my_double           	double              	from deserializer   
+my_string           	string              	from deserializer   
+my_binary           	struct<hb:binary,offset:int,isreadonly:boolean,bigendian:boolean,nativebyteorder:boolean>	from deserializer   
+my_string_string_map	map<string,string>  	from deserializer   
+my_string_enum_map  	map<string,string>  	from deserializer   
+my_enum_string_map  	map<string,string>  	from deserializer   
+my_enum_struct_map  	map<string,struct<my_string:string,my_enum:string,optionals:struct<>>>	from deserializer   
+my_enum_stringlist_map	map<string,array<string>>	from deserializer   
+my_enum_structlist_map	map<string,array<struct<my_string:string,my_enum:string,optionals:struct<>>>>	from deserializer   
+my_stringlist       	array<string>       	from deserializer   
+my_structlist       	array<struct<my_string:string,my_enum:string,optionals:struct<>>>	from deserializer   
+my_enumlist         	array<string>       	from deserializer   
+my_stringset        	array<string>       	from deserializer   
+my_enumset          	array<string>       	from deserializer   
+my_structset        	array<struct<my_string:string,my_enum:string,optionals:struct<>>>	from deserializer   
+optionals           	struct<>            	from deserializer   
+b                   	string              	                    
+	 	 
+# Partition Information	 	 
+# col_name            	data_type           	comment             
+	 	 
+b                   	string              	                    
