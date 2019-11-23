@@ -204,6 +204,13 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"Binarizer: uid=$uid" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(outputCols).map(c => s", numOutputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")

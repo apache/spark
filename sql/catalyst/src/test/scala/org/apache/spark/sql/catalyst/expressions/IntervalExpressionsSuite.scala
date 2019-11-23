@@ -20,12 +20,16 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.IntervalUtils.fromString
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.stringToInterval
 import org.apache.spark.sql.types.Decimal
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+  implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
+
   implicit def interval(s: String): Literal = {
-    Literal(fromString("interval " + s))
+    Literal(stringToInterval( "interval " + s))
   }
 
   test("millenniums") {
@@ -195,8 +199,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("multiply") {
     def check(interval: String, num: Double, expected: String): Unit = {
       checkEvaluation(
-        MultiplyInterval(Literal(fromString(interval)), Literal(num)),
-        if (expected == null) null else fromString(expected))
+        MultiplyInterval(Literal(stringToInterval(interval)), Literal(num)),
+        if (expected == null) null else stringToInterval(expected))
     }
 
     check("0 seconds", 10, "0 seconds")
@@ -213,8 +217,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("divide") {
     def check(interval: String, num: Double, expected: String): Unit = {
       checkEvaluation(
-        DivideInterval(Literal(fromString(interval)), Literal(num)),
-        if (expected == null) null else fromString(expected))
+        DivideInterval(Literal(stringToInterval(interval)), Literal(num)),
+        if (expected == null) null else stringToInterval(expected))
     }
 
     check("0 seconds", 10, "0 seconds")
@@ -225,5 +229,36 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("-1 month 2 microseconds", -0.25, "4 months -8 microseconds")
     check("1 month 3 microsecond", 1.5, "20 days 2 microseconds")
     check("1 second", 0, null)
+  }
+
+  test("make interval") {
+    def check(
+        years: Int = 0,
+        months: Int = 0,
+        weeks: Int = 0,
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = seconds * MICROS_PER_SECOND + millis * MICROS_PER_MILLIS + micros
+      val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
+        Literal(days), Literal(hours), Literal(minutes), Literal(Decimal(secFrac, 8, 6)))
+      val totalMonths = years * MONTHS_PER_YEAR + months
+      val totalDays = weeks * DAYS_PER_WEEK + days
+      val totalMicros = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR
+      val expected = new CalendarInterval(totalMonths, totalDays, totalMicros)
+      checkEvaluation(intervalExpr, expected)
+    }
+
+    check(months = 0, days = 0, micros = 0)
+    check(years = -123)
+    check(weeks = 123)
+    check(millis = -123)
+    check(9999, 11, 0, 31, 23, 59, 59, 999, 999)
+    check(years = 10000, micros = -1)
+    check(-9999, -11, 0, -31, -23, -59, -59, -999, -999)
+    check(years = -10000, micros = 1)
   }
 }

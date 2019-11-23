@@ -538,7 +538,11 @@ private[spark] class Client(
             if (!Utils.isLocalUri(jar)) {
               val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
               val pathFs = FileSystem.get(path.toUri(), hadoopConf)
-              pathFs.globStatus(path).filter(_.isFile()).foreach { entry =>
+              val fss = pathFs.globStatus(path)
+              if (fss == null) {
+                throw new FileNotFoundException(s"Path ${path.toString} does not exist")
+              }
+              fss.filter(_.isFile()).foreach { entry =>
                 val uri = entry.getPath().toUri()
                 statCache.update(uri, entry)
                 distribute(uri.toString(), targetDir = Some(LOCALIZED_LIB_DIR))

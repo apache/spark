@@ -62,15 +62,22 @@ private[execution] object SparkPlanInfo {
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
     }
 
+    val nodeName = plan match {
+      case physicalOperator: WholeStageCodegenExec =>
+        s"${plan.nodeName} (${physicalOperator.codegenStageId})"
+      case _ => plan.nodeName
+    }
+
     // dump the file scan metadata (e.g file path) to event log
     val metadata = plan match {
       case fileScan: FileSourceScanExec => fileScan.metadata
       case _ => Map[String, String]()
     }
     new SparkPlanInfo(
-      plan.nodeName,
+      nodeName,
       plan.simpleString(SQLConf.get.maxToStringFields),
       children.map(fromSparkPlan),
-      metadata, metrics)
+      metadata,
+      metrics)
   }
 }

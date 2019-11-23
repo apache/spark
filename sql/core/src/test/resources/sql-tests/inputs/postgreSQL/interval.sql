@@ -157,13 +157,11 @@
 -- select '100000000y 10mon -1000000000d -100000h -10min -10.000001s ago'::interval;
 
 -- test justify_hours() and justify_days()
--- [SPARK-29390] Add the justify_days(), justify_hours() and justify_interval() functions
--- SELECT justify_hours(interval '6 months 3 days 52 hours 3 minutes 2 seconds') as `6 mons 5 days 4 hours 3 mins 2 seconds`;
--- SELECT justify_days(interval '6 months 36 days 5 hours 4 minutes 3 seconds') as `7 mons 6 days 5 hours 4 mins 3 seconds`;
+SELECT justify_hours(interval '6 months 3 days 52 hours 3 minutes 2 seconds') as `6 mons 5 days 4 hours 3 mins 2 seconds`;
+SELECT justify_days(interval '6 months 36 days 5 hours 4 minutes 3 seconds') as `7 mons 6 days 5 hours 4 mins 3 seconds`;
 
 -- test justify_interval()
-
--- SELECT justify_interval(interval '1 month -1 hour') as `1 month -1 hour`;
+SELECT justify_interval(interval '1 month -1 hour') as `1 month -1 hour`;
 
 -- test fractional second input, and detection of duplicate units
 -- [SPARK-28259] Date/Time Output Styles and Date Order Conventions
@@ -272,10 +270,12 @@ SELECT interval '1 2:03:04' minute to second;
 -- test output of couple non-standard interval values in the sql style
 -- [SPARK-29406] Interval output styles
 -- SET IntervalStyle TO sql_standard;
--- SELECT  interval '1 day -1 hours',
---         interval '-1 days +1 hours',
---         interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds',
---         - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds';
+set spark.sql.intervalOutputStyle=SQL_STANDARD;
+SELECT  interval '1 day -1 hours',
+        interval '-1 days +1 hours',
+        interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds',
+        - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds';
+set spark.sql.intervalOutputStyle=MULTI_UNITS;
 
 -- test outputting iso8601 intervals
 -- [SPARK-29406] Interval output styles
