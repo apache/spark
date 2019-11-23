@@ -161,7 +161,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
   }
 
   private def writeTaskDataToStore(i: Int, store: KVStore, status: String): Unit = {
-   val liveTask = new LiveTask(new TaskInfo( i.toLong, i, i, i.toLong, i.toString,
+    val liveTask = new LiveTask(new TaskInfo( i.toLong, i, i, i.toLong, i.toString,
        i.toString, TaskLocality.ANY, false), stageId, attemptId, None)
 
     if (status == "SUCCESS") {

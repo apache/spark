@@ -177,14 +177,13 @@ private[spark] class TaskDataWrapper(
     val accumulatorUpdates: Seq[AccumulableInfo],
     val errorMessage: Option[String],
 
-    // Non successful metrics now will have negative values in `TaskDataWrapper`.
-    // `TaskData` will have actual metric values. To recover the actual metric value
-    // from `TaskDataWrapper`, need use `getMetricValue` method.
     val hasMetrics: Boolean,
     // The following is an exploded view of a TaskMetrics API object. This saves 5 objects
-    // (= 80 bytes of Java object overhead) per instance of this wrapper. If the first value
-    // (executorDeserializeTime) is -1L, it means the metrics for this task have not been
-    // recorded.
+    // (= 80 bytes of Java object overhead) per instance of this wrapper. Non successful
+    // tasks' metrics will have negative values in `TaskDataWrapper`. `TaskData` will have
+    // actual metric values. To recover the actual metric value from `TaskDataWrapper`,
+    // need use `getMetricValue` method. If `hasMetrics` is false, it means the metrics
+    // for this task have not been recorded.
     @KVIndexParam(value = TaskIndexNames.DESER_TIME, parent = TaskIndexNames.STAGE)
     val executorDeserializeTime: Long,
     @KVIndexParam(value = TaskIndexNames.DESER_CPU_TIME, parent = TaskIndexNames.STAGE)
