@@ -59,27 +59,45 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFile().
   def getFile(filename: String): File = {
-    // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
-    val dirId = hash % localDirs.length
-    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
-
-    // Create the subdirectory if it doesn't already exist
-    val subDir = subDirs(dirId).synchronized {
-      val old = subDirs(dirId)(subDirId)
-      if (old != null) {
-        old
-      } else {
-        val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        if (!newDir.exists() && !newDir.mkdir()) {
-          throw new IOException(s"Failed to create local dir in $newDir.")
+    var count = 0
+    val localDirIndex = scala.collection.mutable.ArrayBuffer(localDirs.indices: _*)
+    var subDir: Option[File] = None
+    while (subDir.isEmpty && count < localDirs.length) {
+      // Figure out which local directory it hashes to, and which subdirectory in that
+      val hashIndex = hash % localDirIndex.size
+      val dirId = localDirIndex(hashIndex)
+      val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
+      // Create the subdirectory if it doesn't already exist
+      subDirs(dirId).synchronized {
+        val old = subDirs(dirId)(subDirId)
+        if (old != null) {
+          subDir = Some(old)
+        } else {
+          val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
+          try {
+            if (!newDir.exists()) {
+              // If parent dir not exist, create it
+              newDir.mkdirs()
+            }
+            subDirs(dirId)(subDirId) = newDir
+            subDir = Some(newDir)
+          } catch {
+            case e: IOException =>
+              logError(s"Failed to create local dir in $newDir.", e)
+              count = count + 1
+              localDirIndex.remove(hashIndex)
+          }
         }
-        subDirs(dirId)(subDirId) = newDir
-        newDir
       }
     }
-
-    new File(subDir, filename)
+    if (subDir.isDefined) {
+      new File(subDir.get, filename)
+    } else {
+      logError("Failed to create in all local dirs.")
+      System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
+      null
+    }
   }
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
