@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.types
 
+import java.util.GregorianCalendar
+import javax.xml.datatype.{DatatypeFactory, XMLGregorianCalendar}
+
 import com.fasterxml.jackson.core.JsonParseException
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -477,5 +482,34 @@ class DataTypeSuite extends SparkFunSuite {
         |""".stripMargin
 
     assert(result === expected)
+  }
+
+  test("SPARK-30004: Allow UserDefinedType to be merged into a standard DateType") {
+    class CustomXMLGregorianCalendarType extends UserDefinedType[XMLGregorianCalendar] {
+      override def sqlType: DataType = TimestampType
+
+      override def serialize(obj: XMLGregorianCalendar): Any =
+        obj.toGregorianCalendar.getTimeInMillis * 1000
+
+      override def deserialize(datum: Any): XMLGregorianCalendar = {
+        val calendar = new GregorianCalendar
+        calendar.setTimeInMillis(datum.asInstanceOf[Long])
+        DatatypeFactory.newInstance.newXMLGregorianCalendar(calendar)
+      }
+
+      override def userClass: Class[XMLGregorianCalendar] = classOf[XMLGregorianCalendar]
+
+      override private[sql] def jsonValue: JValue = "timestamp"
+    }
+
+    val left = StructType(
+      StructField("a", TimestampType) :: Nil)
+
+    // We should be able to merge these types since the
+    // CustomXMLGregorianCalendarType maps to a TimestampTypes
+    val right = StructType(
+      StructField("a", new CustomXMLGregorianCalendarType) :: Nil)
+
+    assert(left.merge(right) === left)
   }
 }
