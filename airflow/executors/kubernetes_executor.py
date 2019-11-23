@@ -274,7 +274,7 @@ class KubernetesJobWatcher(multiprocessing.Process, LoggingMixin):
         if resource_version:
             kwargs['resource_version'] = resource_version
         if kube_config.kube_client_request_args:
-            for key, value in kube_config.kube_client_request_args.iteritems():
+            for key, value in kube_config.kube_client_request_args.items():
                 kwargs[key] = value
 
         last_resource_version = None
@@ -652,7 +652,7 @@ class KubernetesExecutor(BaseExecutor, LoggingMixin):
             # pylint: enable=protected-access
             kwargs = dict(label_selector=dict_string)
             if self.kube_config.kube_client_request_args:
-                for key, value in self.kube_config.kube_client_request_args.iteritems():
+                for key, value in self.kube_config.kube_client_request_args.items():
                     kwargs[key] = value
             pod_list = self.kube_client.list_namespaced_pod(
                 self.kube_config.kube_namespace, **kwargs)
