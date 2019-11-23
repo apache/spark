@@ -134,7 +134,7 @@
     <hive.version>2.3.6</hive.version>
     <hive23.version>2.3.6</hive23.version>
     <!-- Version used for internal directory structure -->
-    <hive.version.short>2.3.5</hive.version.short>
+    <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>2.3.1</kafka.version>
     <derby.version>10.12.1.1</derby.version>
@@ -2932,7 +2932,7 @@
         <!-- Version used in Maven Hive dependency -->
         <hive.version>1.2.1.spark2</hive.version>
         <!-- Version used for internal directory structure -->
-        <hive.version.short>1.2.1</hive.version.short>
+        <hive.version.short>1.2</hive.version.short>
         <hive.parquet.scope>${hive.deps.scope}</hive.parquet.scope>
         <orc.classifier>nohive</orc.classifier>
         <datanucleus-core.version>3.2.10</datanucleus-core.version>
