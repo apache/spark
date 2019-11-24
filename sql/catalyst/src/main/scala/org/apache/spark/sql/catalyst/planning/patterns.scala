@@ -100,11 +100,11 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
 object FileSourceOperation extends OperationHelper with PredicateHelper {
 
   private val invalid: LogicalPlan => (Option[Seq[NamedExpression]], Seq[Expression],
-    LogicalPlan, Boolean, AttributeMap[Expression], Set[String]) =
-    plan => (None, Nil, plan, false, AttributeMap(Seq()), Set.empty)
+    LogicalPlan, Boolean, AttributeMap[Expression]) =
+    plan => (None, Nil, plan, false, AttributeMap(Seq()))
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
-    val (fields, filters, child, valid, _, _) = collectProjectsAndFilters(plan)
+    val (fields, filters, child, valid, _) = collectProjectsAndFilters(plan)
     if (valid) {
       Some((fields.getOrElse(child.output), filters, child))
     } else {
@@ -114,19 +114,23 @@ object FileSourceOperation extends OperationHelper with PredicateHelper {
 
   private def collectProjectsAndFilters(plan: LogicalPlan)
     : (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Boolean,
-    AttributeMap[Expression], Set[String]) =
+    AttributeMap[Expression]) =
       plan match {
         case p @ Project(fields, child) =>
-          val (_, filters, other, valid, aliases, nonDeterministics) =
+          val (_, filters, other, valid, aliases) =
             collectProjectsAndFilters(child)
           if (valid) {
-            val substitutedFields =
-              fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
-            val thisNonDeterministics =
-              substitutedFields.filterNot(_.deterministic).map(_.name).toSet
-            if (thisNonDeterministics.intersect(nonDeterministics).isEmpty) {
+            val hasCommonNonDeterministic = filters.exists(_.collect {
+              case Alias(ref: AttributeReference, _) if aliases.contains(ref) =>
+                aliases(ref)
+              case a: AttributeReference if aliases.contains(a) =>
+                aliases(a)
+            }.exists(!_.deterministic))
+            if (!hasCommonNonDeterministic) {
+              val substitutedFields =
+                fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
               (Some(substitutedFields), filters, other, true,
-                collectAliases(substitutedFields), thisNonDeterministics)
+                collectAliases(substitutedFields))
             } else {
               invalid(p)
             }
@@ -135,13 +139,13 @@ object FileSourceOperation extends OperationHelper with PredicateHelper {
           }
 
         case f @ Filter(condition, child) =>
-          val (fields, filters, other, valid, aliases, nonDeterministics) =
+          val (fields, filters, other, valid, aliases) =
             collectProjectsAndFilters(child)
           if (valid) {
             val substitutedCondition = substitute(aliases)(condition)
             if (substitutedCondition.deterministic) {
               (fields, filters ++ splitConjunctivePredicates(substitutedCondition),
-                other, true, aliases, nonDeterministics)
+                other, true, aliases)
             } else {
               invalid(f)
             }
@@ -153,7 +157,7 @@ object FileSourceOperation extends OperationHelper with PredicateHelper {
           collectProjectsAndFilters(h.child)
 
         case other =>
-          (None, Nil, other, true, AttributeMap(Seq()), Set.empty)
+          (None, Nil, other, true, AttributeMap(Seq()))
       }
 }
 
