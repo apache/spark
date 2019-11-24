@@ -97,7 +97,7 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
     }
 }
 
-object FileSourceOperation extends OperationHelper with PredicateHelper {
+object ScanOperation extends OperationHelper with PredicateHelper {
 
   private val invalid: LogicalPlan => (Option[Seq[NamedExpression]], Seq[Expression],
     LogicalPlan, Boolean, AttributeMap[Expression]) =
