@@ -23,6 +23,12 @@ jobs:
     # We split caches because GitHub Action Cache has a 400MB-size limit.
     - uses: actions/cache@v1
       with:
+        path: build
+        key: build-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          build-
+    - uses: actions/cache@v1
+      with:
         path: ~/.m2/repository/com
         key: ${{ matrix.scala }}-${{ matrix.hadoop }}-maven-com-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
