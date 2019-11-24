@@ -632,6 +632,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
+        // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
+        // Please refer to https://github.com/apache/spark/pull/26640
         changePrecision(Decimal(new JavaBigDecimal(s.toString.trim)), target)
       } catch {
         case _: NumberFormatException => null
