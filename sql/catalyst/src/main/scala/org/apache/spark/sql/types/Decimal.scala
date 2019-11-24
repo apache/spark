@@ -188,7 +188,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toScalaBigInt: BigInt = {
     if (decimalVal.ne(null)) {
-      decimalVal.toBigInt()
+      decimalVal.toBigInt
     } else {
       BigInt(toLong)
     }
@@ -220,15 +220,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  def toDouble: Double = toBigDecimal.doubleValue()
+  def toDouble: Double = toBigDecimal.doubleValue
 
-  def toFloat: Float = toBigDecimal.floatValue()
+  def toFloat: Float = toBigDecimal.floatValue
 
   def toLong: Long = {
     if (decimalVal.eq(null)) {
       longVal / POW_10(_scale)
     } else {
-      decimalVal.longValue()
+      decimalVal.longValue
     }
   }
 
