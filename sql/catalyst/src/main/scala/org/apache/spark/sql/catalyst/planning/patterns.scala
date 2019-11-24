@@ -99,65 +99,55 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
 
 object ScanOperation extends OperationHelper with PredicateHelper {
 
-  private val invalid: LogicalPlan => (Option[Seq[NamedExpression]], Seq[Expression],
-    LogicalPlan, Boolean, AttributeMap[Expression]) =
-    plan => (None, Nil, plan, false, AttributeMap(Seq()))
-
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
-    val (fields, filters, child, valid, _) = collectProjectsAndFilters(plan)
-    if (valid) {
-      Some((fields.getOrElse(child.output), filters, child))
-    } else {
-      None
+    collectProjectsAndFilters(plan) match {
+      case Some((fields, filters, child, _)) =>
+        Some((fields.getOrElse(child.output), filters, child))
+      case None => None
     }
   }
 
   private def collectProjectsAndFilters(plan: LogicalPlan)
-    : (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Boolean,
-    AttributeMap[Expression]) =
+    : Option[(Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan,
+    AttributeMap[Expression])] =
       plan match {
-        case p @ Project(fields, child) =>
-          val (_, filters, other, valid, aliases) =
-            collectProjectsAndFilters(child)
-          if (valid) {
-            val hasCommonNonDeterministic = filters.exists(_.collect {
-              case Alias(ref: AttributeReference, _) if aliases.contains(ref) =>
-                aliases(ref)
-              case a: AttributeReference if aliases.contains(a) =>
-                aliases(a)
-            }.exists(!_.deterministic))
-            if (!hasCommonNonDeterministic) {
-              val substitutedFields =
-                fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
-              (Some(substitutedFields), filters, other, true,
-                collectAliases(substitutedFields))
-            } else {
-              invalid(p)
-            }
-          } else {
-            invalid(p)
+        case Project(fields, child) =>
+          collectProjectsAndFilters(child) match {
+            case Some((_, filters, other, aliases)) =>
+              val hasCommonNonDeterministic = filters.exists(_.collect {
+                case Alias(ref: AttributeReference, _) if aliases.contains(ref) =>
+                  aliases(ref)
+                case a: AttributeReference if aliases.contains(a) =>
+                  aliases(a)
+              }.exists(!_.deterministic))
+              if (!hasCommonNonDeterministic) {
+                val substitutedFields =
+                  fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
+                Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
+              } else {
+                None
+              }
+            case None => None
           }
 
-        case f @ Filter(condition, child) =>
-          val (fields, filters, other, valid, aliases) =
-            collectProjectsAndFilters(child)
-          if (valid) {
-            val substitutedCondition = substitute(aliases)(condition)
-            if (substitutedCondition.deterministic) {
-              (fields, filters ++ splitConjunctivePredicates(substitutedCondition),
-                other, true, aliases)
-            } else {
-              invalid(f)
-            }
-          } else {
-            invalid(f)
+        case Filter(condition, child) =>
+          collectProjectsAndFilters(child) match {
+            case Some((fields, filters, other, aliases)) =>
+              val substitutedCondition = substitute(aliases)(condition)
+              if (substitutedCondition.deterministic) {
+                Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
+                  other, aliases))
+              } else {
+                None
+              }
+            case None => None
           }
 
         case h: ResolvedHint =>
           collectProjectsAndFilters(h.child)
 
         case other =>
-          (None, Nil, other, true, AttributeMap(Seq()))
+          Some((None, Nil, other, AttributeMap(Seq())))
       }
 }
 
