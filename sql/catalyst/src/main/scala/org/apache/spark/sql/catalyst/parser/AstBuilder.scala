@@ -3275,7 +3275,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
         .getOrElse(Map.empty),
       Option(source(ctx.query)),
-      child = plan(ctx.query),
+      plan(ctx.query),
       ctx.EXISTS != null,
       ctx.REPLACE != null,
       viewType)
