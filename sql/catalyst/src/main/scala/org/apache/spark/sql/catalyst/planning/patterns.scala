@@ -114,7 +114,7 @@ object ScanOperation extends OperationHelper with PredicateHelper {
         case Project(fields, child) =>
           collectProjectsAndFilters(child) match {
             case Some((_, filters, other, aliases)) =>
-              val hasCommonNonDeterministic = filters.exists(_.collect {
+              val hasCommonNonDeterministic = fields.exists(_.collect {
                 case Alias(ref: AttributeReference, _) if aliases.contains(ref) =>
                   aliases(ref)
                 case a: AttributeReference if aliases.contains(a) =>
