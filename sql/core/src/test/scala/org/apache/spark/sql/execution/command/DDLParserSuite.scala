@@ -972,57 +972,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.comment == Some("no comment"))
   }
 
-  test("create view -- basic") {
-    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
-    val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
-    assert(!command.allowExisting)
-    assert(command.name.database.isEmpty)
-    assert(command.name.table == "view1")
-    assert(command.originalText == Some("SELECT * FROM tab1"))
-    assert(command.userSpecifiedColumns.isEmpty)
-  }
-
-  test("create view - full") {
-    val v1 =
-      """
-        |CREATE OR REPLACE VIEW view1
-        |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
-        |COMMENT 'BLABLA'
-        |AS SELECT * FROM tab1
-      """.stripMargin
-    val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
-    assert(command.name.database.isEmpty)
-    assert(command.name.table == "view1")
-    assert(command.userSpecifiedColumns == Seq("col1" -> None, "col3" -> Some("hello")))
-    assert(command.originalText == Some("SELECT * FROM tab1"))
-    assert(command.properties == Map("prop1Key" -> "prop1Val"))
-    assert(command.comment == Some("BLABLA"))
-  }
-
-  test("create view -- partitioned view") {
-    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
-    intercept[ParseException] {
-      parser.parsePlan(v1)
-    }
-  }
-
-  test("create view - duplicate clauses") {
-    def createViewStatement(duplicateClause: String): String = {
-      s"""
-        |CREATE OR REPLACE VIEW view1
-        |(col1, col3 COMMENT 'hello')
-        |$duplicateClause
-        |$duplicateClause
-        |AS SELECT * FROM tab1
-      """.stripMargin
-    }
-    val sql1 = createViewStatement("COMMENT 'BLABLA'")
-    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
-    intercept(sql1, "Found duplicate clauses: COMMENT")
-    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
-  }
-
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
     val (target, source, provider, location, exists) = parser.parsePlan(v1).collect {
