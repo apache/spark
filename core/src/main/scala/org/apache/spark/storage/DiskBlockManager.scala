@@ -19,7 +19,9 @@ package org.apache.spark.storage
 
 import java.io.{File, IOException}
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
@@ -53,6 +55,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
+  private val dirIdToFileName = new ConcurrentHashMap[String, Int]()
   private val shutdownHook = addShutdownHook()
 
   /** Looks up a file by hashing it into one of our local subdirectories. */
@@ -61,12 +64,19 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   def getFile(filename: String): File = {
     val hash = Utils.nonNegativeHash(filename)
     var count = 0
-    val localDirIndex = scala.collection.mutable.ArrayBuffer(localDirs.indices: _*)
+    val localDirIndex = ArrayBuffer(localDirs.indices: _*)
     var subDir: Option[File] = None
-    while (subDir.isEmpty && count < localDirs.length) {
+    var dirIdMatched: Option[Int] = None
+    while (subDir.isEmpty && dirIdMatched.isEmpty && count < localDirs.length) {
       // Figure out which local directory it hashes to, and which subdirectory in that
       val hashIndex = hash % localDirIndex.size
-      val dirId = localDirIndex(hashIndex)
+      val dirId = if (dirIdToFileName.containsKey(filename)) {
+        val id = dirIdToFileName.get(filename)
+        dirIdMatched = Some(id)
+        id
+      } else {
+        localDirIndex(hashIndex)
+      }
       val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
       // Create the subdirectory if it doesn't already exist
       subDirs(dirId).synchronized {
@@ -81,6 +91,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
               newDir.mkdirs()
             }
             subDirs(dirId)(subDirId) = newDir
+            dirIdToFileName.put(filename, dirId)
             subDir = Some(newDir)
           } catch {
             case e: IOException =>
