@@ -46,6 +46,7 @@ import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
+import org.apache.kerby.kerberos.kerb.admin.Krb5Conf
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.zookeeper.server.auth.SASLAuthenticationProvider
 import org.scalatest.concurrent.Eventually._
@@ -173,6 +174,7 @@ class KafkaTestUtils(
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
+      |  refreshKrb5Config=true
       |  keyTab="${zkServerKeytabFile.getAbsolutePath()}"
       |  principal="$zkServerUser@$realm";
       |};
@@ -182,6 +184,7 @@ class KafkaTestUtils(
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
+      |  refreshKrb5Config=true
       |  keyTab="${zkClientKeytabFile.getAbsolutePath()}"
       |  principal="$zkClientUser@$realm";
       |};
@@ -243,6 +246,7 @@ class KafkaTestUtils(
     if (secure) {
       setupKrbDebug()
       setUpMiniKdc()
+      System.setProperty(Krb5Conf.KRB5_CONF, kdc.getKrb5conf.getAbsolutePath)
       val jaasConfigFile = createKeytabsAndJaasConfigFile()
       System.setProperty(JAVA_AUTH_CONFIG, jaasConfigFile)
       Configuration.getConfiguration.refresh()
