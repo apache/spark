@@ -40,15 +40,19 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val content = // make sure all parts in this page are consistent
-        generateBasicStats() ++
-        <br/> ++
+    val content = store.synchronized { // make sure all parts in this page are consistent
+      generateBasicStats() ++
+          <br/> ++
         <h4>
-        {store.getOnlineSessionNum} session(s) are online,
-        running {store.getTotalRunning} SQL statement(s)
+          {store.getOnlineSessionNum}
+          session(s) are online,
+          running
+          {store.getTotalRunning}
+          SQL statement(s)
         </h4> ++
         generateSessionStatsTable(request) ++
         generateSQLStatsTable(request)
+    }
     UIUtils.headerSparkPage(request, "JDBC/ODBC Server", content, parent)
   }
 
