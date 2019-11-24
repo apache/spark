@@ -354,7 +354,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(catalogTable.stats.get.colStats == Map("c1" -> emptyCatalogColStat))
 
     // Check relation statistics
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.PLAN_STATS_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       assert(relation.stats.sizeInBytes == 1)
       assert(relation.stats.rowCount == Some(0))
       assert(relation.stats.attributeStats.size == 1)
@@ -363,7 +363,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       assert(colStat == emptyColStat)
     }
     relation.invalidateStatsCache()
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "false", SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
       assert(relation.stats.sizeInBytes == 0)
       assert(relation.stats.rowCount.isEmpty)
       assert(relation.stats.attributeStats.isEmpty)
