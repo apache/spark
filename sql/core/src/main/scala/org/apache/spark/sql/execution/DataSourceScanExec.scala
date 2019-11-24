@@ -65,10 +65,26 @@ trait DataSourceScanExec extends LeafExecNode {
       s"$nodeNamePrefix$nodeName${truncatedString(output, "[", ",", "]", maxFields)}$metadataStr")
   }
 
+  override def verboseStringWithOperatorId(): String = {
+    val metadataStr = metadata.toSeq.sorted.filterNot {
+      case (_, value) if (value.isEmpty || value.equals("[]")) => true
+      case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
+      case (_, _) => false
+    }.map {
+      case (key, value) => s"$key: ${redact(value)}"
+    }
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+       |${metadataStr.mkString("\n")}
+     """.stripMargin
+  }
+
   /**
    * Shorthand for calling redactString() without specifying redacting rules
    */
-  private def redact(text: String): String = {
+  protected def redact(text: String): String = {
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
   }
 
@@ -214,7 +230,7 @@ case class FileSourceScanExec(
       // call the file index for the files matching all filters except dynamic partition filters
       val predicate = dynamicPartitionFilters.reduce(And)
       val partitionColumns = relation.partitionSchema
-      val boundPredicate = newPredicate(predicate.transform {
+      val boundPredicate = Predicate.create(predicate.transform {
         case a: AttributeReference =>
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
@@ -340,6 +356,31 @@ case class FileSourceScanExec(
     }
 
     withSelectedBucketsCount
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val metadataStr = metadata.toSeq.sorted.filterNot {
+      case (_, value) if (value.isEmpty || value.equals("[]")) => true
+      case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
+      case (_, _) => false
+    }.map {
+      case (key, _) if (key.equals("Location")) =>
+        val location = relation.location
+        val numPaths = location.rootPaths.length
+        val abbreviatedLoaction = if (numPaths <= 1) {
+          location.rootPaths.mkString("[", ", ", "]")
+        } else {
+          "[" + location.rootPaths.head + s", ... ${numPaths - 1} entries]"
+        }
+        s"$key: ${location.getClass.getSimpleName} ${redact(abbreviatedLoaction)}"
+      case (key, value) => s"$key: ${redact(value)}"
+    }
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+       |${metadataStr.mkString("\n")}
+     """.stripMargin
   }
 
   lazy val inputRDD: RDD[InternalRow] = {

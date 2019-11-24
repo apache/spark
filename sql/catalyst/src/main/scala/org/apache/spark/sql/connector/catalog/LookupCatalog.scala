@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
  * A trait to encapsulate catalog lookup function and helpful extractors.
@@ -28,27 +29,9 @@ private[sql] trait LookupCatalog extends Logging {
   protected val catalogManager: CatalogManager
 
   /**
-   * Returns the default catalog. When set, this catalog is used for all identifiers that do not
-   * set a specific catalog. When this is None, the session catalog is responsible for the
-   * identifier.
-   *
-   * If this is None and a table's provider (source) is a v2 provider, the v2 session catalog will
-   * be used.
-   */
-  def defaultCatalog: Option[CatalogPlugin] = catalogManager.defaultCatalog
-
-  /**
    * Returns the current catalog set.
    */
   def currentCatalog: CatalogPlugin = catalogManager.currentCatalog
-
-  /**
-   * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
-   * session catalog is responsible for an identifier, but the source requires the v2 catalog API.
-   * This happens when the source implementation extends the v2 TableProvider API and is not listed
-   * in the fallback configuration, spark.sql.sources.write.useV1SourceList
-   */
-  def sessionCatalog: CatalogPlugin = catalogManager.v2SessionCatalog
 
   /**
    * Extract catalog plugin and remaining identifier names.
@@ -69,16 +52,14 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
-  type CatalogObjectIdentifier = (Option[CatalogPlugin], Identifier)
-
   /**
-   * Extract catalog and identifier from a multi-part identifier with the default catalog if needed.
+   * Extract catalog and identifier from a multi-part identifier with the current catalog if needed.
    */
   object CatalogObjectIdentifier {
-    def unapply(parts: Seq[String]): Some[CatalogObjectIdentifier] = parts match {
+    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Identifier)] = parts match {
       case CatalogAndIdentifier(maybeCatalog, nameParts) =>
         Some((
-            maybeCatalog.orElse(defaultCatalog),
+            maybeCatalog.getOrElse(currentCatalog),
             Identifier.of(nameParts.init.toArray, nameParts.last)
         ))
     }
@@ -108,7 +89,7 @@ private[sql] trait LookupCatalog extends Logging {
    */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndIdentifier(None, names) if defaultCatalog.isEmpty =>
+      case CatalogAndIdentifier(None, names) if CatalogV2Util.isSessionCatalog(currentCatalog) =>
         names match {
           case Seq(name) =>
             Some(TableIdentifier(name))
@@ -140,14 +121,25 @@ private[sql] trait LookupCatalog extends Logging {
    * Extract catalog and the rest name parts from a multi-part identifier.
    */
   object CatalogAndIdentifierParts {
-    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
+    private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+
+    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = {
       assert(nameParts.nonEmpty)
       try {
-        Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+        // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
+        // API does not support view yet, and we have to use v1 commands to deal with global temp
+        // views. To simplify the implementation, we put global temp views in a special namespace
+        // in the session catalog. The special namespace has higher priority during name resolution.
+        // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
+        // this custom catalog can't be accessed.
+        if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
+          Some((catalogManager.v2SessionCatalog, nameParts))
+        } else {
+          Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+        }
       } catch {
         case _: CatalogNotFoundException =>
-          // TODO (SPARK-29014): use current catalog here.
-          Some((defaultCatalog.getOrElse(sessionCatalog), nameParts))
+          Some((currentCatalog, nameParts))
       }
     }
   }

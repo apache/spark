@@ -207,7 +207,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
       rowWithNoNullColumns.getDecimal(11, 38, 18))
 
     for (i <- fieldTypes.indices) {
-      // Cann't call setNullAt() on DecimalType
+      // Can't call setNullAt() on DecimalType
       if (i == 11) {
         setToNullAfterCreation.setDecimal(11, null, 38)
       } else {
@@ -531,7 +531,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     // Simple tests
     val inputRow = InternalRow.fromSeq(Seq(
       false, 3.toByte, 15.toShort, -83, 129L, 1.0f, 8.0, UTF8String.fromString("test"),
-      Decimal(255), CalendarInterval.fromString("interval 1 day"), Array[Byte](1, 2)
+      Decimal(255), IntervalUtils.stringToInterval(UTF8String.fromString( "interval 1 day")),
+        Array[Byte](1, 2)
     ))
     val fields1 = Array(
       BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,

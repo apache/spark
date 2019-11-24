@@ -17,10 +17,9 @@
 
 package org.apache.spark
 
-import java.io._
+import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
@@ -29,9 +28,12 @@ import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOutputStream}
+
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, MapStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
@@ -192,7 +194,8 @@ private class ShuffleStatus(numPartitions: Int) {
   def serializedMapStatus(
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
-      minBroadcastSize: Int): Array[Byte] = {
+      minBroadcastSize: Int,
+      conf: SparkConf): Array[Byte] = {
     var result: Array[Byte] = null
 
     withReadLock {
@@ -204,7 +207,7 @@ private class ShuffleStatus(numPartitions: Int) {
     if (result == null) withWriteLock {
       if (cachedSerializedMapStatus == null) {
         val serResult = MapOutputTracker.serializeMapStatuses(
-          mapStatuses, broadcastManager, isLocal, minBroadcastSize)
+          mapStatuses, broadcastManager, isLocal, minBroadcastSize, conf)
         cachedSerializedMapStatus = serResult._1
         cachedSerializedBroadcast = serResult._2
       }
@@ -371,8 +374,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
  */
 private[spark] class MapOutputTrackerMaster(
     conf: SparkConf,
-    broadcastManager: BroadcastManager,
-    isLocal: Boolean)
+    private[spark] val broadcastManager: BroadcastManager,
+    private[spark] val isLocal: Boolean)
   extends MapOutputTracker(conf) {
 
   // The size at which we use Broadcast to send the map output statuses to the executors
@@ -447,7 +450,8 @@ private[spark] class MapOutputTrackerMaster(
               " to " + hostPort)
             val shuffleStatus = shuffleStatuses.get(shuffleId).head
             context.reply(
-              shuffleStatus.serializedMapStatus(broadcastManager, isLocal, minSizeForBroadcast))
+              shuffleStatus.serializedMapStatus(broadcastManager, isLocal, minSizeForBroadcast,
+                conf))
           } catch {
             case NonFatal(e) => logError(e.getMessage, e)
           }
@@ -697,8 +701,7 @@ private[spark] class MapOutputTrackerMaster(
     if (shuffleStatus != null) {
       shuffleStatus.withMapStatuses { statuses =>
         if (mapId >= 0 && mapId < statuses.length) {
-          Seq( ExecutorCacheTaskLocation(statuses(mapId).location.host,
-            statuses(mapId).location.executorId).toString)
+          Seq(statuses(mapId).location.host)
         } else {
           Nil
         }
@@ -796,7 +799,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       endPartition: Int)
     : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
-    val statuses = getStatuses(shuffleId)
+    val statuses = getStatuses(shuffleId, conf)
     try {
       MapOutputTracker.convertMapStatuses(
         shuffleId, startPartition, endPartition, statuses)
@@ -815,7 +818,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, mapIndex $mapIndex" +
       s"partitions $startPartition-$endPartition")
-    val statuses = getStatuses(shuffleId)
+    val statuses = getStatuses(shuffleId, conf)
     try {
       MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition,
         statuses, Some(mapIndex))
@@ -833,7 +836,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    *
    * (It would be nice to remove this restriction in the future.)
    */
-  private def getStatuses(shuffleId: Int): Array[MapStatus] = {
+  private def getStatuses(shuffleId: Int, conf: SparkConf): Array[MapStatus] = {
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
@@ -843,7 +846,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         if (fetchedStatuses == null) {
           logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
           val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
-          fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
+          fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes, conf)
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
         }
@@ -885,13 +888,22 @@ private[spark] object MapOutputTracker extends Logging {
   private val BROADCAST = 1
 
   // Serialize an array of map output locations into an efficient byte format so that we can send
-  // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will
+  // it to reduce tasks. We do this by compressing the serialized bytes using Zstd. They will
   // generally be pretty compressible because many map outputs will be on the same hostname.
-  def serializeMapStatuses(statuses: Array[MapStatus], broadcastManager: BroadcastManager,
-      isLocal: Boolean, minBroadcastSize: Int): (Array[Byte], Broadcast[Array[Byte]]) = {
-    val out = new ByteArrayOutputStream
+  def serializeMapStatuses(
+      statuses: Array[MapStatus],
+      broadcastManager: BroadcastManager,
+      isLocal: Boolean,
+      minBroadcastSize: Int,
+      conf: SparkConf): (Array[Byte], Broadcast[Array[Byte]]) = {
+    // Using `org.apache.commons.io.output.ByteArrayOutputStream` instead of the standard one
+    // This implementation doesn't reallocate the whole memory block but allocates
+    // additional buffers. This way no buffers need to be garbage collected and
+    // the contents don't have to be copied to the new buffer.
+    val out = new ApacheByteArrayOutputStream()
     out.write(DIRECT)
-    val objOut = new ObjectOutputStream(new GZIPOutputStream(out))
+    val codec = CompressionCodec.createCodec(conf, "zstd")
+    val objOut = new ObjectOutputStream(codec.compressedOutputStream(out))
     Utils.tryWithSafeFinally {
       // Since statuses can be modified in parallel, sync on it
       statuses.synchronized {
@@ -908,9 +920,12 @@ private[spark] object MapOutputTracker extends Logging {
       // toByteArray creates copy, so we can reuse out
       out.reset()
       out.write(BROADCAST)
-      val oos = new ObjectOutputStream(new GZIPOutputStream(out))
-      oos.writeObject(bcast)
-      oos.close()
+      val oos = new ObjectOutputStream(codec.compressedOutputStream(out))
+      Utils.tryWithSafeFinally {
+        oos.writeObject(bcast)
+      } {
+        oos.close()
+      }
       val outArr = out.toByteArray
       logInfo("Broadcast mapstatuses size = " + outArr.length + ", actual size = " + arr.length)
       (outArr, bcast)
@@ -920,11 +935,15 @@ private[spark] object MapOutputTracker extends Logging {
   }
 
   // Opposite of serializeMapStatuses.
-  def deserializeMapStatuses(bytes: Array[Byte]): Array[MapStatus] = {
+  def deserializeMapStatuses(bytes: Array[Byte], conf: SparkConf): Array[MapStatus] = {
     assert (bytes.length > 0)
 
     def deserializeObject(arr: Array[Byte], off: Int, len: Int): AnyRef = {
-      val objIn = new ObjectInputStream(new GZIPInputStream(
+      val codec = CompressionCodec.createCodec(conf, "zstd")
+      // The ZStd codec is wrapped in a `BufferedInputStream` which avoids overhead excessive
+      // of JNI call while trying to decompress small amount of data for each element
+      // of `MapStatuses`
+      val objIn = new ObjectInputStream(codec.compressedInputStream(
         new ByteArrayInputStream(arr, off, len)))
       Utils.tryWithSafeFinally {
         objIn.readObject()

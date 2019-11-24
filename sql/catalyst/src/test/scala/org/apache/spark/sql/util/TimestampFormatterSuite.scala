@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.util
 
-import java.time.{LocalDateTime, LocalTime, ZoneOffset}
+import java.time.{Instant, LocalDateTime, LocalTime, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
@@ -25,8 +25,8 @@ import org.scalatest.Matchers
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, instantToMicros, MICROS_PER_DAY}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.unsafe.types.UTF8String
 
 class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers {
 
@@ -137,22 +137,100 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   }
 
   test("special timestamp values") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val zoneId = getZoneId(timeZone)
-        val formatter = TimestampFormatter(zoneId)
-        val tolerance = TimeUnit.SECONDS.toMicros(30)
+    testSpecialDatetimeValues { zoneId =>
+      val formatter = TimestampFormatter(zoneId)
+      val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-        assert(formatter.parse("EPOCH") === 0)
-        val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
-        formatter.parse("now") should be (now +- tolerance)
-        val today = instantToMicros(LocalDateTime.now(zoneId)
-          .`with`(LocalTime.MIDNIGHT)
-          .atZone(zoneId).toInstant)
-        formatter.parse("yesterday CET") should be (today - MICROS_PER_DAY +- tolerance)
-        formatter.parse(" TODAY ") should be (today +- tolerance)
-        formatter.parse("Tomorrow ") should be (today + MICROS_PER_DAY +- tolerance)
+      assert(formatter.parse("EPOCH") === 0)
+      val now = instantToMicros(Instant.now())
+      formatter.parse("now") should be(now +- tolerance)
+      val localToday = LocalDateTime.now(zoneId)
+        .`with`(LocalTime.MIDNIGHT)
+        .atZone(zoneId)
+      val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
+      formatter.parse("yesterday CET") should be(yesterday +- tolerance)
+      val today = instantToMicros(localToday.toInstant)
+      formatter.parse(" TODAY ") should be(today +- tolerance)
+      val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
+      formatter.parse("Tomorrow ") should be(tomorrow +- tolerance)
+    }
+  }
+
+  test("parsing timestamp strings with various seconds fractions") {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      def check(pattern: String, input: String, reference: String): Unit = {
+        val formatter = TimestampFormatter(pattern, zoneId)
+        val expected = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(reference), zoneId).get
+        val actual = formatter.parse(input)
+        assert(actual === expected)
       }
+
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
+        "2019-10-14T09:39:07.3220000Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+        "2019-10-14T09:39:07.322000", "2019-10-14T09:39:07.322")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.00001Z")
+      check("yyyy HH:mm:ss.SSSSS", "1970 01:02:03.00004", "1970-01-01 01:02:03.00004")
+      check("yyyy HH:mm:ss.SSSS", "2019 00:00:07.0100", "2019-01-01 00:00:07.0100")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSX",
+        "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SS",
+        "2019-10-14T09:39:07.10", "2019-10-14T09:39:07.1")
+      check("yyyy-MM-dd'T'HH:mm:ss.S",
+        "2019-10-14T09:39:07.1", "2019-10-14T09:39:07.1")
+
+      try {
+        TimestampFormatter("yyyy/MM/dd HH_mm_ss.SSSSSS", zoneId)
+          .parse("2019/11/14 20#25#30.123456")
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: java.time.format.DateTimeParseException =>
+          assert(e.getMessage.contains("could not be parsed"))
+      }
+    }
+  }
+
+  test("formatting timestamp strings up to microsecond precision") {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      def check(pattern: String, input: String, expected: String): Unit = {
+        val formatter = TimestampFormatter(pattern, zoneId)
+        val timestamp = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(input), zoneId).get
+        val actual = formatter.format(timestamp)
+        assert(actual === expected)
+      }
+
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSSSSSS", "2019-10-14T09:39:07.123456",
+        "2019-10-14 09:39:07.1234560")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSSSSS", "1960-01-01T09:39:07.123456",
+        "1960-01-01 09:39:07.123456")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSSSS", "0001-10-14T09:39:07.1",
+        "0001-10-14 09:39:07.10000")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSSS", "9999-12-31T23:59:59.999",
+        "9999-12-31 23:59:59.9990")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSS", "1970-01-01T00:00:00.0101",
+        "1970-01-01 00:00:00.010")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SS", "2019-10-14T09:39:07.09",
+        "2019-10-14 09:39:07.09")
+      check(
+        "yyyy-MM-dd HH:mm:ss.S", "2019-10-14T09:39:07.2",
+        "2019-10-14 09:39:07.2")
+      check(
+        "yyyy-MM-dd HH:mm:ss.S", "2019-10-14T09:39:07",
+        "2019-10-14 09:39:07.0")
+      check(
+        "yyyy-MM-dd HH:mm:ss", "2019-10-14T09:39:07.123456",
+        "2019-10-14 09:39:07")
     }
   }
 }

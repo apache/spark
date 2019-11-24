@@ -25,6 +25,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -141,11 +142,11 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       "timestampFormat" -> "yyyy-MM-dd HH:mm:ss",
       "dateFormat" -> "yyyy-MM-dd"), false, "UTC")
     parser = new UnivocityParser(StructType(Seq.empty), timestampsOptions)
-    val expected = 1420070400 * DateTimeUtils.MICROS_PER_SECOND
+    val expected = 1420070400 * MICROS_PER_SECOND
     assert(parser.makeConverter("_1", TimestampType).apply(timestamp) ==
       expected)
     assert(parser.makeConverter("_1", DateType).apply("2015-01-01") ==
-      expected / DateTimeUtils.MICROS_PER_DAY)
+      expected / MICROS_PER_DAY)
   }
 
   test("Throws exception for casting an invalid string to Float and Double Types") {

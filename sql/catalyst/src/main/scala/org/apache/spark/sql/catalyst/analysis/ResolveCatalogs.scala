@@ -73,7 +73,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       createAlterTable(nameParts, catalog, tableName, changes)
 
     case AlterTableSetLocationStatement(
-         nameParts @ NonSessionCatalog(catalog, tableName), newLoc) =>
+         nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, newLoc) =>
+      if (partitionSpec.nonEmpty) {
+        throw new AnalysisException(
+          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
+      }
       val changes = Seq(TableChange.setProperty("location", newLoc))
       createAlterTable(nameParts, catalog, tableName, changes)
 
@@ -89,18 +93,18 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${tableName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case DeleteFromStatement(
-         nameParts @ NonSessionCatalog(catalog, tableName), tableAlias, condition) =>
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
-      val aliased = tableAlias.map(SubqueryAlias(_, r)).getOrElse(r)
-      DeleteFromTable(aliased, condition)
+    case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
+      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, properties)
 
-    case u @ UpdateTableStatement(
-         nameParts @ CatalogAndIdentifierParts(catalog, tableName), _, _, _, _) =>
-      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
-      val aliased = u.tableAlias.map(SubqueryAlias(_, r)).getOrElse(r)
-      val columns = u.columns.map(UnresolvedAttribute(_))
-      UpdateTable(aliased, columns, u.values, u.condition)
+    case AlterNamespaceSetLocationStatement(NonSessionCatalog(catalog, nameParts), location) =>
+      AlterNamespaceSetProperties(
+        catalog.asNamespaceCatalog, nameParts, Map("location" -> location))
+
+    case RenameTableStatement(NonSessionCatalog(catalog, oldName), newNameParts, isView) =>
+      if (isView) {
+        throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
+      }
+      RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
 
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
@@ -137,6 +141,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.options.filterKeys(_ != "path"),
         ignoreIfExists = c.ifNotExists)
 
+    case RefreshTableStatement(NonSessionCatalog(catalog, tableName)) =>
+      RefreshTable(catalog.asTableCatalog, tableName.asIdentifier)
+
     case c @ ReplaceTableStatement(
          NonSessionCatalog(catalog, tableName), _, _, _, _, _, _, _, _, _) =>
       ReplaceTable(
@@ -168,6 +175,19 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
+    case c @ CreateNamespaceStatement(NonSessionCatalog(catalog, nameParts), _, _) =>
+      CreateNamespace(
+        catalog.asNamespaceCatalog,
+        nameParts,
+        c.ifNotExists,
+        c.properties)
+
+    case DropNamespaceStatement(NonSessionCatalog(catalog, nameParts), ifExists, cascade) =>
+      DropNamespace(catalog, nameParts, ifExists, cascade)
+
+    case DescribeNamespaceStatement(NonSessionCatalog(catalog, nameParts), extended) =>
+      DescribeNamespace(catalog.asNamespaceCatalog, nameParts, extended)
+
     case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, namespace)), pattern) =>
       ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)
 
@@ -177,9 +197,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case ShowTablesStatement(Some(NonSessionCatalog(catalog, nameParts)), pattern) =>
       ShowTables(catalog.asTableCatalog, nameParts, pattern)
 
-    // TODO (SPARK-29014): we should check if the current catalog is not session catalog here.
-    case ShowTablesStatement(None, pattern) if defaultCatalog.isDefined =>
-      ShowTables(defaultCatalog.get.asTableCatalog, catalogManager.currentNamespace, pattern)
+    case ShowTablesStatement(None, pattern) if !isSessionCatalog(currentCatalog) =>
+      ShowTables(currentCatalog.asTableCatalog, catalogManager.currentNamespace, pattern)
 
     case UseStatement(isNamespaceSet, nameParts) =>
       if (isNamespaceSet) {
@@ -188,6 +207,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val CatalogAndNamespace(catalog, namespace) = nameParts
         SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
       }
+
+    case ShowCurrentNamespaceStatement() =>
+      ShowCurrentNamespace(catalogManager)
+
+    case ShowTablePropertiesStatement(
+      nameParts @ NonSessionCatalog(catalog, tableName), propertyKey) =>
+      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
+      ShowTableProperties(r, propertyKey)
   }
 
   object NonSessionCatalog {

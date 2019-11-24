@@ -18,7 +18,9 @@
 package org.apache.spark.sql.internal
 
 import java.net.URL
-import java.util.Locale
+import java.util.{Locale, UUID}
+import java.util.concurrent.ConcurrentHashMap
+import javax.annotation.concurrent.GuardedBy
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -31,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.ElementTrackingStore
@@ -47,6 +50,8 @@ private[sql] class SharedState(
     val sparkContext: SparkContext,
     initialConfigs: scala.collection.Map[String, String])
   extends Logging {
+
+  SharedState.setFsUrlStreamHandlerFactory(sparkContext.conf)
 
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
@@ -109,6 +114,16 @@ private[sql] class SharedState(
    * Class for caching query results reused in future executions.
    */
   val cacheManager: CacheManager = new CacheManager
+
+  /** A global lock for all streaming query lifecycle tracking and management. */
+  private[sql] val activeQueriesLock = new Object
+
+  /**
+   * A map of active streaming queries to the session specific StreamingQueryManager that manages
+   * the lifecycle of that stream.
+   */
+  @GuardedBy("activeQueriesLock")
+  private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamExecution]()
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
@@ -177,11 +192,23 @@ private[sql] class SharedState(
 }
 
 object SharedState extends Logging {
-  try {
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
-  } catch {
-    case e: Error =>
-      logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+  @volatile private var fsUrlStreamHandlerFactoryInitialized = false
+
+  private def setFsUrlStreamHandlerFactory(conf: SparkConf): Unit = {
+    if (!fsUrlStreamHandlerFactoryInitialized &&
+        conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED)) {
+      synchronized {
+        if (!fsUrlStreamHandlerFactoryInitialized) {
+          try {
+            URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+            fsUrlStreamHandlerFactoryInitialized = true
+          } catch {
+            case NonFatal(_) =>
+              logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+          }
+        }
+      }
+    }
   }
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"

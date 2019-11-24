@@ -178,6 +178,41 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 [`pyspark.sql.DataFrame.mapsInPandas`](api/python/pyspark.sql.html#pyspark.sql.DataFrame.mapInPandas).
 
 
+### Cogrouped Map
+
+Cogrouped map Pandas UDFs allow two DataFrames to be cogrouped by a common key and then a python function applied to
+each cogroup.  They are used with `groupBy().cogroup().apply()` which consists of the following steps:
+
+* Shuffle the data such that the groups of each dataframe which share a key are cogrouped together.
+* Apply a function to each cogroup.  The input of the function is two `pandas.DataFrame` (with an optional Tuple
+representing the key).  The output of the function is a `pandas.DataFrame`.
+* Combine the pandas.DataFrames from all groups into a new `DataFrame`. 
+
+To use `groupBy().cogroup().apply()`, the user needs to define the following:
+* A Python function that defines the computation for each cogroup.
+* A `StructType` object or a string that defines the schema of the output `DataFrame`.
+
+The column labels of the returned `pandas.DataFrame` must either match the field names in the
+defined output schema if specified as strings, or match the field data types by position if not
+strings, e.g. integer indices. See [pandas.DataFrame](https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.html#pandas.DataFrame)
+on how to label columns when constructing a `pandas.DataFrame`.
+
+Note that all data for a cogroup will be loaded into memory before the function is applied. This can lead to out of
+memory exceptions, especially if the group sizes are skewed. The configuration for [maxRecordsPerBatch](#setting-arrow-batch-size)
+is not applied and it is up to the user to ensure that the cogrouped data will fit into the available memory.
+
+The following example shows how to use `groupby().cogroup().apply()` to perform an asof join between two datasets.
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example cogrouped_map_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
+For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf) and
+[`pyspark.sql.CoGroupedData.apply`](api/python/pyspark.sql.html#pyspark.sql.CoGroupedData.apply).
+
+
 ## Usage Notes
 
 ### Supported SQL Types

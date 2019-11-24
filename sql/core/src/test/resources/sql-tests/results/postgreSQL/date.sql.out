@@ -11,7 +11,7 @@ struct<>
 
 
 -- !query 1
-INSERT INTO DATE_TBL VALUES ('1957-04-09')
+INSERT INTO DATE_TBL VALUES (date('1957-04-09'))
 -- !query 1 schema
 struct<>
 -- !query 1 output
@@ -19,7 +19,7 @@ struct<>
 
 
 -- !query 2
-INSERT INTO DATE_TBL VALUES ('1957-06-13')
+INSERT INTO DATE_TBL VALUES (date('1957-06-13'))
 -- !query 2 schema
 struct<>
 -- !query 2 output
@@ -27,7 +27,7 @@ struct<>
 
 
 -- !query 3
-INSERT INTO DATE_TBL VALUES ('1996-02-28')
+INSERT INTO DATE_TBL VALUES (date('1996-02-28'))
 -- !query 3 schema
 struct<>
 -- !query 3 output
@@ -35,7 +35,7 @@ struct<>
 
 
 -- !query 4
-INSERT INTO DATE_TBL VALUES ('1996-02-29')
+INSERT INTO DATE_TBL VALUES (date('1996-02-29'))
 -- !query 4 schema
 struct<>
 -- !query 4 output
@@ -43,7 +43,7 @@ struct<>
 
 
 -- !query 5
-INSERT INTO DATE_TBL VALUES ('1996-03-01')
+INSERT INTO DATE_TBL VALUES (date('1996-03-01'))
 -- !query 5 schema
 struct<>
 -- !query 5 output
@@ -51,7 +51,7 @@ struct<>
 
 
 -- !query 6
-INSERT INTO DATE_TBL VALUES ('1996-03-02')
+INSERT INTO DATE_TBL VALUES (date('1996-03-02'))
 -- !query 6 schema
 struct<>
 -- !query 6 output
@@ -59,7 +59,7 @@ struct<>
 
 
 -- !query 7
-INSERT INTO DATE_TBL VALUES ('1997-02-28')
+INSERT INTO DATE_TBL VALUES (date('1997-02-28'))
 -- !query 7 schema
 struct<>
 -- !query 7 output
@@ -67,7 +67,7 @@ struct<>
 
 
 -- !query 8
-INSERT INTO DATE_TBL VALUES ('1997-03-01')
+INSERT INTO DATE_TBL VALUES (date('1997-03-01'))
 -- !query 8 schema
 struct<>
 -- !query 8 output
@@ -75,7 +75,7 @@ struct<>
 
 
 -- !query 9
-INSERT INTO DATE_TBL VALUES ('1997-03-02')
+INSERT INTO DATE_TBL VALUES (date('1997-03-02'))
 -- !query 9 schema
 struct<>
 -- !query 9 output
@@ -83,7 +83,7 @@ struct<>
 
 
 -- !query 10
-INSERT INTO DATE_TBL VALUES ('2000-04-01')
+INSERT INTO DATE_TBL VALUES (date('2000-04-01'))
 -- !query 10 schema
 struct<>
 -- !query 10 output
@@ -91,7 +91,7 @@ struct<>
 
 
 -- !query 11
-INSERT INTO DATE_TBL VALUES ('2000-04-02')
+INSERT INTO DATE_TBL VALUES (date('2000-04-02'))
 -- !query 11 schema
 struct<>
 -- !query 11 output
@@ -99,7 +99,7 @@ struct<>
 
 
 -- !query 12
-INSERT INTO DATE_TBL VALUES ('2000-04-03')
+INSERT INTO DATE_TBL VALUES (date('2000-04-03'))
 -- !query 12 schema
 struct<>
 -- !query 12 output
@@ -107,7 +107,7 @@ struct<>
 
 
 -- !query 13
-INSERT INTO DATE_TBL VALUES ('2038-04-08')
+INSERT INTO DATE_TBL VALUES (date('2038-04-08'))
 -- !query 13 schema
 struct<>
 -- !query 13 output
@@ -115,7 +115,7 @@ struct<>
 
 
 -- !query 14
-INSERT INTO DATE_TBL VALUES ('2039-04-09')
+INSERT INTO DATE_TBL VALUES (date('2039-04-09'))
 -- !query 14 schema
 struct<>
 -- !query 14 output
@@ -123,7 +123,7 @@ struct<>
 
 
 -- !query 15
-INSERT INTO DATE_TBL VALUES ('2040-04-10')
+INSERT INTO DATE_TBL VALUES (date('2040-04-10'))
 -- !query 15 schema
 struct<>
 -- !query 15 output
@@ -582,7 +582,7 @@ struct<date_part('EPOCH', DATE '1970-01-01'):decimal(20,6)>
 -- !query 55
 SELECT EXTRACT(EPOCH FROM TIMESTAMP   '1970-01-01')
 -- !query 55 schema
-struct<date_part('EPOCH', TIMESTAMP('1970-01-01 00:00:00')):decimal(20,6)>
+struct<date_part('EPOCH', TIMESTAMP '1970-01-01 00:00:00'):decimal(20,6)>
 -- !query 55 output
 0.000000
 
@@ -790,7 +790,7 @@ true
 -- !query 81
 SELECT EXTRACT(CENTURY FROM TIMESTAMP '1970-03-20 04:30:00.00000')
 -- !query 81 schema
-struct<date_part('CENTURY', TIMESTAMP('1970-03-20 04:30:00')):int>
+struct<date_part('CENTURY', TIMESTAMP '1970-03-20 04:30:00'):int>
 -- !query 81 output
 20
 
@@ -798,7 +798,7 @@ struct<date_part('CENTURY', TIMESTAMP('1970-03-20 04:30:00')):int>
 -- !query 82
 SELECT DATE_TRUNC('MILLENNIUM', TIMESTAMP '1970-03-20 04:30:00.00000')
 -- !query 82 schema
-struct<date_trunc(MILLENNIUM, TIMESTAMP('1970-03-20 04:30:00')):timestamp>
+struct<date_trunc(MILLENNIUM, TIMESTAMP '1970-03-20 04:30:00'):timestamp>
 -- !query 82 output
 1001-01-01 00:07:02
 
@@ -814,7 +814,7 @@ struct<date_trunc(MILLENNIUM, CAST(DATE '1970-03-20' AS TIMESTAMP)):timestamp>
 -- !query 84
 SELECT DATE_TRUNC('CENTURY', TIMESTAMP '1970-03-20 04:30:00.00000')
 -- !query 84 schema
-struct<date_trunc(CENTURY, TIMESTAMP('1970-03-20 04:30:00')):timestamp>
+struct<date_trunc(CENTURY, TIMESTAMP '1970-03-20 04:30:00'):timestamp>
 -- !query 84 output
 1901-01-01 00:00:00
 

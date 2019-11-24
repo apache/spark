@@ -53,18 +53,6 @@ class CatalogManager(
     }
   }
 
-  def defaultCatalog: Option[CatalogPlugin] = {
-    conf.defaultV2Catalog.flatMap { catalogName =>
-      try {
-        Some(catalog(catalogName))
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Cannot load default v2 catalog: $catalogName", e)
-          None
-      }
-    }
-  }
-
   private def loadV2SessionCatalog(): CatalogPlugin = {
     Catalogs.load(SESSION_CATALOG_NAME, conf) match {
       case extension: CatalogExtension =>
@@ -74,9 +62,16 @@ class CatalogManager(
     }
   }
 
-  // If the V2_SESSION_CATALOG_IMPLEMENTATION config is specified, we try to instantiate the
-  // user-specified v2 session catalog. Otherwise, return the default session catalog.
-  def v2SessionCatalog: CatalogPlugin = {
+  /**
+   * If the V2_SESSION_CATALOG config is specified, we try to instantiate the user-specified v2
+   * session catalog. Otherwise, return the default session catalog.
+   *
+   * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
+   * session catalog is responsible for an identifier, but the source requires the v2 catalog API.
+   * This happens when the source implementation extends the v2 TableProvider API and is not listed
+   * in the fallback configuration, spark.sql.sources.write.useV1SourceList
+   */
+  private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
         catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
@@ -120,9 +115,7 @@ class CatalogManager(
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {
-    _currentCatalogName.map(catalogName => catalog(catalogName))
-      .orElse(defaultCatalog)
-      .getOrElse(v2SessionCatalog)
+    catalog(_currentCatalogName.getOrElse(conf.getConf(SQLConf.DEFAULT_CATALOG)))
   }
 
   def setCurrentCatalog(catalogName: String): Unit = synchronized {

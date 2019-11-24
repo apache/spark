@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -217,6 +217,12 @@ license: |
   For example `SELECT timestamp 'tomorrow';`.
 
   - Since Spark 3.0, the `size` function returns `NULL` for the `NULL` input. In Spark version 2.4 and earlier, this function gives `-1` for the same input. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.sizeOfNull` to `true`.
+
+  - Since Spark 3.0, the interval literal syntax does not allow multiple from-to units anymore. For example, `SELECT INTERVAL '1-1' YEAR TO MONTH '2-2' YEAR TO MONTH'` throws parser exception.
+
+  - Since Spark 3.0, when casting interval values to string type, there is no "interval" prefix, e.g. `1 days 2 hours`. In Spark version 2.4 and earlier, the string contains the "interval" prefix like `interval 1 days 2 hours`.
+
+  - Since Spark 3.0, when casting string value to integral types, including tinyint, smallint, int and bigint type, the leading and trailing white spaces(<= ACSII 32) will be trimmed before convert to integral values, e.g. `cast(' 1 ' as int)` results `1`. In Spark version 2.4 and earlier, the result will be `null`.
 
   - Since Spark 3.0, we pad decimal numbers with trailing zeros to the scale of the column for Hive result, for example:
     <table class="table">
@@ -828,7 +834,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `CLUSTER BY`
   * `SORT BY`
 * All Hive operators, including:
-  * Relational operators (`=`, `⇔`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
+  * Relational operators (`=`, `<=>`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
   * Arithmetic operators (`+`, `-`, `*`, `/`, `%`, etc)
   * Logical operators (`AND`, `&&`, `OR`, `||`, etc)
   * Complex type constructors

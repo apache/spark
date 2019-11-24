@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
@@ -413,7 +412,7 @@ class StringIndexerModel (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    var (inputColNames, outputColNames) = getInOutCols()
+    val (inputColNames, outputColNames) = getInOutCols()
     val outputColumns = new Array[Column](outputColNames.length)
 
     // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
@@ -474,6 +473,14 @@ class StringIndexerModel (
 
   @Since("1.6.0")
   override def write: StringIndexModelWriter = new StringIndexModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"StringIndexerModel: uid=$uid, handleInvalid=${$(handleInvalid)}" +
+      get(stringOrderType).map(t => s", stringOrderType=$t").getOrElse("") +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(outputCols).map(c => s", numOutputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")

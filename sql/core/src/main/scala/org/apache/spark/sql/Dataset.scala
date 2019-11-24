@@ -46,11 +46,12 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
@@ -59,7 +60,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -585,8 +586,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 2.4.0
    */
-  def isEmpty: Boolean = withAction("isEmpty", limit(1).groupBy().count().queryExecution) { plan =>
-    plan.executeCollect().head.getLong(0) == 0
+  def isEmpty: Boolean = withAction("isEmpty", select().queryExecution) { plan =>
+    plan.executeTake(1).isEmpty
   }
 
   /**
@@ -724,14 +725,14 @@ class Dataset[T] private[sql](
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
     val parsedDelay =
       try {
-        CalendarInterval.fromCaseInsensitiveString(delayThreshold)
+        IntervalUtils.stringToInterval(UTF8String.fromString(delayThreshold))
       } catch {
         case e: IllegalArgumentException =>
           throw new AnalysisException(
             s"Unable to parse time delay '$delayThreshold'",
             cause = Some(e))
       }
-    require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
+    require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
       EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
@@ -3217,7 +3218,7 @@ class Dataset[T] private[sql](
         fr.inputFiles
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
-      case DataSourceV2Relation(table: FileTable, _, _) =>
+      case DataSourceV2ScanRelation(table: FileTable, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray

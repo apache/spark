@@ -28,6 +28,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -664,16 +665,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     import org.apache.spark.unsafe.types.CalendarInterval
 
     checkEvaluation(Cast(Literal(""), CalendarIntervalType), null)
-    checkEvaluation(Cast(Literal("interval -3 month 7 hours"), CalendarIntervalType),
-      new CalendarInterval(-3, 7 * CalendarInterval.MICROS_PER_HOUR))
+    checkEvaluation(Cast(Literal("interval -3 month 1 day 7 hours"), CalendarIntervalType),
+      new CalendarInterval(-3, 1, 7 * MICROS_PER_HOUR))
     checkEvaluation(Cast(Literal.create(
-      new CalendarInterval(15, -3 * CalendarInterval.MICROS_PER_DAY), CalendarIntervalType),
+      new CalendarInterval(15, 9, -3 * MICROS_PER_HOUR), CalendarIntervalType),
       StringType),
-      "interval 1 years 3 months -3 days")
+      "1 years 3 months 9 days -3 hours")
     checkEvaluation(Cast(Literal("INTERVAL 1 Second 1 microsecond"), CalendarIntervalType),
-      new CalendarInterval(0, 1000001))
+      new CalendarInterval(0, 0, 1000001))
     checkEvaluation(Cast(Literal("1 MONTH 1 Microsecond"), CalendarIntervalType),
-      new CalendarInterval(1, 1))
+      new CalendarInterval(1, 0, 1))
   }
 
   test("cast string to boolean") {
@@ -890,7 +891,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to decimal type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(
+      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       checkExceptionInExpression[ArithmeticException](
         cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
@@ -956,7 +958,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to byte type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(
+      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testIntMaxAndMin(ByteType)
       Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
@@ -981,7 +984,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to short type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(
+      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testIntMaxAndMin(ShortType)
       Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
@@ -1006,7 +1010,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to int type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(
+      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key ->requiredAnsiEnabledForOverflowTestCases.toString) {
       testIntMaxAndMin(IntegerType)
       testLongMaxAndMin(IntegerType)
 
@@ -1023,7 +1028,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to long type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(
+      SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testLongMaxAndMin(LongType)
 
       Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
@@ -1200,7 +1206,7 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-28470: Cast should honor nullOnOverflow property") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false") {
       checkEvaluation(Cast(Literal("134.12"), DecimalType(3, 2)), null)
       checkEvaluation(
         Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)

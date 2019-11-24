@@ -30,13 +30,13 @@ import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
- * BlockManagerMasterEndpoint is an [[ThreadSafeRpcEndpoint]] on the master node to track statuses
+ * BlockManagerMasterEndpoint is an [[IsolatedRpcEndpoint]] on the master node to track statuses
  * of all slaves' block managers.
  */
 private[spark]
@@ -45,11 +45,9 @@ class BlockManagerMasterEndpoint(
     val isLocal: Boolean,
     conf: SparkConf,
     listenerBus: LiveListenerBus,
-    externalBlockStoreClient: Option[ExternalBlockStoreClient])
-  extends ThreadSafeRpcEndpoint with Logging {
-
-  // Mapping from block manager id to the block manager's information.
-  private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
+    externalBlockStoreClient: Option[ExternalBlockStoreClient],
+    blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo])
+  extends IsolatedRpcEndpoint with Logging {
 
   // Mapping from external shuffle service block manager id to the block statuses.
   private val blockStatusByShuffleService =
@@ -144,9 +142,6 @@ class BlockManagerMasterEndpoint(
     case StopBlockManagerMaster =>
       context.reply(true)
       stop()
-
-    case BlockManagerHeartbeat(blockManagerId) =>
-      context.reply(heartbeatReceived(blockManagerId))
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
@@ -288,19 +283,6 @@ class BlockManagerMasterEndpoint(
   private def removeExecutor(execId: String): Unit = {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
-  }
-
-  /**
-   * Return true if the driver knows about the given block manager. Otherwise, return false,
-   * indicating that the block manager should re-register.
-   */
-  private def heartbeatReceived(blockManagerId: BlockManagerId): Boolean = {
-    if (!blockManagerInfo.contains(blockManagerId)) {
-      blockManagerId.isDriver && !isLocal
-    } else {
-      blockManagerInfo(blockManagerId).updateLastSeenMs()
-      true
-    }
   }
 
   // Remove a block from the slaves that have it. This can only be used to remove

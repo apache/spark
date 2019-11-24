@@ -56,11 +56,16 @@ private[execution] object SparkPlanInfo {
       case ReusedSubqueryExec(child) => child :: Nil
       case a: AdaptiveSparkPlanExec => a.executedPlan :: Nil
       case stage: QueryStageExec => stage.plan :: Nil
-      case localReader: LocalShuffleReaderExec => localReader.child :: Nil
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
+    }
+
+    val nodeName = plan match {
+      case physicalOperator: WholeStageCodegenExec =>
+        s"${plan.nodeName} (${physicalOperator.codegenStageId})"
+      case _ => plan.nodeName
     }
 
     // dump the file scan metadata (e.g file path) to event log
@@ -69,9 +74,10 @@ private[execution] object SparkPlanInfo {
       case _ => Map[String, String]()
     }
     new SparkPlanInfo(
-      plan.nodeName,
+      nodeName,
       plan.simpleString(SQLConf.get.maxToStringFields),
       children.map(fromSparkPlan),
-      metadata, metrics)
+      metadata,
+      metrics)
   }
 }

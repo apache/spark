@@ -168,6 +168,19 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       assert(e.message.contains("It doesn't match the specified format"))
     }
   }
+
+  test("throw exception if Create Table LIKE USING Hive built-in ORC in in-memory catalog") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t") {
+      sql("CREATE TABLE s(a INT, b INT) USING parquet")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.provider == Some("parquet"))
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t LIKE s USING org.apache.spark.sql.hive.orc")
+      }.getMessage
+      assert(e.contains("Hive built-in ORC data source must be used with Hive support enabled"))
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -1725,7 +1738,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       column.map(_.metadata).getOrElse(Metadata.empty)
     }
     // Ensure that change column will preserve other metadata fields.
-    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 TYPE INT COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
     assert(getMetadata("col1").getString("comment") == "this is col1")
   }
@@ -2064,7 +2077,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("show functions") {
     withUserDefinedFunction("add_one" -> true) {
-      val numFunctions = FunctionRegistry.functionSet.size.toLong
+      val numFunctions = FunctionRegistry.functionSet.size.toLong +
+        FunctionsCommand.virtualOperators.size.toLong
       assert(sql("show functions").count() === numFunctions)
       assert(sql("show system functions").count() === numFunctions)
       assert(sql("show all functions").count() === numFunctions)
@@ -2088,7 +2102,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           val message = intercept[AnalysisException] {
             sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
-          assert(message.contains("SHOW COLUMNS with conflicting databases"))
+          assert(message.contains(
+            s"SHOW COLUMNS with conflicting databases: " +
+              s"'${db.toUpperCase(Locale.ROOT)}' != '$db'"))
         }
       }
     }
@@ -2814,6 +2830,36 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql("SELECT * FROM foo.first")
           checkAnswer(spark.table("foo.first"), Row("second"))
         }
+      }
+    }
+  }
+
+  test("Create Table LIKE USING provider") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t1", "t2", "t3", "t4") {
+      sql("CREATE TABLE s(a INT, b INT) USING parquet")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.provider == Some("parquet"))
+
+      sql("CREATE TABLE t1 LIKE s USING orc")
+      val table1 = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table1.provider == Some("orc"))
+
+      sql("CREATE TABLE t2 LIKE s USING hive")
+      val table2 = catalog.getTableMetadata(TableIdentifier("t2"))
+      assert(table2.provider == Some("hive"))
+
+      val e1 = intercept[ClassNotFoundException] {
+        sql("CREATE TABLE t3 LIKE s USING unknown")
+      }.getMessage
+      assert(e1.contains("Failed to find data source"))
+
+      withGlobalTempView("src") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
+        sql(s"CREATE TABLE t4 LIKE $globalTempDB.src USING parquet")
+        val table = catalog.getTableMetadata(TableIdentifier("t4"))
+        assert(table.provider == Some("parquet"))
       }
     }
   }
