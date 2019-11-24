@@ -400,7 +400,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     Seq(false, true).foreach { autoUpdate =>
       withSQLConf(
           SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString,
-        SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+          SQLConf.PLAN_STATS_ENABLED.key -> "false") {
         withTempDir { dir =>
           withTable(table) {
             val path = dir.getCanonicalPath
