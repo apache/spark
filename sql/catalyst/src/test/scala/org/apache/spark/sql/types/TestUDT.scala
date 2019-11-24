@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import java.util.GregorianCalendar
+import javax.xml.datatype.{DatatypeFactory, XMLGregorianCalendar}
 
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 
 // Wrapped in an object to check Scala compatibility. See SPARK-13929
 object TestUDT {
@@ -57,5 +62,23 @@ object TestUDT {
     override def hashCode(): Int = getClass.hashCode()
 
     override def equals(other: Any): Boolean = other.isInstanceOf[MyDenseVectorUDT]
+  }
+
+  private[sql] class MyXMLGregorianCalendarUDT extends UserDefinedType[XMLGregorianCalendar] {
+    override def sqlType: DataType = TimestampType
+
+    override def serialize(obj: XMLGregorianCalendar): Any =
+      obj.toGregorianCalendar.getTimeInMillis * 1000
+
+    override def deserialize(datum: Any): XMLGregorianCalendar = {
+      val calendar = new GregorianCalendar
+      calendar.setTimeInMillis(datum.asInstanceOf[Long])
+      DatatypeFactory.newInstance.newXMLGregorianCalendar(calendar)
+    }
+
+    override def userClass: Class[XMLGregorianCalendar] = classOf[XMLGregorianCalendar]
+
+    // By setting this to a timestamp, we lose the information about the udt
+    override private[sql] def jsonValue: JValue = "timestamp"
   }
 }
