@@ -128,19 +128,19 @@
     <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>2.7.1</curator.version>
     <okapi.version>0.4.2</okapi.version>
-    <hive.group>org.spark-project.hive</hive.group>
-    <hive.classifier></hive.classifier>
+    <hive.group>org.apache.hive</hive.group>
+    <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>1.2.1.spark2</hive.version>
+    <hive.version>2.3.6</hive.version>
     <hive23.version>2.3.6</hive23.version>
     <!-- Version used for internal directory structure -->
-    <hive.version.short>1.2.1</hive.version.short>
+    <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>2.3.1</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
     <orc.version>1.5.7</orc.version>
-    <orc.classifier>nohive</orc.classifier>
+    <orc.classifier></orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.18.v20190429</jetty.version>
@@ -181,7 +181,7 @@
     <commons-lang3.version>3.8.1</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
-    <datanucleus-core.version>3.2.10</datanucleus-core.version>
+    <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <janino.version>3.0.15</janino.version>
     <jersey.version>2.29</jersey.version>
     <joda.version>2.10.5</joda.version>
@@ -228,7 +228,7 @@
     -->
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
-    <hive.parquet.scope>${hive.deps.scope}</hive.parquet.scope>
+    <hive.parquet.scope>provided</hive.parquet.scope>
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
@@ -2326,7 +2326,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2376,7 +2376,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
             <stderr/>
             <environmentVariables>
               <!--
@@ -2919,18 +2919,29 @@
     <profile>
       <id>hadoop-3.2</id>
       <properties>
-        <hadoop.version>2.7.4</hadoop.version>
-        <curator.version>2.7.1</curator.version>
-        <hive.group>org.apache.hive</hive.group>
-        <hive.classifier>core</hive.classifier>
-        <hive.version>${hive23.version}</hive.version>
-        <hive.version.short>2.3.5</hive.version.short>
-        <!-- Do not need parquet-hadoop-bundle because we already have
-          parquet-common, parquet-column and parquet-hadoop -->
-        <hive.parquet.scope>provided</hive.parquet.scope>
-        <orc.classifier></orc.classifier>
-        <datanucleus-core.version>4.1.17</datanucleus-core.version>
+        <hadoop.version>3.2.0</hadoop.version>
+        <curator.version>2.13.0</curator.version>
       </properties>
+    </profile>
+
+    <profile>
+      <id>hive-1.2</id>
+      <properties>
+        <hive.group>org.spark-project.hive</hive.group>
+        <hive.classifier></hive.classifier>
+        <!-- Version used in Maven Hive dependency -->
+        <hive.version>1.2.1.spark2</hive.version>
+        <!-- Version used for internal directory structure -->
+        <hive.version.short>1.2</hive.version.short>
+        <hive.parquet.scope>${hive.deps.scope}</hive.parquet.scope>
+        <orc.classifier>nohive</orc.classifier>
+        <datanucleus-core.version>3.2.10</datanucleus-core.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>hive-2.3</id>
+      <!-- Default hive profile. Uses global properties. -->
       <dependencies>
         <!-- Both Hive and ORC need hive-storage-api, but it is excluded by orc-mapreduce -->
         <dependency>

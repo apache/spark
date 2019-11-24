@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -256,6 +256,30 @@ case class DropNamespace(
     cascade: Boolean) extends Command
 
 /**
+ * The logical plan of the DESCRIBE NAMESPACE command that works for v2 catalogs.
+ */
+case class DescribeNamespace(
+    catalog: SupportsNamespaces,
+    namespace: Seq[String],
+    extended: Boolean) extends Command {
+
+  override def output: Seq[Attribute] = Seq(
+    AttributeReference("name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the column").build())(),
+    AttributeReference("value", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "value of the column").build())())
+}
+
+/**
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES)
+ * command that works for v2 catalogs.
+ */
+case class AlterNamespaceSetProperties(
+    catalog: SupportsNamespaces,
+    namespace: Seq[String],
+    properties: Map[String, String]) extends Command
+
+/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
@@ -375,6 +399,14 @@ case class AlterTable(
     }
   }
 }
+
+/**
+ * The logical plan of the ALTER TABLE RENAME command that works for v2 tables.
+ */
+case class RenameTable(
+    catalog: TableCatalog,
+    oldIdent: Identifier,
+    newIdent: Identifier) extends Command
 
 /**
  * The logical plan of the SHOW TABLE command that works for v2 catalogs.

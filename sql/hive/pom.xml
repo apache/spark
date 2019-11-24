@@ -209,7 +209,7 @@
       </build>
     </profile>
     <profile>
-      <id>hadoop-3.2</id>
+      <id>hive-2.3</id>
       <dependencies>
         <dependency>
           <groupId>${hive.group}</groupId>
@@ -244,7 +244,7 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
       <plugin>

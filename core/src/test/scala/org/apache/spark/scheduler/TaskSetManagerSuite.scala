@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.FileAlreadyExistsException
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
+import org.scalatest.Assertions._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -128,7 +129,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   def removeExecutor(execId: String): Unit = {
     executors -= execId
     val host = executorIdToHost.get(execId)
-    assert(host != None)
+    assert(host.isDefined)
     val hostId = host.get
     val executorsOnHost = hostToExecutors(hostId)
     executorsOnHost -= execId

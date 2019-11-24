@@ -90,23 +90,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[ShowTablesCommand]] logical plan.
-   * Example SQL :
-   * {{{
-   *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
-   *   [PARTITION(partition_spec)];
-   * }}}
-   */
-  override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
-    val partitionSpec = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
-    ShowTablesCommand(
-      Option(ctx.db).map(_.getText),
-      Option(ctx.pattern).map(string),
-      isExtended = true,
-      partitionSpec = partitionSpec)
-  }
-
-  /**
    * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
@@ -245,49 +228,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AlterDatabasePropertiesCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER (DATABASE|SCHEMA) database SET DBPROPERTIES (property_name=property_value, ...);
-   * }}}
-   */
-  override def visitSetDatabaseProperties(
-      ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    AlterDatabasePropertiesCommand(
-      ctx.db.getText,
-      visitPropertyKeyValues(ctx.tablePropertyList))
-  }
-
-  /**
-   * Create an [[AlterDatabaseSetLocationCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER (DATABASE|SCHEMA) database SET LOCATION path;
-   * }}}
-   */
-  override def visitSetDatabaseLocation(
-      ctx: SetDatabaseLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterDatabaseSetLocationCommand(
-      ctx.db.getText,
-      visitLocationSpec(ctx.locationSpec)
-    )
-  }
-
-  /**
-   * Create a [[DescribeDatabaseCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   DESCRIBE DATABASE [EXTENDED] database;
-   * }}}
-   */
-  override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DescribeDatabaseCommand(ctx.db.getText, ctx.EXTENDED != null)
-  }
-
-  /**
    * Create a plan for a DESCRIBE FUNCTION command.
    */
   override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
@@ -374,22 +314,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       functionIdentifier.funcName,
       ctx.EXISTS != null,
       ctx.TEMPORARY != null)
-  }
-
-  /**
-   * Create a [[AlterTableRenameCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table1 RENAME TO table2;
-   *   ALTER VIEW view1 RENAME TO view2;
-   * }}}
-   */
-  override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenameCommand(
-      visitTableIdentifier(ctx.from),
-      visitTableIdentifier(ctx.to),
-      ctx.VIEW != null)
   }
 
   /**

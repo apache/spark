@@ -93,6 +93,19 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${tableName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
+    case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
+      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, properties)
+
+    case AlterNamespaceSetLocationStatement(NonSessionCatalog(catalog, nameParts), location) =>
+      AlterNamespaceSetProperties(
+        catalog.asNamespaceCatalog, nameParts, Map("location" -> location))
+
+    case RenameTableStatement(NonSessionCatalog(catalog, oldName), newNameParts, isView) =>
+      if (isView) {
+        throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
+      }
+      RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
+
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
@@ -171,6 +184,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case DropNamespaceStatement(NonSessionCatalog(catalog, nameParts), ifExists, cascade) =>
       DropNamespace(catalog, nameParts, ifExists, cascade)
+
+    case DescribeNamespaceStatement(NonSessionCatalog(catalog, nameParts), extended) =>
+      DescribeNamespace(catalog.asNamespaceCatalog, nameParts, extended)
 
     case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, namespace)), pattern) =>
       ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)

@@ -490,7 +490,8 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method"),
-    expression[Version]("version"),
+    expression[SparkVersion]("version"),
+    expression[TypeOf]("typeof"),
 
     // grouping sets
     expression[Cube]("cube"),
