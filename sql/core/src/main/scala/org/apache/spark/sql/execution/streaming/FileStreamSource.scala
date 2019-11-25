@@ -270,10 +270,12 @@ class FileStreamSource(
 
     sourceCleaner.foreach { cleaner =>
       sourceHasMetadata match {
-        case Some(true) if !warnedIgnoringCleanSourceOption =>
-          logWarning("Ignoring 'cleanSource' option since source path refers to the output" +
-            " directory of FileStreamSink.")
-          warnedIgnoringCleanSourceOption = true
+        case Some(true) =>
+          if (!warnedIgnoringCleanSourceOption) {
+            logWarning("Ignoring 'cleanSource' option since source path refers to the output" +
+              " directory of FileStreamSink.")
+            warnedIgnoringCleanSourceOption = true
+          }
 
         case Some(false) =>
           val files = metadataLog.get(Some(logOffset), Some(logOffset)).flatMap(_._2)
