@@ -297,8 +297,7 @@ private[sql] object V2SessionCatalog {
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
           .getOrElse(throw new IllegalArgumentException("Missing database location")),
-      properties = metadata.asScala.toMap --
-        Seq(SupportsNamespaces.PROP_COMMENT, SupportsNamespaces.PROP_LOCATION))
+      properties = metadata.asScala.toMap -- SupportsNamespaces.RESERVED_PROPERTIES.asScala)
   }
 
   private implicit class CatalogDatabaseHelper(catalogDatabase: CatalogDatabase) {
