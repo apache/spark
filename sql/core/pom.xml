@@ -96,6 +96,11 @@
       <classifier>${orc.classifier}</classifier>
     </dependency>
     <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-storage-api</artifactId>
+      <version>2.6.0</version>
+    </dependency>
+    <dependency>
       <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-column</artifactId>
     </dependency>
