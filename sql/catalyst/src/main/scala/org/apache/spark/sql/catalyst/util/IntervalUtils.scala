@@ -462,7 +462,7 @@ object IntervalUtils {
     if (input == null) {
       throwIAE("interval string cannot be null")
     }
-    val strs = input.trimAll().split(UTF8String.fromString("interval\\s+"), -1)
+    val strs = input.trimAll().toLowerCase().split(UTF8String.fromString("interval\\s+"), -1)
       .filterNot(UTF8String.EMPTY_UTF8.equals)
     if (strs.isEmpty) {
       throwIAE("interval string cannot be empty")
@@ -470,11 +470,8 @@ object IntervalUtils {
     if (strs.length > 1) {
       throwIAE("`interval` word must be a prefix")
     }
-    // scalastyle:off caselocale .toLowerCase
-    val s = strs(0).toLowerCase
-    // scalastyle:on
+    val s = strs(0)
     val bytes = s.getBytes
-
     var state = TRIM_BEFORE_SIGN
     var i = 0
     var currentValue: Long = 0
