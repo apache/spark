@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2492,10 +2493,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
     Option(ctx.comment).map(string).map {
-      properties += CreateNamespaceStatement.COMMENT_PROPERTY_KEY -> _
+      properties += SupportsNamespaces.PROP_COMMENT -> _
     }
     ctx.locationSpec.asScala.headOption.map(visitLocationSpec).map {
-      properties += CreateNamespaceStatement.LOCATION_PROPERTY_KEY -> _
+      properties += SupportsNamespaces.PROP_LOCATION -> _
     }
 
     CreateNamespaceStatement(

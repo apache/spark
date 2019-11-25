@@ -345,11 +345,6 @@ case class CreateNamespaceStatement(
     ifNotExists: Boolean,
     properties: Map[String, String]) extends ParsedStatement
 
-object CreateNamespaceStatement {
-  val COMMENT_PROPERTY_KEY: String = "comment"
-  val LOCATION_PROPERTY_KEY: String = "location"
-}
-
 /**
  * A DROP NAMESPACE statement, as parsed from SQL.
  */
