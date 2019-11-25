@@ -93,13 +93,10 @@ object Summarizer extends Logging {
    *  - variance: a vector tha contains the coefficient-wise variance.
    *  - std: a vector tha contains the coefficient-wise standard deviation.
    *  - count: the count of all vectors seen.
-   *  - weightSum: the sum of all weights seen.
-   *  - numFeatures: the size of vectors.
    *  - numNonzeros: a vector with the number of non-zeros for each coefficients
    *  - max: the maximum for each coefficient.
    *  - min: the minimum for each coefficient.
    *  - normL2: the Euclidean norm for each coefficient.
-   *  - sumL2: a vector that contains the coefficient-wise squared sum.
    *  - normL1: the L1 norm of each coefficient (sum of the absolute values).
    * @param metrics metrics that can be provided.
    * @return a builder.
@@ -156,22 +153,6 @@ object Summarizer extends Logging {
   @Since("2.3.0")
   def count(col: Column): Column = count(col, lit(1.0))
 
-  @Since("3.0.0")
-  def weightSum(col: Column, weightCol: Column): Column = {
-    getSingleMetric(col, weightCol, "weightSum")
-  }
-
-  @Since("3.0.0")
-  def weightSum(col: Column): Column = weightSum(col, lit(1.0))
-
-  @Since("3.0.0")
-  def numFeatures(col: Column, weightCol: Column): Column = {
-    getSingleMetric(col, weightCol, "numFeatures")
-  }
-
-  @Since("3.0.0")
-  def numFeatures(col: Column): Column = numFeatures(col, lit(1.0))
-
   @Since("2.3.0")
   def numNonZeros(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "numNonZeros")
@@ -211,14 +192,6 @@ object Summarizer extends Logging {
 
   @Since("2.3.0")
   def normL2(col: Column): Column = normL2(col, lit(1.0))
-
-  @Since("3.0.0")
-  def sumL2(col: Column, weightCol: Column): Column = {
-    getSingleMetric(col, weightCol, "sumL2")
-  }
-
-  @Since("3.0.0")
-  def sumL2(col: Column): Column = sumL2(col, lit(1.0))
 
   private def getSingleMetric(col: Column, weightCol: Column, metric: String): Column = {
     val c1 = metrics(metric).summary(col, weightCol)
@@ -294,13 +267,10 @@ private[ml] object SummaryBuilderImpl extends Logging {
     ("variance", Variance, vectorUDT, Seq(ComputeWeightSum, ComputeMean, ComputeM2n)),
     ("std", Std, vectorUDT, Seq(ComputeWeightSum, ComputeMean, ComputeM2n)),
     ("count", Count, LongType, Seq()),
-    ("weightSum", WeightSum, DoubleType, Seq()),
-    ("numFeatures", NumFeatures, IntegerType, Seq()),
     ("numNonZeros", NumNonZeros, vectorUDT, Seq(ComputeNNZ)),
     ("max", Max, vectorUDT, Seq(ComputeMax, ComputeNNZ)),
     ("min", Min, vectorUDT, Seq(ComputeMin, ComputeNNZ)),
     ("normL2", NormL2, vectorUDT, Seq(ComputeM2)),
-    ("sumL2", SumL2, vectorUDT, Seq(ComputeM2)),
     ("normL1", NormL1, vectorUDT, Seq(ComputeL1))
   )
 
@@ -313,13 +283,10 @@ private[ml] object SummaryBuilderImpl extends Logging {
   private[stat] case object Variance extends Metric
   private[stat] case object Std extends Metric
   private[stat] case object Count extends Metric
-  private[stat] case object WeightSum extends Metric
-  private[stat] case object NumFeatures extends Metric
   private[stat] case object NumNonZeros extends Metric
   private[stat] case object Max extends Metric
   private[stat] case object Min extends Metric
   private[stat] case object NormL2 extends Metric
-  private[stat] case object SumL2 extends Metric
   private[stat] case object NormL1 extends Metric
 
   /**
@@ -357,8 +324,8 @@ private[ml] object SummaryBuilderImpl extends Logging {
 
     def this() {
       this(
-        Seq(Mean, Sum, Variance, Std, Count, WeightSum, NumFeatures,
-          NumNonZeros, Max, Min, NormL2, SumL2, NormL1),
+        Seq(Mean, Sum, Variance, Std, Count, NumNonZeros,
+          Max, Min, NormL2, NormL1),
         Seq(ComputeMean, ComputeM2n, ComputeM2, ComputeL1,
           ComputeWeightSum, ComputeNNZ, ComputeMax, ComputeMin)
       )
@@ -588,19 +555,6 @@ private[ml] object SummaryBuilderImpl extends Logging {
     def count: Long = totalCnt
 
     /**
-     * Sum of weights.
-     */
-    def weightSum: Double = totalWeightSum
-
-    /**
-     * Number of features.
-     */
-    def numFeatures: Int = {
-      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
-      n
-    }
-
-    /**
      * Number of nonzero elements in each dimension.
      *
      */
@@ -660,16 +614,6 @@ private[ml] object SummaryBuilderImpl extends Logging {
     }
 
     /**
-     * Squared sum of each dimension.
-     */
-    def sumL2: Vector = {
-      require(requestedMetrics.contains(SumL2))
-      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
-
-      Vectors.dense(currM2)
-    }
-
-    /**
      * L1 norm of each dimension.
      */
     def normL1: Vector = {
@@ -696,13 +640,10 @@ private[ml] object SummaryBuilderImpl extends Logging {
         case Variance => vectorUDT.serialize(state.variance)
         case Std => vectorUDT.serialize(state.std)
         case Count => state.count
-        case WeightSum => state.weightSum
-        case NumFeatures => state.numFeatures
         case NumNonZeros => vectorUDT.serialize(state.numNonzeros)
         case Max => vectorUDT.serialize(state.max)
         case Min => vectorUDT.serialize(state.min)
         case NormL2 => vectorUDT.serialize(state.normL2)
-        case SumL2 => vectorUDT.serialize(state.sumL2)
         case NormL1 => vectorUDT.serialize(state.normL1)
       }
       InternalRow.apply(metrics: _*)

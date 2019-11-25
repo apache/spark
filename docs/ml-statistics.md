@@ -109,8 +109,8 @@ Refer to the [`ChiSquareTest` Python docs](api/python/index.html#pyspark.ml.stat
 ## Summarizer
 
 We provide vector column summary statistics for `Dataframe` through `Summarizer`.
-Available metrics are the column-wise max, min, mean, sum, variance, std, squared sum, and number of nonzeros,
-as well as the total count and sum of weights.
+Available metrics are the column-wise max, min, mean, sum, variance, std, and number of nonzeros,
+as well as the total count.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
