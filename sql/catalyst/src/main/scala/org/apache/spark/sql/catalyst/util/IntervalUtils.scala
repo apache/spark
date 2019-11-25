@@ -414,8 +414,7 @@ object IntervalUtils {
   private object ParseState extends Enumeration {
     type ParseState = Value
 
-    val PREFIX,
-        TRIM_BEFORE_SIGN,
+    val TRIM_BEFORE_SIGN,
         SIGN,
         TRIM_BEFORE_VALUE,
         VALUE,
@@ -425,7 +424,6 @@ object IntervalUtils {
         UNIT_SUFFIX,
         UNIT_END = Value
   }
-  private final val intervalStr = UTF8String.fromString("interval ")
   private def unitToUtf8(unit: IntervalUnit): UTF8String = {
     UTF8String.fromString(unit.toString)
   }
@@ -464,14 +462,20 @@ object IntervalUtils {
     if (input == null) {
       throwIAE("interval string cannot be null")
     }
-    // scalastyle:off caselocale .toLowerCase
-    val s = input.trimAll().toLowerCase
-    // scalastyle:on
-    val bytes = s.getBytes
-    if (bytes.isEmpty) {
+    val strs = input.trimAll().split(UTF8String.fromString("interval\\s+"), -1)
+      .filterNot(UTF8String.EMPTY_UTF8.equals)
+    if (strs.isEmpty) {
       throwIAE("interval string cannot be empty")
     }
-    var state = PREFIX
+    if (strs.length > 1) {
+      throwIAE("`interval` word must be a prefix")
+    }
+    // scalastyle:off caselocale .toLowerCase
+    val s = strs(0).toLowerCase
+    // scalastyle:on
+    val bytes = s.getBytes
+
+    var state = TRIM_BEFORE_SIGN
     var i = 0
     var currentValue: Long = 0
     var isNegative: Boolean = false
@@ -485,29 +489,21 @@ object IntervalUtils {
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
       b match {
-        case ' ' => i += 1
+        case _ if b <= ' ' => i += 1
         case _ => state = next
       }
     }
 
     def currentWord: UTF8String = {
-      val strings = s.split(UTF8String.blankString(1), -1)
-      val lenRight = s.substring(i, s.numBytes()).split(UTF8String.blankString(1), -1).length
+      val sep = UTF8String.fromString("\\s+")
+      val strings = s.split(sep, -1)
+      val lenRight = s.substring(i, s.numBytes()).split(sep, -1).length
       strings(strings.length - lenRight)
     }
 
     while (i < bytes.length) {
       val b = bytes(i)
       state match {
-        case PREFIX =>
-          if (s.startsWith(intervalStr)) {
-            if (s.numBytes() == intervalStr.numBytes()) {
-              throwIAE("interval string cannot be empty")
-            } else {
-              i += intervalStr.numBytes()
-            }
-          }
-          state = TRIM_BEFORE_SIGN
         case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
         case SIGN =>
           currentValue = 0
@@ -548,7 +544,7 @@ object IntervalUtils {
               } catch {
                 case e: ArithmeticException => throwIAE(e.getMessage, e)
               }
-            case ' ' => state = TRIM_BEFORE_UNIT
+            case _ if b <= ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = initialFractionScale
               state = VALUE_FRACTIONAL_PART
@@ -560,7 +556,7 @@ object IntervalUtils {
             case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
               fraction += (b - '0') * fractionScale
               fractionScale /= 10
-            case ' ' if !pointPrefixed || fractionScale < initialFractionScale =>
+            case _ if b <= ' ' && (!pointPrefixed || fractionScale < initialFractionScale) =>
               fraction /= NANOS_PER_MICROS.toInt
               state = TRIM_BEFORE_UNIT
             case _ if '0' <= b && b <= '9' =>
@@ -627,13 +623,13 @@ object IntervalUtils {
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
-            case ' ' => state = TRIM_BEFORE_SIGN
+            case _ if b <= ' ' => state = TRIM_BEFORE_SIGN
             case _ => throwIAE(s"invalid unit '$currentWord'")
           }
           i += 1
         case UNIT_END =>
           b match {
-            case ' ' =>
+            case _ if b <= ' ' =>
               i += 1
               state = TRIM_BEFORE_SIGN
             case _ => throwIAE(s"invalid unit '$currentWord'")
