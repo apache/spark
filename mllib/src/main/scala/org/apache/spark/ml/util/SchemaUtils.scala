@@ -135,14 +135,9 @@ private[spark] object SchemaUtils {
       schema: StructType,
       colName: String,
       numValues: Int): StructType = {
-    val attr = if (numValues == 2) {
-      BinaryAttribute.defaultAttr
-        .withName(colName)
-    } else {
-      NominalAttribute.defaultAttr
-        .withName(colName)
-        .withNumValues(numValues)
-    }
+    val attr = NominalAttribute.defaultAttr
+      .withName(colName)
+      .withNumValues(numValues)
     val field = attr.toStructField
     updateField(schema, field, true)
   }
@@ -166,16 +161,19 @@ private[spark] object SchemaUtils {
    * Update the metadata of an existing column. If this column do not exist, append it.
    * @param schema input schema
    * @param field struct field
+   * @param overwriteMetadata whether to overwrite the metadata. If true, the metadata in the
+   *                          schema will be overwritten. If false, the metadata in `field`
+   *                          and `schema` will be merged to generate output metadata.
    * @return new schema
    */
   def updateField(
       schema: StructType,
       field: StructField,
-      overrideMeta: Boolean = true): StructType = {
+      overwriteMetadata: Boolean = true): StructType = {
     if (schema.fieldNames.contains(field.name)) {
       val newFields = schema.fields.map { f =>
         if (f.name == field.name) {
-          if (overrideMeta) {
+          if (overwriteMetadata) {
             field
           } else {
             val newMeta = new MetadataBuilder()

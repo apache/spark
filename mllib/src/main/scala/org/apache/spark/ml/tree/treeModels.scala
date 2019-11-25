@@ -94,12 +94,8 @@ private[spark] trait DecisionTreeModel {
     leafIterator(rootNode).size
 
   private[ml] lazy val leafAttr = {
-    if (numLeave == 2) {
-      BinaryAttribute.defaultAttr
-    } else {
-      NominalAttribute.defaultAttr
-        .withNumValues(numLeave)
-    }
+    NominalAttribute.defaultAttr
+      .withNumValues(numLeave)
   }
 
   private[ml] def getLeafField(leafCol: String) = {

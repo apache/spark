@@ -71,7 +71,8 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       vecSize: Int): Unit = {
     import dataframe.sparkSession.implicits._
     val group = AttributeGroup.fromStructField(dataframe.schema(vecColName))
-    assert(group.size === vecSize)
+    assert(group.size === vecSize,
+      s"the vector size obtained from schema should be $vecSize, but got ${group.size}")
     val sizeUDF = udf { vector: Vector => vector.size }
     assert(dataframe.select(sizeUDF(col(vecColName)))
       .as[Int]
@@ -88,7 +89,8 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       case binAttr: BinaryAttribute => Some(2)
       case nomAttr: NominalAttribute => nomAttr.getNumValues
     }
-    assert(n.isDefined && n.get === numValues)
+    assert(n.isDefined && n.get === numValues,
+      s"the number of values obtained from schema should be $numValues, but got $n")
     assert(dataframe.select(colName)
       .as[Double]
       .collect()

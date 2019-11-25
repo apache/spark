@@ -86,7 +86,7 @@ class NormalizerSuite extends MLTest with DefaultReadWriteTest {
 
     val vectorSize = data.head.size
 
-    // Can not infer size of ouput vector, since no metadata is provided
+    // Can not infer size of output vector, since no metadata is provided
     intercept[TestFailedException] {
       val transformed = normalizer.transform(dataFrame)
       checkVectorSizeOnDF(transformed, "normalized", vectorSize)

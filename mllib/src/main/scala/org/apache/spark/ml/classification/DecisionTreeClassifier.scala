@@ -203,7 +203,7 @@ class DecisionTreeClassificationModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
-  @Since("1.4.0")
+  @Since("3.0.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
     if ($(leafCol).nonEmpty) {
