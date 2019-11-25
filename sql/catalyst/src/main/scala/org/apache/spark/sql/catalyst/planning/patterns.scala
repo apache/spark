@@ -107,6 +107,16 @@ object ScanOperation extends OperationHelper with PredicateHelper {
     }
   }
 
+  private def hasCommonNonDeterministic(expr: Seq[Expression], aliases: AttributeMap[Expression])
+    : Boolean = {
+    expr.exists(_.collect {
+      case Alias(ref: AttributeReference, _) if aliases.contains(ref) =>
+        aliases(ref)
+      case a: AttributeReference if aliases.contains(a) =>
+        aliases(a)
+    }.exists(!_.deterministic))
+  }
+
   private def collectProjectsAndFilters(plan: LogicalPlan)
     : Option[(Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan,
     AttributeMap[Expression])] =
@@ -114,13 +124,7 @@ object ScanOperation extends OperationHelper with PredicateHelper {
         case Project(fields, child) =>
           collectProjectsAndFilters(child) match {
             case Some((_, filters, other, aliases)) =>
-              val hasCommonNonDeterministic = fields.exists(_.collect {
-                case Alias(ref: AttributeReference, _) if aliases.contains(ref) =>
-                  aliases(ref)
-                case a: AttributeReference if aliases.contains(a) =>
-                  aliases(a)
-              }.exists(!_.deterministic))
-              if (!hasCommonNonDeterministic) {
+              if (!hasCommonNonDeterministic(fields, aliases)) {
                 val substitutedFields =
                   fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
                 Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
@@ -133,8 +137,8 @@ object ScanOperation extends OperationHelper with PredicateHelper {
         case Filter(condition, child) =>
           collectProjectsAndFilters(child) match {
             case Some((fields, filters, other, aliases)) =>
-              val substitutedCondition = substitute(aliases)(condition)
-              if (substitutedCondition.deterministic) {
+              if (condition.deterministic && !hasCommonNonDeterministic(Seq(condition), aliases)) {
+                val substitutedCondition = substitute(aliases)(condition)
                 Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
                   other, aliases))
               } else {
