@@ -117,10 +117,7 @@ object ScanOperation extends OperationHelper with PredicateHelper {
   private def hasCommonNonDeterministic(expr: Seq[Expression], aliases: AttributeMap[Expression])
     : Boolean = {
     expr.exists(_.collect {
-      case Alias(ref: AttributeReference, _) if aliases.contains(ref) =>
-        aliases(ref)
-      case a: AttributeReference if aliases.contains(a) =>
-        aliases(a)
+      case a: AttributeReference if aliases.contains(a) => aliases(a)
     }.exists(!_.deterministic))
   }
 
