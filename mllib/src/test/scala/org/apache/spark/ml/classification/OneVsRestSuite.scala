@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.LabeledPoint

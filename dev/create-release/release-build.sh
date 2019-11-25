@@ -138,7 +138,8 @@ fi
 # Hive-specific profiles for some builds
 HIVE_PROFILES="-Phive -Phive-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
-PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
+# We use Apache Hive 2.3 for publishing
+PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Phive-2.3 -Pspark-ganglia-lgpl -Pkinesis-asl"
 # Profiles for building binary releases
 BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 

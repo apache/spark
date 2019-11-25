@@ -110,6 +110,15 @@ test_that("cleanClosure on R functions", {
   actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
 
+  # Test for combination for nested and sequenctial functions in a closure
+  f1 <- function(x) x + 1
+  f2 <- function(x) f1(x) + 2
+  userFunc <- function(x) { f1(x); f2(x) }
+  cUserFuncEnv <- environment(cleanClosure(userFunc))
+  expect_equal(length(cUserFuncEnv), 2)
+  innerCUserFuncEnv <- environment(cUserFuncEnv$f2)
+  expect_equal(length(innerCUserFuncEnv), 1)
+
   # Test for function (and variable) definitions.
   f <- function(x) {
     g <- function(y) { y * 2 }

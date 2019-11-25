@@ -95,8 +95,8 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
       // plan should show the rewritten aggregate expression.
       val df = sql("SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k")
       checkKeywordsExistsInExplain(df,
-        "Aggregate [k#x], [k#x, min(v#x) AS every(v)#x, max(v#x) AS any(v)#x, " +
-          "max(v#x) AS any(v)#x]")
+        "Aggregate [k#x], [k#x, min(v#x) AS bool_and(v)#x, max(v#x) AS bool_or(v)#x, " +
+          "max(v#x) AS bool_or(v)#x]")
     }
   }
 

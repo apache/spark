@@ -312,6 +312,86 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("array_sort with lambda functions") {
+
+    spark.udf.register("fAsc", (x: Int, y: Int) => {
+      if (x < y) -1
+      else if (x == y) 0
+      else 1
+    })
+
+    spark.udf.register("fDesc", (x: Int, y: Int) => {
+      if (x < y) 1
+      else if (x == y) 0
+      else -1
+    })
+
+    spark.udf.register("fString", (x: String, y: String) => {
+      if (x == null && y == null) 0
+      else if (x == null) 1
+      else if (y == null) -1
+      else if (x < y) 1
+      else if (x == y) 0
+      else -1
+    })
+
+    spark.udf.register("fStringLength", (x: String, y: String) => {
+      if (x == null && y == null) 0
+      else if (x == null) 1
+      else if (y == null) -1
+      else if (x.length < y.length) -1
+      else if (x.length == y.length) 0
+      else 1
+    })
+
+    val df1 = Seq(Array[Int](3, 2, 5, 1, 2)).toDF("a")
+    checkAnswer(
+      df1.selectExpr("array_sort(a, (x, y) -> fAsc(x, y))"),
+      Seq(
+        Row(Seq(1, 2, 2, 3, 5)))
+    )
+
+    checkAnswer(
+      df1.selectExpr("array_sort(a, (x, y) -> fDesc(x, y))"),
+      Seq(
+        Row(Seq(5, 3, 2, 2, 1)))
+    )
+
+    val df2 = Seq(Array[String]("bc", "ab", "dc")).toDF("a")
+    checkAnswer(
+      df2.selectExpr("array_sort(a, (x, y) -> fString(x, y))"),
+      Seq(
+        Row(Seq("dc", "bc", "ab")))
+    )
+
+    val df3 = Seq(Array[String]("a", "abcd", "abc")).toDF("a")
+    checkAnswer(
+      df3.selectExpr("array_sort(a, (x, y) -> fStringLength(x, y))"),
+      Seq(
+        Row(Seq("a", "abc", "abcd")))
+    )
+
+    val df4 = Seq((Array[Array[Int]](Array(2, 3, 1), Array(4, 2, 1, 4),
+      Array(1, 2)), "x")).toDF("a", "b")
+    checkAnswer(
+      df4.selectExpr("array_sort(a, (x, y) -> fAsc(cardinality(x), cardinality(y)))"),
+      Seq(
+        Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4))))
+    )
+
+    val df5 = Seq(Array[String]("bc", null, "ab", "dc")).toDF("a")
+    checkAnswer(
+      df5.selectExpr("array_sort(a, (x, y) -> fString(x, y))"),
+      Seq(
+        Row(Seq("dc", "bc", "ab", null)))
+    )
+
+    spark.sql("drop temporary function fAsc")
+    spark.sql("drop temporary function fDesc")
+    spark.sql("drop temporary function fString")
+    spark.sql("drop temporary function fStringLength")
+  }
+
   test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
@@ -383,7 +463,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     assert(intercept[AnalysisException] {
       df3.selectExpr("array_sort(a)").collect()
-    }.getMessage().contains("only supports array input"))
+    }.getMessage().contains("argument 1 requires array type, however, '`a`' is of string type"))
   }
 
   def testSizeOfArray(sizeOfNull: Any): Unit = {
@@ -3400,9 +3480,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
   }
 
-  test("SPARK-21281 use string types by default if map have no argument") {
+  test("SPARK-21281 use string types by default if array and map have no argument") {
     val ds = spark.range(1)
     var expectedSchema = new StructType()
+      .add("x", ArrayType(StringType, containsNull = false), nullable = false)
+    assert(ds.select(array().as("x")).schema == expectedSchema)
+    expectedSchema = new StructType()
       .add("x", MapType(StringType, StringType, valueContainsNull = false), nullable = false)
     assert(ds.select(map().as("x")).schema == expectedSchema)
   }
@@ -3459,13 +3542,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Seq(1, 9, 8, 7), 1, 2)))
     checkAnswer(df.select("x").filter("exists(i, x -> x % d == 0)"),
       Seq(Row(1)))
-  }
-
-  test("SPARK-29462: Use null type by default if array have no argument") {
-    val ds = spark.range(1)
-    var expectedSchema = new StructType()
-      .add("x", ArrayType(NullType, containsNull = false), nullable = false)
-    assert(ds.select(array().as("x")).schema == expectedSchema)
   }
 }
 

@@ -443,10 +443,13 @@ private[ui] class SessionStatsPagedTable(
     val sessionTableHeaders =
       Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration", "Total Execute")
 
+    val tooltips = Seq(None, None, None, None, None, Some(THRIFT_SESSION_DURATION),
+      Some(THRIFT_SESSION_TOTAL_EXECUTE))
+    assert(sessionTableHeaders.length == tooltips.length)
     val colWidthAttr = s"${100.toDouble / sessionTableHeaders.size}%"
 
     val headerRow: Seq[Node] = {
-      sessionTableHeaders.map { header =>
+      sessionTableHeaders.zip(tooltips).map { case (header, tooltip) =>
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
@@ -455,12 +458,22 @@ private[ui] class SessionStatsPagedTable(
               s"&$sessionStatsTableTag.pageSize=$pageSize" +
               s"#$sessionStatsTableTag")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
+            <th width={colWidthAttr}>
+              <a href={headerLink}>
+                {
+                  if (tooltip.nonEmpty) {
+                    <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                      {header}&nbsp;{Unparsed(arrow)}
+                    </span>
+                  } else {
+                    <span>
+                      {header}&nbsp;{Unparsed(arrow)}
+                    </span>
+                  }
+                }
+              </a>
+            </th>
 
-          <th width={colWidthAttr}>
-            <a href={headerLink}>
-              {header}&nbsp;{Unparsed(arrow)}
-            </a>
-          </th>
         } else {
           val headerLink = Unparsed(
             parameterPath +
@@ -468,11 +481,19 @@ private[ui] class SessionStatsPagedTable(
               s"&$sessionStatsTableTag.pageSize=$pageSize" +
               s"#$sessionStatsTableTag")
 
-          <th width={colWidthAttr}>
-            <a href={headerLink}>
-              {header}
-            </a>
-          </th>
+            <th width={colWidthAttr}>
+              <a href={headerLink}>
+                {
+                  if (tooltip.nonEmpty) {
+                    <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                      {header}
+                    </span>
+                  } else {
+                    {header}
+                  }
+                }
+              </a>
+            </th>
         }
       }
     }

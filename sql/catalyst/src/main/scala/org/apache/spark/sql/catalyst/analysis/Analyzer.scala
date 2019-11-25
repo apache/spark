@@ -198,7 +198,6 @@ class Analyzer(
       ResolveTableValuedFunctions ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
-      ResolveTables ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
@@ -666,12 +665,26 @@ class Analyzer(
   }
 
   /**
-   * Resolve table relations with concrete relations from v2 catalog.
+   * Resolve relations to temp views. This is not an actual rule, and is only called by
+   * [[ResolveTables]].
+   */
+  object ResolveTempViews extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case u @ UnresolvedRelation(Seq(part1)) =>
+        v1SessionCatalog.lookupTempView(part1).getOrElse(u)
+      case u @ UnresolvedRelation(Seq(part1, part2)) =>
+        v1SessionCatalog.lookupGlobalTempView(part1, part2).getOrElse(u)
+    }
+  }
+
+  /**
+   * Resolve table relations with concrete relations from v2 catalog. This is not an actual rule,
+   * and is only called by [[ResolveRelations]].
    *
    * [[ResolveRelations]] still resolves v1 tables.
    */
   object ResolveTables extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
           .getOrElse(u)
@@ -690,6 +703,11 @@ class Analyzer(
         CatalogV2Util.loadRelation(u.catalog, u.tableName)
             .map(rel => alter.copy(table = rel))
             .getOrElse(alter)
+
+      case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
+        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+          .map(rel => show.copy(table = rel))
+          .getOrElse(show)
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
@@ -728,10 +746,6 @@ class Analyzer(
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
-      case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
-        if v1SessionCatalog.isTemporaryTable(ident) =>
-        resolveRelation(lookupTableFromCatalog(ident, u, AnalysisContext.get.defaultDatabase))
-
       case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
         val foundRelation = lookupTableFromCatalog(ident, u, defaultDatabase)
@@ -762,7 +776,7 @@ class Analyzer(
       case _ => plan
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    def apply(plan: LogicalPlan): LogicalPlan = ResolveTables(plan).resolveOperatorsUp {
       case i @ InsertIntoStatement(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
           if child.resolved =>
         EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
@@ -966,6 +980,18 @@ class Analyzer(
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
           (oldVersion, oldVersion.copy(generatorOutput = newOutput))
+
+        case oldVersion: Expand
+            if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
+          val producedAttributes = oldVersion.producedAttributes
+          val newOutput = oldVersion.output.map { attr =>
+            if (producedAttributes.contains(attr)) {
+              attr.newInstance()
+            } else {
+              attr
+            }
+          }
+          (oldVersion, oldVersion.copy(output = newOutput))
 
         case oldVersion @ Window(windowExpressions, _, _, child)
             if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
@@ -2822,7 +2848,6 @@ class Analyzer(
   private def lookupV2RelationAndCatalog(
       identifier: Seq[String]): Option[(DataSourceV2Relation, CatalogPlugin, Identifier)] =
     identifier match {
-      case AsTemporaryViewIdentifier(ti) if v1SessionCatalog.isTemporaryTable(ti) => None
       case CatalogObjectIdentifier(catalog, ident) if !CatalogV2Util.isSessionCatalog(catalog) =>
         CatalogV2Util.loadTable(catalog, ident) match {
           case Some(table) => Some((DataSourceV2Relation.create(table), catalog, ident))

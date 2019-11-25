@@ -140,6 +140,11 @@ class MaxAbsScalerModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new MaxAbsScalerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"MaxAbsScalerModel: uid=$uid, numFeatures=${maxAbs.size}"
+  }
 }
 
 @Since("2.0.0")

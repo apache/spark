@@ -18,10 +18,9 @@
 package org.apache.spark.sql.kafka010
 
 import java.io.{File, IOException}
-import java.lang.{Integer => JInt}
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
-import java.util.{Collections, Map => JMap, Properties, UUID}
+import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
 import javax.security.auth.login.Configuration
 
@@ -41,13 +40,12 @@ import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SaslConfigs
-import org.apache.kafka.common.header.Header
-import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.zookeeper.server.auth.SASLAuthenticationProvider
+import org.scalatest.Assertions._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 

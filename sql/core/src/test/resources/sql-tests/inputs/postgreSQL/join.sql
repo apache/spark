@@ -6,6 +6,19 @@
 -- Test JOIN clauses
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/join.sql
 --
+
+-- There are 2 dimensions we want to test
+--  1. run with broadcast hash join, sort merge join or shuffle hash join.
+--  2. run with whole-stage-codegen, operator codegen or no codegen.
+
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=10485760
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
+
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 CREATE OR REPLACE TEMPORARY VIEW INT4_TBL AS SELECT * FROM
   (VALUES (0), (123456), (-123456), (2147483647), (-2147483647))
   AS v(f1);

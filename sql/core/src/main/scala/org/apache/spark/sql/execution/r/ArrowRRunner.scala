@@ -191,11 +191,7 @@ class ArrowRRunner(
               null
           }
         }
-      } catch {
-        case eof: EOFException =>
-          throw new SparkException(
-            "R worker exited unexpectedly (crashed)\n " + errThread.getLines(), eof)
-      }
+      } catch handleException
     }
   }
 }

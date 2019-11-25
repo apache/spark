@@ -218,6 +218,11 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
   @Since("1.6.0")
   override def copy(extra: ParamMap): Interaction = defaultCopy(extra)
 
+  @Since("3.0.0")
+  override def toString: String = {
+    s"Interaction: uid=$uid" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")

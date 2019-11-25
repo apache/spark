@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
