@@ -116,29 +116,6 @@ abstract class AggregationIterator(
   protected val aggregateFunctions: Array[AggregateFunction] =
     initializeAggregateFunctions(aggregateExpressions, initialInputBufferOffset)
 
-  protected def initializeFilterPredicates(
-      expressions: Seq[AggregateExpression]): mutable.Map[Int, BasePredicate] = {
-    val filterPredicates = new mutable.HashMap[Int, BasePredicate]
-    expressions.zipWithIndex.foreach {
-      case (ae: AggregateExpression, i) =>
-        ae.mode match {
-          case Partial | Complete =>
-            ae.filter.foreach { filterExpr =>
-              val filterAttrs = filterExpr.references.toSeq
-              val predicate = Predicate.create(filterExpr, inputAttributes ++ filterAttrs)
-              predicate.initialize(partIndex)
-              filterPredicates(i) = predicate
-            }
-          case _ =>
-        }
-      case _ =>
-    }
-    filterPredicates
-  }
-
-  protected val predicates: mutable.Map[Int, BasePredicate] =
-    initializeFilterPredicates(aggregateExpressions)
-
   // Positions of those imperative aggregate functions in allAggregateFunctions.
   // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
   // func2 and func3 are imperative aggregate functions.
@@ -180,6 +157,19 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
+      // Initialize predicates for aggregate functions if necessary
+      val predicateOptions = expressions.map {
+        case AggregateExpression(_, mode, _, Some(filter), _) =>
+          mode match {
+            case Partial | Complete =>
+              val filterAttrs = filter.references.toSeq
+              val predicate = Predicate.create(filter, inputAttributes ++ filterAttrs)
+              predicate.initialize(partIndex)
+              Some(predicate)
+            case _ => None
+          }
+        case _ => None
+      }
       var isFinalOrMerge = false
       val mergeExpressions = functions.zipWithIndex.collect {
         case (ae: DeclarativeAggregate, i) =>
@@ -195,9 +185,9 @@ abstract class AggregationIterator(
         case (ae: ImperativeAggregate, i) =>
           expressions(i).mode match {
             case Partial | Complete =>
-              if (predicates.get(i).isDefined) {
+              if (predicateOptions(i).isDefined) {
                 (buffer: InternalRow, row: InternalRow) =>
-                  if (predicates(i).eval(row)) { ae.update(buffer, row) }
+                  if (predicateOptions(i).eval(row)) { ae.update(buffer, row) }
               } else {
                 (buffer: InternalRow, row: InternalRow) => ae.update(buffer, row)
               }
@@ -222,7 +212,7 @@ abstract class AggregationIterator(
       // The following two situations will adopt a common implementation:
       // First, no filter predicate is specified for any aggregate expression.
       // Second, aggregate expressions are in merge or final mode.
-      if (predicates.isEmpty || isFinalOrMerge) {
+      if (predicateOptions.isEmpty || isFinalOrMerge) {
         (currentBuffer: InternalRow, row: InternalRow) => {
           updateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
           processImperative(currentBuffer, row)
@@ -244,8 +234,8 @@ abstract class AggregationIterator(
           val dynamicMergeExpressions = new mutable.ArrayBuffer[Expression]
           for (i <- 0 until expressions.length) {
             if ((expressions(i).mode == Partial || expressions(i).mode == Complete)) {
-              if (predicates.get(i).isDefined) {
-                if (predicates(i).eval(row)) {
+              if (predicateOptions(i).isDefined) {
+                if (predicatesOption(i).eval(row)) {
                   dynamicMergeExpressions ++= mergeExpressions(i)
                 } else {
                   dynamicMergeExpressions ++= Seq(NoOp)
