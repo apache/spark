@@ -497,6 +497,8 @@ final class ShuffleBlockFetcherIterator(
                 dirs.get(hostLocalBmId.executorId),
                 hostLocalBmId)
             }
+            logDebug(s"Got host-local blocks (without cached executors' dir) in " +
+              s"${Utils.getUsedTimeNs(startTimeNs)}")
           }
 
         case Failure(throwable) =>
@@ -516,6 +518,8 @@ final class ShuffleBlockFetcherIterator(
           }
         }
       }
+      logDebug(s"Got host-local blocks (with cached executors' dir) in " +
+        s"${Utils.getUsedTimeNs(startTimeNs)}")
     }
   }
 
