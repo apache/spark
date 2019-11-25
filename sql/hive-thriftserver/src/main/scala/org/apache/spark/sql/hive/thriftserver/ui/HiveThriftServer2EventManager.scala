@@ -26,11 +26,11 @@ import org.apache.spark.scheduler.SparkListenerEvent
 private[thriftserver] class HiveThriftServer2EventManager(sc: SparkContext) {
 
   def postLiveListenerBus(event: SparkListenerEvent): Unit = {
-      sc.listenerBus.post(event)
+    sc.listenerBus.post(event)
   }
 
   def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN"): Unit = {
-    postLiveListenerBus(SparkListenerSessionCreated(ip, sessionId,
+    postLiveListenerBus(SparkListenerThriftServerSessionCreated(ip, sessionId,
       userName, System.currentTimeMillis()))
   }
 
@@ -44,34 +44,34 @@ private[thriftserver] class HiveThriftServer2EventManager(sc: SparkContext) {
       statement: String,
       groupId: String,
       userName: String = "UNKNOWN"): Unit = {
-    postLiveListenerBus(SparkListenerOperationStart(id, sessionId, statement, groupId,
+    postLiveListenerBus(SparkListenerThriftServerOperationStart(id, sessionId, statement, groupId,
       System.currentTimeMillis(), userName))
   }
 
   def onStatementParsed(id: String, executionPlan: String): Unit = {
-    postLiveListenerBus(SparkListenerOperationParsed(id, executionPlan))
+    postLiveListenerBus(SparkListenerThriftServerOperationParsed(id, executionPlan))
   }
 
   def onStatementCanceled(id: String): Unit = {
-    postLiveListenerBus(SparkListenerOperationCanceled(id, System.currentTimeMillis()))
+    postLiveListenerBus(SparkListenerThriftServerOperationCanceled(id, System.currentTimeMillis()))
   }
 
   def onStatementError(id: String, errorMsg: String, errorTrace: String): Unit = {
-    postLiveListenerBus(SparkListenerOperationError(id, errorMsg, errorTrace,
+    postLiveListenerBus(SparkListenerThriftServerOperationError(id, errorMsg, errorTrace,
       System.currentTimeMillis()))
   }
 
   def onStatementFinish(id: String): Unit = {
-    postLiveListenerBus(SparkListenerOperationFinish(id, System.currentTimeMillis()))
+    postLiveListenerBus(SparkListenerThriftServerOperationFinish(id, System.currentTimeMillis()))
 
   }
 
   def onOperationClosed(id: String): Unit = {
-    postLiveListenerBus(SparkListenerOperationClosed(id, System.currentTimeMillis()))
+    postLiveListenerBus(SparkListenerThriftServerOperationClosed(id, System.currentTimeMillis()))
   }
 }
 
-private[thriftserver] case class SparkListenerSessionCreated(
+private[thriftserver] case class SparkListenerThriftServerSessionCreated(
     ip: String,
     sessionId: String,
     userName: String,
@@ -80,7 +80,7 @@ private[thriftserver] case class SparkListenerSessionCreated(
 private[thriftserver] case class SparkListenerSessionClosed(
     sessionId: String, finishTime: Long) extends SparkListenerEvent
 
-private[thriftserver] case class SparkListenerOperationStart(
+private[thriftserver] case class SparkListenerThriftServerOperationStart(
     id: String,
     sessionId: String,
     statement: String,
@@ -88,23 +88,25 @@ private[thriftserver] case class SparkListenerOperationStart(
     startTime: Long,
     userName: String = "UNKNOWN") extends SparkListenerEvent
 
-private[thriftserver] case class SparkListenerOperationParsed(
+private[thriftserver] case class SparkListenerThriftServerOperationParsed(
     id: String,
     executionPlan: String) extends SparkListenerEvent
 
-private[thriftserver] case class SparkListenerOperationCanceled(
+private[thriftserver] case class SparkListenerThriftServerOperationCanceled(
     id: String, finishTime: Long) extends SparkListenerEvent
 
-private[thriftserver] case class SparkListenerOperationError(
+private[thriftserver] case class SparkListenerThriftServerOperationError(
     id: String,
     errorMsg: String,
     errorTrace: String,
     finishTime: Long) extends SparkListenerEvent
 
-private[thriftserver] case class SparkListenerOperationFinish(id: String, finishTime: Long)
-  extends SparkListenerEvent
+private[thriftserver] case class SparkListenerThriftServerOperationFinish(
+    id: String,
+    finishTime: Long) extends SparkListenerEvent
 
-private[thriftserver] case class SparkListenerOperationClosed(id: String, closeTime: Long)
-  extends SparkListenerEvent
+private[thriftserver] case class SparkListenerThriftServerOperationClosed(
+    id: String,
+    closeTime: Long) extends SparkListenerEvent
 
 

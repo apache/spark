@@ -46,18 +46,20 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
       val (statusStore: HiveThriftServer2AppStatusStore,
       listener: HiveThriftServer2Listener) = createAppStatusStore(live)
 
-      listener.onOtherEvent(SparkListenerSessionCreated("localhost", "sessionId", "user",
-        System.currentTimeMillis()))
-      listener.onOtherEvent(SparkListenerOperationStart("id", "sessionId", "dummy query",
-        "groupId", System.currentTimeMillis(), "user"))
-      listener.onOtherEvent(SparkListenerOperationParsed("id", "dummy plan"))
+      listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId",
+        "user", System.currentTimeMillis()))
+      listener.onOtherEvent(SparkListenerThriftServerOperationStart("id", "sessionId",
+        "dummy query", "groupId", System.currentTimeMillis(), "user"))
+      listener.onOtherEvent(SparkListenerThriftServerOperationParsed("id", "dummy plan"))
       listener.onJobStart(SparkListenerJobStart(
         0,
         System.currentTimeMillis(),
         Nil,
         createProperties))
-      listener.onOtherEvent(SparkListenerOperationFinish("id", System.currentTimeMillis()))
-      listener.onOtherEvent(SparkListenerOperationClosed("id", System.currentTimeMillis()))
+      listener.onOtherEvent(SparkListenerThriftServerOperationFinish("id",
+        System.currentTimeMillis()))
+      listener.onOtherEvent(SparkListenerThriftServerOperationClosed("id",
+        System.currentTimeMillis()))
 
       assert(statusStore.getOnlineSessionNum === 1)
 
@@ -81,9 +83,11 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
       val (statusStore: HiveThriftServer2AppStatusStore,
       listener: HiveThriftServer2Listener) = createAppStatusStore(live)
       var time = 0
-      listener.onOtherEvent(SparkListenerSessionCreated("localhost", "sessionId1", "user", time))
+      listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId1",
+        "user", time))
       time += 1
-      listener.onOtherEvent(SparkListenerSessionCreated("localhost", "sessionId2", "user", time))
+      listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId2",
+        "user", time))
 
       assert(statusStore.getOnlineSessionNum === 2)
       assert(statusStore.getSessionCount === 2)
@@ -94,7 +98,8 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
       time += 1
       listener.onOtherEvent(SparkListenerSessionClosed("sessionId2", time))
 
-      listener.onOtherEvent(SparkListenerSessionCreated("localhost", "sessionId3", "user", time))
+      listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId3",
+        "user", time))
       assert(statusStore.getOnlineSessionNum === 1)
       assert(statusStore.getSessionCount === 1)
       assert(statusStore.getSession("sessionId1") === None)
@@ -109,13 +114,15 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val (statusStore: HiveThriftServer2AppStatusStore,
     listener: HiveThriftServer2Listener) = createAppStatusStore(true)
 
-    listener.onOtherEvent(SparkListenerSessionCreated("localhost", "sessionId", "user",
+    listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId", "user",
       System.currentTimeMillis()))
-    listener.onOtherEvent(SparkListenerOperationStart("id", "sessionId", "dummy query",
+    listener.onOtherEvent(SparkListenerThriftServerOperationStart("id", "sessionId", "dummy query",
       "groupId", System.currentTimeMillis(), "user"))
-    listener.onOtherEvent(SparkListenerOperationParsed("id", "dummy plan"))
-    listener.onOtherEvent(SparkListenerOperationFinish("id", System.currentTimeMillis()))
-    listener.onOtherEvent(SparkListenerOperationClosed("id", System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerOperationParsed("id", "dummy plan"))
+    listener.onOtherEvent(SparkListenerThriftServerOperationFinish("id",
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerOperationClosed("id",
+      System.currentTimeMillis()))
     listener.onJobStart(SparkListenerJobStart(
       0,
       System.currentTimeMillis(),

@@ -67,13 +67,7 @@ class HiveThriftServer2AppStatusStore(
    * cancellations and count all statements that have not been closed so far.
    */
   def getTotalRunning: Int = {
-    store.view(classOf[ExecutionInfo]).asScala.count(isExecutionActive)
-  }
-
-  def isExecutionActive(execInfo: ExecutionInfo): Boolean = {
-    !(execInfo.state == ExecutionState.FAILED ||
-      execInfo.state == ExecutionState.CANCELED ||
-      execInfo.state == ExecutionState.CLOSED)
+    store.view(classOf[ExecutionInfo]).asScala.count(_.isExecutionActive)
   }
 
   def getSessionCount: Long = {
@@ -117,7 +111,16 @@ private[thriftserver] class ExecutionInfo(
     val jobId: ArrayBuffer[String],
     val groupId: String) {
   @JsonIgnore @KVIndex("finishTime")
-  private def finishTimeIndex: Long = if (finishTimestamp > 0L ) finishTimestamp else -1L
+  private def finishTimeIndex: Long = if (finishTimestamp > 0L && !isExecutionActive) {
+    finishTimestamp
+  } else -1L
+
+  def isExecutionActive: Boolean = {
+    !(state == ExecutionState.FAILED ||
+      state == ExecutionState.CANCELED ||
+      state == ExecutionState.CLOSED)
+  }
+
   def totalTime(endTime: Long): Long = {
     if (endTime == 0L) {
       System.currentTimeMillis - startTimestamp

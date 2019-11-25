@@ -369,9 +369,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val otherTabs: Seq[AppHistoryServerPlugin] = Seq()
 
     plugins.foreach{ plugin =>
-      if (plugin.toString.contains("SQL")) {
+      if (plugin.toString.contains("SQLHistoryServerPlugin")) {
         sqlTab = Some(plugin)
-      } else if (plugin.toString.contains("ThriftServer")) {
+      } else if (plugin.toString.contains("HiveThriftServer2HistoryServerPlugin")) {
         jdbcTab = Some(plugin)
       } else {
         otherTabs :+ plugin

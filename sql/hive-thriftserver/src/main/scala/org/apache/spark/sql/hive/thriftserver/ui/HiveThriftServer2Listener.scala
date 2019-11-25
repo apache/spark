@@ -34,10 +34,10 @@ import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
  * An inner sparkListener called in sc.stop to clean up the HiveThriftServer2
  */
 private[thriftserver] class HiveThriftServer2Listener(
-  kvstore: ElementTrackingStore,
-  sparkConf: SparkConf,
-  server: Option[HiveServer2],
-  live: Boolean = true) extends SparkListener {
+    kvstore: ElementTrackingStore,
+    sparkConf: SparkConf,
+    server: Option[HiveServer2],
+    live: Boolean = true) extends SparkListener {
 
   private val sessionList = new ConcurrentHashMap[String, LiveSessionData]()
   private val executionList = new ConcurrentHashMap[String, LiveExecutionData]()
@@ -110,19 +110,19 @@ private[thriftserver] class HiveThriftServer2Listener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
-      case e: SparkListenerSessionCreated => onSessionCreated(e)
+      case e: SparkListenerThriftServerSessionCreated => onSessionCreated(e)
       case e: SparkListenerSessionClosed => onSessionClosed(e)
-      case e: SparkListenerOperationStart => onOperationStart(e)
-      case e: SparkListenerOperationParsed => onOperationParsed(e)
-      case e: SparkListenerOperationCanceled => onOperationCanceled(e)
-      case e: SparkListenerOperationError => onOperationError(e)
-      case e: SparkListenerOperationFinish => onOperationFinished(e)
-      case e: SparkListenerOperationClosed => onOperationClosed(e)
+      case e: SparkListenerThriftServerOperationStart => onOperationStart(e)
+      case e: SparkListenerThriftServerOperationParsed => onOperationParsed(e)
+      case e: SparkListenerThriftServerOperationCanceled => onOperationCanceled(e)
+      case e: SparkListenerThriftServerOperationError => onOperationError(e)
+      case e: SparkListenerThriftServerOperationFinish => onOperationFinished(e)
+      case e: SparkListenerThriftServerOperationClosed => onOperationClosed(e)
       case _ => // Ignore
     }
   }
 
-  private def onSessionCreated(e: SparkListenerSessionCreated): Unit = {
+  private def onSessionCreated(e: SparkListenerThriftServerSessionCreated): Unit = {
     val session = getOrCreateSession(e.sessionId, e.startTime, e.ip, e.userName)
     sessionList.put(e.sessionId, session)
     updateLiveStore(session, true)
@@ -135,7 +135,7 @@ private[thriftserver] class HiveThriftServer2Listener(
     sessionList.remove(e.sessionId)
   }
 
-  private def onOperationStart(e: SparkListenerOperationStart): Unit = {
+  private def onOperationStart(e: SparkListenerThriftServerOperationStart): Unit = {
     val info = getOrCreateExecution(
       e.id,
       e.statement,
@@ -151,32 +151,32 @@ private[thriftserver] class HiveThriftServer2Listener(
     updateLiveStore(sessionList.get(e.sessionId), true)
   }
 
-  private def onOperationParsed(e: SparkListenerOperationParsed): Unit = {
+  private def onOperationParsed(e: SparkListenerThriftServerOperationParsed): Unit = {
     executionList.get(e.id).executePlan = e.executionPlan
     executionList.get(e.id).state = ExecutionState.COMPILED
     updateLiveStore(executionList.get(e.id))
   }
 
-  private def onOperationCanceled(e: SparkListenerOperationCanceled): Unit = {
+  private def onOperationCanceled(e: SparkListenerThriftServerOperationCanceled): Unit = {
     executionList.get(e.id).finishTimestamp = e.finishTime
     executionList.get(e.id).state = ExecutionState.CANCELED
     updateLiveStore(executionList.get(e.id))
   }
 
-  private def onOperationError(e: SparkListenerOperationError): Unit = {
+  private def onOperationError(e: SparkListenerThriftServerOperationError): Unit = {
     executionList.get(e.id).finishTimestamp = e.finishTime
     executionList.get(e.id).detail = e.errorMsg
     executionList.get(e.id).state = ExecutionState.FAILED
     updateLiveStore(executionList.get(e.id))
   }
 
-  private def onOperationFinished(e: SparkListenerOperationFinish): Unit = {
+  private def onOperationFinished(e: SparkListenerThriftServerOperationFinish): Unit = {
     executionList.get(e.id).finishTimestamp = e.finishTime
     executionList.get(e.id).state = ExecutionState.FINISHED
     updateLiveStore(executionList.get(e.id))
   }
 
-  private def onOperationClosed(e: SparkListenerOperationClosed): Unit = {
+  private def onOperationClosed(e: SparkListenerThriftServerOperationClosed): Unit = {
     executionList.get(e.id).closeTimestamp = e.closeTime
     executionList.get(e.id).state = ExecutionState.CLOSED
     updateLiveStore(executionList.get(e.id), true)
