@@ -200,21 +200,21 @@ class Summarizer(object):
     >>> from pyspark.ml.stat import Summarizer
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> summarizer = Summarizer.metrics("mean", "count", "numFeatures")
+    >>> summarizer = Summarizer.metrics("mean", "count")
     >>> df = sc.parallelize([Row(weight=1.0, features=Vectors.dense(1.0, 1.0, 1.0)),
     ...                      Row(weight=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
     >>> df.select(summarizer.summary(df.features, df.weight)).show(truncate=False)
     +-----------------------------------+
     |aggregate_metrics(features, weight)|
     +-----------------------------------+
-    |[[1.0,1.0,1.0], 1, 3]              |
+    |[[1.0,1.0,1.0], 1]                 |
     +-----------------------------------+
     <BLANKLINE>
     >>> df.select(summarizer.summary(df.features)).show(truncate=False)
     +--------------------------------+
     |aggregate_metrics(features, 1.0)|
     +--------------------------------+
-    |[[1.0,1.5,2.0], 2, 3]           |
+    |[[1.0,1.5,2.0], 2]              |
     +--------------------------------+
     <BLANKLINE>
     >>> df.select(Summarizer.mean(df.features, df.weight)).show(truncate=False)
@@ -230,13 +230,6 @@ class Summarizer(object):
     +--------------+
     |[1.0,1.5,2.0] |
     +--------------+
-    <BLANKLINE>
-    >>> df.select(Summarizer.sum(df.features), Summarizer.sumL2(df.features)).show(truncate=False)
-    +-------------+---------------+
-    |sum(features)|sumL2(features)|
-    +-------------+---------------+
-    |[2.0,3.0,4.0]|[2.0,5.0,10.0] |
-    +-------------+---------------+
     <BLANKLINE>
 
     .. versionadded:: 2.4.0
@@ -283,22 +276,6 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "count")
 
     @staticmethod
-    @since("3.0.0")
-    def weightSum(col, weightCol=None):
-        """
-        return a column of weightSum summary
-        """
-        return Summarizer._get_single_metric(col, weightCol, "weightSum")
-
-    @staticmethod
-    @since("3.0.0")
-    def numFeatures(col, weightCol=None):
-        """
-        return a column of numFeatures summary
-        """
-        return Summarizer._get_single_metric(col, weightCol, "numFeatures")
-
-    @staticmethod
     @since("2.4.0")
     def numNonZeros(col, weightCol=None):
         """
@@ -337,14 +314,6 @@ class Summarizer(object):
         return a column of normL2 summary
         """
         return Summarizer._get_single_metric(col, weightCol, "normL2")
-
-    @staticmethod
-    @since("3.0.0")
-    def sumL2(col, weightCol=None):
-        """
-        return a column of sumL2 summary
-        """
-        return Summarizer._get_single_metric(col, weightCol, "sumL2")
 
     @staticmethod
     def _check_param(featuresCol, weightCol):

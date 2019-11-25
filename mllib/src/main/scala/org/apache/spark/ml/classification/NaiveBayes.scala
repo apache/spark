@@ -187,9 +187,9 @@ class NaiveBayes @Since("1.5.0") (
 
     // Aggregates term frequencies per label.
     val aggregated = dataset.groupBy(col($(labelCol)))
-      .agg(Summarizer.metrics("weightSum", "sum", "count")
+      .agg(sum(w).as("weightSum"), Summarizer.metrics("sum", "count")
         .summary(validateUDF(col($(featuresCol))), w).as("summary"))
-      .select($(labelCol), "summary.weightSum", "summary.sum", "summary.count")
+      .select($(labelCol), "weightSum", "summary.sum", "summary.count")
       .as[(Double, Double, Vector, Long)]
       .collect().sortBy(_._1)
 
@@ -266,11 +266,13 @@ class NaiveBayes @Since("1.5.0") (
 
     // Aggregates mean vector and square-sum vector per label.
     val aggregated = dataset.groupBy(col($(labelCol)))
-      .agg(Summarizer.metrics("weightSum", "mean", "sumL2")
+      .agg(sum(w).as("weightSum"), Summarizer.metrics("mean", "normL2")
         .summary(col($(featuresCol)), w).as("summary"))
-      .select($(labelCol), "summary.weightSum", "summary.mean", "summary.sumL2")
+      .select($(labelCol), "weightSum", "summary.mean", "summary.normL2")
       .as[(Double, Double, Vector, Vector)]
-      .collect().sortBy(_._1)
+      .map { case (label, weightSum, mean, normL2) =>
+        (label, weightSum, mean, Vectors.dense(normL2.toArray.map(v => v * v)))
+      }.collect().sortBy(_._1)
 
     val numFeatures = aggregated.head._3.size
     instr.logNumFeatures(numFeatures)

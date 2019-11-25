@@ -145,34 +145,6 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         Row(Row(summarizerWithoutWeight.count), expWithoutWeight.count))
     }
 
-    registerTest(s"$name - weightSum only") {
-      val (df, c, w) = wrappedInit()
-      val expected = summarizer.weightSum
-      compareRow(df.select(metrics("weightSum").summary(c, w), weightSum(c, w)).first(),
-        Row(Row(expected), expected))
-    }
-
-    registerTest(s"$name - weightSum only w/o weight") {
-      val (df, c, _) = wrappedInit()
-      val expected = summarizerWithoutWeight.weightSum
-      compareRow(df.select(metrics("weightSum").summary(c), weightSum(c)).first(),
-        Row(Row(expected), expected))
-    }
-
-    registerTest(s"$name - numFeatures only") {
-      val (df, c, w) = wrappedInit()
-      val expected = summarizer.min.size
-      compareRow(df.select(metrics("numFeatures").summary(c, w), numFeatures(c, w)).first(),
-        Row(Row(expected), expected))
-    }
-
-    registerTest(s"$name - numFeatures only w/o weight") {
-      val (df, c, _) = wrappedInit()
-      val expected = summarizerWithoutWeight.min.size
-      compareRow(df.select(metrics("numFeatures").summary(c), numFeatures(c)).first(),
-        Row(Row(expected), expected))
-    }
-
     registerTest(s"$name - numNonZeros only") {
       val (df, c, w) = wrappedInit()
       compareRow(df.select(metrics("numNonZeros").summary(c, w), numNonZeros(c, w)).first(),
@@ -231,22 +203,6 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       val (df, c, _) = wrappedInit()
       compareRow(df.select(metrics("normL2").summary(c), normL2(c)).first(),
         Row(Row(summarizerWithoutWeight.normL2), expWithoutWeight.normL2))
-    }
-
-    registerTest(s"$name - sumL2 only") {
-      val (df, c, w) = wrappedInit()
-      val expected1 = Vectors.dense(summarizer.normL2.toArray.map(v => v * v))
-      val expected2 = Vectors.dense(exp.normL2.toArray.map(v => v * v))
-      compareRow(df.select(metrics("sumL2").summary(c, w), sumL2(c, w)).first(),
-        Row(Row(expected1), expected2))
-    }
-
-    registerTest(s"$name - sumL2 only w/o weight") {
-      val (df, c, _) = wrappedInit()
-      val expected1 = Vectors.dense(summarizerWithoutWeight.normL2.toArray.map(v => v * v))
-      val expected2 = Vectors.dense(expWithoutWeight.normL2.toArray.map(v => v * v))
-      compareRow(df.select(metrics("sumL2").summary(c), sumL2(c)).first(),
-        Row(Row(expected1), expected2))
     }
 
     registerTest(s"$name - multiple metrics at once") {
@@ -635,21 +591,9 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     summarizer3.add(Vectors.dense(10.0, -10.0), 1e10)
 
     Seq(summarizer1, summarizer2, summarizer3).foreach { summarizer =>
-      val weightSum = summarizer.weightSum
-      val mean = summarizer.mean.copy
-      BLAS.scal(weightSum, mean)
-      assert(summarizer.sum ~== mean relTol 1e-14)
-
-      val expectedNumFeatures = mean.size
-      assert(summarizer.numFeatures === expectedNumFeatures)
-
       val variance = summarizer.variance
       val expectedStd = Vectors.dense(variance.toArray.map(math.sqrt))
       assert(summarizer.std ~== expectedStd relTol 1e-14)
-
-      val normL2 = summarizer.normL2
-      val expectedSumL2 = Vectors.dense(normL2.toArray.map(v => v * v))
-      assert(summarizer.sumL2 ~== expectedSumL2 relTol 1e-14)
     }
   }
 
