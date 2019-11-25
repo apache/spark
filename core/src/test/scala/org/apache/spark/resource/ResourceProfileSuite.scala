@@ -165,13 +165,9 @@ class ResourceProfileSuite extends SparkFunSuite {
 
   test("Internal confs") {
     val rprof = new ResourceProfile()
-    val gpuTaskReq = new TaskResourceRequests().resource("resource.gpu", 2)
     val gpuExecReq =
       new ExecutorResourceRequests().resource("resource.gpu", 2, "", "someScript")
-
-    rprof.require(gpuTaskReq)
     rprof.require(gpuExecReq)
-
     val internalResourceConfs = ResourceProfile.createResourceProfileInternalConfs(rprof)
     val sparkConf = new SparkConf
     internalResourceConfs.foreach { case(key, value) => sparkConf.set(key, value) }

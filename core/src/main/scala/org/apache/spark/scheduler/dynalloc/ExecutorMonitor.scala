@@ -164,9 +164,7 @@ private[spark] class ExecutorMonitor(
     }
   }
 
-  def pendingRemovalCount: Int = executors.asScala.count {
-    case (_, exec) => exec.pendingRemoval
-  }
+  def pendingRemovalCount: Int = executors.asScala.count { case (_, exec) => exec.pendingRemoval }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
     if (!shuffleTrackingEnabled) {
