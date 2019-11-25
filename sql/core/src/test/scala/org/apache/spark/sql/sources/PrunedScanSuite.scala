@@ -148,5 +148,27 @@ class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
       }
     }
   }
+
+  testNonDeterministicPruning("SELECT a, rand() FROM oneToTenPruned WHERE a > 5", "a")
+
+  testNonDeterministicPruning("SELECT a FROM oneToTenPruned WHERE rand() > 5", "a")
+
+  testNonDeterministicPruning("SELECT a, rand() FROM oneToTenPruned WHERE rand() > 5", "a")
+
+  testNonDeterministicPruning("SELECT a, rand() FROM oneToTenPruned WHERE b > 5", "a", "b")
+
+  def testNonDeterministicPruning(sqlString: String, expectedColumns: String*): Unit = {
+    test(s"SPARK-29768: Column pruning through non-deterministic expressions - $sqlString") {
+      val schema = StructType(expectedColumns.map { col => StructField(col, IntegerType, false) })
+      val queryExecution = sql(sqlString).queryExecution
+      val scan = queryExecution.executedPlan.collect {
+        case scan: execution.RowDataSourceScanExec => scan
+      } match {
+        case Seq(p) => p
+        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+      }
+      assert(scan.output.toStructType === schema)
+    }
+  }
 }
 
