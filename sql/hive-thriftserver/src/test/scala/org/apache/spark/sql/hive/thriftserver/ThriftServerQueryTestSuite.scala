@@ -41,12 +41,18 @@ import org.apache.spark.sql.types._
  * To run the entire test suite:
  * {{{
  *   build/sbt "hive-thriftserver/test-only *ThriftServerQueryTestSuite" -Phive-thriftserver
+ *   -Phive-1.2
  * }}}
  *
  * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt -Phive-1.2 "sql/test-only *SQLQueryTestSuite"
  * }}}
+ *
+ * Change profiles:
+ * We use `hadoop-2.7` as default now, so the above scripts is equivalent to
+ * `-Phadoop-2.7 -Phive-1.2`. You can change profiles to `-Phadoop-3.2 -Phive-2.3` to verify higher
+ * hadoop and hive versions.
  *
  * TODO:
  *   1. Support UDF testing.
