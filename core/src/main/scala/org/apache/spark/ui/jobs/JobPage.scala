@@ -104,7 +104,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="top"' +
+           |    'data-toggle="tooltip" data-placement="bottom"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
            |    'data-html="true">Executor ${e.id} added</div>'
@@ -120,7 +120,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="top"' +
+             |    'data-toggle="tooltip" data-placement="bottom"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -164,7 +164,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="top">
+      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="right">
         Event Timeline
       </a>
     </span> ++

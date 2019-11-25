@@ -302,7 +302,7 @@ class GBTRegressionModel private[ml](
 
   @Since("1.4.0")
   override def toString: String = {
-    s"GBTRegressionModel: uid=$uid, numTrees=$numTrees, numFeatures=$numFeatures"
+    s"GBTRegressionModel (uid=$uid) with $numTrees trees"
   }
 
   /**

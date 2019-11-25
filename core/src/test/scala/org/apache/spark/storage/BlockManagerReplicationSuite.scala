@@ -19,7 +19,6 @@ package org.apache.spark.storage
 
 import java.util.Locale
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
@@ -98,12 +97,9 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     conf.set(STORAGE_CACHED_PEERS_TTL, 10)
 
     sc = new SparkContext("local", "test", conf)
-    val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo)),
-      rpcEnv.setupEndpoint("blockmanagerHeartbeat",
-      new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
+        new LiveListenerBus(conf), None)), conf, true)
     allStores.clear()
   }
 

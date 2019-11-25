@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,6 +17,7 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
 import os
 import sys
 import json

@@ -131,7 +131,7 @@ hashCode <- function(key) {
     } else {
       asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
       hashC <- 0
-      for (k in seq_len(length(asciiVals))) {
+      for (k in 1:length(asciiVals)) {
         hashC <- mult31AndAdd(hashC, asciiVals[k])
       }
       as.integer(hashC)
@@ -543,14 +543,10 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
               funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F,
                                ifnotfound = list(list(NULL)))[[1]]
               found <- sapply(funcList, function(func) {
-                ifelse(
-                  identical(func, obj) &&
-                    # Also check if the parent environment is identical to current parent
-                    identical(parent.env(environment(func)), func.env),
-                  TRUE, FALSE)
+                ifelse(identical(func, obj), TRUE, FALSE)
               })
               if (sum(found) > 0) {
-                # If function has been examined ignore
+                # If function has been examined, ignore.
                 break
               }
               # Function has not been examined, record it and recursively clean its closure.
@@ -728,7 +724,7 @@ assignNewEnv <- function(data) {
   stopifnot(length(cols) > 0)
 
   env <- new.env()
-  for (i in seq_len(length(cols))) {
+  for (i in 1:length(cols)) {
     assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
   }
   env
@@ -754,7 +750,7 @@ launchScript <- function(script, combinedArgs, wait = FALSE, stdout = "", stderr
   if (.Platform$OS.type == "windows") {
     scriptWithArgs <- paste(script, combinedArgs, sep = " ")
     # on Windows, intern = F seems to mean output to the console. (documentation on this is missing)
-    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait)
+    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait) # nolint
   } else {
     # http://stat.ethz.ch/R-manual/R-devel/library/base/html/system2.html
     # stdout = F means discard output

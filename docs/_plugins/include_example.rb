@@ -16,7 +16,7 @@
 #
 
 require 'liquid'
-require 'rouge'
+require 'pygments'
 
 module Jekyll
   class IncludeExampleTag < Liquid::Tag
@@ -56,9 +56,7 @@ module Jekyll
       end
       code = select_lines(code)
 
-      formatter = Rouge::Formatters::HTML.new
-      lexer = Rouge::Lexer.find(@lang)
-      rendered_code = formatter.format(lexer.lex(code))
+      rendered_code = Pygments.highlight(code, :lexer => @lang)
 
       hint = "<div><small>Find full example code at " \
         "\"examples/src/main/#{snippet_file}\" in the Spark repo.</small></div>"

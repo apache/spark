@@ -30,7 +30,6 @@ import org.apache.spark.util.{RpcUtils, ThreadUtils}
 private[spark]
 class BlockManagerMaster(
     var driverEndpoint: RpcEndpointRef,
-    var driverHeartbeatEndPoint: RpcEndpointRef,
     conf: SparkConf,
     isDriver: Boolean)
   extends Logging {
@@ -231,11 +230,6 @@ class BlockManagerMaster(
     if (driverEndpoint != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverEndpoint = null
-      if (driverHeartbeatEndPoint.askSync[Boolean](StopBlockManagerMaster)) {
-        driverHeartbeatEndPoint = null
-      } else {
-        logWarning("Failed to stop BlockManagerMasterHeartbeatEndpoint")
-      }
       logInfo("BlockManagerMaster stopped")
     }
   }
@@ -251,5 +245,4 @@ class BlockManagerMaster(
 
 private[spark] object BlockManagerMaster {
   val DRIVER_ENDPOINT_NAME = "BlockManagerMaster"
-  val DRIVER_HEARTBEAT_ENDPOINT_NAME = "BlockManagerMasterHeartbeat"
 }

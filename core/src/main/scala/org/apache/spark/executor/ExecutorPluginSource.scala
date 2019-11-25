@@ -15,26 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.executor
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{NamespaceChange, SupportsNamespaces}
+import com.codahale.metrics.MetricRegistry
 
-/**
- * Physical plan node for setting properties of namespace.
- */
-case class AlterNamespaceSetPropertiesExec(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
-    props: Map[String, String]) extends V2CommandExec {
-  override protected def run(): Seq[InternalRow] = {
-    val changes = props.map{ case (k, v) =>
-      NamespaceChange.setProperty(k, v)
-    }.toSeq
-    catalog.alterNamespace(namespace.toArray, changes: _*)
-    Seq.empty
-  }
+import org.apache.spark.metrics.source.Source
 
-  override def output: Seq[Attribute] = Seq.empty
+private[spark]
+class ExecutorPluginSource(name: String) extends Source {
+
+  override val metricRegistry = new MetricRegistry()
+
+  override val sourceName = name
 }

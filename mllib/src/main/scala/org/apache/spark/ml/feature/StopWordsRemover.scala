@@ -22,18 +22,14 @@ import java.util.Locale
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
 /**
  * A feature transformer that filters out stop words from input.
- *
- * Since 3.0.0, `StopWordsRemover` can filter out multiple columns at once by setting the
- * `inputCols` parameter. Note that when both the `inputCol` and `inputCols` parameters are set,
- * an Exception will be thrown.
  *
  * @note null values from input array are preserved unless adding null to stopWords
  * explicitly.
@@ -42,8 +38,7 @@ import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructTyp
  */
 @Since("1.5.0")
 class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with HasInputCols with HasOutputCols
-    with DefaultParamsWritable {
+  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("stopWords"))
@@ -55,14 +50,6 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   /** @group setParam */
   @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /** @group setParam */
-  @Since("3.0.0")
-  def setInputCols(value: Array[String]): this.type = set(inputCols, value)
-
-  /** @group setParam */
-  @Since("3.0.0")
-  def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
   /**
    * The words to be filtered out.
@@ -134,15 +121,6 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     }
   }
 
-  /** Returns the input and output column names corresponding in pair. */
-  private[feature] def getInOutCols(): (Array[String], Array[String]) = {
-    if (isSet(inputCol)) {
-      (Array($(inputCol)), Array($(outputCol)))
-    } else {
-      ($(inputCols), $(outputCols))
-    }
-  }
-
   setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"),
     caseSensitive -> false, locale -> getDefaultOrUS.toString)
 
@@ -164,48 +142,20 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
         terms.filter(s => !lowerStopWords.contains(toLower(s)))
       }
     }
-
-    val (inputColNames, outputColNames) = getInOutCols()
-    val ouputCols = inputColNames.map { inputColName =>
-      t(col(inputColName))
-    }
-    val ouputMetadata = outputColNames.map(outputSchema(_).metadata)
-    dataset.withColumns(outputColNames, ouputCols, ouputMetadata)
+    val metadata = outputSchema($(outputCol)).metadata
+    dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol),
-      Seq(outputCols))
-
-    if (isSet(inputCols)) {
-      require(getInputCols.length == getOutputCols.length,
-        s"StopWordsRemover $this has mismatched Params " +
-          s"for multi-column transform. Params ($inputCols, $outputCols) should have " +
-          "equal lengths, but they have different lengths: " +
-          s"(${getInputCols.length}, ${getOutputCols.length}).")
-    }
-
-    val (inputColNames, outputColNames) = getInOutCols()
-    val newCols = inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
-       require(!schema.fieldNames.contains(outputColName),
-        s"Output Column $outputColName already exists.")
-      val inputType = schema(inputColName).dataType
-      require(inputType.sameType(ArrayType(StringType)), "Input type must be " +
-        s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
-      StructField(outputColName, inputType, schema(inputColName).nullable)
-    }
-    StructType(schema.fields ++ newCols)
+    val inputType = schema($(inputCol)).dataType
+    require(inputType.sameType(ArrayType(StringType)), "Input type must be " +
+      s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
+    SchemaUtils.appendColumn(schema, $(outputCol), inputType, schema($(inputCol)).nullable)
   }
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): StopWordsRemover = defaultCopy(extra)
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"StopWordsRemover: uid=$uid, numStopWords=${$(stopWords).length}, locale=${$(locale)}, " +
-      s"caseSensitive=${$(caseSensitive)}"
-  }
 }
 
 @Since("1.6.0")

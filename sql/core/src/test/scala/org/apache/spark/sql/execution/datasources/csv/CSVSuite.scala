@@ -2168,16 +2168,4 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
       }
     }
   }
-
-  test("parse timestamp in microsecond precision") {
-    withTempPath { path =>
-      val t = "2019-11-14 20:35:30.123456"
-      Seq(t).toDF("t").write.text(path.getAbsolutePath)
-      val readback = spark.read
-        .schema("t timestamp")
-        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
-        .csv(path.getAbsolutePath)
-      checkAnswer(readback, Row(Timestamp.valueOf(t)))
-    }
-  }
 }

@@ -527,7 +527,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
-        AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan, extraOptions.toMap)
+        AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan)
 
       case (SaveMode.Overwrite, _) =>
         ReplaceTableAsSelect(

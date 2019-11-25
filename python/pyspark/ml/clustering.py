@@ -234,7 +234,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> model.getFeaturesCol()
     'features'
     >>> model.setPredictionCol("newPrediction")
-    GaussianMixtureModel...
+    GaussianMixture...
     >>> model.predict(df.head().features)
     2
     >>> model.predictProbability(df.head().features)
@@ -532,7 +532,7 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     >>> model.getDistanceMeasure()
     'euclidean'
     >>> model.setPredictionCol("newPrediction")
-    KMeansModel...
+    KMeans...
     >>> model.predict(df.head().features)
     0
     >>> centers = model.clusterCenters()
@@ -794,7 +794,7 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     >>> model.getMaxIter()
     20
     >>> model.setPredictionCol("newPrediction")
-    BisectingKMeansModel...
+    BisectingKMeans...
     >>> model.predict(df.head().features)
     0
     >>> centers = model.clusterCenters()
@@ -1265,8 +1265,6 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     10
     >>> lda.clear(lda.maxIter)
     >>> model = lda.fit(df)
-    >>> model.setSeed(1)
-    DistributedLDAModel...
     >>> model.getTopicDistributionCol()
     'topicDistribution'
     >>> model.isDistributed()

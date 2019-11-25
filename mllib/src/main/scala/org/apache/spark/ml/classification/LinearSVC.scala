@@ -326,10 +326,6 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   override def write: MLWriter = new LinearSVCModel.LinearSVCWriter(this)
 
-  @Since("3.0.0")
-  override def toString: String = {
-    s"LinearSVCModel: uid=$uid, numClasses=$numClasses, numFeatures=$numFeatures"
-  }
 }
 
 

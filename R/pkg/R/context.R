@@ -416,7 +416,7 @@ spark.getSparkFiles <- function(fileName) {
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' doubled <- spark.lapply(1:10, function(x) {2 * x})
+#' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
 #' @note spark.lapply since 2.0.0
 spark.lapply <- function(list, func) {

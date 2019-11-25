@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -720,6 +721,14 @@ object SQLConf {
     .stringConf
     .createWithDefault("_corrupt_record")
 
+  val FROM_JSON_FORCE_NULLABLE_SCHEMA = buildConf("spark.sql.fromJsonForceNullableSchema")
+    .internal()
+    .doc("When true, force the output schema of the from_json() function to be nullable " +
+      "(including all the fields). Otherwise, the schema might not be compatible with" +
+      "actual data, which leads to corruptions. This config will be removed in Spark 3.0.")
+    .booleanConf
+    .createWithDefault(true)
+
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
     .timeConf(TimeUnit.SECONDS)
@@ -1079,25 +1088,6 @@ object SQLConf {
     buildConf("spark.sql.streaming.aggregation.stateFormatVersion")
       .internal()
       .doc("State format version used by streaming aggregation operations in a streaming query. " +
-        "State between versions are tend to be incompatible, so state format version shouldn't " +
-        "be modified after running.")
-      .intConf
-      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
-      .createWithDefault(2)
-
-  val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
-    buildConf("spark.sql.streaming.stopActiveRunOnRestart")
-    .doc("Running multiple runs of the same streaming query concurrently is not supported. " +
-      "If we find a concurrent active run for a streaming query (in the same or different " +
-      "SparkSessions on the same cluster) and this flag is true, we will stop the old streaming " +
-      "query run to start the new one.")
-    .booleanConf
-    .createWithDefault(true)
-
-  val STREAMING_JOIN_STATE_FORMAT_VERSION =
-    buildConf("spark.sql.streaming.join.stateFormatVersion")
-      .internal()
-      .doc("State format version used by streaming join operations in a streaming query. " +
         "State between versions are tend to be incompatible, so state format version shouldn't " +
         "be modified after running.")
       .intConf
@@ -1665,19 +1655,13 @@ object SQLConf {
       .checkValues(Dialect.values.map(_.toString))
       .createWithDefault(Dialect.SPARK.toString)
 
-  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+  val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
+    buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
     .internal()
-    .doc("This configuration is deprecated and will be removed in the future releases." +
-      "It is replaced by spark.sql.dialect.spark.ansi.enabled.")
+    .doc("When this option is set to true, creating managed tables with nonempty location " +
+      "is allowed. Otherwise, an analysis exception is thrown. ")
     .booleanConf
     .createWithDefault(false)
-
-  val DIALECT_SPARK_ANSI_ENABLED = buildConf("spark.sql.dialect.spark.ansi.enabled")
-    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
-      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser.")
-    .fallbackConf(ANSI_ENABLED)
 
   val VALIDATE_PARTITION_COLUMNS =
     buildConf("spark.sql.sources.validatePartitionColumns")
@@ -1782,22 +1766,13 @@ object SQLConf {
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
-  object IntervalStyle extends Enumeration {
-    type IntervalStyle = Value
-    val SQL_STANDARD, ISO_8601, MULTI_UNITS = Value
-  }
-
-  val INTERVAL_STYLE = buildConf("spark.sql.intervalOutputStyle")
-    .doc("When converting interval values to strings (i.e. for display), this config decides the" +
-      " interval string format. The value SQL_STANDARD will produce output matching SQL standard" +
-      " interval literals (i.e. '+3-2 +10 -00:00:01'). The value ISO_8601 will produce output" +
-      " matching the ISO 8601 standard (i.e. 'P3Y2M10DT-1S'). The value MULTI_UNITS (which is the" +
-      " default) will produce output in form of value unit pairs, (i.e. '3 year 2 months 10 days" +
-      " -1 seconds'")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(IntervalStyle.values.map(_.toString))
-    .createWithDefault(IntervalStyle.MULTI_UNITS.toString)
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
+      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
+      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser.")
+    .booleanConf
+    .createWithDefault(false)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -1819,7 +1794,7 @@ object SQLConf {
         "reading unnecessary nested column data. Currently Parquet and ORC are the " +
         "data sources that implement this optimization.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
@@ -1828,7 +1803,7 @@ object SQLConf {
         "satisfying a query. This optimization allows object serializers to avoid " +
         "executing unnecessary nested expressions.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val NESTED_PRUNING_ON_EXPRESSIONS =
     buildConf("spark.sql.optimizer.expression.nestedPruning.enabled")
@@ -1838,7 +1813,7 @@ object SQLConf {
         "physical data source scanning. For pruning nested fields from scanning, please use " +
         "`spark.sql.optimizer.nestedSchemaPruning.enabled` config.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
@@ -1913,6 +1888,16 @@ object SQLConf {
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
+
+  val COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP =
+    buildConf("spark.sql.legacy.compareDateTimestampInTimestamp")
+      .internal()
+      .doc("When true (default), compare Date with Timestamp after converting both sides to " +
+        "Timestamp. This behavior is compatible with Hive 2.2 or later. See HIVE-15236. " +
+        "When false, restore the behavior prior to Spark 2.4. Compare Date with Timestamp after " +
+        "converting both sides to string. This config will be removed in Spark 3.0.")
+      .booleanConf
+      .createWithDefault(true)
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
@@ -2024,11 +2009,10 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val DEFAULT_CATALOG = buildConf("spark.sql.defaultCatalog")
-    .doc("Name of the default catalog. This will be the current catalog if users have not " +
-      "explicitly set the current catalog yet.")
+  val DEFAULT_V2_CATALOG = buildConf("spark.sql.default.catalog")
+    .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
     .stringConf
-    .createWithDefault(SESSION_CATALOG_NAME)
+    .createOptional
 
   val V2_SESSION_CATALOG_IMPLEMENTATION =
     buildConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME")
@@ -2226,6 +2210,8 @@ class SQLConf extends Serializable with Logging {
 
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
+
+  def compareDateTimestampInTimestamp : Boolean = getConf(COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
@@ -2505,6 +2491,9 @@ class SQLConf extends Serializable with Logging {
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
+  def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
+    getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
+
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
@@ -2513,13 +2502,9 @@ class SQLConf extends Serializable with Logging {
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
-  def intervalOutputStyle: IntervalStyle.Value = IntervalStyle.withName(getConf(INTERVAL_STYLE))
+  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
-  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString
-
-  def dialectSparkAnsiEnabled: Boolean = getConf(DIALECT_SPARK_ANSI_ENABLED)
-
-  def ansiEnabled: Boolean = usePostgreSQLDialect || dialectSparkAnsiEnabled
+  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString()
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
@@ -2560,6 +2545,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
+
+  def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 

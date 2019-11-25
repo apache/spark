@@ -56,6 +56,9 @@ class _DecisionTreeModel(JavaPredictionModel):
         """
         return self._call_java("predictLeaf", value)
 
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
     """
@@ -204,6 +207,9 @@ class _TreeEnsembleModel(JavaPredictionModel):
         Predict the indices of the leaves corresponding to the feature vector.
         """
         return self._call_java("predictLeaf", value)
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 class _TreeEnsembleParams(_DecisionTreeParams):

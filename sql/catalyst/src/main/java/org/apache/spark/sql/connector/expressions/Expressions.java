@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import java.util.Arrays;
-
-import scala.collection.JavaConverters;
-
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.types.DataType;
+import scala.collection.JavaConverters;
+
+import java.util.Arrays;
 
 /**
  * Helper methods to create logical transforms to pass into Spark.
@@ -47,13 +46,13 @@ public class Expressions {
   }
 
   /**
-   * Create a named reference expression for a (nested) column.
+   * Create a named reference expression for a column.
    *
-   * @param name The column name. It refers to nested column if name contains dot.
+   * @param name a column name
    * @return a named reference for the column
    */
   public static NamedReference column(String name) {
-    return LogicalExpressions.parseReference(name);
+    return LogicalExpressions.reference(name);
   }
 
   /**
@@ -83,10 +82,8 @@ public class Expressions {
    * @return a logical bucket transform with name "bucket"
    */
   public static Transform bucket(int numBuckets, String... columns) {
-    NamedReference[] references = Arrays.stream(columns)
-      .map(Expressions::column)
-      .toArray(NamedReference[]::new);
-    return LogicalExpressions.bucket(numBuckets, references);
+    return LogicalExpressions.bucket(numBuckets,
+        JavaConverters.asScalaBuffer(Arrays.asList(columns)).toSeq());
   }
 
   /**
@@ -100,7 +97,7 @@ public class Expressions {
    * @return a logical identity transform with name "identity"
    */
   public static Transform identity(String column) {
-    return LogicalExpressions.identity(Expressions.column(column));
+    return LogicalExpressions.identity(column);
   }
 
   /**
@@ -114,7 +111,7 @@ public class Expressions {
    * @return a logical yearly transform with name "years"
    */
   public static Transform years(String column) {
-    return LogicalExpressions.years(Expressions.column(column));
+    return LogicalExpressions.years(column);
   }
 
   /**
@@ -129,7 +126,7 @@ public class Expressions {
    * @return a logical monthly transform with name "months"
    */
   public static Transform months(String column) {
-    return LogicalExpressions.months(Expressions.column(column));
+    return LogicalExpressions.months(column);
   }
 
   /**
@@ -144,7 +141,7 @@ public class Expressions {
    * @return a logical daily transform with name "days"
    */
   public static Transform days(String column) {
-    return LogicalExpressions.days(Expressions.column(column));
+    return LogicalExpressions.days(column);
   }
 
   /**
@@ -159,7 +156,7 @@ public class Expressions {
    * @return a logical hourly transform with name "hours"
    */
   public static Transform hours(String column) {
-    return LogicalExpressions.hours(Expressions.column(column));
+    return LogicalExpressions.hours(column);
   }
 
 }

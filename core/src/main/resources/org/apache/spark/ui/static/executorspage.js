@@ -462,8 +462,7 @@ $(document).ready(function () {
                         {"visible": false, "targets": 5},
                         {"visible": false, "targets": 6},
                         {"visible": false, "targets": 9}
-                    ],
-                    "deferRender": true
+                    ]
                 };
 
                 execDataTable = $(selector).DataTable(conf);

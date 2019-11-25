@@ -81,12 +81,6 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"ElementwiseProduct: uid=$uid" +
-      get(scalingVec).map(v => s", vectorSize=${v.size}").getOrElse("")
-  }
 }
 
 @Since("2.0.0")

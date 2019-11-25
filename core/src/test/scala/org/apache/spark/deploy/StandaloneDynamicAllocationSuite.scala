@@ -34,7 +34,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{LaunchedExecutor, RegisterExecutor, RegisterExecutorFailed}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RegisterExecutorFailed}
 
 /**
  * End-to-end tests for dynamic allocation in standalone mode.
@@ -634,7 +634,6 @@ class StandaloneDynamicAllocationSuite
         Map.empty)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
       backend.driverEndpoint.askSync[Boolean](message)
-      backend.driverEndpoint.send(LaunchedExecutor(id))
     }
   }
 

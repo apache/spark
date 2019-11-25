@@ -82,5 +82,5 @@ No rows selected
 
 ### Related Statements
 - [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
-- [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
+- [ALTER TABLE](sql-ref-syntax-ddl-alter-tabley.html)
 

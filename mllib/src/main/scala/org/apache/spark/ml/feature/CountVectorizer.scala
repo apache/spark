@@ -307,7 +307,7 @@ class CountVectorizerModel(
     }
     val dictBr = broadcastDict.get
     val minTf = $(minTF)
-    val vectorizer = udf { document: Seq[String] =>
+    val vectorizer = udf { (document: Seq[String]) =>
       val termCounts = new OpenHashMap[Int, Double]
       var tokenCount = 0L
       document.foreach { term =>
@@ -344,11 +344,6 @@ class CountVectorizerModel(
 
   @Since("1.6.0")
   override def write: MLWriter = new CountVectorizerModelWriter(this)
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"CountVectorizerModel: uid=$uid, vocabularySize=${vocabulary.length}"
-  }
 }
 
 @Since("1.6.0")

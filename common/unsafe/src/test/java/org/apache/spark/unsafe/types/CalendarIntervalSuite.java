@@ -47,6 +47,36 @@ public class CalendarIntervalSuite {
   }
 
   @Test
+  public void toStringTest() {
+    CalendarInterval i;
+
+    i = new CalendarInterval(0, 0, 0);
+    assertEquals("0 seconds", i.toString());
+
+    i = new CalendarInterval(34, 0, 0);
+    assertEquals("2 years 10 months", i.toString());
+
+    i = new CalendarInterval(-34, 0, 0);
+    assertEquals("-2 years -10 months", i.toString());
+
+    i = new CalendarInterval(0, 31, 0);
+    assertEquals("31 days", i.toString());
+
+    i = new CalendarInterval(0, -31, 0);
+    assertEquals("-31 days", i.toString());
+
+    i = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
+    assertEquals("3 hours 13 minutes 0.000123 seconds", i.toString());
+
+    i = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123);
+    assertEquals("-3 hours -13 minutes -0.000123 seconds", i.toString());
+
+    i = new CalendarInterval(34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
+    assertEquals("2 years 10 months 31 days 3 hours 13 minutes 0.000123 seconds",
+      i.toString());
+  }
+
+  @Test
   public void periodAndDurationTest() {
     CalendarInterval interval = new CalendarInterval(120, -40, 123456);
     assertEquals(Period.of(0, 120, -40), interval.extractAsPeriod());

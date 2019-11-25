@@ -22,7 +22,6 @@ import java.net.Socket
 import java.util.Locale
 
 import scala.collection.JavaConverters._
-import scala.collection.concurrent
 import scala.collection.mutable
 import scala.util.Properties
 
@@ -196,7 +195,6 @@ object SparkEnv extends Logging {
   private[spark] def createExecutorEnv(
       conf: SparkConf,
       executorId: String,
-      bindAddress: String,
       hostname: String,
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
@@ -204,7 +202,7 @@ object SparkEnv extends Logging {
     val env = create(
       conf,
       executorId,
-      bindAddress,
+      hostname,
       hostname,
       None,
       isLocal,
@@ -213,17 +211,6 @@ object SparkEnv extends Logging {
     )
     SparkEnv.set(env)
     env
-  }
-
-  private[spark] def createExecutorEnv(
-      conf: SparkConf,
-      executorId: String,
-      hostname: String,
-      numCores: Int,
-      ioEncryptionKey: Option[Array[Byte]],
-      isLocal: Boolean): SparkEnv = {
-    createExecutorEnv(conf, executorId, hostname,
-      hostname, numCores, ioEncryptionKey, isLocal)
   }
 
   /**
@@ -352,26 +339,19 @@ object SparkEnv extends Logging {
       None
     }
 
-    // Mapping from block manager id to the block manager's information.
-    val blockManagerInfo = new concurrent.TrieMap[BlockManagerId, BlockManagerInfo]()
-    val blockManagerMaster = new BlockManagerMaster(
-      registerOrLookupEndpoint(
-        BlockManagerMaster.DRIVER_ENDPOINT_NAME,
-        new BlockManagerMasterEndpoint(
-          rpcEnv,
-          isLocal,
-          conf,
-          listenerBus,
-          if (conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)) {
-            externalShuffleClient
-          } else {
-            None
-          }, blockManagerInfo)),
-      registerOrLookupEndpoint(
-        BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
-        new BlockManagerMasterHeartbeatEndpoint(rpcEnv, isLocal, blockManagerInfo)),
-      conf,
-      isDriver)
+    val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
+      BlockManagerMaster.DRIVER_ENDPOINT_NAME,
+      new BlockManagerMasterEndpoint(
+        rpcEnv,
+        isLocal,
+        conf,
+        listenerBus,
+        if (conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)) {
+          externalShuffleClient
+        } else {
+          None
+        })),
+      conf, isDriver)
 
     val blockTransferService =
       new NettyBlockTransferService(conf, securityManager, bindAddress, advertiseAddress,

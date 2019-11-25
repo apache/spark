@@ -1106,12 +1106,6 @@ class GeneralizedLinearRegressionModel private[ml] (
     new GeneralizedLinearRegressionModel.GeneralizedLinearRegressionModelWriter(this)
 
   override val numFeatures: Int = coefficients.size
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"GeneralizedLinearRegressionModel: uid=$uid, family=${$(family)}, link=${$(link)}, " +
-      s"numFeatures=$numFeatures"
-  }
 }
 
 @Since("2.0.0")

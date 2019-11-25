@@ -235,7 +235,7 @@ class RandomForestRegressionModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"RandomForestRegressionModel: uid=$uid, numTrees=$getNumTrees, numFeatures=$numFeatures"
+    s"RandomForestRegressionModel (uid=$uid) with $getNumTrees trees"
   }
 
   /**

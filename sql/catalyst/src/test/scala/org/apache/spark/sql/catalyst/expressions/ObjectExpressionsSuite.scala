@@ -485,8 +485,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("abcd".getBytes, BinaryType),
       ("abcd", StringType),
       (BigDecimal.valueOf(10), DecimalType.IntDecimal),
-      (IntervalUtils.stringToInterval(UTF8String.fromString("interval 3 day")),
-        CalendarIntervalType),
+      (IntervalUtils.fromString("interval 3 day"), CalendarIntervalType),
       (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
       (Array(3, 2, 1), ArrayType(IntegerType))
     ).foreach { case (input, dt) =>

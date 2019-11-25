@@ -15,9 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark;
+
+import com.codahale.metrics.MetricRegistry;
+import org.apache.spark.annotation.DeveloperApi;
+import org.apache.spark.annotation.Private;
 
 /**
- * Exception thrown when a task cannot write to output file due to the file already exists.
+ * Encapsulates information about the executor when initializing {@link ExecutorPlugin} instances.
  */
-private[spark] class TaskOutputFileAlreadyExistException(error: Throwable) extends Exception(error)
+@DeveloperApi
+public class ExecutorPluginContext {
+
+  public final MetricRegistry metricRegistry;
+  public final SparkConf sparkConf;
+  public final String executorId;
+  public final String executorHostName;
+  public final boolean isLocal;
+
+  @Private
+  public ExecutorPluginContext(
+      MetricRegistry registry,
+      SparkConf conf,
+      String id,
+      String hostName,
+      boolean local) {
+    metricRegistry = registry;
+    sparkConf = conf;
+    executorId = id;
+    executorHostName = hostName;
+    isLocal = local;
+  }
+
+}

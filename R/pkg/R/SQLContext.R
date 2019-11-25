@@ -166,9 +166,9 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
       for (rdf_slice in rdf_slices) {
         batch <- arrow::record_batch(rdf_slice)
         if (is.null(stream_writer)) {
-          stream <- arrow::FileOutputStream$create(fileName)
+          stream <- arrow::FileOutputStream(fileName)
           schema <- batch$schema
-          stream_writer <- arrow::RecordBatchStreamWriter$create(stream, schema)
+          stream_writer <- arrow::RecordBatchStreamWriter(stream, schema)
         }
 
         stream_writer$write_batch(batch)
@@ -197,7 +197,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
       as.list(schema)
     }
     if (is.null(names)) {
-      names <- lapply(seq_len(length(firstRow)), function(x) {
+      names <- lapply(1:length(firstRow), function(x) {
         paste0("_", as.character(x))
       })
     }
@@ -213,7 +213,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     })
 
     types <- lapply(firstRow, infer_type)
-    fields <- lapply(seq_len(length(firstRow)), function(i) {
+    fields <- lapply(1:length(firstRow), function(i) {
       structField(names[[i]], types[[i]], TRUE)
     })
     schema <- do.call(structType, fields)

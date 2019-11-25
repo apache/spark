@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,6 +17,7 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
 import logging
 from argparse import ArgumentParser
 import os
@@ -86,10 +87,9 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
     env["TMPDIR"] = tmp_dir
 
     # Also override the JVM's temp directory by setting driver and executor options.
-    java_options = "-Djava.io.tmpdir={0} -Dio.netty.tryReflectionSetAccessible=true".format(tmp_dir)
     spark_args = [
-        "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
-        "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
+        "--conf", "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
         "pyspark-shell"
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
@@ -160,15 +160,11 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python3.6", "python2.7", "pypy"] if which(x)]
-
-    if "python3.6" not in python_execs:
-        p = which("python3")
-        if not p:
-            LOGGER.error("No python3 executable found.  Exiting!")
-            os._exit(1)
-        else:
-            python_execs.insert(0, p)
+    python_execs = [x for x in ["python2.7", "python3.6", "pypy"] if which(x)]
+    if "python2.7" not in python_execs:
+        LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
+                       " back to `python` instead")
+        python_execs.insert(0, "python")
     return python_execs
 
 

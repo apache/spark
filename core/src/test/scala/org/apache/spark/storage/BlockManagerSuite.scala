@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -143,13 +142,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // need to create a SparkContext is to initialize LiveListenerBus.
     sc = mock(classOf[SparkContext])
     when(sc.conf).thenReturn(conf)
-
-    val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
-    master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
-      new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo)),
-      rpcEnv.setupEndpoint("blockmanagerHeartbeat",
-      new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
+    master = spy(new BlockManagerMaster(
+      rpcEnv.setupEndpoint("blockmanager",
+        new BlockManagerMasterEndpoint(rpcEnv, true, conf,
+          new LiveListenerBus(conf), None)), conf, true))
 
     val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
@@ -472,7 +468,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
+    val reregister = !master.driverEndpoint.askSync[Boolean](
       BlockManagerHeartbeat(store.blockManagerId))
     assert(reregister)
   }

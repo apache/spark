@@ -121,12 +121,6 @@ class MultilabelClassificationEvaluator (override val uid: String)
   }
 
   override def copy(extra: ParamMap): MultilabelClassificationEvaluator = defaultCopy(extra)
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"MultilabelClassificationEvaluator: uid=$uid, metricName=${$(metricName)}, " +
-      s"metricLabel=${$(metricLabel)}"
-  }
 }
 
 

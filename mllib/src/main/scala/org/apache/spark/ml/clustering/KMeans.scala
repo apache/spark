@@ -108,9 +108,6 @@ class KMeansModel private[ml] (
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
     with HasTrainingSummary[KMeansSummary] {
 
-  @Since("3.0.0")
-  lazy val numFeatures: Int = parentModel.clusterCenters.head.size
-
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
     val copied = copyValues(new KMeansModel(uid, parentModel), extra)
@@ -155,12 +152,6 @@ class KMeansModel private[ml] (
    */
   @Since("1.6.0")
   override def write: GeneralMLWriter = new GeneralMLWriter(this)
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"KMeansModel: uid=$uid, k=${parentModel.k}, distanceMeasure=${$(distanceMeasure)}, " +
-      s"numFeatures=$numFeatures"
-  }
 
   /**
    * Gets summary of model on training set. An exception is

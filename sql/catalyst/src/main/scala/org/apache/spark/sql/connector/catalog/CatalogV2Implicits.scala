@@ -27,12 +27,8 @@ import org.apache.spark.sql.types.StructType
  * Conversion helpers for working with v2 [[CatalogPlugin]].
  */
 private[sql] object CatalogV2Implicits {
-  import LogicalExpressions._
-
   implicit class PartitionTypeHelper(partitionType: StructType) {
-    def asTransforms: Array[Transform] = {
-      partitionType.names.map(col => identity(reference(Seq(col)))).toArray
-    }
+    def asTransforms: Array[Transform] = partitionType.names.map(LogicalExpressions.identity)
   }
 
   implicit class BucketSpecHelper(spec: BucketSpec) {
@@ -42,8 +38,7 @@ private[sql] object CatalogV2Implicits {
           s"Cannot convert bucketing with sort columns to a transform: $spec")
       }
 
-      val references = spec.bucketColumnNames.map(col => reference(Seq(col)))
-      bucket(spec.numBuckets, references.toArray)
+      LogicalExpressions.bucket(spec.numBuckets, spec.bucketColumnNames: _*)
     }
   }
 

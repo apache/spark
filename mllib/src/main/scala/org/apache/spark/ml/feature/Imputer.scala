@@ -274,13 +274,6 @@ class ImputerModel private[ml] (
 
   @Since("2.2.0")
   override def write: MLWriter = new ImputerModelWriter(this)
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"ImputerModel: uid=$uid, strategy=${$(strategy)}, missingValue=${$(missingValue)}" +
-      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
-      get(outputCols).map(c => s", numOutputCols=${c.length}").getOrElse("")
-  }
 }
 
 

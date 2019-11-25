@@ -627,14 +627,4 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
     }
   }
-
-  test("from_json - timestamp in micros") {
-    val df = Seq("""{"time": "1970-01-01T00:00:00.123456"}""").toDS()
-    val schema = new StructType().add("time", TimestampType)
-    val options = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SSSSSS")
-
-    checkAnswer(
-      df.select(from_json($"value", schema, options)),
-      Row(Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.123456"))))
-  }
 }

@@ -52,8 +52,8 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
        false
   """,
   since = "3.0.0")
-case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = "bool_and"
+case class EveryAgg(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
+  override def nodeName: String = "Every"
 }
 
 @ExpressionDescription(
@@ -68,6 +68,6 @@ case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
        false
   """,
   since = "3.0.0")
-case class BoolOr(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = "bool_or"
+case class AnyAgg(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
+  override def nodeName: String = "Any"
 }

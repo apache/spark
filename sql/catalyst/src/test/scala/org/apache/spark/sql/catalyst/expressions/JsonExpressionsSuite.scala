@@ -702,22 +702,26 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("from_json missing fields") {
-    val input =
-      """{
-      |  "a": 1,
-      |  "c": "foo"
-      |}
-      |""".stripMargin
-    val jsonSchema = new StructType()
-      .add("a", LongType, nullable = false)
-      .add("b", StringType, nullable = false)
-      .add("c", StringType, nullable = false)
-    val output = InternalRow(1L, null, UTF8String.fromString("foo"))
-    val expr = JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId)
-    checkEvaluation(expr, output)
-    val schema = expr.dataType
-    val schemaToCompare = jsonSchema.asNullable
-    assert(schemaToCompare == schema)
+    for (forceJsonNullableSchema <- Seq(false, true)) {
+      withSQLConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA.key -> forceJsonNullableSchema.toString) {
+        val input =
+          """{
+          |  "a": 1,
+          |  "c": "foo"
+          |}
+          |""".stripMargin
+        val jsonSchema = new StructType()
+          .add("a", LongType, nullable = false)
+          .add("b", StringType, nullable = !forceJsonNullableSchema)
+          .add("c", StringType, nullable = false)
+        val output = InternalRow(1L, null, UTF8String.fromString("foo"))
+        val expr = JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId)
+        checkEvaluation(expr, output)
+        val schema = expr.dataType
+        val schemaToCompare = if (forceJsonNullableSchema) jsonSchema.asNullable else jsonSchema
+        assert(schemaToCompare == schema)
+      }
+    }
   }
 
   test("SPARK-24709: infer schema of json strings") {

@@ -478,16 +478,15 @@ it computes the conditional probability distribution of each feature given each 
 For prediction, it applies Bayes' theorem to compute the conditional probability distribution
 of each label given an observation.
 
-MLlib supports [Multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes),
-[Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html)
-and [Gaussian naive Bayes](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes).
+MLlib supports both [multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
+and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
 
 *Input data*:
-These Multinomial and Bernoulli models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+These models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
 Within that context, each observation is a document and each feature represents a term.
 A feature's value is the frequency of the term (in multinomial Naive Bayes) or
 a zero or one indicating whether the term was found in the document (in Bernoulli Naive Bayes).
-Feature values for Multinomial and Bernoulli models must be *non-negative*. The model type is selected with an optional parameter
+Feature values must be *non-negative*. The model type is selected with an optional parameter
 "multinomial" or "bernoulli" with "multinomial" as the default.
 For document classification, the input feature vectors should usually be sparse vectors.
 Since the training data is only used once, it is not necessary to cache it.

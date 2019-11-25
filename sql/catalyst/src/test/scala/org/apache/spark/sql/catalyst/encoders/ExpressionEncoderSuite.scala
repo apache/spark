@@ -436,7 +436,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       testAndVerifyNotLeakingReflectionObjects(
         s"overflowing $testName, ansiEnabled=$ansiEnabled") {
         withSQLConf(
-          SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> ansiEnabled.toString
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString
         ) {
           // Need to construct Encoder here rather than implicitly resolving it
           // so that SQLConf changes are respected.

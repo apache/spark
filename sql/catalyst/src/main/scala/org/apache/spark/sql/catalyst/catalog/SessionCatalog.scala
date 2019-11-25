@@ -327,7 +327,8 @@ class SessionCatalog(
 
   def validateTableLocation(table: CatalogTable): Unit = {
     // SPARK-19724: the default location of a managed table should be non-existent or empty.
-    if (table.tableType == CatalogTableType.MANAGED) {
+    if (table.tableType == CatalogTableType.MANAGED &&
+      !conf.allowCreatingManagedTableUsingNonemptyLocation) {
       val tableLocation =
         new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
       val fs = tableLocation.getFileSystem(hadoopConf)

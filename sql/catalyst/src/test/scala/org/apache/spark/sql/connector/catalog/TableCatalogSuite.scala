@@ -847,16 +847,19 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(catalog.namespaceExists(testNs) === false)
   }
 
-  test("dropNamespace: drop even if it's not empty") {
+  test("dropNamespace: fail if not empty") {
     val catalog = newCatalog()
 
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    assert(catalog.dropNamespace(testNs))
+    val exc = intercept[IllegalStateException] {
+      catalog.dropNamespace(testNs)
+    }
 
-    assert(!catalog.namespaceExists(testNs))
-    assert(catalog.listTables(testNs).isEmpty)
+    assert(exc.getMessage.contains(testNs.quoted))
+    assert(catalog.namespaceExists(testNs) === true)
+    assert(catalog.loadNamespaceMetadata(testNs).asScala === Map("property" -> "value"))
   }
 
   test("alterNamespace: basic behavior") {

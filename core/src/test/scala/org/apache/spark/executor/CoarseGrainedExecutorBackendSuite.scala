@@ -54,7 +54,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val env = createMockEnv(conf, serializer)
 
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1", "host1",
+    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
     withTempDir { tmpDir =>
       val testResourceArgs: JObject = ("" -> "")
@@ -76,7 +76,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1", "host1",
+    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
     withTempDir { tmpDir =>
       val ra = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
@@ -101,7 +101,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1", "host1",
+    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
 
     withTempDir { tmpDir =>
@@ -129,7 +129,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
+    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
 
     // not enough gpu's on the executor
@@ -168,7 +168,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
+    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
 
     // executor resources < required
@@ -200,7 +200,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val env = createMockEnv(conf, serializer)
 
       // we don't really use this, just need it to get at the parser function
-      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
+      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
         4, Seq.empty[URL], env, None)
 
       val parsedResources = backend.parseOrFindResources(None)
@@ -226,7 +226,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val env = createMockEnv(conf, serializer)
 
       // we don't really use this, just need it to get at the parser function
-      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
+      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
         4, Seq.empty[URL], env, None)
       val gpuArgs = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
       val ja = Extraction.decompose(Seq(gpuArgs))
@@ -254,7 +254,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val rpcEnv = RpcEnv.create("1", "localhost", 0, conf, securityMgr)
       val env = createMockEnv(conf, serializer, Some(rpcEnv))
       backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
-        "host1", "host1", 4, Seq.empty[URL], env, None)
+        "host1", 4, Seq.empty[URL], env, None)
       assert(backend.taskResources.isEmpty)
 
       val taskId = 1000000
@@ -287,31 +287,6 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         backend.rpcEnv.shutdown()
       }
     }
-  }
-
-  test("SPARK-24203 when bindAddress is not set, it defaults to hostname") {
-    val args1 = Array(
-      "--driver-url", "driverurl",
-      "--executor-id", "1",
-      "--hostname", "host1",
-      "--cores", "1",
-      "--app-id", "app1")
-
-    val arg = CoarseGrainedExecutorBackend.parseArguments(args1, "")
-    assert(arg.bindAddress == "host1")
-  }
-
-  test("SPARK-24203 when bindAddress is different, it does not default to hostname") {
-    val args1 = Array(
-      "--driver-url", "driverurl",
-      "--executor-id", "1",
-      "--hostname", "host1",
-      "--bind-address", "bindaddress1",
-      "--cores", "1",
-      "--app-id", "app1")
-
-    val arg = CoarseGrainedExecutorBackend.parseArguments(args1, "")
-    assert(arg.bindAddress == "bindaddress1")
   }
 
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer,

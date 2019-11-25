@@ -1070,13 +1070,4 @@ class JoinSuite extends QueryTest with SharedSparkSession {
       checkAnswer(res, Row(0, 0, 0))
     }
   }
-
-  test("SPARK-29850: sort-merge-join an empty table should not memory leak") {
-    val df1 = spark.range(10).select($"id", $"id" % 3 as 'p)
-      .repartition($"id").groupBy($"id").agg(Map("p" -> "max"))
-    val df2 = spark.range(0)
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      assert(df2.join(df1, "id").collect().isEmpty)
-    }
-  }
 }

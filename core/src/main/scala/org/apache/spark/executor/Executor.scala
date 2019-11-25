@@ -137,6 +137,35 @@ private[spark] class Executor(
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
+  private val executorPlugins: Seq[ExecutorPlugin] = {
+    val pluginNames = conf.get(EXECUTOR_PLUGINS)
+    if (pluginNames.nonEmpty) {
+      logInfo(s"Initializing the following plugins: ${pluginNames.mkString(", ")}")
+
+      // Plugins need to load using a class loader that includes the executor's user classpath
+      val pluginList: Seq[ExecutorPlugin] =
+        Utils.withContextClassLoader(replClassLoader) {
+          val plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginNames, conf)
+          plugins.foreach { plugin =>
+            val pluginSource = new ExecutorPluginSource(plugin.getClass().getSimpleName())
+            val pluginContext = new ExecutorPluginContext(pluginSource.metricRegistry, conf,
+              executorId, executorHostname, isLocal)
+            plugin.init(pluginContext)
+            logInfo("Successfully loaded plugin " + plugin.getClass().getCanonicalName())
+            if (pluginSource.metricRegistry.getNames.size() > 0) {
+              env.metricsSystem.registerSource(pluginSource)
+            }
+          }
+          plugins
+        }
+
+      logInfo("Finished initializing plugins")
+      pluginList
+    } else {
+      Nil
+    }
+  }
+
   // Plugins need to load using a class loader that includes the executor's user classpath
   private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
     PluginContainer(env)
@@ -266,6 +295,14 @@ private[spark] class Executor(
 
     // Notify plugins that executor is shutting down so they can terminate cleanly
     Utils.withContextClassLoader(replClassLoader) {
+      executorPlugins.foreach { plugin =>
+        try {
+          plugin.shutdown()
+        } catch {
+          case e: Exception =>
+            logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
+        }
+      }
       plugins.foreach(_.shutdown())
     }
     if (!isLocal) {

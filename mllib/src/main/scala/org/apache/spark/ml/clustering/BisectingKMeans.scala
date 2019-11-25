@@ -91,9 +91,6 @@ class BisectingKMeansModel private[ml] (
   extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable
   with HasTrainingSummary[BisectingKMeansSummary] {
 
-  @Since("3.0.0")
-  lazy val numFeatures: Int = parentModel.clusterCenters.head.size
-
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
     val copied = copyValues(new BisectingKMeansModel(uid, parentModel), extra)
@@ -147,12 +144,6 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def write: MLWriter = new BisectingKMeansModel.BisectingKMeansModelWriter(this)
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"BisectingKMeansModel: uid=$uid, k=${parentModel.k}, distanceMeasure=${$(distanceMeasure)}, " +
-      s"numFeatures=$numFeatures"
-  }
 
   /**
    * Gets summary of model on training set. An exception is

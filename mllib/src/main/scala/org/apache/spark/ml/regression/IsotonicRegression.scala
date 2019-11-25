@@ -259,14 +259,6 @@ class IsotonicRegressionModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter =
     new IsotonicRegressionModelWriter(this)
-
-  @Since("3.0.0")
-  val numFeatures: Int = 1
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"IsotonicRegressionModel: uid=$uid, numFeatures=$numFeatures"
-  }
 }
 
 @Since("1.6.0")

@@ -30,7 +30,6 @@ private[spark] object Minikube extends Logging {
   private val KUBELET_PREFIX = "kubelet:"
   private val APISERVER_PREFIX = "apiserver:"
   private val KUBECTL_PREFIX = "kubectl:"
-  private val KUBECONFIG_PREFIX = "kubeconfig:"
   private val MINIKUBE_VM_PREFIX = "minikubeVM: "
   private val MINIKUBE_PREFIX = "minikube: "
   private val MINIKUBE_PATH = ".minikube"
@@ -87,23 +86,18 @@ private[spark] object Minikube extends Logging {
     val kubeletString = statusString.find(_.contains(s"$KUBELET_PREFIX "))
     val apiserverString = statusString.find(_.contains(s"$APISERVER_PREFIX "))
     val kubectlString = statusString.find(_.contains(s"$KUBECTL_PREFIX "))
-    val kubeconfigString = statusString.find(_.contains(s"$KUBECONFIG_PREFIX "))
-    val hasConfigStatus = kubectlString.isDefined || kubeconfigString.isDefined
 
-    if (hostString.isEmpty || kubeletString.isEmpty || apiserverString.isEmpty ||
-        !hasConfigStatus) {
+    if (hostString.isEmpty || kubeletString.isEmpty
+      || apiserverString.isEmpty || kubectlString.isEmpty) {
       MinikubeStatus.NONE
     } else {
       val status1 = hostString.get.replaceFirst(s"$HOST_PREFIX ", "")
       val status2 = kubeletString.get.replaceFirst(s"$KUBELET_PREFIX ", "")
       val status3 = apiserverString.get.replaceFirst(s"$APISERVER_PREFIX ", "")
-      val isConfigured = if (kubectlString.isDefined) {
-        val cfgStatus = kubectlString.get.replaceFirst(s"$KUBECTL_PREFIX ", "")
-        cfgStatus.contains("Correctly Configured:")
+      val status4 = kubectlString.get.replaceFirst(s"$KUBECTL_PREFIX ", "")
+      if (!status4.contains("Correctly Configured:")) {
+        MinikubeStatus.NONE
       } else {
-        kubeconfigString.get.replaceFirst(s"$KUBECONFIG_PREFIX ", "") == "Configured"
-      }
-      if (isConfigured) {
         val stats = List(status1, status2, status3)
           .map(MinikubeStatus.unapply)
           .map(_.getOrElse(throw new IllegalStateException(s"Unknown status $statusString")))
@@ -112,8 +106,6 @@ private[spark] object Minikube extends Logging {
         } else {
           MinikubeStatus.RUNNING
         }
-      } else {
-        MinikubeStatus.NONE
       }
     }
   }

@@ -1526,15 +1526,26 @@ class TypeCoercionSuite extends AnalysisTest {
       GreaterThan(Literal("1.5"), Literal(BigDecimal("0.5"))),
       GreaterThan(Cast(Literal("1.5"), DoubleType), Cast(Literal(BigDecimal("0.5")),
         DoubleType)))
-    // Checks that dates/timestamps are not promoted to strings
-    val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
-    val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
-    val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))
-    // `Date` should be treated as timestamp at 00:00:00 See SPARK-23549
-    ruleTest(rule, EqualTo(date0301, timestamp0301000000),
-      EqualTo(Cast(date0301, TimestampType), timestamp0301000000))
-    ruleTest(rule, LessThan(date0301, timestamp0301000001),
-      LessThan(Cast(date0301, TimestampType), timestamp0301000001))
+    Seq(true, false).foreach { convertToTS =>
+      withSQLConf(
+        SQLConf.COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP.key -> convertToTS.toString) {
+        val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
+        val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
+        val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))
+        if (convertToTS) {
+          // `Date` should be treated as timestamp at 00:00:00 See SPARK-23549
+          ruleTest(rule, EqualTo(date0301, timestamp0301000000),
+            EqualTo(Cast(date0301, TimestampType), timestamp0301000000))
+          ruleTest(rule, LessThan(date0301, timestamp0301000001),
+            LessThan(Cast(date0301, TimestampType), timestamp0301000001))
+        } else {
+          ruleTest(rule, LessThan(date0301, timestamp0301000000),
+            LessThan(Cast(date0301, StringType), Cast(timestamp0301000000, StringType)))
+          ruleTest(rule, LessThan(date0301, timestamp0301000001),
+            LessThan(Cast(date0301, StringType), Cast(timestamp0301000001, StringType)))
+        }
+      }
+    }
   }
 
   test("cast WindowFrame boundaries to the type they operate upon") {

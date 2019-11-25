@@ -242,7 +242,7 @@ readDeserializeInArrow <- function(inputCon) {
     # for now.
     dataLen <- readInt(inputCon)
     arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
-    batches <- arrow::RecordBatchStreamReader$create(arrowData)$batches()
+    batches <- arrow::RecordBatchStreamReader(arrowData)$batches()
 
     if (useAsTibble) {
       as_tibble <- get("as_tibble", envir = asNamespace("arrow"))

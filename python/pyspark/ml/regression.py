@@ -105,9 +105,9 @@ class LinearRegression(JavaPredictor, _LinearRegressionParams, JavaMLWritable, J
     LinearRegression...
     >>> model = lr.fit(df)
     >>> model.setFeaturesCol("features")
-    LinearRegressionModel...
+    LinearRegression...
     >>> model.setPredictionCol("newPrediction")
-    LinearRegressionModel...
+    LinearRegression...
     >>> model.getMaxIter()
     5
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
@@ -591,7 +591,7 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
     >>> model.setFeaturesCol("features")
-    IsotonicRegressionModel...
+    IsotonicRegression...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -800,7 +800,7 @@ class DecisionTreeRegressor(JavaPredictor, _DecisionTreeRegressorParams, JavaMLW
     >>> dt3 = DecisionTreeRegressor(maxDepth=2, weightCol="weight", varianceCol="variance")
     >>> model3 = dt3.fit(df3)
     >>> print(model3.toDebugString)
-    DecisionTreeRegressionModel...depth=1, numNodes=3...
+    DecisionTreeRegressionModel (uid=...) of depth 1 with 3 nodes...
 
     .. versionadded:: 1.4.0
     """
@@ -1018,7 +1018,7 @@ class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLW
     >>> model.numFeatures
     1
     >>> model.trees
-    [DecisionTreeRegressionModel...depth=..., DecisionTreeRegressionModel...]
+    [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
     >>> model.getNumTrees
     2
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
@@ -1265,7 +1265,7 @@ class GBTRegressor(JavaPredictor, _GBTRegressorParams, JavaMLWritable, JavaMLRea
     >>> model.treeWeights == model2.treeWeights
     True
     >>> model.trees
-    [DecisionTreeRegressionModel...depth=..., DecisionTreeRegressionModel...]
+    [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
     >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0))],
     ...              ["label", "features"])
     >>> model.evaluateEachIteration(validation, "squared")
@@ -1546,7 +1546,7 @@ class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
     >>> aftsr.clear(aftsr.maxIter)
     >>> model = aftsr.fit(df)
     >>> model.setFeaturesCol("features")
-    AFTSurvivalRegressionModel...
+    AFTSurvivalRegression...
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
@@ -1881,7 +1881,7 @@ class GeneralizedLinearRegression(JavaPredictor, _GeneralizedLinearRegressionPar
     >>> glr.clear(glr.maxIter)
     >>> model = glr.fit(df)
     >>> model.setFeaturesCol("features")
-    GeneralizedLinearRegressionModel...
+    GeneralizedLinearRegression...
     >>> model.getMaxIter()
     25
     >>> model.getAggregationDepth()

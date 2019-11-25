@@ -311,9 +311,6 @@ class AFTSurvivalRegressionModel private[ml] (
     @Since("1.6.0") val scale: Double)
   extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with MLWritable {
 
-  @Since("3.0.0")
-  lazy val numFeatures: Int = coefficients.size
-
   /** @group setParam */
   @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -389,11 +386,6 @@ class AFTSurvivalRegressionModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter =
     new AFTSurvivalRegressionModel.AFTSurvivalRegressionModelWriter(this)
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"AFTSurvivalRegressionModel: uid=$uid, numFeatures=$numFeatures"
-  }
 }
 
 @Since("1.6.0")

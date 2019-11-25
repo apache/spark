@@ -29,11 +29,20 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Base SQL parsing infrastructure.
  */
 abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Logging {
+
+  /**
+   * Creates [[CalendarInterval]] for a given SQL String. Throws [[ParseException]] if the SQL
+   * string is not a valid interval format.
+   */
+  def parseInterval(sqlText: String): CalendarInterval = parse(sqlText) { parser =>
+    astBuilder.visitSingleInterval(parser.singleInterval())
+  }
 
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
@@ -92,7 +101,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.ansi = conf.dialectSparkAnsiEnabled
+    lexer.ansi = conf.ansiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -100,7 +109,7 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    parser.ansi = conf.dialectSparkAnsiEnabled
+    parser.ansi = conf.ansiEnabled
 
     try {
       try {

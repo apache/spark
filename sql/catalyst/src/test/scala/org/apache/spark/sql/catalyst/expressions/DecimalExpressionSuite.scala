@@ -32,7 +32,7 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("MakeDecimal") {
-    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(MakeDecimal(Literal(101L), 3, 1), Decimal("10.1"))
       checkEvaluation(MakeDecimal(Literal.create(null, LongType), 3, 1), null)
       val overflowExpr = MakeDecimal(Literal.create(1000L, LongType), 3, 1)
@@ -41,7 +41,7 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluateWithoutCodegen(overflowExpr, null)
       checkEvaluationWithUnsafeProjection(overflowExpr, null)
     }
-    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkEvaluation(MakeDecimal(Literal(101L), 3, 1), Decimal("10.1"))
       checkEvaluation(MakeDecimal(Literal.create(null, LongType), 3, 1), null)
       val overflowExpr = MakeDecimal(Literal.create(1000L, LongType), 3, 1)

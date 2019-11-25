@@ -184,12 +184,6 @@ class StandardScalerModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new StandardScalerModelWriter(this)
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"StandardScalerModel: uid=$uid, numFeatures=${mean.size}, withMean=${$(withMean)}, " +
-      s"withStd=${$(withStd)}"
-  }
 }
 
 @Since("1.6.0")

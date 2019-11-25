@@ -160,10 +160,9 @@ def require_minimum_pyarrow_version():
     """ Raise ImportError if minimum version of pyarrow is not installed
     """
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "0.15.1"
+    minimum_pyarrow_version = "0.12.1"
 
     from distutils.version import LooseVersion
-    import os
     try:
         import pyarrow
         have_arrow = True
@@ -175,9 +174,6 @@ def require_minimum_pyarrow_version():
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
         raise ImportError("PyArrow >= %s must be installed; however, "
                           "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
-    if os.environ.get("ARROW_PRE_0_15_IPC_FORMAT", "0") == "1":
-        raise RuntimeError("Arrow legacy IPC format is not supported in PySpark, "
-                           "please unset ARROW_PRE_0_15_IPC_FORMAT")
 
 
 def require_test_compiled():

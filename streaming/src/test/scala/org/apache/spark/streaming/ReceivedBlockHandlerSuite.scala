@@ -20,7 +20,6 @@ package org.apache.spark.streaming
 import java.io.File
 import java.nio.ByteBuffer
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -88,12 +87,9 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
-    val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo)),
-      rpcEnv.setupEndpoint("blockmanagerHeartbeat",
-      new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
+        new LiveListenerBus(conf), None)), conf, true)
 
     storageLevel = StorageLevel.MEMORY_ONLY_SER
     blockManager = createBlockManager(blockManagerSize, conf)

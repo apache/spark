@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
+import java.io.{File, FileInputStream, FileOutputStream}
 import java.net.URI
 import java.util.Properties
 
@@ -471,18 +471,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
     assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 3)
     assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
     assert(allResourceInfo.get(yarnMadeupResource).get === 5)
-  }
-
-  test("test yarn jars path not exists") {
-    withTempDir { dir =>
-      val conf = new SparkConf().set(SPARK_JARS, Seq(dir.getAbsolutePath + "/test"))
-      val client = new Client(new ClientArguments(Array()), conf, null)
-      withTempDir { distDir =>
-        intercept[FileNotFoundException] {
-          client.prepareLocalResources(new Path(distDir.getAbsolutePath), Nil)
-        }
-      }
-    }
   }
 
   private val matching = Seq(

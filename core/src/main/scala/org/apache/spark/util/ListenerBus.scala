@@ -25,8 +25,7 @@ import scala.util.control.NonFatal
 
 import com.codahale.metrics.Timer
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 
 /**
  * An event bus which posts events to its listeners.
@@ -37,20 +36,6 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   // Marked `private[spark]` for access in tests.
   private[spark] def listeners = listenersPlusTimers.asScala.map(_._1).asJava
-
-  private lazy val env = SparkEnv.get
-
-  private lazy val logSlowEventEnabled = if (env != null) {
-    env.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_ENABLED)
-  } else {
-    false
-  }
-
-  private lazy val logSlowEventThreshold = if (env != null) {
-    env.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD)
-  } else {
-    Long.MaxValue
-  }
 
   /**
    * Returns a CodaHale metrics Timer for measuring the listener's event processing time.
@@ -110,7 +95,6 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       } else {
         null
       }
-      lazy val listenerName = Utils.getFormattedClassName(listener)
       try {
         doPostEvent(listener, event)
         if (Thread.interrupted()) {
@@ -120,17 +104,14 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
         }
       } catch {
         case ie: InterruptedException =>
-          logError(s"Interrupted while posting to ${listenerName}. Removing that listener.", ie)
+          logError(s"Interrupted while posting to ${Utils.getFormattedClassName(listener)}.  " +
+            s"Removing that listener.", ie)
           removeListenerOnError(listener)
         case NonFatal(e) if !isIgnorableException(e) =>
-          logError(s"Listener ${listenerName} threw an exception", e)
+          logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
       } finally {
         if (maybeTimerContext != null) {
-          val elapsed = maybeTimerContext.stop()
-          if (logSlowEventEnabled && elapsed > logSlowEventThreshold) {
-            logInfo(s"Process of event ${event} by listener ${listenerName} took " +
-              s"${elapsed / 1000000000d}s.")
-          }
+          maybeTimerContext.stop()
         }
       }
     }

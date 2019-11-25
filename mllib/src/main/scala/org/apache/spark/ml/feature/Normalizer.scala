@@ -65,11 +65,6 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"Normalizer: uid=$uid, p=${$(p)}"
-  }
 }
 
 @Since("1.6.0")

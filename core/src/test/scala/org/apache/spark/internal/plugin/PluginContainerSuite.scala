@@ -31,7 +31,7 @@ import org.mockito.Mockito.{mock, spy, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
-import org.apache.spark._
+import org.apache.spark.{ExecutorPlugin => _, _}
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher

@@ -372,9 +372,6 @@ class JavaModel(JavaTransformer, Model):
 
             self._resetUid(java_model.uid())
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 @inherit_doc
 class _JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):

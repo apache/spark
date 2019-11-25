@@ -297,26 +297,26 @@ $(document).ready(function () {
         "</div>");
 
     $('#scheduler_delay').attr("data-toggle", "tooltip")
-        .attr("data-placement", "top")
+        .attr("data-placement", "right")
         .attr("title", "Scheduler delay includes time to ship the task from the scheduler to the executor, and time to send " +
             "the task result from the executor to the scheduler. If scheduler delay is large, consider decreasing the size of tasks or decreasing the size of task results.");
     $('#task_deserialization_time').attr("data-toggle", "tooltip")
-        .attr("data-placement", "top")
+        .attr("data-placement", "right")
         .attr("title", "Time spent deserializing the task closure on the executor, including the time to read the broadcasted task.");
     $('#shuffle_read_blocked_time').attr("data-toggle", "tooltip")
-        .attr("data-placement", "top")
+        .attr("data-placement", "right")
         .attr("title", "Time that the task spent blocked waiting for shuffle data to be read from remote machines.");
     $('#shuffle_remote_reads').attr("data-toggle", "tooltip")
-        .attr("data-placement", "top")
+        .attr("data-placement", "right")
         .attr("title", "Total shuffle bytes read from remote executors. This is a subset of the shuffle read bytes; the remaining shuffle data is read locally. ");
     $('#result_serialization_time').attr("data-toggle", "tooltip")
-            .attr("data-placement", "top")
+            .attr("data-placement", "right")
             .attr("title", "Time spent serializing the task result on the executor before sending it back to the driver.");
     $('#getting_result_time').attr("data-toggle", "tooltip")
-            .attr("data-placement", "top")
+            .attr("data-placement", "right")
             .attr("title", "Time that the driver spends fetching task results from workers. If this is large, consider decreasing the amount of data returned from each task.");
     $('#peak_execution_memory').attr("data-toggle", "tooltip")
-            .attr("data-placement", "top")
+            .attr("data-placement", "right")
             .attr("title", "Execution memory refers to the memory used by internal data structures created during " +
                 "shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator " +
                 "should be approximately the sum of the peak sizes across all such data structures created " +
@@ -880,8 +880,7 @@ $(document).ready(function () {
                         { "visible": false, "targets": 16 },
                         { "visible": false, "targets": 17 },
                         { "visible": false, "targets": 18 }
-                    ],
-                    "deferRender": true
+                    ]
                 };
                 taskTableSelector = $(taskTable).DataTable(taskConf);
                 $('#active-tasks-table_filter input').unbind();

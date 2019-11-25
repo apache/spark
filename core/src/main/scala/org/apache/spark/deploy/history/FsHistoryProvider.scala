@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
-import java.lang.{Long => JLong}
 import java.nio.file.Files
 import java.util.{Date, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
@@ -31,7 +30,6 @@ import scala.io.Source
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
@@ -1169,7 +1167,6 @@ private[history] case class LogInfo(
     appId: Option[String],
     attemptId: Option[String],
     fileSize: Long,
-    @JsonDeserialize(contentAs = classOf[JLong])
     lastIndex: Option[Long],
     isComplete: Boolean)
 
@@ -1177,7 +1174,6 @@ private[history] class AttemptInfoWrapper(
     val info: ApplicationAttemptInfo,
     val logPath: String,
     val fileSize: Long,
-    @JsonDeserialize(contentAs = classOf[JLong])
     val lastIndex: Option[Long],
     val adminAcls: Option[String],
     val viewAcls: Option[String],

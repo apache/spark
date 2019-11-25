@@ -31,9 +31,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class BasicInMemoryTableCatalog extends TableCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  protected val namespaces: util.Map[List[String], Map[String, String]] =
-    new ConcurrentHashMap[List[String], Map[String, String]]()
-
   protected val tables: util.Map[Identifier, InMemoryTable] =
     new ConcurrentHashMap[Identifier, InMemoryTable]()
 
@@ -77,7 +74,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     val table = new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties)
     tables.put(ident, table)
-    namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
   }
 
@@ -124,6 +120,11 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 }
 
 class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  protected val namespaces: util.Map[List[String], Map[String, String]] =
+    new ConcurrentHashMap[List[String], Map[String, String]]()
+
   private def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
   }
@@ -180,8 +181,9 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   }
 
   override def dropNamespace(namespace: Array[String]): Boolean = {
-    listNamespaces(namespace).map(dropNamespace)
-    listTables(namespace).map(dropTable)
+    if (listTables(namespace).nonEmpty) {
+      throw new IllegalStateException(s"Cannot delete non-empty namespace: ${namespace.quoted}")
+    }
     Option(namespaces.remove(namespace.toList)).isDefined
   }
 }

@@ -243,8 +243,7 @@ class DecisionTreeRegressionModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"DecisionTreeRegressionModel: uid=$uid, depth=$depth, numNodes=$numNodes, " +
-      s"numFeatures=$numFeatures"
+    s"DecisionTreeRegressionModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
 
   /**

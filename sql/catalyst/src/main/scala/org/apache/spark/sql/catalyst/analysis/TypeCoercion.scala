@@ -132,9 +132,12 @@ object TypeCoercion {
     case (NullType, StringType) => Some(StringType)
 
     // Cast to TimestampType when we compare DateType with TimestampType
+    // if conf.compareDateTimestampInTimestamp is true
     // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
-    case (TimestampType, DateType) => Some(TimestampType)
-    case (DateType, TimestampType) => Some(TimestampType)
+    case (TimestampType, DateType)
+      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
+    case (DateType, TimestampType)
+      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
 
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.

@@ -313,11 +313,11 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expression[BoolAnd]("every"),
-    expression[BoolAnd]("bool_and"),
-    expression[BoolOr]("any"),
-    expression[BoolOr]("some"),
-    expression[BoolOr]("bool_or"),
+    expression[EveryAgg]("every"),
+    expression[EveryAgg]("bool_and"),
+    expression[AnyAgg]("any"),
+    expression[AnyAgg]("some"),
+    expression[AnyAgg]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -420,9 +420,6 @@ object FunctionRegistry {
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeInterval]("make_interval"),
-    expression[JustifyDays]("justify_days"),
-    expression[JustifyHours]("justify_hours"),
-    expression[JustifyInterval]("justify_interval"),
     expression[DatePart]("date_part"),
 
     // collection functions

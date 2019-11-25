@@ -74,11 +74,6 @@ class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   }
 
   override protected def outputDataType: DataType = new VectorUDT
-
-  @Since("3.0.0")
-  override def toString: String = {
-    s"DCT: uid=$uid, inverse=$inverse"
-  }
 }
 
 @Since("1.6.0")

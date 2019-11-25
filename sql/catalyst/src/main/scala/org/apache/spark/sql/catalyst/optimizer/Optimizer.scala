@@ -1002,11 +1002,12 @@ object EliminateSorts extends Rule[LogicalPlan] {
 
   private def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
     def isOrderIrrelevantAggFunction(func: AggregateFunction): Boolean = func match {
-      case _: Min | _: Max | _: Count => true
-      // Arithmetic operations for floating-point values are order-sensitive
-      // (they are not associative).
-      case _: Sum | _: Average | _: CentralMomentAgg =>
-        !Seq(FloatType, DoubleType).exists(_.sameType(func.children.head.dataType))
+      case _: Sum => true
+      case _: Min => true
+      case _: Max => true
+      case _: Count => true
+      case _: Average => true
+      case _: CentralMomentAgg => true
       case _ => false
     }
 
