@@ -98,10 +98,9 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
 }
 
 /**
- * Unlike PhysicalOperation, this operation would firstly search the first non-Project
- * and non-Filter LogicalPlan without non-deterministic expression check and then do that
- * check when it back track. Once there's a failed check during backtracking, the backtracking
- * will return immediately.
+ * A variant of [[PhysicalOperation]]. It matches any number of project or filter
+ * operations even if they are non-deterministic, as long as they satisfy the
+ * requirement of CollapseProject and CombineFilters.
  */
 object ScanOperation extends OperationHelper with PredicateHelper {
   type ScanReturnType = Option[(Option[Seq[NamedExpression]],
