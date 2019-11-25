@@ -1796,4 +1796,22 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
+
+  test("Tasks with wildcard location can run immediately if preferred location not available") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    val taskSet = FakeTask.createTaskSet(3,
+      Seq(TaskLocation("host1"), TaskLocation("*")),
+      Seq(TaskLocation("host1"), TaskLocation("*")),
+      Seq(TaskLocation("host2"), TaskLocation("*"))
+    )
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).get.index === 0)
+    // Second task is not scheduled as it does not satisfy locality level.
+    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL).get.index === 2)
+    assert(manager.resourceOffer("exec3", "host3", NODE_LOCAL).isEmpty)
+    // Second task is scheduled immediately on a non-preferred host with NO_PREF locality level.
+    assert(manager.resourceOffer("exec3", "host3", NO_PREF).get.index === 1)
+  }
 }
