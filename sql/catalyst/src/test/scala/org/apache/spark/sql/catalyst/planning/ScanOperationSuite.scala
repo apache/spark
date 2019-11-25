@@ -31,7 +31,6 @@ case class TestRelation() extends LeafNode {
 
 class ScanOperationSuite extends SparkFunSuite {
   test("Collect projects and filters through non-deterministic expressions") {
-    OneRowRelation
     val colA = AttributeReference("a", StringType)()
     val colB = AttributeReference("b", StringType)()
     val aliasR = Alias(Rand(1), "r")()
