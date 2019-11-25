@@ -180,7 +180,6 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
-      val filterExpressions = expressions.map(_.filter)
       var isFinalOrMerge = false
       val mergeExpressions = functions.zipWithIndex.collect {
         case (ae: DeclarativeAggregate, i) =>
@@ -195,11 +194,13 @@ abstract class AggregationIterator(
       val updateFunctions = functions.zipWithIndex.collect {
         case (ae: ImperativeAggregate, i) =>
           expressions(i).mode match {
-            case Partial | Complete if filterExpressions(i).isDefined =>
-              (buffer: InternalRow, row: InternalRow) =>
-                if (predicates(i).eval(row)) { ae.update(buffer, row) }
-            case Partial | Complete if filterExpressions(i).isEmpty =>
-              (buffer: InternalRow, row: InternalRow) => ae.update(buffer, row)
+            case Partial | Complete =>
+              if (predicates.get(i).isDefined) {
+                (buffer: InternalRow, row: InternalRow) =>
+                  if (predicates(i).eval(row)) { ae.update(buffer, row) }
+              } else {
+                (buffer: InternalRow, row: InternalRow) => ae.update(buffer, row)
+              }
             case PartialMerge | Final =>
               (buffer: InternalRow, row: InternalRow) => ae.merge(buffer, row)
           }
@@ -243,7 +244,7 @@ abstract class AggregationIterator(
           val dynamicMergeExpressions = new mutable.ArrayBuffer[Expression]
           for (i <- 0 until expressions.length) {
             if ((expressions(i).mode == Partial || expressions(i).mode == Complete)) {
-              if (filterExpressions(i).isDefined) {
+              if (predicates.get(i).isDefined) {
                 if (predicates(i).eval(row)) {
                   dynamicMergeExpressions ++= mergeExpressions(i)
                 } else {
