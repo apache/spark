@@ -54,7 +54,7 @@ private [spark] case class HDFSCacheTaskLocation(override val host: String) exte
  * preferred locations to indicate that the task can be assigned to any host if it cannot get any
  * desired location immediately.
  */
-private [spark] case class WildcardLocation() extends TaskLocation {
+private [spark] case object WildcardLocation extends TaskLocation {
   override val host: String = "*"
   override def toString: String = host
 }
@@ -81,7 +81,7 @@ private[spark] object TaskLocation {
     val hstr = str.stripPrefix(inMemoryLocationTag)
     if (hstr.equals(str)) {
       if (str == "*") {
-        new WildcardLocation()
+        WildcardLocation
       } else if (str.startsWith(executorLocationTag)) {
         val hostAndExecutorId = str.stripPrefix(executorLocationTag)
         val splits = hostAndExecutorId.split("_", 2)

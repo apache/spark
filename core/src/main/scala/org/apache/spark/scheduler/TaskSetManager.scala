@@ -218,7 +218,7 @@ private[spark] class TaskSetManager(
       speculatable: Boolean = false): Unit = {
     val pendingTaskSetToAddTo = if (speculatable) pendingSpeculatableTasks else pendingTasks
     for (loc <- tasks(index).preferredLocations) {
-      if (loc.isInstanceOf[WildcardLocation]) {
+      if (loc == WildcardLocation) {
         pendingTaskSetToAddTo.noPrefs += index
       } else {
         loc match {
