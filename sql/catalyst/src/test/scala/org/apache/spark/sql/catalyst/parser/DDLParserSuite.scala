@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, PersistedView, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1685,7 +1685,7 @@ class DDLParserSuite extends AnalysisTest {
       PersistedView)
     comparePlans(parsed1, expected1)
 
-    val v2 = "CREATE VIEW a.b.c AS SELECT * FROM tab1"
+    val v2 = "CREATE TEMPORARY VIEW a.b.c AS SELECT * FROM tab1"
     val parsed2 = parsePlan(v2)
 
     val expected2 = CreateViewStatement(
@@ -1697,7 +1697,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SELECT * FROM tab1"),
       false,
       false,
-      PersistedView)
+      LocalTempView)
     comparePlans(parsed2, expected2)
   }
 
@@ -1725,7 +1725,7 @@ class DDLParserSuite extends AnalysisTest {
 
     val v2 =
       """
-        |CREATE OR REPLACE VIEW a.b.c
+        |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a.b.c
         |(col1, col3 COMMENT 'hello')
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |COMMENT 'BLABLA'
@@ -1741,7 +1741,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SELECT * FROM tab1"),
       false,
       true,
-      PersistedView)
+      GlobalTempView)
     comparePlans(parsed2, expected2)
   }
 
