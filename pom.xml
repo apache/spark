@@ -2828,12 +2828,12 @@
       </plugin>
       <plugin>
         <groupId>org.antipathy</groupId>
-        <artifactId>mvn-scalafmt_2.12</artifactId>
-        <version>0.9_1.5.1</version>
+        <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
+        <version>1.0.2</version>
         <configuration>
           <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
           <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
-          <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config locataion -->
+          <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
         </configuration>
         <executions>
           <execution>
