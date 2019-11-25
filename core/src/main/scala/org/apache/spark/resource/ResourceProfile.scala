@@ -89,16 +89,25 @@ private[spark] object ResourceProfile extends Logging {
   val OVERHEAD_MEM = "memoryOverhead"
   val PYSPARK_MEM = "pyspark.memory"
 
-  val SPARK_RP_TASK_PREFIX = "spark.resourceProfile.task"
   val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
 
+  private def resourceProfileIntConfPrefix(rpId: Int): String = {
+    s"$SPARK_RP_EXEC_PREFIX.$rpId.${RESOURCE_DOT}"
+  }
+
   // Helper class for constructing the resource profile internal configs used to pass to
-  // executors
-  case class ResourceProfileInternalConf(componentName: String, id: Int, resourceName: String) {
-    def confPrefix: String = s"$componentName.$id.${RESOURCE_DOT}$resourceName."
-    def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
-    def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
-    def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
+  // executors. The configs look like:
+  // spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
+  case class ResourceProfileInternalConf(id: Int, resourceName: String) {
+    def resourceNameConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceName"
+    def resourceNameAndAmount: String = s"$resourceName${ResourceUtils.AMOUNT}"
+    def resourceNameAndDiscovery: String = s"$resourceName${ResourceUtils.DISCOVERY_SCRIPT}"
+    def resourceNameAndVendor: String = s"$resourceName${ResourceUtils.VENDOR}"
+
+    def amountConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceNameAndAmount"
+    def discoveryScriptConf: String =
+      s"${resourceProfileIntConfPrefix(id)}$resourceNameAndDiscovery"
+    def vendorConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceNameAndVendor"
   }
 
   private lazy val nextProfileId = new AtomicInteger(0)
@@ -165,19 +174,17 @@ private[spark] object ResourceProfile extends Logging {
    * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
    *
    * Keep this here as utility a function rather then in public ResourceProfile interface because
-   * end users shouldn't need this.
+   * end users doesn't need this.
    */
   def createResourceProfileInternalConfs(rp: ResourceProfile): Map[String, String] = {
-    val res = new mutable.HashMap[String, String]()
-    // executor resources
+    val ret = new mutable.HashMap[String, String]()
     rp.executorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val execIntConf = ResourceProfileInternalConf(SPARK_RP_EXEC_PREFIX, rp.id, name)
-
-      res(execIntConf.amountConf) = req.amount.toString
-      if (req.vendor.nonEmpty) res(execIntConf.vendorConf) = req.vendor
-      if (req.discoveryScript.nonEmpty) res(execIntConf.discoveryScriptConf) = req.discoveryScript
+      val execIntConf = ResourceProfileInternalConf(rp.id, name)
+      ret(execIntConf.amountConf) = req.amount.toString
+      if (req.vendor.nonEmpty) ret(execIntConf.vendorConf) = req.vendor
+      if (req.discoveryScript.nonEmpty) ret(execIntConf.discoveryScriptConf) = req.discoveryScript
     }
-    res.toMap
+    ret.toMap
   }
 
   /**
@@ -192,21 +199,22 @@ private[spark] object ResourceProfile extends Logging {
   }
 
   /**
-   * Get the executor ResourceRequests from the internal resource confs
+   * Get the executor ResourceRequests from the internal ResourceProfile confs.
    * The configs looks like:
    * spark.resourceProfile.executor.[rpId].resource.gpu.[amount, vendor, discoveryScript]
    */
   def getResourceRequestsFromInternalConfs(
       sparkConf: SparkConf,
       rpId: Int): Seq[ResourceRequest] = {
-    val execRpIdConfPrefix = s"${SPARK_RP_EXEC_PREFIX}.${rpId}.${RESOURCE_DOT}"
+    val execRpIdConfPrefix = resourceProfileIntConfPrefix(rpId)
     val execConfs = sparkConf.getAllWithPrefix(execRpIdConfPrefix).toMap
     val execResourceNames = listResourceNames(execConfs)
-    val resourceReqs = execResourceNames.map { resource =>
-      val amount = execConfs.get(s"${resource}.amount").get.toInt
-      val vendor = execConfs.get(s"${resource}.vendor")
-      val discoveryScript = execConfs.get(s"${resource}.discoveryScript")
-      ResourceRequest(ResourceID(SPARK_EXECUTOR_PREFIX, resource), amount, discoveryScript, vendor)
+    val resourceReqs = execResourceNames.map { rName =>
+      val intConf = ResourceProfileInternalConf(rpId, rName)
+      val amount = execConfs.get(intConf.resourceNameAndAmount).get.toInt
+      val vendor = execConfs.get(intConf.resourceNameAndVendor)
+      val discoveryScript = execConfs.get(intConf.resourceNameAndDiscovery)
+      ResourceRequest(ResourceID(SPARK_EXECUTOR_PREFIX, rName), amount, discoveryScript, vendor)
     }
     resourceReqs
   }

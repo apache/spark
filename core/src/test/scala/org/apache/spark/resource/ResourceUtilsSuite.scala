@@ -127,9 +127,6 @@ class ResourceUtilsSuite extends SparkFunSuite
       val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
       val resourcesFile = createTempJsonFile(
         dir, "resources", Extraction.decompose(Seq(fpgaAllocation)))
-      val fpgaInternalConf =
-        ResourceProfile.ResourceProfileInternalConf(ResourceProfile.SPARK_RP_TASK_PREFIX, 1, "fpga")
-      conf.set(fpgaInternalConf.amountConf, "3")
       val resourcesFromFileOnly = getOrDiscoverAllResourcesForResourceProfile(1,
         conf,
         Some(resourcesFile),
@@ -137,8 +134,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       val expectedFpgaInfo = new ResourceInformation(FPGA, fpgaAddrs.toArray)
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
-      val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(
-        ResourceProfile.SPARK_RP_EXEC_PREFIX, 1, "gpu")
+      val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(1, "gpu")
       val gpuDiscovery = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript", """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(gpuInternalConf.amountConf, "2")

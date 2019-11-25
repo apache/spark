@@ -582,7 +582,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     res.map(_.resourceProfileId).getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
-
   /**
    * Request an additional number of executors from the cluster manager.
    * @return whether the request is acknowledged.
