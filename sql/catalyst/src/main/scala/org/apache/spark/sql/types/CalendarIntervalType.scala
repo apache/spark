@@ -21,11 +21,11 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * The data type representing calendar time intervals. The calendar time interval is stored
- * internally in three components:
- *   the number of months
- *   the number of days
- *   the number of microseconds.
+ * The data type representing calendar intervals. The calendar interval is stored internally in
+ * three components:
+ *   an integer value representing the number of `months` in this interval,
+ *   an integer value representing the number of `days` in this interval,
+ *   a long value representing the number of `microseconds` in this interval.
  *
  * Please use the singleton `DataTypes.CalendarIntervalType` to refer the type.
  *
