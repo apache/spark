@@ -187,7 +187,7 @@ abstract class AggregationIterator(
             case Partial | Complete =>
               if (predicateOptions(i).isDefined) {
                 (buffer: InternalRow, row: InternalRow) =>
-                  if (predicateOptions(i).eval(row)) { ae.update(buffer, row) }
+                  if (predicateOptions(i).get.eval(row)) { ae.update(buffer, row) }
               } else {
                 (buffer: InternalRow, row: InternalRow) => ae.update(buffer, row)
               }
@@ -235,7 +235,7 @@ abstract class AggregationIterator(
           for (i <- 0 until expressions.length) {
             if ((expressions(i).mode == Partial || expressions(i).mode == Complete)) {
               if (predicateOptions(i).isDefined) {
-                if (predicatesOption(i).eval(row)) {
+                if (predicateOption(i).get.eval(row)) {
                   dynamicMergeExpressions ++= mergeExpressions(i)
                 } else {
                   dynamicMergeExpressions ++= Seq(NoOp)
