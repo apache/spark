@@ -281,13 +281,14 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val data = Seq(
       Row(Row(null, "a2")),
-      Row(Row("b1", "b2")))
+      Row(Row("b1", "b2")),
+      Row(null))
 
     val df = spark.createDataFrame(
       spark.sparkContext.parallelize(data), schema)
 
     checkAnswer(df.select("c1.c1-1"),
-      Row(null) :: Row("b1") :: Nil)
+      Row(null) :: Row("b1") :: Row(null) :: Nil)
 
     // Nested columns are ignored for fill().
     checkAnswer(df.na.fill("a1", Seq("c1.c1-1")), data)

@@ -478,10 +478,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   private def toAttributes(cols: Seq[String]): Seq[Attribute] = {
-    cols.flatMap { colName =>
-      df.col(colName).expr.collect {
-        case a: Attribute => a
-      }
+    cols.map(name => df.col(name).expr).collect {
+      case a: Attribute => a
     }
   }
 
