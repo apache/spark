@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  *   the number of days
  *   the number of microseconds.
  *
- * Please use the singleton [[DataTypes.CalendarIntervalType]] to refer the type.
+ * Please use the singleton `DataTypes.CalendarIntervalType` to refer the type.
  *
  * @note Calendar intervals support comparison and ordering since 3.0.0.
  *
