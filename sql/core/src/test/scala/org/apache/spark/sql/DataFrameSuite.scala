@@ -30,6 +30,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
@@ -2221,4 +2222,62 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     val idTuples = sampled.collect().map(row => row.getLong(0) -> row.getLong(1))
     assert(idTuples.length == idTuples.toSet.size)
   }
+
+  test("groupBy.as") {
+    val df1 = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
+      .repartition($"a", $"b").sortWithinPartitions("a", "b")
+    val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a", "b", "c")
+      .repartition($"a", $"b").sortWithinPartitions("a", "b")
+
+    implicit val valueEncoder = RowEncoder(df1.schema)
+
+    val df3 = df1.groupBy("a", "b").as[GroupByKey, Row]
+      .cogroup(df2.groupBy("a", "b").as[GroupByKey, Row]) { case (_, data1, data2) =>
+        data1.zip(data2).map { p =>
+          p._1.getInt(2) + p._2.getInt(2)
+        }
+      }.toDF
+
+    checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
+
+    // Assert that no extra shuffle introduced by cogroup.
+    val exchanges = df3.queryExecution.executedPlan.collect {
+      case h: ShuffleExchangeExec => h
+    }
+    assert(exchanges.size == 2)
+  }
+
+  test("groupBy.as: custom grouping expressions") {
+    val df1 = Seq((1, 2, 3), (2, 3, 4)).toDF("a1", "b", "c")
+      .repartition($"a1", $"b").sortWithinPartitions("a1", "b")
+    val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a1", "b", "c")
+      .repartition($"a1", $"b").sortWithinPartitions("a1", "b")
+
+    implicit val valueEncoder = RowEncoder(df1.schema)
+
+    val groupedDataset1 = df1.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
+    val groupedDataset2 = df2.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
+
+    val df3 = groupedDataset1
+      .cogroup(groupedDataset2) { case (_, data1, data2) =>
+        data1.zip(data2).map { p =>
+          p._1.getInt(2) + p._2.getInt(2)
+        }
+      }.toDF
+
+    checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
+  }
+
+  test("groupBy.as: throw AnalysisException for unresolved grouping expr") {
+    val df = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
+
+    implicit val valueEncoder = RowEncoder(df.schema)
+
+    val err = intercept[AnalysisException] {
+      df.groupBy($"d", $"b").as[GroupByKey, Row]
+    }
+    assert(err.getMessage.contains("cannot resolve '`d`'"))
+  }
 }
+
+case class GroupByKey(a: Int, b: Int)

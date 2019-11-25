@@ -39,15 +39,20 @@ private[ui] class EnvironmentPage(
       "Scala Version" -> appEnv.runtime.scalaVersion)
 
     val runtimeInformationTable = UIUtils.listingTable(
-      propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true)
+      propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true,
+      headerClasses = headerClasses)
     val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.sparkProperties.sorted), fixedWidth = true)
+      Utils.redact(conf, appEnv.sparkProperties.sorted), fixedWidth = true,
+      headerClasses = headerClasses)
     val hadoopPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.hadoopProperties.sorted), fixedWidth = true)
+      Utils.redact(conf, appEnv.hadoopProperties.sorted), fixedWidth = true,
+      headerClasses = headerClasses)
     val systemPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.systemProperties.sorted), fixedWidth = true)
+      Utils.redact(conf, appEnv.systemProperties.sorted), fixedWidth = true,
+      headerClasses = headerClasses)
     val classpathEntriesTable = UIUtils.listingTable(
-      classPathHeaders, classPathRow, appEnv.classpathEntries.sorted, fixedWidth = true)
+      classPathHeader, classPathRow, appEnv.classpathEntries.sorted, fixedWidth = true,
+      headerClasses = headerClasses)
     val content =
       <span>
         <span class="collapse-aggregated-runtimeInformation collapse-table"
@@ -111,7 +116,9 @@ private[ui] class EnvironmentPage(
   }
 
   private def propertyHeader = Seq("Name", "Value")
-  private def classPathHeaders = Seq("Resource", "Source")
+  private def classPathHeader = Seq("Resource", "Source")
+  private def headerClasses = Seq("sorttable_alpha", "sorttable_alpha")
+
   private def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>

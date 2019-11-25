@@ -22,6 +22,7 @@ import java.time.{Duration, Instant, LocalDate}
 import java.util.concurrent.TimeUnit
 
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.types._

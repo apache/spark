@@ -22,7 +22,7 @@ import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.internal.Logging
@@ -89,9 +89,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
         try {
           val fs = path.getFileSystem(jobContext.getConfiguration)
           // this is to make sure the file can be seen from driver as well
-          if (fs.exists(path)) {
-            fs.delete(path, false)
-          }
+          deleteIfExists(fs, path)
         } catch {
           case e: IOException =>
             logWarning(s"Fail to remove temporary file $path, continue removing next.", e)
@@ -139,7 +137,14 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     if (addedFiles.nonEmpty) {
       val fs = new Path(addedFiles.head).getFileSystem(taskContext.getConfiguration)
       val statuses: Seq[SinkFileStatus] =
-        addedFiles.map(f => SinkFileStatus(fs.getFileStatus(new Path(f))))
+        addedFiles.flatMap { f =>
+          val path = new Path(f)
+          if (fs.exists(path)) {
+            Some(SinkFileStatus(fs.getFileStatus(path)))
+          } else {
+            None
+          }
+        }
       new TaskCommitMessage(statuses)
     } else {
       new TaskCommitMessage(Seq.empty[SinkFileStatus])
@@ -150,7 +155,13 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     // best effort cleanup of incomplete files
     if (addedFiles.nonEmpty) {
       val fs = new Path(addedFiles.head).getFileSystem(taskContext.getConfiguration)
-      addedFiles.foreach { file => fs.delete(new Path(file), false) }
+      addedFiles.foreach { file => deleteIfExists(fs, new Path(file)) }
+    }
+  }
+
+  private def deleteIfExists(fs: FileSystem, path: Path, recursive: Boolean = false): Unit = {
+    if (fs.exists(path)) {
+      fs.delete(path, recursive)
     }
   }
 }

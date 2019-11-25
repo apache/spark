@@ -16,14 +16,25 @@ jobs:
       matrix:
         java: [ '1.8', '11' ]
         hadoop: [ 'hadoop-2.7', 'hadoop-3.2' ]
+        hive: [ 'hive-1.2', 'hive-2.3' ]
         exclude:
         - java: '11'
           hadoop: 'hadoop-2.7'
-    name: Build Spark with JDK ${{ matrix.java }} and ${{ matrix.hadoop }}
+        - java: '11'
+          hive: 'hive-1.2'
+        - hadoop: 'hadoop-3.2'
+          hive: 'hive-1.2'
+    name: Build Spark - JDK${{ matrix.java }}/${{ matrix.hadoop }}/${{ matrix.hive }}
 
     steps:
     - uses: actions/checkout@master
     # We split caches because GitHub Action Cache has a 400MB-size limit.
+    - uses: actions/cache@v1
+      with:
+        path: build
+        key: build-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          build-
     - uses: actions/cache@v1
       with:
         path: ~/.m2/repository/com
@@ -36,6 +47,18 @@ jobs:
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-org-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-maven-org-
+    - uses: actions/cache@v1
+      with:
+        path: ~/.m2/repository/net
+        key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-net-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ matrix.java }}-${{ matrix.hadoop }}-maven-net-
+    - uses: actions/cache@v1
+      with:
+        path: ~/.m2/repository/io
+        key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-io-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ matrix.java }}-${{ matrix.hadoop }}-maven-io-
     - name: Set up JDK ${{ matrix.java }}
       uses: actions/setup-java@v1
       with:
@@ -44,7 +67,7 @@ jobs:
       run: |
         export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -P${{ matrix.hadoop }} -Phadoop-cloud -Djava.version=${{ matrix.java }} install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -P${{ matrix.hive }} -Phive-thriftserver -P${{ matrix.hadoop }} -Phadoop-cloud -Djava.version=${{ matrix.java }} install
         rm -rf ~/.m2/repository/org/apache/spark
 
 

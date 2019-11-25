@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
+import org.scalatest.Assertions._
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
