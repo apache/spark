@@ -28,7 +28,6 @@ import scala.xml.{Node, Unparsed}
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, SessionInfo}
 import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
@@ -36,23 +35,24 @@ import org.apache.spark.util.Utils
 
 /** Page for Spark Web UI that shows statistics of the thrift server */
 private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage("") with Logging {
-
-  private val listener = parent.listener
-  private val startTime = Calendar.getInstance().getTime()
+  private val store = parent.store
+  private val startTime = parent.startTime
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val content =
-      listener.synchronized { // make sure all parts in this page are consistent
-        generateBasicStats() ++
-        <br/> ++
+    val content = store.synchronized { // make sure all parts in this page are consistent
+      generateBasicStats() ++
+          <br/> ++
         <h4>
-        {listener.getOnlineSessionNum} session(s) are online,
-        running {listener.getTotalRunning} SQL statement(s)
+          {store.getOnlineSessionNum}
+          session(s) are online,
+          running
+          {store.getTotalRunning}
+          SQL statement(s)
         </h4> ++
         generateSessionStatsTable(request) ++
         generateSQLStatsTable(request)
-      }
+    }
     UIUtils.headerSparkPage(request, "JDBC/ODBC Server", content, parent)
   }
 
@@ -72,7 +72,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   /** Generate stats of batch statements of the thrift server program */
   private def generateSQLStatsTable(request: HttpServletRequest): Seq[Node] = {
 
-    val numStatement = listener.getExecutionList.size
+    val numStatement = store.getExecutionList.size
 
     val table = if (numStatement > 0) {
 
@@ -103,7 +103,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         Some(new SqlStatsPagedTable(
           request,
           parent,
-          listener.getExecutionList,
+          store.getExecutionList,
           "sqlserver",
           UIUtils.prependBaseUri(request, parent.basePath),
           parameterOtherTable,
@@ -141,7 +141,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
   /** Generate stats of batch sessions of the thrift server program */
   private def generateSessionStatsTable(request: HttpServletRequest): Seq[Node] = {
-    val numSessions = listener.getSessionList.size
+    val numSessions = store.getSessionList.size
     val table = if (numSessions > 0) {
 
       val sessionTableTag = "sessionstat"
@@ -171,7 +171,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         Some(new SessionStatsPagedTable(
           request,
           parent,
-          listener.getSessionList,
+          store.getSessionList,
           "sqlserver",
           UIUtils.prependBaseUri(request, parent.basePath),
           parameterOtherTable,

@@ -63,7 +63,7 @@ private[hive] class SparkGetColumnsOperation(
 
   override def close(): Unit = {
     super.close()
-    HiveThriftServer2.listener.onOperationClosed(statementId)
+    HiveThriftServer2.eventManager.onOperationClosed(statementId)
   }
 
   override def runInternal(): Unit = {
@@ -78,7 +78,7 @@ private[hive] class SparkGetColumnsOperation(
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    HiveThriftServer2.listener.onStatementStart(
+    HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -135,17 +135,17 @@ private[hive] class SparkGetColumnsOperation(
         setState(OperationState.ERROR)
         e match {
           case hiveException: HiveSQLException =>
-            HiveThriftServer2.listener.onStatementError(
+            HiveThriftServer2.eventManager.onStatementError(
               statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
             throw hiveException
           case _ =>
             val root = ExceptionUtils.getRootCause(e)
-            HiveThriftServer2.listener.onStatementError(
+            HiveThriftServer2.eventManager.onStatementError(
               statementId, root.getMessage, SparkUtils.exceptionString(root))
             throw new HiveSQLException("Error getting columns: " + root.toString, root)
         }
     }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    HiveThriftServer2.eventManager.onStatementFinish(statementId)
   }
 
   private def addToRowSet(

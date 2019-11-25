@@ -352,15 +352,34 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val ui = SparkUI.create(None, new HistoryAppStatusStore(conf, kvstore), conf, secManager,
       app.info.name, HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
       attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
-    loadPlugins().foreach(_.setupUI(ui))
-
+    setupPluginUI(ui)
     val loadedUI = LoadedAppUI(ui)
-
     synchronized {
       activeUIs((appId, attemptId)) = loadedUI
     }
 
     Some(loadedUI)
+  }
+
+  private def setupPluginUI(ui: SparkUI): Unit = {
+    val plugins = loadPlugins().toSeq
+
+    var sqlTab: Option[AppHistoryServerPlugin] = None
+    var jdbcTab: Option[AppHistoryServerPlugin] = None
+    val otherTabs: Seq[AppHistoryServerPlugin] = Seq()
+
+    plugins.foreach{ plugin =>
+      if (plugin.toString.contains("SQLHistoryServerPlugin")) {
+        sqlTab = Some(plugin)
+      } else if (plugin.toString.contains("HiveThriftServer2HistoryServerPlugin")) {
+        jdbcTab = Some(plugin)
+      } else {
+        otherTabs :+ plugin
+      }
+    }
+    sqlTab.foreach(_.setupUI(ui))
+    jdbcTab.foreach(_.setupUI(ui))
+    otherTabs.foreach(_.setupUI(ui))
   }
 
   override def getEmptyListingHtml(): Seq[Node] = {
