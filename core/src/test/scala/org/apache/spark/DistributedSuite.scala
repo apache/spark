@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import org.scalatest.Assertions._
 import org.scalatest.Matchers
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}

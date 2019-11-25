@@ -22,6 +22,8 @@ import java.nio.file.{Files, Paths}
 import scala.collection.JavaConverters._
 import scala.util.Try
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.TestUtils
 import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction, PythonUtils}
 import org.apache.spark.broadcast.Broadcast
