@@ -1778,12 +1778,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
   }
 
-  private def testSingleTaskSpeculation(singleTaskEnabled: Boolean): Unit = {
+  private def testSingleTaskSpeculation(speculationThresholdProvided: Boolean): Unit = {
     sc = new SparkContext("local", "test")
     sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_SINGLETASKSTAGE_ENABLED, singleTaskEnabled)
     // Set the threshold to be 60 minutes
-    sc.conf.set(config.SPECULATION_SINGLETASKSTAGE_DURATION_THRESHOLD.key, "60min")
+    if (speculationThresholdProvided) {
+      sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, "60min")
+    }
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     // Create a task set with only one task
     val taskSet = FakeTask.createTaskSet(1)
@@ -1801,7 +1802,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Now the task should have been running for 60 minutes and 1 second
     clock.advance(1)
-    if (singleTaskEnabled) {
+    if (speculationThresholdProvided) {
       assert(manager.checkSpeculatableTasks(0))
       assert(sched.speculativeTasks.size == 1)
     } else {

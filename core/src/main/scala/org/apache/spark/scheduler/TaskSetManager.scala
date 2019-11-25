@@ -82,9 +82,7 @@ private[spark] class TaskSetManager(
   val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
   // Whether start speculation if there is only one task
-  val speculationSingleTaskStageEnabled = conf.get(SPECULATION_SINGLETASKSTAGE_ENABLED)
-  val speculationSingleTaskStageTimeThres =
-    conf.get(SPECULATION_SINGLETASKSTAGE_DURATION_THRESHOLD)
+  val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -961,6 +959,27 @@ private[spark] class TaskSetManager(
     recomputeLocality()
   }
 
+  private def checkAndSubmitSpeculatableTask(
+      tid: Long,
+      currentTimeMillis: Long,
+      threshold: Double): Boolean = {
+    val info = taskInfos(tid)
+    val index = info.index
+    if (!successful(index) && copiesRunning(index) == 1 &&
+        info.timeRunning(currentTimeMillis) > threshold && !speculatableTasks.contains(index)) {
+      addPendingTask(index, speculatable = true)
+      logInfo(
+        ("Marking task %d in stage %s (on %s) as speculatable because it ran more" +
+          " than %.0f ms(%d speculatable tasks in this taskset now)")
+          .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
+      speculatableTasks += index
+      sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
+      true
+    } else {
+      false
+    }
+  }
+
   /**
    * Check for tasks to be speculated and return true if there are any. This is called periodically
    * by the TaskScheduler.
@@ -969,48 +988,33 @@ private[spark] class TaskSetManager(
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
     // zombie or is from a barrier stage.
-    if (isZombie || isBarrier || (numTasks == 1 && !speculationSingleTaskStageEnabled)) {
+    if (isZombie || isBarrier || (numTasks == 1 && !speculationTaskDurationThresOpt.isDefined)) {
       return false
     }
     var foundTasks = false
-    val minFinished = if (numTasks == 1) {
-      logDebug("Checking if need to trigger speculative task for single task stage")
-      // Set the minFinish to be 0 so that the single task could be speculated
-      0
-    } else {
-      logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
-      minFinishedForSpeculation
-    }
+    logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
 
     // It's possible that a task is marked as completed by the scheduler, then the size of
     // `successfulTaskDurations` may not equal to `tasksSuccessful`. Here we should only count the
     // tasks that are submitted by this `TaskSetManager` and are completed successfully.
     val numSuccessfulTasks = successfulTaskDurations.size()
-    if (numSuccessfulTasks >= minFinished) {
+    if (numSuccessfulTasks >= minFinishedForSpeculation) {
       val time = clock.getTimeMillis()
-      val threshold = if (numTasks == 1) {
-        speculationSingleTaskStageTimeThres
-      } else {
-        // TODO: Threshold should also look at standard deviation of task durations and have a lower
-        // bound based on that.
-        val medianDuration = successfulTaskDurations.median
-        max(speculationMultiplier * medianDuration, minTimeToSpeculation)
-      }
+      val medianDuration = successfulTaskDurations.median
+      val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
+      // TODO: Threshold should also look at standard deviation of task durations and have a lower
+      // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
       for (tid <- runningTasksSet) {
-        val info = taskInfos(tid)
-        val index = info.index
-        if (!successful(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
-            !speculatableTasks.contains(index)) {
-          addPendingTask(index, speculatable = true)
-          logInfo(
-            ("Marking task %d in stage %s (on %s) as speculatable because it ran more" +
-            " than %.0f ms(%d speculatable tasks in this taskset now)")
-            .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
-          speculatableTasks += index
-          sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
-          foundTasks = true
-        }
+        foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
+      }
+    }
+    if (speculationTaskDurationThresOpt.isDefined) {
+      val time = clock.getTimeMillis()
+      val threshold = speculationTaskDurationThresOpt.get
+      logDebug("Check tasks taking long time than provided speculation threshold: " + threshold)
+      for (tid <- runningTasksSet) {
+        foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
       }
     }
     foundTasks
