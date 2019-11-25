@@ -143,7 +143,8 @@ object ScanOperation extends OperationHelper with PredicateHelper {
         case Filter(condition, child) =>
           collectProjectsAndFilters(child) match {
             case Some((fields, filters, other, aliases)) =>
-              if (condition.deterministic && !hasCommonNonDeterministic(Seq(condition), aliases)) {
+              if (filters.forall(_.deterministic) &&
+                !hasCommonNonDeterministic(Seq(condition), aliases)) {
                 val substitutedCondition = substitute(aliases)(condition)
                 Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
                   other, aliases))
