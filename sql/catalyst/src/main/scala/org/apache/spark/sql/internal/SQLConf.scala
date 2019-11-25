@@ -353,13 +353,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
-    buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
-      .doc("The target post-shuffle input size in bytes of a task. This configuration only has " +
-        s"an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled.")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(64 * 1024 * 1024)
-
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED =
     buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch.enabled")
       .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
@@ -381,11 +374,20 @@ object SQLConf {
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.shuffle.minNumPostShufflePartitions")
       .doc("The advisory minimum number of post-shuffle partitions used when " +
-        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled.")
+        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+        s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
       .intConf
       .checkValue(_ > 0, "The minimum shuffle partition number " +
         "must be a positive integer.")
       .createWithDefault(1)
+
+  val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
+    buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
+      .doc("The target post-shuffle input size in bytes of a task. This configuration only has " +
+        s"an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+        s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(64 * 1024 * 1024)
 
   val SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.shuffle.maxNumPostShufflePartitions")
