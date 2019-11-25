@@ -110,7 +110,7 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-shims</artifactId>
-      <scope>${hive.shim.scope}</scope>
+      <scope>${hive.shims.scope}</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
