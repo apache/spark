@@ -1778,7 +1778,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
   }
 
-  private def testSingleTaskSpeculation(speculationThresholdProvided: Boolean): Unit = {
+  private def testSpeculationDurationThreshold(
+      speculationThresholdProvided: Boolean,
+      numTasks: Int): Unit = {
     sc = new SparkContext("local", "test")
     sc.conf.set(config.SPECULATION_ENABLED, true)
     // Set the threshold to be 60 minutes
@@ -1787,13 +1789,15 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     // Create a task set with only one task
-    val taskSet = FakeTask.createTaskSet(1)
+    val taskSet = FakeTask.createTaskSet(numTasks)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     manager.isZombie = false
 
     // Offer resources for the task to start
-    manager.resourceOffer("exec1", "host1", NO_PREF)
+    for (i <- 1 to numTasks) {
+      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF)
+    }
 
     // if the time threshold has not been exceeded, no speculative run should be triggered
     clock.advance(1000*60*60)
@@ -1804,7 +1808,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     clock.advance(1)
     if (speculationThresholdProvided) {
       assert(manager.checkSpeculatableTasks(0))
-      assert(sched.speculativeTasks.size == 1)
+      assert(sched.speculativeTasks.size == numTasks)
+      // Should not submit duplicated tasks
+      assert(!manager.checkSpeculatableTasks(0))
+      assert(sched.speculativeTasks.size == numTasks)
     } else {
       // If the feature flag is turned off, shouldn't do speculative run if there is only one task
       assert(!manager.checkSpeculatableTasks(0))
@@ -1812,12 +1819,16 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
   }
 
-  test("SPARK-29976 when single task stage speculation enabled, should speculative run the task") {
-    testSingleTaskSpeculation(true)
-  }
+  Seq(1, 2).foreach { numTasks =>
+    test("SPARK-29976 when a speculation time threshold is provided, should speculative " +
+      s"run the task even if there are not enough successful runs, total tasks: $numTasks") {
+      testSpeculationDurationThreshold(true, numTasks)
+    }
 
-  test("SPARK-29976: when single task stage speculation disabled, don't speculative run") {
-    testSingleTaskSpeculation(false)
+    test("SPARK-29976: when the speculation time threshold is not provided," +
+      s"don't speculative run if there are not enough successful runs, total tasks: $numTasks") {
+      testSpeculationDurationThreshold(false, numTasks)
+    }
   }
 
   test("TaskOutputFileAlreadyExistException lead to task set abortion") {

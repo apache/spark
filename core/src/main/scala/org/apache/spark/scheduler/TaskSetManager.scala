@@ -959,6 +959,10 @@ private[spark] class TaskSetManager(
     recomputeLocality()
   }
 
+  /**
+   * Check if the task associated with the given tid has past the time threshold and should be
+   * speculative run.
+   */
   private def checkAndSubmitSpeculatableTask(
       tid: Long,
       currentTimeMillis: Long,
