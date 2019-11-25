@@ -81,7 +81,7 @@ private[spark] class TaskSetManager(
   val speculationQuantile = conf.get(SPECULATION_QUANTILE)
   val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
-  // Whether start speculation if there is only one task
+  // User provided threshold for speculation regardless of whether the quantile has been reached
   val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
@@ -986,8 +986,9 @@ private[spark] class TaskSetManager(
    *
    */
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
-    // Can't speculate if we only have one task, and no need to speculate if the task set is a
-    // zombie or is from a barrier stage.
+    // No need to speculate if the task set is zombie or is from a barrier stage. If there is only
+    // one task we don't speculate since we don't have metrics to decide whether it's taking too
+    // long or not, unless a task duration threshold is explicitly provided.
     if (isZombie || isBarrier || (numTasks == 1 && !speculationTaskDurationThresOpt.isDefined)) {
       return false
     }
@@ -1012,7 +1013,7 @@ private[spark] class TaskSetManager(
     if (speculationTaskDurationThresOpt.isDefined) {
       val time = clock.getTimeMillis()
       val threshold = speculationTaskDurationThresOpt.get
-      logDebug("Check tasks taking long time than provided speculation threshold: " + threshold)
+      logDebug("Checking tasks taking long time than provided speculation threshold: " + threshold)
       for (tid <- runningTasksSet) {
         foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
       }
