@@ -175,7 +175,7 @@ case class InSubqueryExec(
 /**
  * The physical node of non-correlated EXISTS subquery.
  */
-case class ExistsExec(
+case class ExistsSubqueryExec(
     plan: BaseSubqueryExec,
     exprId: ExprId)
   extends ExecSubqueryExpression {
@@ -186,10 +186,10 @@ case class ExistsExec(
   override def children: Seq[Expression] = Nil
   override def nullable: Boolean = false
   override def toString: String = s"EXISTS (${plan.simpleString(SQLConf.get.maxToStringFields)})"
-  override def withNewPlan(plan: BaseSubqueryExec): ExistsExec = copy(plan = plan)
+  override def withNewPlan(plan: BaseSubqueryExec): ExistsSubqueryExec = copy(plan = plan)
 
   override def semanticEquals(other: Expression): Boolean = other match {
-    case in: ExistsExec => plan.sameResult(in.plan)
+    case in: ExistsSubqueryExec => plan.sameResult(in.plan)
     case _ => false
   }
 
@@ -235,7 +235,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
       case expressions.Exists(sub, children, exprId) =>
         val executedPlan = new QueryExecution(sparkSession, Project(Nil, sub)).executedPlan
-        ExistsExec(SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
+        ExistsSubqueryExec(SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
     }
   }
 }
