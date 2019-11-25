@@ -454,11 +454,6 @@ class ResolveSessionCatalog(
     case CreateViewStatement(
       tableName, userSpecifiedColumns, comment, properties,
       originalText, child, allowExisting, replace, viewType) =>
-      val vtype = viewType match {
-        case 1 => PersistedView
-        case 2 => GlobalTempView
-        case 3 => LocalTempView
-      }
 
       val v1TableName = parseV1Table(tableName, "CREATE VIEW")
       CreateViewCommand(
@@ -470,7 +465,7 @@ class ResolveSessionCatalog(
         child,
         allowExisting,
         replace,
-        vtype)
+        viewType)
 
     case ShowTablePropertiesStatement(SessionCatalog(_, tableName), propertyKey) =>
       ShowTablePropertiesCommand(

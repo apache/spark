@@ -3258,15 +3258,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }
     }
 
-    val persistedView: Int = 1
-    val globalTempView: Int = 2
-    val localTempView: Int = 3
     val viewType = if (ctx.TEMPORARY == null) {
-      persistedView
+      PersistedView
     } else if (ctx.GLOBAL != null) {
-      globalTempView
+      GlobalTempView
     } else {
-      localTempView
+      LocalTempView
     }
     CreateViewStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),

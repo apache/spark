@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, PersistedView, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1682,7 +1682,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SELECT * FROM tab1"),
       false,
       false,
-      1)
+      PersistedView)
     comparePlans(parsed1, expected1)
 
     val v2 = "CREATE VIEW a.b.c AS SELECT * FROM tab1"
@@ -1697,7 +1697,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SELECT * FROM tab1"),
       false,
       false,
-      1)
+      PersistedView)
     comparePlans(parsed2, expected2)
   }
 
@@ -1720,7 +1720,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SELECT * FROM tab1"),
       false,
       true,
-      1)
+      PersistedView)
     comparePlans(parsed1, expected1)
 
     val v2 =
@@ -1741,7 +1741,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SELECT * FROM tab1"),
       false,
       true,
-      1)
+      PersistedView)
     comparePlans(parsed2, expected2)
   }
 
