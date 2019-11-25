@@ -107,4 +107,7 @@ private[spark] object StageInfo {
       taskLocalityPreferences,
       shuffleDepId)
   }
+
+  val INVALID_STAGE_ID = -1
+  val INVALID_ATTEMPT_ID = -1
 }

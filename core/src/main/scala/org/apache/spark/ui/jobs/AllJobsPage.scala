@@ -629,9 +629,7 @@ private[ui] class JobPagedTable(
       </td>
       <td>{jobTableRow.formattedDuration}</td>
       <td class="stage-progress-cell">
-        {job.numCompletedStages}/{
-          if (job.numTasks > 0) job.stageIds.size - job.numSkippedStages else 0
-        }
+        {job.numCompletedStages}/{job.stageIds.size - job.numSkippedStages}
         {if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)"}
         {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
       </td>
