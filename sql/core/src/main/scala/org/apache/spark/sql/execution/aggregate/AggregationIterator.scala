@@ -157,6 +157,21 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
+      val mergeExpressions = functions.zip(expressions).flatMap {
+        case (ae: DeclarativeAggregate, expression) =>
+          expression.mode match {
+            case Partial | Complete =>
+              expression match {
+                case AggregateExpression(_, _, _, Some(filter), _) =>
+                  ae.updateExpressions.zip(ae.aggBufferAttributes).map{
+                    case (newVal, attr) => If(filter, newVal, attr)
+                  }
+                case _ => ae.updateExpressions
+              }
+            case PartialMerge | Final => ae.mergeExpressions
+          }
+        case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+      }
       // Initialize predicates for aggregate functions if necessary
       val predicateOptions = expressions.map {
         case AggregateExpression(_, mode, _, Some(filter), _) =>
@@ -169,14 +184,6 @@ abstract class AggregationIterator(
             case _ => None
           }
         case _ => None
-      }
-      val mergeExpressions = functions.zipWithIndex.collect {
-        case (ae: DeclarativeAggregate, i) =>
-          expressions(i).mode match {
-            case Partial | Complete => ae.updateExpressions
-            case PartialMerge | Final => ae.mergeExpressions
-          }
-        case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
       }
       val updateFunctions = functions.zipWithIndex.collect {
         case (ae: ImperativeAggregate, i) =>
@@ -194,63 +201,17 @@ abstract class AggregationIterator(
       }.toArray
       // This projection is used to merge buffer values for all expression-based aggregates.
       val aggregationBufferSchema = functions.flatMap(_.aggBufferAttributes)
-      val updateProjection = newMutableProjection(
-        mergeExpressions.flatMap(_.seq), aggregationBufferSchema ++ inputAttributes)
+      val updateProjection =
+        newMutableProjection(mergeExpressions, aggregationBufferSchema ++ inputAttributes)
 
-      val processImperative = (currentBuffer: InternalRow, row: InternalRow) => {
+      (currentBuffer: InternalRow, row: InternalRow) => {
+        // Process all expression-based aggregate functions.
+        updateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
         // Process all imperative aggregate functions.
         var i = 0
         while (i < updateFunctions.length) {
           updateFunctions(i)(currentBuffer, row)
           i += 1
-        }
-      }
-
-      // The following two situations will adopt a common implementation:
-      // First, no filter predicate is specified for any aggregate expression.
-      // Second, aggregate expressions are in merge or final mode.
-      val isFinalOrMerge = expressions.map(_.mode)
-        .collect { case PartialMerge | Final => true }.nonEmpty
-      if (predicateOptions.isEmpty || isFinalOrMerge) {
-        (currentBuffer: InternalRow, row: InternalRow) => {
-          updateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
-          processImperative(currentBuffer, row)
-        }
-      } else {
-        // In the list of aggregate expressions, if a filter predicate is specified for at least one
-        // aggregate expression and aggregate expressions are in partial or complete mode,
-        // then the filter will be used.
-        // Suppose there is a list of aggregate expressions, such as exprA with filterA, exprB,
-        // exprC with filterC, then the specific implementation process is as follows:
-        // 1. Accept data row.
-        // 2. Execute multiple aggregate expressions in sequence.
-        // 2-1. Filter the data row using filter predicate filterA. If the filter predicate
-        //      filterA is met, then calculate using aggregate expression exprA.
-        // 2-2. Calculate using aggregate expression exprB.
-        // 2-3. Filter the data row using filter predicate filterC. If the filter predicate
-        //      filterC is met, then calculate using aggregate expression exprC.
-        (currentBuffer: InternalRow, row: InternalRow) => {
-          val dynamicMergeExpressions = new mutable.ArrayBuffer[Expression]
-          for (i <- 0 until expressions.length) {
-            if ((expressions(i).mode == Partial || expressions(i).mode == Complete)) {
-              if (predicateOptions(i).isDefined) {
-                if (predicateOptions(i).get.eval(row)) {
-                  dynamicMergeExpressions ++= mergeExpressions(i)
-                } else {
-                  dynamicMergeExpressions ++= Seq(NoOp)
-                }
-              } else {
-                dynamicMergeExpressions ++= mergeExpressions(i)
-              }
-            }
-          }
-          if (!dynamicMergeExpressions.isEmpty) {
-            val dynamicUpdateProjection = newMutableProjection(
-              dynamicMergeExpressions, aggregationBufferSchema ++ inputAttributes)
-            dynamicUpdateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
-          }
-
-          processImperative(currentBuffer, row)
         }
       }
     } else {
