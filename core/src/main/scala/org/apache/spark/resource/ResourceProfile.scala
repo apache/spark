@@ -27,7 +27,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceUtils.RESOURCE_PREFIX
+import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
 
 /**
  * Resource profile to associate with an RDD. A ResourceProfile allows the user to
@@ -208,10 +208,12 @@ private[spark] object ResourceProfile extends Logging {
     val taskRpIdConfPrefix = s"${SPARK_RP_TASK_PREFIX}.${rpId}."
     val taskConfs = sparkConf.getAllWithPrefix(taskRpIdConfPrefix).toMap
     val taskResourceNames = listResourceNames(taskConfs)
+    val taskResourceRequests = new TaskResourceRequests()
     taskResourceNames.foreach { resource =>
       val amount = taskConfs.get(s"${resource}.amount").get.toInt
-      rp.require(new TaskResourceRequest(resource, amount))
+      taskResourceRequests.resource(resource, amount)
     }
+    rp.require(taskResourceRequests)
     rp
   }
 
