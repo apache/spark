@@ -230,6 +230,8 @@
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.parquet.scope>provided</hive.parquet.scope>
     <hive.storage.scope>compile</hive.storage.scope>
+    <hive.common.scope>compile</hive.common.scope>
+    <hive.llap.scope>compile</hive.llap.scope>
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
@@ -2948,6 +2950,8 @@
         <hive.version.short>1.2</hive.version.short>
         <hive.parquet.scope>${hive.deps.scope}</hive.parquet.scope>
         <hive.storage.scope>provided</hive.storage.scope>
+        <hive.common.scope>provided</hive.common.scope>
+        <hive.llap.scope>provided</hive.llap.scope>
         <orc.classifier>nohive</orc.classifier>
         <datanucleus-core.version>3.2.10</datanucleus-core.version>
       </properties>
