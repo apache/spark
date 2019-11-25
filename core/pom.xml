@@ -26,12 +26,15 @@
   </parent>
 
   <artifactId>spark-core_2.12</artifactId>
-  <properties>
-    <sbt.project.name>core</sbt.project.name>
-  </properties>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
   <url>http://spark.apache.org/</url>
+
+  <properties>
+    <sbt.project.name>core</sbt.project.name>
+    <extra.source.dir>src/main/scala-${scala.binary.version}</extra.source.dir>
+  </properties>
+  
   <dependencies>
     <dependency>
       <groupId>com.thoughtworks.paranamer</groupId>
@@ -512,6 +515,24 @@
                 guava,jetty-io,jetty-servlet,jetty-servlets,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client
               </includeArtifactIds>
               <silent>true</silent>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>add-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${extra.source.dir}</source>
+              </sources>
             </configuration>
           </execution>
         </executions>
