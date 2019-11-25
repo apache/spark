@@ -22,11 +22,14 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * The data type representing calendar time intervals. The calendar time interval is stored
- * internally in two components: number of months the number of microseconds.
+ * internally in three components:
+ *   the number of months
+ *   the number of days
+ *   the number of microseconds.
  *
- * Please use the singleton `DataTypes.CalendarIntervalType`.
+ * Please use the singleton [[DataTypes.CalendarIntervalType]] to refer the type.
  *
- * @note Calendar intervals are not comparable.
+ * @note Calendar intervals support comparison and ordering since 3.0.0.
  *
  * @since 1.5.0
  */
