@@ -161,7 +161,7 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   }
 
   private[ml] def getLeafField(leafCol: String) = {
-    new AttributeGroup(leafCol, trees.map(_.leafAttr)).toStructField()
+    new AttributeGroup(leafCol, attrs = trees.map(_.leafAttr)).toStructField()
   }
 }
 
