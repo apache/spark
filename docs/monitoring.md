@@ -1055,9 +1055,9 @@ when running in local mode.
 - namespace=ExecutorMetrics
   - **notes:** 
     - These metrics are conditional to a configuration parameter:
-    `spark.metrics.executormetrics.source.enabled` (default is true) 
+    `spark.metrics.executormetrics.source.enabled` (default value is true) 
     - ExecutorMetrics are updated as part of heartbeat processes scheduled
-   for the executors and for the driver at regular intervals: `spark.executor.heartbeatInterval`, default 10 seconds
+   for the executors and for the driver at regular intervals: `spark.executor.heartbeatInterval` (default value is 10 seconds)
     - An optional faster polling mechanism is available for executor memory metrics, 
    it can be activated by setting a polling interval (in milliseconds) using the configuration parameter `spark.executor.metrics.pollingInterval`
   - JVMHeapMemory

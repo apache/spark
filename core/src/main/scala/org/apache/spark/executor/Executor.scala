@@ -115,18 +115,18 @@ private[spark] class Executor(
 
   val executorMetricsSource =
     if (conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
-      new ExecutorMetricsSource
+      Some(new ExecutorMetricsSource)
     } else {
-      null
+      None
     }
 
   if (!isLocal) {
     env.blockManager.initialize(conf.getAppId)
     env.metricsSystem.registerSource(executorSource)
     env.metricsSystem.registerSource(new JVMCPUSource())
-    if (conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
-      executorMetricsSource.register
-      env.metricsSystem.registerSource(executorMetricsSource)
+    executorMetricsSource match {
+      case Some(executorMetricsSource: ExecutorMetricsSource) =>
+        executorMetricsSource.register(env.metricsSystem)
     }
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   }

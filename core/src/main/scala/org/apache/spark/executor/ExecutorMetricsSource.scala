@@ -19,9 +19,18 @@ package org.apache.spark.executor
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.metrics.ExecutorMetricType
+import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
 import org.apache.spark.metrics.source.Source
 
+// Expose executor metrics from [[ExecutorMetricsType]] using the Dropwizard metrics system
+// Metrics related the memory system can be expensive to gather, we implement some optimizations:
+// (1) Metrics values are cached, updated at each heartbeat (default period is 10 seconds)
+// An alternative faster polling mechanism is used only if activated, by setting
+// spark.executor.metrics.pollingInterval=<interval in ms>
+// (2) procfs metrics are gathered all in one-go and only conditionally:
+// if the /proc filesystem exists
+// and spark.eventLog.logStageExecutorProcessTreeMetrics.enabled=true
+// and spark.eventLog.logStageExecutorMetrics.enabled=true
 private[spark] class ExecutorMetricsSource extends Source {
 
   override val metricRegistry = new MetricRegistry()
@@ -37,9 +46,7 @@ private[spark] class ExecutorMetricsSource extends Source {
     def getValue: Long = metricsSnapshot(idx)
   }
 
-  def register: Unit = {
-    // This looks like a bunch of independent gauges as far the metric system
-    // is concerned, but actually they're all using one shared snapshot.
+  def register(metricsSystem: MetricsSystem): Unit = {
     val gauges: IndexedSeq[ExecutorMetricGauge] = (0 until ExecutorMetricType.numMetrics).map {
       idx => new ExecutorMetricGauge(idx)
     }.toIndexedSeq
@@ -48,5 +55,7 @@ private[spark] class ExecutorMetricsSource extends Source {
       case (name, idx) =>
         metricRegistry.register(MetricRegistry.name(name), gauges(idx))
     }
+
+    metricsSystem.registerSource(this)
   }
 }

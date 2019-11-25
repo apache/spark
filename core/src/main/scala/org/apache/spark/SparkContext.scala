@@ -551,16 +551,16 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
-    val executorMetricsSource =
+    val _executorMetricsSource =
       if (_conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
-        new ExecutorMetricsSource
+        Some(new ExecutorMetricsSource)
       } else {
-        null
+        None
       }
 
     // create and start the heartbeater for collecting memory metrics
     _heartbeater = new Heartbeater(
-      () => SparkContext.this.reportHeartBeat(executorMetricsSource),
+      () => SparkContext.this.reportHeartBeat(_executorMetricsSource),
       "driver-heartbeater",
       conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
     _heartbeater.start()
@@ -629,9 +629,9 @@ class SparkContext(config: SparkConf) extends Logging {
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _env.metricsSystem.registerSource(new JVMCPUSource())
-    if (executorMetricsSource != null) {
-      executorMetricsSource.register
-      env.metricsSystem.registerSource(executorMetricsSource)
+    _executorMetricsSource match {
+      case Some(executorMetricsSource: ExecutorMetricsSource) =>
+        executorMetricsSource.register(_env.metricsSystem)
     }
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
@@ -2484,9 +2484,13 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** Reports heartbeat metrics for the driver. */
-  private def reportHeartBeat(executorMetricsSource: ExecutorMetricsSource): Unit = {
+  private def reportHeartBeat(executorMetricsSource: Option[ExecutorMetricsSource]): Unit = {
     val currentMetrics = ExecutorMetrics.getCurrentMetrics(env.memoryManager)
-    executorMetricsSource.updateMetricsSnapshot(currentMetrics)
+
+    executorMetricsSource match {
+      case Some(executorMetricsSource: ExecutorMetricsSource) =>
+        executorMetricsSource.updateMetricsSnapshot(currentMetrics)
+    }
 
     val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]
     // In the driver, we do not track per-stage metrics, so use a dummy stage for the key
