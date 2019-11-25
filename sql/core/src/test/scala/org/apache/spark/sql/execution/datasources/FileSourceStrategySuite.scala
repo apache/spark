@@ -499,44 +499,31 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
   }
 
   test("SPARK-29768: Column pruning through non-deterministic expressions") {
-    // for DataSource V1
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
-      withTempDir { dir =>
-        val sourcePath = new File(dir, "source").getAbsolutePath
-        val targetPath = new File(dir, "target").getAbsolutePath
-        spark.range(10).selectExpr("id as key", "id * 2 as value")
-          .write.format("parquet").save(sourcePath)
-        spark.range(10).selectExpr("id as key", "id * 3 as s1", "id * 5 as s2").
-          write.format("parquet").save(targetPath)
-        val sourceDF = spark.read.parquet(sourcePath)
-        val targetDF = spark.read.parquet(targetPath).
-          withColumn("row_id", monotonically_increasing_id())
-        val plan = sourceDF.join(targetDF, "key").select("key", "row_id")
-          .queryExecution.sparkPlan
+      withTempPath { path =>
+        spark.range(10)
+          .selectExpr("id as key", "id * 3 as s1", "id * 5 as s2")
+          .write.format("parquet").save(path.getAbsolutePath)
+        val df1 = spark.read.parquet(path.getAbsolutePath)
+        val df2 = df1.selectExpr("key", "rand()").where("key > 5")
+        val plan = df2.queryExecution.sparkPlan
         val scan = plan.collect { case scan: FileSourceScanExec => scan }
-        assert(scan.size == 2)
-        assert(scan.forall {_.requiredSchema == StructType(StructField("key", LongType) :: Nil)})
+        assert(scan.size === 1)
+        assert(scan.head.requiredSchema == StructType(StructField("key", LongType) :: Nil))
       }
     }
 
-    // for DataSource V2
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-      withTempDir { dir =>
-        val sourcePath = new File(dir, "source").getAbsolutePath
-        val targetPath = new File(dir, "target").getAbsolutePath
-        spark.range(10).selectExpr("id as key", "id * 2 as value")
-          .write.format("parquet").save(sourcePath)
-        spark.range(10).selectExpr("id as key", "id * 3 as s1", "id * 5 as s2").
-          write.format("parquet").save(targetPath)
-        val sourceDF = spark.read.parquet(sourcePath)
-        val targetDF = spark.read.parquet(targetPath).
-          withColumn("row_id", monotonically_increasing_id())
-        val plan = sourceDF.join(targetDF, "key").select("key", "row_id")
-          .queryExecution.optimizedPlan
-        val v2Relation = plan.collect { case r: DataSourceV2ScanRelation => r }
-        assert(v2Relation.size === 2)
-        assert(v2Relation.forall(
-          _.scan.readSchema() == StructType(StructField("key", LongType) :: Nil)))
+      withTempPath { path =>
+        spark.range(10)
+          .selectExpr("id as key", "id * 3 as s1", "id * 5 as s2")
+          .write.format("parquet").save(path.getAbsolutePath)
+        val df1 = spark.read.parquet(path.getAbsolutePath)
+        val df2 = df1.selectExpr("key", "rand()").where("key > 5")
+        val plan = df2.queryExecution.optimizedPlan
+        val scan = plan.collect { case r: DataSourceV2ScanRelation => r }
+        assert(scan.size === 1)
+        assert(scan.head.scan.readSchema() == StructType(StructField("key", LongType) :: Nil))
       }
     }
   }
