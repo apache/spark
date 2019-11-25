@@ -169,11 +169,32 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
   usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
   since = "3.0.0")
 // scalastyle:on line.size.limit
-case class Version() extends LeafExpression with CodegenFallback {
+case class SparkVersion() extends LeafExpression with CodegenFallback {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
   override def dataType: DataType = StringType
   override def eval(input: InternalRow): Any = {
     UTF8String.fromString(SPARK_VERSION_SHORT + " " + SPARK_REVISION)
+  }
+}
+
+@ExpressionDescription(
+  usage = """_FUNC_(expr) - Return DDL-formatted type string for the data type of the input.""",
+  examples = """
+      Examples:
+      > SELECT _FUNC_(1);
+       int
+      > SELECT _FUNC_(array(1));
+       array<int>
+  """,
+  since = "3.0.0")
+case class TypeOf(child: Expression) extends UnaryExpression {
+  override def nullable: Boolean = false
+  override def foldable: Boolean = true
+  override def dataType: DataType = StringType
+  override def eval(input: InternalRow): Any = UTF8String.fromString(child.dataType.catalogString)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
   }
 }

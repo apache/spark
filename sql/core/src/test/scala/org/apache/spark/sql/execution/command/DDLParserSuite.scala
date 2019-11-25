@@ -74,57 +74,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }.head
   }
 
-  test("alter database set dbproperties") {
-    // ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
-    val sql1 = "ALTER DATABASE database_name SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"
-    val sql2 = "ALTER SCHEMA database_name SET DBPROPERTIES ('a'='a')"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-
-    val expected1 = AlterDatabasePropertiesCommand(
-      "database_name",
-      Map("a" -> "a", "b" -> "b", "c" -> "c"))
-    val expected2 = AlterDatabasePropertiesCommand(
-      "database_name",
-      Map("a" -> "a"))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
   test("alter database - property values must be set") {
     assertUnsupported(
       sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
-  }
-
-  test("alter database set location") {
-    // ALTER (DATABASE|SCHEMA) database_name SET LOCATION
-    val sql1 = "ALTER DATABASE database_name SET LOCATION '/home/user/db'"
-    val parsed1 = parser.parsePlan(sql1)
-
-    val expected1 = AlterDatabaseSetLocationCommand("database_name", "/home/user/db")
-    comparePlans(parsed1, expected1)
-  }
-
-  test("describe database") {
-    // DESCRIBE DATABASE [EXTENDED] db_name;
-    val sql1 = "DESCRIBE DATABASE EXTENDED db_name"
-    val sql2 = "DESCRIBE DATABASE db_name"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-
-    val expected1 = DescribeDatabaseCommand(
-      "db_name",
-      extended = true)
-    val expected2 = DescribeDatabaseCommand(
-      "db_name",
-      extended = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
   }
 
   test("create function") {
@@ -418,32 +371,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }
     assert(e4.message.contains(
       "Directory path and 'path' in OPTIONS should be specified one, but not both"))
-  }
-
-  // ALTER TABLE table_name RENAME TO new_table_name;
-  // ALTER VIEW view_name RENAME TO new_view_name;
-  test("alter table/view: rename table/view") {
-    val sql_table = "ALTER TABLE table_name RENAME TO new_table_name"
-    val sql_view = sql_table.replace("TABLE", "VIEW")
-    val parsed_table = parser.parsePlan(sql_table)
-    val parsed_view = parser.parsePlan(sql_view)
-    val expected_table = AlterTableRenameCommand(
-      TableIdentifier("table_name"),
-      TableIdentifier("new_table_name"),
-      isView = false)
-    val expected_view = AlterTableRenameCommand(
-      TableIdentifier("table_name"),
-      TableIdentifier("new_table_name"),
-      isView = true)
-    comparePlans(parsed_table, expected_table)
-    comparePlans(parsed_view, expected_view)
-  }
-
-  test("alter table: rename table with database") {
-    val query = "ALTER TABLE db1.tbl RENAME TO db1.tbl2"
-    val plan = parseAs[AlterTableRenameCommand](query)
-    assert(plan.oldName == TableIdentifier("tbl", Some("db1")))
-    assert(plan.newName == TableIdentifier("tbl2", Some("db1")))
   }
 
   test("alter table - property values must be set") {
@@ -789,7 +716,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assertError("select interval '23:61:15' hour to second",
       "minute 61 outside range [0, 59]")
     assertError("select interval '.1111111111' second",
-      "nanosecond 1111111111 outside range")
+      "'.1111111111' is out of range")
   }
 
   test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {

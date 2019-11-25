@@ -701,8 +701,7 @@ private[spark] class MapOutputTrackerMaster(
     if (shuffleStatus != null) {
       shuffleStatus.withMapStatuses { statuses =>
         if (mapId >= 0 && mapId < statuses.length) {
-          Seq( ExecutorCacheTaskLocation(statuses(mapId).location.host,
-            statuses(mapId).location.executorId).toString)
+          Seq(statuses(mapId).location.host)
         } else {
           Nil
         }

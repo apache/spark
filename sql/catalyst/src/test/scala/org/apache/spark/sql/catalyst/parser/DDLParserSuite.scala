@@ -623,6 +623,15 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("alter table/view: rename table/view") {
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = false))
+    comparePlans(
+      parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = true))
+  }
+
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumnStatement(
@@ -651,6 +660,13 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
     assert(caught.getMessage.contains(
         "DESC TABLE COLUMN for a specific partition is not supported"))
+  }
+
+  test("describe database") {
+    val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
+    val sql2 = "DESCRIBE DATABASE a.b"
+    comparePlans(parsePlan(sql1), DescribeNamespaceStatement(Seq("a", "b"), extended = true))
+    comparePlans(parsePlan(sql2), DescribeNamespaceStatement(Seq("a", "b"), extended = false))
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
@@ -1022,6 +1038,31 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
+  test("show table extended") {
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED LIKE '*test*'"),
+      ShowTableStatement(None, "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*'"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*'"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09', hr=11)"),
+      ShowTableStatement(None, "*test*", Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
+        Some(Map("ds" -> "2008-04-09"))))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
+        Some(Map("ds" -> "2008-04-09"))))
+  }
+
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
     val expected = CreateNamespaceStatement(
       Seq("a", "b", "c"),
@@ -1126,6 +1167,52 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c CASCADE"),
       DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = true))
+  }
+
+  test("set namespace properties") {
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a")))
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("b" -> "b")))
+
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a")))
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("b" -> "b")))
+  }
+
+  test("set namespace location") {
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
   }
 
   test("show databases: basic") {

@@ -102,10 +102,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  override def visitSingleInterval(ctx: SingleIntervalContext): CalendarInterval = {
-    withOrigin(ctx)(visitMultiUnitsInterval(ctx.multiUnitsInterval))
-  }
-
   /* ********************************************************************************************
    * Plan parsing
    * ******************************************************************************************** */
@@ -1585,7 +1581,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     // Create the function call.
-    val name = ctx.qualifiedName.getText
+    val name = ctx.functionName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     val arguments = ctx.argument.asScala.map(expression) match {
       case Seq(UnresolvedStar(None))
@@ -1595,7 +1591,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case expressions =>
         expressions
     }
-    val function = UnresolvedFunction(visitFunctionName(ctx.qualifiedName), arguments, isDistinct)
+    val function = UnresolvedFunction(
+      getFunctionIdentifier(ctx.functionName), arguments, isDistinct)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1632,6 +1629,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case Seq(fn) => FunctionIdentifier(fn, None)
       case other =>
         throw new ParseException(s"Unsupported function name '${texts.mkString(".")}'", ctx)
+    }
+  }
+
+  /**
+   * Get a function identifier consist by database (optional) and name.
+   */
+  protected def getFunctionIdentifier(ctx: FunctionNameContext): FunctionIdentifier = {
+    if (ctx.qualifiedName != null) {
+      visitFunctionName(ctx.qualifiedName)
+    } else {
+      FunctionIdentifier(ctx.getText, None)
     }
   }
 
@@ -1854,7 +1862,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
     val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
-    val isNegative = ctx.negativeSign != null
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
       f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
@@ -1863,23 +1870,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     try {
       valueType match {
-        case "DATE" if !isNegative =>
+        case "DATE" =>
           toLiteral(stringToDate(_, getZoneId(SQLConf.get.sessionLocalTimeZone)), DateType)
-        case "TIMESTAMP" if !isNegative =>
+        case "TIMESTAMP" =>
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
           val interval = try {
-            IntervalUtils.fromString(value)
+            IntervalUtils.stringToInterval(UTF8String.fromString(value))
           } catch {
             case e: IllegalArgumentException =>
               val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          val signedInterval = if (isNegative) IntervalUtils.negate(interval) else interval
-          Literal(signedInterval, CalendarIntervalType)
-        case "X" if !isNegative =>
+          Literal(interval, CalendarIntervalType)
+        case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
         case "INTEGER" =>
@@ -1891,10 +1897,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(if (isNegative) -i else i, IntegerType)
+          Literal(i, IntegerType)
         case other =>
-          val negativeSign: String = if (isNegative) "-" else ""
-          throw new ParseException(s"Literals of type '$negativeSign$other' are currently not" +
+          throw new ParseException(s"Literals of type '$other' are currently not" +
             " supported.", ctx)
       }
     } catch {
@@ -2024,14 +2029,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
-  private def applyNegativeSign(sign: Token, interval: CalendarInterval): CalendarInterval = {
-    if (sign != null) {
-      IntervalUtils.negate(interval)
-    } else {
-      interval
-    }
-  }
-
   /**
    * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
@@ -2045,10 +2042,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           innerCtx.unitToUnitInterval)
       }
-      val interval = applyNegativeSign(
-        ctx.negativeSign,
-        visitMultiUnitsInterval(innerCtx.multiUnitsInterval))
-      Literal(interval, CalendarIntervalType)
+      Literal(visitMultiUnitsInterval(innerCtx.multiUnitsInterval), CalendarIntervalType)
     } else if (ctx.errorCapturingUnitToUnitInterval != null) {
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
@@ -2057,8 +2051,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           errorCtx)
       }
-      val interval = applyNegativeSign(ctx.negativeSign, visitUnitToUnitInterval(innerCtx.body))
-      Literal(interval, CalendarIntervalType)
+      Literal(visitUnitToUnitInterval(innerCtx.body), CalendarIntervalType)
     } else {
       throw new ParseException("at least one time unit should be given for interval literal", ctx)
     }
@@ -2069,22 +2062,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val units = ctx.intervalUnit().asScala.map { unit =>
-        val u = unit.getText.toLowerCase(Locale.ROOT)
-        // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
-        if (u.endsWith("s")) u.substring(0, u.length - 1) else u
-      }.map(IntervalUtils.IntervalUnit.withName).toArray
-
-      val values = ctx.intervalValue().asScala.map { value =>
-        if (value.STRING() != null) {
-          string(value.STRING())
-        } else {
-          value.getText
-        }
-      }.toArray
-
+      val units = ctx.intervalUnit().asScala
+      val values = ctx.intervalValue().asScala
       try {
-        IntervalUtils.fromUnitStrings(units, values)
+        assert(units.length == values.length)
+        val kvs = units.indices.map { i =>
+          val u = units(i).getText
+          val v = if (values(i).STRING() != null) {
+            string(values(i).STRING())
+          } else {
+            values(i).getText
+          }
+          UTF8String.fromString(" " + v + " " + u)
+        }
+        IntervalUtils.stringToInterval(UTF8String.concat(kvs: _*))
       } catch {
         case i: IllegalArgumentException =>
           val e = new ParseException(i.getMessage, ctx)
@@ -2159,12 +2150,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => TimestampType
       case ("string", Nil) => StringType
-      case ("char", length :: Nil) => CharType(length.getText.toInt)
+      case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
       case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
       case ("binary", Nil) => BinaryType
-      case ("decimal" | "numeric", Nil) => DecimalType.USER_DEFAULT
-      case ("decimal" | "numeric", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
-      case ("decimal" | "numeric", precision :: scale :: Nil) =>
+      case ("decimal" | "dec" | "numeric", Nil) => DecimalType.USER_DEFAULT
+      case ("decimal" | "dec" | "numeric", precision :: Nil) =>
+        DecimalType(precision.getText.toInt, 0)
+      case ("decimal" | "dec" | "numeric", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
       case ("interval", Nil) => CalendarIntervalType
       case (dt, params) =>
@@ -2529,6 +2521,39 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create an [[AlterNamespaceSetPropertiesStatement]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) database
+   *   SET (DBPROPERTIES|PROPERTIES) (property_name=property_value, ...);
+   * }}}
+   */
+  override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
+    withOrigin(ctx) {
+      AlterNamespaceSetPropertiesStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        visitPropertyKeyValues(ctx.tablePropertyList))
+    }
+  }
+
+  /**
+   * Create an [[AlterNamespaceSetLocationStatement]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) namespace SET LOCATION path;
+   * }}}
+   */
+  override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
+    withOrigin(ctx) {
+      AlterNamespaceSetLocationStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        visitLocationSpec(ctx.locationSpec))
+    }
+  }
+
+  /**
    * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
@@ -2540,6 +2565,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
       Option(ctx.pattern).map(string))
   }
+
+  /**
+   * Create a [[DescribeNamespaceStatement]].
+   *
+   * For example:
+   * {{{
+   *   DESCRIBE (DATABASE|SCHEMA|NAMESPACE) [EXTENDED] database;
+   * }}}
+   */
+  override def visitDescribeNamespace(ctx: DescribeNamespaceContext): LogicalPlan =
+    withOrigin(ctx) {
+      DescribeNamespaceStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
+        ctx.EXTENDED != null)
+    }
 
   /**
    * Create a table, returning a [[CreateTableStatement]] logical plan.
@@ -2717,6 +2757,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     ShowTablesStatement(
       Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
       Option(ctx.pattern).map(string))
+  }
+
+  /**
+   * Create a [[ShowTableStatement]] command.
+   */
+  override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
+    ShowTableStatement(
+      Option(ctx.namespace).map(visitMultipartIdentifier),
+      string(ctx.pattern),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
   /**
@@ -3191,6 +3241,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       visitMultipartIdentifier(ctx.multipartIdentifier),
       originalText = source(ctx.query),
       query = plan(ctx.query))
+  }
+
+  /**
+   * Create a [[RenameTableStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name1 RENAME TO multi_part_name2;
+   *   ALTER VIEW multi_part_name1 RENAME TO multi_part_name2;
+   * }}}
+   */
+  override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
+    RenameTableStatement(
+      visitMultipartIdentifier(ctx.from),
+      visitMultipartIdentifier(ctx.to),
+      ctx.VIEW != null)
   }
 
   /**

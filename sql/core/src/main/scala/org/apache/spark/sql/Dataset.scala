@@ -60,7 +60,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -586,8 +586,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 2.4.0
    */
-  def isEmpty: Boolean = withAction("isEmpty", limit(1).groupBy().count().queryExecution) { plan =>
-    plan.executeCollect().head.getLong(0) == 0
+  def isEmpty: Boolean = withAction("isEmpty", select().queryExecution) { plan =>
+    plan.executeTake(1).isEmpty
   }
 
   /**
@@ -725,7 +725,7 @@ class Dataset[T] private[sql](
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
     val parsedDelay =
       try {
-        IntervalUtils.fromString(delayThreshold)
+        IntervalUtils.stringToInterval(UTF8String.fromString(delayThreshold))
       } catch {
         case e: IllegalArgumentException =>
           throw new AnalysisException(

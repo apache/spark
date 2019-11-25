@@ -89,7 +89,7 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     val timestamp = LocalDateTime.of(2016, 1, 1, 0, 0, 0, 987654321)
       .atZone(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       .toInstant
-    checkSQL(Literal(timestamp), "TIMESTAMP('2016-01-01 00:00:00.987654')")
+    checkSQL(Literal(timestamp), "TIMESTAMP '2016-01-01 00:00:00.987654'")
     // TODO tests for decimals
   }
 
@@ -169,12 +169,12 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
 
     checkSQL(
       TimeAdd('a, interval),
-      "`a` + 1 hours"
+      "`a` + INTERVAL '1 hours'"
     )
 
     checkSQL(
       TimeSub('a, interval),
-      "`a` - 1 hours"
+      "`a` - INTERVAL '1 hours'"
     )
   }
 }
