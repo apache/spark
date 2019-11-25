@@ -83,24 +83,23 @@ private[spark] object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
-  val SPARK_RP_TASK_PREFIX = "spark.resourceProfile.task"
-  val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
-
-  // Helper class for constructing the resource profile internal configs used to pass to
-  // executors
-  case class ResourceProfileInternalConf(componentName: String,
-      id: Int, resourceName: String) {
-    def confPrefix: String = s"$componentName.$id.${RESOURCE_DOT}$resourceName."
-    def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
-    def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
-    def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
-  }
-
   val CPUS = "cpus"
   val CORES = "cores"
   val MEMORY = "memory"
   val OVERHEAD_MEM = "memoryOverhead"
   val PYSPARK_MEM = "pyspark.memory"
+
+  val SPARK_RP_TASK_PREFIX = "spark.resourceProfile.task"
+  val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
+
+  // Helper class for constructing the resource profile internal configs used to pass to
+  // executors
+  case class ResourceProfileInternalConf(componentName: String, id: Int, resourceName: String) {
+    def confPrefix: String = s"$componentName.$id.${RESOURCE_DOT}$resourceName."
+    def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
+    def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
+    def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
+  }
 
   private lazy val nextProfileId = new AtomicInteger(0)
 
@@ -164,18 +163,12 @@ private[spark] object ResourceProfile extends Logging {
    * to value where the keys get formatted as:
    *
    * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
-   * spark.resourceProfile.task.[rpId].resource.[resourceName].amount
    *
    * Keep this here as utility a function rather then in public ResourceProfile interface because
    * end users shouldn't need this.
    */
   def createResourceProfileInternalConfs(rp: ResourceProfile): Map[String, String] = {
     val res = new mutable.HashMap[String, String]()
-    // task resources
-    rp.taskResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val taskIntConf = ResourceProfileInternalConf(SPARK_RP_TASK_PREFIX, rp.id, name)
-      res(s"${taskIntConf.amountConf}") = req.amount.toString
-    }
     // executor resources
     rp.executorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
       val execIntConf = ResourceProfileInternalConf(SPARK_RP_EXEC_PREFIX, rp.id, name)
@@ -190,31 +183,12 @@ private[spark] object ResourceProfile extends Logging {
   /**
    * Parse out just the resourceName given the map of confs. It only looks for confs that
    * end with .amount because we should always have one of those for every resource.
-   * Format is expected to be: [resourcesname].amount, where resourceName could have multiple
+   * Format is expected to be: [resourcename].amount, where resourceName could have multiple
    * .'s like resource.gpu.foo.amount
    */
   private def listResourceNames(confs: Map[String, String]): Seq[String] = {
     confs.filterKeys(_.endsWith(ResourceUtils.AMOUNT)).
       map { case (key, _) => key.substring(0, key.lastIndexOf(s".${ResourceUtils.AMOUNT}")) }.toSeq
-  }
-
-  /**
-   * Get a ResourceProfile with the task requirements from the internal resource confs.
-   * The configs looks like:
-   * spark.resourceProfile.task.[rpId].resource.[resourceName].amount
-   */
-  def getTaskRequirementsFromInternalConfs(sparkConf: SparkConf, rpId: Int): ResourceProfile = {
-    val rp = new ResourceProfile()
-    val taskRpIdConfPrefix = s"${SPARK_RP_TASK_PREFIX}.${rpId}."
-    val taskConfs = sparkConf.getAllWithPrefix(taskRpIdConfPrefix).toMap
-    val taskResourceNames = listResourceNames(taskConfs)
-    val taskResourceRequests = new TaskResourceRequests()
-    taskResourceNames.foreach { resource =>
-      val amount = taskConfs.get(s"${resource}.amount").get.toInt
-      taskResourceRequests.resource(resource, amount)
-    }
-    rp.require(taskResourceRequests)
-    rp
   }
 
   /**

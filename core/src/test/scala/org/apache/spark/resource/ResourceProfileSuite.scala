@@ -176,16 +176,10 @@ class ResourceProfileSuite extends SparkFunSuite {
     val sparkConf = new SparkConf
     internalResourceConfs.foreach { case(key, value) => sparkConf.set(key, value) }
     val resourceReq = ResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, rprof.id)
-    val taskReq = ResourceProfile.getTaskRequirementsFromInternalConfs(sparkConf, rprof.id)
 
     assert(resourceReq.size === 1, "ResourceRequest should have 1 item")
     assert(resourceReq(0).id.resourceName === "gpu")
     assert(resourceReq(0).amount === 2)
     assert(resourceReq(0).discoveryScript === Some("someScript"))
-
-    assert(taskReq.taskResources.size === 1,
-      "TaskResourceRequirements should have 1 item")
-    assert(taskReq.taskResources.contains("resource.gpu"))
-    assert(taskReq.taskResources("resource.gpu").amount === 2)
   }
 }

@@ -178,10 +178,6 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
-  /**
-   * This function parses any resources allocated via passed in resources file, then
-   * looks at the configs
-   */
   private def parseAllocatedOrDiscoverResources(
       sparkConf: SparkConf,
       componentName: String,

@@ -94,49 +94,14 @@ private[spark] class CoarseGrainedExecutorBackend(
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     logDebug(s"Resource profile id is: $resourceProfileId")
     // if resource profile specified we look at different confs
-    if (resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
-      // only parse the resources if a task requires them
-      val resourceInfo = if (parseResourceRequirements(env.conf, SPARK_TASK_PREFIX).nonEmpty) {
-        val resources = getOrDiscoverAllResources(env.conf, SPARK_EXECUTOR_PREFIX, resourcesFileOpt)
-        if (resources.isEmpty) {
-          throw new SparkException("User specified resources per task via: " +
-            s"$SPARK_TASK_PREFIX, but can't find any resources available on the executor.")
-        } else {
-          logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
-        }
-        resources
-      } else {
-        if (resourcesFileOpt.nonEmpty) {
-          logWarning("A resources file was specified but the application is not configured " +
-            s"to use any resources, see the configs with prefix: ${SPARK_TASK_PREFIX}")
-        }
-        Map.empty[String, ResourceInformation]
-      }
-      resourceInfo
+    val resources = if (resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
+      getOrDiscoverAllResources(env.conf, SPARK_EXECUTOR_PREFIX, resourcesFileOpt)
     } else {
-      val taskResourceProf = getTaskRequirementsFromInternalConfs(env.conf, resourceProfileId)
-      val resourceInfo = if (taskResourceProf.taskResources.nonEmpty) {
-        val resources = getOrDiscoverAllResourcesForResourceProfile(resourceProfileId, env.conf,
-          resourcesFileOpt, SPARK_EXECUTOR_PREFIX)
-        if (resources.isEmpty) {
-          throw new SparkException("User specified resources per task via: " +
-            s"$SPARK_TASK_PREFIX, but can't find any resources available on the executor.")
-        } else {
-          logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
-        }
-        resources
-      } else {
-        if (resourcesFileOpt.nonEmpty) {
-          logWarning("A resources file was specified but the application is not configured " +
-            s"to use any resources, see the configs with prefix: ${SPARK_TASK_PREFIX}")
-        } else {
-          logWarning(s"A resource profile id ${resourceProfileId} was specified but no " +
-            s"task resources were configured, see the configs with prefix ${SPARK_TASK_PREFIX}")
-        }
-        Map.empty[String, ResourceInformation]
-      }
-      resourceInfo
+      getOrDiscoverAllResourcesForResourceProfile(resourceProfileId, env.conf,
+        resourcesFileOpt, SPARK_EXECUTOR_PREFIX)
     }
+    logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
+    resources
   }
 
   def extractLogUrls: Map[String, String] = {

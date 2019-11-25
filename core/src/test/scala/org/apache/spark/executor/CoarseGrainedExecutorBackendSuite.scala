@@ -49,15 +49,11 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("parsing no resources Resource Profile Id") {
     val conf = new SparkConf
-    val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.SPARK_RP_TASK_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, "gpu")
-    conf.set(gpuInternalConf.amountConf, "2")
     testNoResources(conf, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   test("parsing no resources") {
     val conf = new SparkConf
-    conf.set(TASK_GPU_ID.amountConf, "2")
     testNoResources(conf, ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
@@ -84,7 +80,6 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("parsing one resource") {
     val conf = new SparkConf
     conf.set(EXECUTOR_GPU_ID.amountConf, "2")
-    conf.set(TASK_GPU_ID.amountConf, "2")
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
@@ -103,37 +98,27 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     }
   }
 
-  test("parsing multiple resources resoruce profile") {
+  test("parsing multiple resources resource profile") {
     val gpuExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
       ResourceProfile.SPARK_RP_EXEC_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
-    val gpuTaskInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.SPARK_RP_TASK_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
     val fpgaExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
       ResourceProfile.SPARK_RP_EXEC_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
-    val fpgaTaskInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.SPARK_RP_TASK_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
-    testParsingMultipleResources(gpuExecInternalConf.amountConf, gpuTaskInternalConf.amountConf,
-      fpgaExecInternalConf.amountConf, fpgaTaskInternalConf.amountConf,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    testParsingMultipleResources(gpuExecInternalConf.amountConf,
+      fpgaExecInternalConf.amountConf, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   test("parsing multiple resources") {
-    testParsingMultipleResources(EXECUTOR_GPU_ID.amountConf, TASK_GPU_ID.amountConf,
-      EXECUTOR_FPGA_ID.amountConf, TASK_FPGA_ID.amountConf,
-      ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+    testParsingMultipleResources(EXECUTOR_GPU_ID.amountConf,
+      EXECUTOR_FPGA_ID.amountConf, ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
   def testParsingMultipleResources(
       execGpuAmountConf: String,
-      taskGpuAmountConf: String,
       execFpgaAmountConf: String,
-      taskFpgaAmountConf: String,
       rpId: Int) {
     val conf = new SparkConf
     conf.set(execGpuAmountConf, "2")
-    conf.set(taskGpuAmountConf, "2")
     conf.set(execFpgaAmountConf, "3")
-    conf.set(taskFpgaAmountConf, "3")
 
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
@@ -162,7 +147,6 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("error checking parsing resources and executor and task configs") {
     val conf = new SparkConf
     conf.set(EXECUTOR_GPU_ID.amountConf, "2")
-    conf.set(TASK_GPU_ID.amountConf, "2")
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
@@ -201,25 +185,18 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("executor resource found less than required resource profile") {
     val gpuExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
       ResourceProfile.SPARK_RP_EXEC_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
-    val gpuTaskInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.SPARK_RP_TASK_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
     testExecutorResourceFoundLessThanRequired(gpuExecInternalConf.amountConf,
-      gpuTaskInternalConf.amountConf,
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   test("executor resource found less than required") {
-    testExecutorResourceFoundLessThanRequired(EXECUTOR_GPU_ID.amountConf, TASK_GPU_ID.amountConf,
+    testExecutorResourceFoundLessThanRequired(EXECUTOR_GPU_ID.amountConf,
       ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
-  private def testExecutorResourceFoundLessThanRequired(
-      execAmountconf: String,
-      taskAmountConf: String
-      , rpId: Int) = {
+  private def testExecutorResourceFoundLessThanRequired(execAmountconf: String, rpId: Int) = {
     val conf = new SparkConf
     conf.set(execAmountconf, "4")
-    conf.set(taskAmountConf, "1")
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
@@ -244,7 +221,6 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("use resource discovery") {
     val conf = new SparkConf
     conf.set(EXECUTOR_FPGA_ID.amountConf, "3")
-    conf.set(TASK_FPGA_ID.amountConf, "3")
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
@@ -270,27 +246,23 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("use resource discovery and allocated file option with resource profile") {
     val fpgaExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
       ResourceProfile.SPARK_RP_EXEC_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
-    val fpgaTaskInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.SPARK_RP_TASK_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
     allocatedFileAndConfigsResourceDiscoveryTestFpga(fpgaExecInternalConf.amountConf,
-      fpgaTaskInternalConf.amountConf, fpgaExecInternalConf.discoveryScriptConf,
+      fpgaExecInternalConf.discoveryScriptConf,
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   test("use resource discovery and allocated file option") {
     allocatedFileAndConfigsResourceDiscoveryTestFpga(EXECUTOR_FPGA_ID.amountConf,
-      TASK_FPGA_ID.amountConf, EXECUTOR_FPGA_ID.discoveryScriptConf,
+      EXECUTOR_FPGA_ID.discoveryScriptConf,
       ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
   private def allocatedFileAndConfigsResourceDiscoveryTestFpga(
       execAmountConf: String,
-      taskAmountconf: String,
       execDiscoveryConf: String,
       rpId: Int) = {
     val conf = new SparkConf
     conf.set(execAmountConf, "3")
-    conf.set(taskAmountconf, "3")
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
@@ -321,11 +293,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("resource profile id missing from confs") {
     val fpgaExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
       ResourceProfile.SPARK_RP_EXEC_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
-    val fpgaTaskInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.SPARK_RP_TASK_PREFIX, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
     val conf = new SparkConf
     conf.set(fpgaExecInternalConf.amountConf, "3")
-    conf.set(fpgaTaskInternalConf.amountConf, "3")
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
