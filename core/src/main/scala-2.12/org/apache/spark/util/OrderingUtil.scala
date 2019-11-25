@@ -25,7 +25,7 @@ package org.apache.spark.util
  * It functions like Ordering.Double in Scala 2.12.
  */
 private[spark] object OrderingUtil {
-  
+
   def compareDouble(x: Double, y: Double): Int = Ordering.Double.compare(x, y)
 
   def compareFloat(x: Float, y: Float): Int = Ordering.Float.compare(x, y)

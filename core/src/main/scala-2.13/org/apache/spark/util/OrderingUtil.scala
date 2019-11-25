@@ -26,7 +26,7 @@ package org.apache.spark.util
  * rather than Scala 2.12's Ordering.Double in handling of NaN.
  */
 private[spark] object OrderingUtil {
-  
+
   def compareDouble(x: Double, y: Double): Int = Ordering.Double.TotalOrdering.compare(x, y)
 
   def compareFloat(x: Float, y: Float): Int = Ordering.Float.TotalOrdering.compare(x, y)
