@@ -97,6 +97,12 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
     }
 }
 
+/**
+ * Unlike PhysicalOperation, this operation would firstly search the first non-Project
+ * and non-Filter LogicalPlan without non-deterministic expression check and then do that
+ * check when it back track. Once there's a failed check during backtracking, the backtracking
+ * will return immediately.
+ */
 object ScanOperation extends OperationHelper with PredicateHelper {
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
