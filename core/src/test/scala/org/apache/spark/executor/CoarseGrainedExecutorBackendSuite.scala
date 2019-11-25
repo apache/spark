@@ -336,8 +336,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val env = createMockEnv(conf, serializer)
       // configs have resource profile id of the Default profile id, but here we look for
       // profile id 5, this should fail to parse
-      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
-        4, Seq.empty[URL], env, None, resourceProfileId = 5)
+      val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1",
+      "host1", "host1", 4, Seq.empty[URL], env, None, resourceProfileId = 5)
+
       val parsedResources = backend.parseOrFindResources(None)
       assert(parsedResources.size === 0)
     }
@@ -352,7 +353,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     try {
       val rpcEnv = RpcEnv.create("1", "localhost", 0, conf, securityMgr)
       val env = createMockEnv(conf, serializer, Some(rpcEnv))
-      backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
+        backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
         "host1", "host1", 4, Seq.empty[URL], env, None, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       assert(backend.taskResources.isEmpty)
 
