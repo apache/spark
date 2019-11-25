@@ -350,4 +350,4 @@ select cast('1.0 ' as DEC)
 -- !query 42 schema
 struct<CAST(1.0  AS DECIMAL(10,0)):decimal(10,0)>
 -- !query 42 output
-NULL
+1
