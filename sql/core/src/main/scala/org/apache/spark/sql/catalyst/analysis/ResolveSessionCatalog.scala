@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
@@ -303,9 +305,7 @@ class ResolveSessionCatalog(
 
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
-      val newProperties = c.properties -
-        SupportsNamespaces.PROP_COMMENT -
-        SupportsNamespaces.PROP_LOCATION
+      val newProperties = c.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala
       CreateDatabaseCommand(nameParts.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespaceStatement(SessionCatalog(_, nameParts), _, _) =>

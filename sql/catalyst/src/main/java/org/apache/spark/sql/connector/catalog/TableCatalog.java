@@ -39,9 +39,14 @@ import java.util.Map;
 public interface TableCatalog extends CatalogPlugin {
 
   /**
-   * Keys of reserved table properties.
+   * A property to specify the location of the table. The files of the table
+   * should be under this location.
    */
   String PROP_LOCATION = "location";
+
+  /**
+   * A property to specify the description of the table.
+   */
   String PROP_COMMENT = "comment";
 
   /**

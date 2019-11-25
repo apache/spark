@@ -42,12 +42,21 @@ import java.util.Map;
 public interface SupportsNamespaces extends CatalogPlugin {
 
   /**
-   * Keys of reserved namespace properties.
+   * A property to specify the location of the namespace. If the namespace
+   * needs to store files, it should be under this location.
    */
   String PROP_LOCATION = "location";
+
+  /**
+   * A property to specify the description of the namespace. The description
+   * will be returned in the result of "DESCRIBE NAMESPACE" command.
+   */
   String PROP_COMMENT = "comment";
-  List<String> RESERVED_PROPERTIES = Arrays.asList(
-          PROP_COMMENT, PROP_LOCATION);
+
+  /**
+   * The list of reserved namespace properties.
+   */
+  List<String> RESERVED_PROPERTIES = Arrays.asList(PROP_COMMENT, PROP_LOCATION);
 
   /**
    * Return a default namespace for the catalog.
