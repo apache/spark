@@ -172,13 +172,9 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
 
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-    for (ByteBuf b : buffers) {
-      b.release();
-    }
     if (interceptor != null) {
       interceptor.channelInactive();
     }
-    frameLenBuf.release();
     super.channelInactive(ctx);
   }
 
@@ -188,6 +184,20 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
       interceptor.exceptionCaught(cause);
     }
     super.exceptionCaught(ctx, cause);
+  }
+
+  @Override
+  public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+    // Release all buffers that are still in our ownership.
+    // Doing this in handlerRemoved(...) guarantees that this will happen in all cases:
+    //     - When the Channel becomes inactive
+    //     - When the decoder is removed from the ChannelPipeline
+    for (ByteBuf b : buffers) {
+      b.release();
+    }
+    buffers.clear();
+    frameLenBuf.release();
+    super.handlerRemoved(ctx);
   }
 
   public void setInterceptor(Interceptor interceptor) {
