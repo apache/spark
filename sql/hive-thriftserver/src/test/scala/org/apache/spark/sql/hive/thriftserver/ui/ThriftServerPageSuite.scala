@@ -58,8 +58,10 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
       "dummy query", "groupid", System.currentTimeMillis(), "user"))
     listener.onOtherEvent(SparkListenerThriftServerOperationParsed("id", "dummy plan"))
     listener.onOtherEvent(SparkListenerJobStart(0, System.currentTimeMillis(), Seq()))
-    listener.onOtherEvent(SparkListenerThriftServerOperationFinish("id", System.currentTimeMillis()))
-    listener.onOtherEvent(SparkListenerThriftServerOperationClosed("id", System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerOperationFinish("id",
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerOperationClosed("id",
+      System.currentTimeMillis()))
     listener.onOtherEvent(SparkListenerSessionClosed("sessionid", System.currentTimeMillis()))
 
     statusStore
