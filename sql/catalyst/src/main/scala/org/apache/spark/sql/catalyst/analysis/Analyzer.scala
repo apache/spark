@@ -746,6 +746,26 @@ class Analyzer(
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
+      case u @ UnresolvedRelation(CatalogObjectIdentifier(catalog, ident))
+          if CatalogV2Util.isSessionCatalog(catalog) =>
+        val newIdent = if (ident.namespace.isEmpty) {
+          val defaultNamespace = AnalysisContext.get.defaultDatabase match {
+            case Some(db) => Array(db)
+            case None => catalogManager.currentNamespace
+          }
+          Identifier.of(defaultNamespace, ident.name)
+        } else {
+          ident
+        }
+
+        CatalogV2Util.loadTable(catalog, newIdent) match {
+          case Some(v1Table: V1Table) if isV2Provider(v1Table.v1Table.provider) =>
+            DataSourceV2Relation.create(v1Table)
+          case Some(table) =>
+            DataSourceV2Relation.create(table)
+          case None => u
+        }
+
       case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
         val foundRelation = lookupTableFromCatalog(ident, u, defaultDatabase)
@@ -785,6 +805,10 @@ class Analyzer(
           case other => i.copy(table = other)
         }
       case u: UnresolvedRelation => resolveRelation(u)
+    }
+
+    private def isV2Provider(provider: Option[String]): Boolean = {
+      return false
     }
 
     // Look up the table with the given name from catalog. The database we used is decided by the
