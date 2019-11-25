@@ -243,14 +243,14 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
 
 case class UnresolvedFunction(
     name: FunctionIdentifier,
-    inputs: Seq[Expression],
+    arguments: Seq[Expression],
     isDistinct: Boolean,
     filter: Option[Expression] = None)
   extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = filter match {
-    case Some(expr) => inputs :+ expr
-    case _ => inputs
+    case Some(expr) => arguments :+ expr
+    case _ => arguments
   }
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
@@ -263,8 +263,8 @@ case class UnresolvedFunction(
 }
 
 object UnresolvedFunction {
-  def apply(name: String, inputs: Seq[Expression], isDistinct: Boolean): UnresolvedFunction = {
-    UnresolvedFunction(FunctionIdentifier(name, None), inputs, isDistinct)
+  def apply(name: String, arguments: Seq[Expression], isDistinct: Boolean): UnresolvedFunction = {
+    UnresolvedFunction(FunctionIdentifier(name, None), arguments, isDistinct)
   }
 }
 
