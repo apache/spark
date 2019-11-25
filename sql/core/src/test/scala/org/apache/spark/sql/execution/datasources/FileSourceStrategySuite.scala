@@ -31,12 +31,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class FileSourceStrategySuite extends QueryTest with SharedSparkSession with PredicateHelper {
@@ -494,6 +494,27 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
       val readBack = spark.read.parquet(path).filter($"_1" === "true")
       val filtered = ds.filter($"_1" === "true").toDF()
       checkAnswer(readBack, filtered)
+    }
+  }
+
+  test("SPARK-29768: Column pruning through non-deterministic expressions") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempDir { dir =>
+        val sourcePath = new File(dir, "source").getAbsolutePath
+        val targetPath = new File(dir, "target").getAbsolutePath
+        spark.range(10).selectExpr("id as key", "id * 2 as value")
+          .write.format("parquet").save(sourcePath)
+        spark.range(10).selectExpr("id as key", "id * 3 as s1", "id * 5 as s2").
+          write.format("parquet").save(targetPath)
+        val sourceDF = spark.read.parquet(sourcePath)
+        val targetDF = spark.read.parquet(targetPath).
+          withColumn("row_id", monotonically_increasing_id())
+        val plan = sourceDF.join(targetDF, "key").select("key", "row_id")
+          .queryExecution.sparkPlan
+        val scan = plan.collect { case scan: FileSourceScanExec => scan }
+        assert(scan.size == 2)
+        assert(scan.forall {_.requiredSchema == StructType(StructField("key", LongType) :: Nil)})
+      }
     }
   }
 
