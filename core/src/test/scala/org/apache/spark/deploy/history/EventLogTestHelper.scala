@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
-import org.apache.spark.scheduler.SparkListenerEvent
+import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerBlockManagerAdded, SparkListenerEnvironmentUpdate, SparkListenerEvent, SparkListenerNodeBlacklisted, SparkListenerNodeUnblacklisted}
 import org.apache.spark.util.JsonProtocol
 
 object EventLogTestHelper {
@@ -79,5 +79,45 @@ object EventLogTestHelper {
 
   def convertEvent(event: SparkListenerEvent): String = {
     compact(render(JsonProtocol.sparkEventToJson(event)))
+  }
+
+  class TestEventFilter1 extends EventFilter {
+    override def filterApplicationEnd(event: SparkListenerApplicationEnd): Option[Boolean] = {
+      Some(true)
+    }
+
+    override def filterBlockManagerAdded(event: SparkListenerBlockManagerAdded): Option[Boolean] = {
+      Some(true)
+    }
+
+    override def filterApplicationStart(event: SparkListenerApplicationStart): Option[Boolean] = {
+      Some(false)
+    }
+  }
+
+  class TestEventFilter2 extends EventFilter {
+    override def filterApplicationEnd(event: SparkListenerApplicationEnd): Option[Boolean] = {
+      Some(true)
+    }
+
+    override def filterEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Option[Boolean] = {
+      Some(true)
+    }
+
+    override def filterBlockManagerAdded(event: SparkListenerBlockManagerAdded): Option[Boolean] = {
+      Some(false)
+    }
+
+    override def filterApplicationStart(event: SparkListenerApplicationStart): Option[Boolean] = {
+      Some(false)
+    }
+
+    override def filterNodeBlacklisted(event: SparkListenerNodeBlacklisted): Option[Boolean] = {
+      Some(true)
+    }
+
+    override def filterNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Option[Boolean] = {
+      Some(false)
+    }
   }
 }

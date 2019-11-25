@@ -166,8 +166,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       override protected def mergeApplicationListing(
           reader: EventLogFileReader,
           lastSeen: Long,
-          enableSkipToEnd: Boolean): Unit = {
-        super.mergeApplicationListing(reader, lastSeen, enableSkipToEnd)
+          enableSkipToEnd: Boolean,
+          compactible: Option[Boolean]): Unit = {
+        super.mergeApplicationListing(reader, lastSeen, enableSkipToEnd, compactible)
         mergeApplicationListingCall += 1
       }
     }
@@ -1169,7 +1170,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     var fileStatus = new FileStatus(200, false, 0, 0, 0, path)
     when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
     var logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, None, false)
+      Some("attemptId"), 100, None, Some(false), false)
     var reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(mockedProvider.shouldReloadLog(logInfo, reader.get))
@@ -1179,14 +1180,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
     // DFSInputStream.getFileLength is more than logInfo fileSize
     logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, None, false)
+      Some("attemptId"), 100, None, Some(false), false)
     reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(mockedProvider.shouldReloadLog(logInfo, reader.get))
 
     // DFSInputStream.getFileLength is equal to logInfo fileSize
     logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 200, None, false)
+      Some("attemptId"), 200, None, Some(false), false)
     reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(!mockedProvider.shouldReloadLog(logInfo, reader.get))
@@ -1294,11 +1295,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
     val serializer = new KVStoreScalaSerializer()
     val logInfoWithIndexAsNone = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, None, false)
+      Some("attemptId"), 100, None, None, false)
     assertSerDe(serializer, logInfoWithIndexAsNone)
 
     val logInfoWithIndex = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, Some(3), false)
+      Some("attemptId"), 100, Some(3), Some(false), false)
     assertSerDe(serializer, logInfoWithIndex)
   }
 
@@ -1315,11 +1316,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     val appInfo = new ApplicationAttemptInfo(None, new Date(1), new Date(1), new Date(1),
       10, "spark", false, "dummy")
     val attemptInfoWithIndexAsNone = new AttemptInfoWrapper(appInfo, "dummyPath", 10, None,
-      None, None, None, None)
+      None, None, None, None, None)
     assertSerDe(serializer, attemptInfoWithIndexAsNone)
 
     val attemptInfoWithIndex = new AttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1),
-      None, None, None, None)
+      Some(true), None, None, None, None)
     assertSerDe(serializer, attemptInfoWithIndex)
   }
 
@@ -1360,7 +1361,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       when(reader.listEventLogFiles).thenReturn(logPaths.map { p => fs.getFileStatus(new Path(p)) })
 
       val provider = new FsHistoryProvider(conf)
-      provider.rebuildAppStore(store, reader, 0)
+      provider.rebuildAppStore(store, reader, 0, Some(true))
 
       // files being compacted are deleted
       assert(!fs.exists(new Path(logPath1)))
@@ -1387,6 +1388,139 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       assert(exec1.hostPort === "host1")
       val job2 = appStore.job(2)
       assert(job2.status === JobExecutionStatus.SUCCEEDED)
+    }
+  }
+
+  class EligibilityCallTrackingFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
+    override def mergeApplicationListing(
+        reader: EventLogFileReader,
+        scanTime: Long,
+        enableOptimizations: Boolean,
+        compactible: Option[Boolean]): Unit = {
+      super.mergeApplicationListing(reader, scanTime, enableOptimizations, compactible)
+    }
+
+    var checkEligibilityForCompactionCall = 0
+    override protected def checkEligibilityForCompaction(
+        info: LogInfo,
+        reader: EventLogFileReader): Option[Boolean] = {
+      val ret = super.checkEligibilityForCompaction(info, reader)
+      checkEligibilityForCompactionCall += 1
+      ret
+    }
+  }
+
+  private def createLogInfo(reader: EventLogFileReader, appId: String): LogInfo = {
+    LogInfo(reader.rootPath.toString, 0L, LogType.EventLogs,
+      Some(appId), None, reader.fileSizeForLastIndex, reader.lastIndex,
+      None, reader.completed)
+  }
+
+  private def assertCompactibleInLogInfo(
+    provider: FsHistoryProvider,
+    reader: EventLogFileReader,
+    expected: Option[Boolean]): Unit = {
+    val logInfo = provider.listing.read(classOf[LogInfo], reader.rootPath.toString)
+    assert(expected === logInfo.compactible)
+  }
+
+  test("update eligibility for compaction - rolling event log") {
+    def mockReaderForRollingEventLog(
+        fs: FileSystem,
+        rootPath: Path,
+        logPaths: Seq[Path]): EventLogFileReader = {
+      require(logPaths.nonEmpty)
+      val reader = mock(classOf[EventLogFileReader])
+      val statuses = logPaths.map { log => fs.getFileStatus(log) }
+      when(reader.listEventLogFiles).thenReturn(statuses)
+      when(reader.lastIndex).thenReturn(Some(1L))
+      when(reader.rootPath).thenReturn(rootPath)
+      when(reader.fileSizeForLastIndex).thenReturn(statuses.last.getLen)
+      when(reader.completed).thenReturn(false)
+      reader
+    }
+
+    // To simplify the test, this test directly calls mergeApplicationListing() instead of going
+    // through checkForLogs().
+    withTempDir { dir =>
+      val provider = new EligibilityCallTrackingFsHistoryProvider
+
+      val conf = createTestConf()
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val logPath1 = EventLogTestHelper.writeEventLogFile(conf, hadoopConf, dir, 1, Seq(
+        SparkListenerApplicationStart("app", Some("app"), 0, "user", None)))
+
+      val reader1 = mockReaderForRollingEventLog(fs, new Path(dir.getCanonicalPath),
+        Seq(new Path(logPath1)))
+
+      provider.listing.write(createLogInfo(reader1, "app"))
+      provider.getOrUpdateCompactible(reader1)
+
+      assert(1 === provider.checkEligibilityForCompactionCall)
+      // All events in log file are expected to be filtered in - so 'compactible' should be true,
+      // but we don't decide if there's only one file given the file might be updated later.
+      assertCompactibleInLogInfo(provider, reader1, None)
+
+      // 10 of 11 events will be filtered out which meets the condition of compaction
+      val logPath2 = EventLogTestHelper.writeEventLogFile(conf, hadoopConf, dir, 2,
+        (1 to 5).flatMap { idx =>
+          Seq(SparkListenerJobStart(idx, 1L, Seq.empty, null),
+            SparkListenerJobEnd(idx, 1L, JobSucceeded))
+        } ++ Seq(SparkListenerUnpersistRDD(1)))
+
+      val reader2 = mockReaderForRollingEventLog(fs, new Path(dir.getCanonicalPath),
+        Seq(new Path(logPath1), new Path(logPath2)))
+
+      provider.listing.write(createLogInfo(reader2, "app"))
+      provider.checkEligibilityForCompactionCall = 0
+      provider.getOrUpdateCompactible(reader2)
+
+      assert(1 === provider.checkEligibilityForCompactionCall)
+      // All events in log file are expected to be filtered in - so 'compactible' should be false.
+      assertCompactibleInLogInfo(provider, reader2, Some(false))
+
+      val logPath3 = EventLogTestHelper.writeEventLogFile(conf, hadoopConf, dir, 3, Seq(
+        SparkListenerApplicationEnd(4L)))
+
+      val reader3 = mockReaderForRollingEventLog(fs, new Path(dir.getCanonicalPath),
+        Seq(new Path(logPath2), new Path(logPath3)))
+
+      provider.listing.write(createLogInfo(reader3, "app"))
+      provider.checkEligibilityForCompactionCall = 0
+      provider.getOrUpdateCompactible(reader3)
+
+      assert(1 === provider.checkEligibilityForCompactionCall)
+      // All events in log file are expected to be filtered out - so 'compactible' should be true.
+      assertCompactibleInLogInfo(provider, reader3, Some(true))
+    }
+  }
+
+  test("update eligibility for compaction - single event log") {
+    // To simplify the test, this test directly calls mergeApplicationListing() instead of going
+    // through checkForLogs().
+    withTempDir { dir =>
+      val provider = new EligibilityCallTrackingFsHistoryProvider
+
+      val conf = createTestConf()
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val singleLogFile = newLogFile("new1", None, inProgress = false)
+      writeFile(singleLogFile, None,
+        SparkListenerApplicationStart(singleLogFile.getName(), Some("new-app-complete"), 1L, "test",
+          None),
+        SparkListenerApplicationEnd(5L)
+      )
+
+      val readerForSingleLog = EventLogFileReader(fs, new Path(singleLogFile.getCanonicalPath)).get
+      provider.listing.write(createLogInfo(readerForSingleLog, "new1"))
+
+      provider.getOrUpdateCompactible(readerForSingleLog)
+
+      assert(1 === provider.checkEligibilityForCompactionCall)
+      assertCompactibleInLogInfo(provider, readerForSingleLog, Some(false))
     }
   }
 

@@ -162,6 +162,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val fileCompactor = new EventLogFileCompactor(conf, hadoopConf, fs)
 
+  private val eventFilterRateCalculator = new EventLogFilterRateCalculator(fs)
+
   private val blacklist = new ConcurrentHashMap[String, Long]
 
   // Visible for testing
@@ -474,6 +476,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                       attempt.logPath,
                       attempt.fileSize,
                       attempt.lastIndex,
+                      attempt.compactible,
                       attempt.adminAcls,
                       attempt.viewAcls,
                       attempt.adminAclsGroups,
@@ -500,7 +503,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // to parse it. This will allow the cleaner code to detect the file as stale later on
               // if it was not possible to parse it.
               listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime, LogType.EventLogs,
-                None, None, reader.fileSizeForLastIndex, reader.lastIndex,
+                None, None, reader.fileSizeForLastIndex, reader.lastIndex, None,
                 reader.completed))
               reader.fileSizeForLastIndex > 0
           }
@@ -515,8 +518,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       val tasks = updated.flatMap { entry =>
         try {
-          val task: Future[Unit] = replayExecutor.submit(
-            () => mergeApplicationListing(entry, newLastScanTime, true))
+          val task: Future[Unit] = replayExecutor.submit(() => {
+            val compactible = getOrUpdateCompactible(entry)
+            mergeApplicationListing(entry, newLastScanTime, true, compactible)
+          })
           Some(task -> entry.rootPath)
         } catch {
           // let the iteration over the updated entries break, since an exception on
@@ -665,13 +670,49 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  private[spark] def getOrUpdateCompactible(reader: EventLogFileReader): Option[Boolean] = {
+    try {
+      val info = listing.read(classOf[LogInfo], reader.rootPath.toString)
+      val compactible = checkEligibilityForCompaction(info, reader)
+      if (info.compactible != compactible) {
+        listing.write(info.copy(compactible = compactible))
+      }
+      compactible
+    } catch {
+      case _: NoSuchElementException => None
+    }
+  }
+
+  protected def checkEligibilityForCompaction(
+      info: LogInfo,
+      reader: EventLogFileReader): Option[Boolean] = {
+    info.compactible.orElse {
+      // This is not applied to single event log file.
+      if (reader.lastIndex.isEmpty) {
+        Some(false)
+      } else {
+        if (reader.listEventLogFiles.length > 1) {
+          // We have at least one 'complete' file to check whether the event log is eligible to
+          // compact further.
+          val rate = eventFilterRateCalculator.calculate(
+            Seq(reader.listEventLogFiles.head.getPath))
+          Some(rate < COMPACT_THRESHOLD_FILTER_IN_RATE)
+        } else {
+          // still cannot decide
+          None
+        }
+      }
+    }
+  }
+
   /**
    * Replay the given log file, saving the application in the listing db.
    */
   protected def mergeApplicationListing(
       reader: EventLogFileReader,
       scanTime: Long,
-      enableOptimizations: Boolean): Unit = {
+      enableOptimizations: Boolean,
+      compactible: Option[Boolean]): Unit = {
     val eventsFilter: ReplayEventsFilter = { eventString =>
       eventString.startsWith(APPL_START_EVENT_PREFIX) ||
         eventString.startsWith(APPL_END_EVENT_PREFIX) ||
@@ -690,7 +731,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       ((!appCompleted && fastInProgressParsing) || reparseChunkSize > 0)
 
     val bus = new ReplayListenerBus()
-    val listener = new AppListingListener(reader, clock, shouldHalt)
+    val listener = new AppListingListener(reader, compactible, clock, shouldHalt)
     bus.addListener(listener)
 
     logInfo(s"Parsing $logPath for listing data...")
@@ -749,8 +790,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         invalidateUI(app.info.id, app.attempts.head.info.attemptId)
         addListing(app)
         listing.write(LogInfo(logPath.toString(), scanTime, LogType.EventLogs, Some(app.info.id),
-          app.attempts.head.info.attemptId, reader.fileSizeForLastIndex,
-          reader.lastIndex, reader.completed))
+          app.attempts.head.info.attemptId, reader.fileSizeForLastIndex, reader.lastIndex,
+          app.attempts.head.compactible, reader.completed))
 
         // For a finished log, remove the corresponding "in progress" entry from the listing DB if
         // the file is really gone.
@@ -774,7 +815,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // mean the end event is before the configured threshold, so call the method again to
         // re-parse the whole log.
         logInfo(s"Reparsing $logPath since end event was not found.")
-        mergeApplicationListing(reader, scanTime, enableOptimizations = false)
+        mergeApplicationListing(reader, scanTime, enableOptimizations = false, compactible)
 
       case _ =>
         // If the app hasn't written down its app ID to the logs, still record the entry in the
@@ -782,7 +823,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // does not make progress after the configured max log age.
         listing.write(
           LogInfo(logPath.toString(), scanTime, LogType.EventLogs, None, None,
-            reader.fileSizeForLastIndex, reader.lastIndex, reader.completed))
+            reader.fileSizeForLastIndex, reader.lastIndex, compactible, reader.completed))
     }
   }
 
@@ -917,7 +958,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           case e: NoSuchElementException =>
             // For every new driver log file discovered, create a new entry in listing
             listing.write(LogInfo(f.getPath().toString(), currentTime, LogType.DriverLogs, None,
-              None, f.getLen(), None, false))
+              None, f.getLen(), None, None, false))
           false
         }
       if (deleteFile) {
@@ -949,7 +990,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private[spark] def rebuildAppStore(
       store: KVStore,
       reader: EventLogFileReader,
-      lastUpdated: Long): Unit = {
+      lastUpdated: Long,
+      compactible: Option[Boolean]): Unit = {
     // Disable async updates, since they cause higher memory usage, and it's ok to take longer
     // to parse the event logs in the SHS.
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
@@ -965,8 +1007,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } replayBus.addListener(listener)
 
     try {
-      logInfo(s"Compacting ${reader.rootPath}...")
-      val newEventLogFiles = fileCompactor.compact(reader.listEventLogFiles)
+      val eventLogFiles = reader.listEventLogFiles
+      val newEventLogFiles = if (compactible.contains(true)) {
+        logInfo(s"Compacting ${reader.rootPath}...")
+        fileCompactor.compact(eventLogFiles)
+      } else {
+        eventLogFiles
+      }
       logInfo(s"Parsing ${reader.rootPath} to re-build UI...")
       parseAppEventLogs(newEventLogFiles, replayBus, !reader.completed)
       trackingStore.close(false)
@@ -1086,7 +1133,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val lease = dm.lease(reader.totalSize, isCompressed)
     val newStorePath = try {
       Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata)) { store =>
-        rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
+        rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime(), attempt.compactible)
       }
       lease.commit(appId, attempt.info.attemptId)
     } catch {
@@ -1102,7 +1149,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val store = new InMemoryStore()
     val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
       attempt.lastIndex)
-    rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
+    rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime(), attempt.compactible)
     store
   }
 
@@ -1150,6 +1197,8 @@ private[history] object FsHistoryProvider {
    * all data and re-generate the listing data from the event logs.
    */
   private[history] val CURRENT_LISTING_VERSION = 1L
+
+  private val COMPACT_THRESHOLD_FILTER_IN_RATE = 0.3d
 }
 
 private[history] case class FsHistoryProviderMetadata(
@@ -1175,6 +1224,7 @@ private[history] case class LogInfo(
     fileSize: Long,
     @JsonDeserialize(contentAs = classOf[JLong])
     lastIndex: Option[Long],
+    compactible: Option[Boolean],
     isComplete: Boolean)
 
 private[history] class AttemptInfoWrapper(
@@ -1183,6 +1233,7 @@ private[history] class AttemptInfoWrapper(
     val fileSize: Long,
     @JsonDeserialize(contentAs = classOf[JLong])
     val lastIndex: Option[Long],
+    val compactible: Option[Boolean],
     val adminAcls: Option[String],
     val viewAcls: Option[String],
     val adminAclsGroups: Option[String],
@@ -1207,12 +1258,13 @@ private[history] class ApplicationInfoWrapper(
 
 private[history] class AppListingListener(
     reader: EventLogFileReader,
+    compactible: Option[Boolean],
     clock: Clock,
     haltEnabled: Boolean) extends SparkListener {
 
   private val app = new MutableApplicationInfo()
   private val attempt = new MutableAttemptInfo(reader.rootPath.getName(),
-    reader.fileSizeForLastIndex, reader.lastIndex)
+    reader.fileSizeForLastIndex, reader.lastIndex, compactible)
 
   private var gotEnvUpdate = false
   private var halted = false
@@ -1297,7 +1349,11 @@ private[history] class AppListingListener(
 
   }
 
-  private class MutableAttemptInfo(logPath: String, fileSize: Long, lastIndex: Option[Long]) {
+  private class MutableAttemptInfo(
+      logPath: String,
+      fileSize: Long,
+      lastIndex: Option[Long],
+      compactible: Option[Boolean]) {
     var attemptId: Option[String] = None
     var startTime = new Date(-1)
     var endTime = new Date(-1)
@@ -1327,6 +1383,7 @@ private[history] class AppListingListener(
         logPath,
         fileSize,
         lastIndex,
+        compactible,
         adminAcls,
         viewAcls,
         adminAclsGroups,

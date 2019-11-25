@@ -21,9 +21,9 @@ import java.util.Properties
 
 import scala.collection.immutable.Map
 
-import org.apache.spark.{AccumulatorSuite, SparkContext}
+import org.apache.spark.{AccumulatorSuite, SparkContext, Success, TaskState}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.scheduler.{SparkListenerExecutorAdded, SparkListenerExecutorMetricsUpdate, SparkListenerExecutorRemoved, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, SparkListenerExecutorMetricsUpdate, SparkListenerExecutorRemoved, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskEnd, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
 
@@ -135,6 +135,53 @@ object ListenerEventsTestHelper {
     val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
     val executorUpdates = Map((stageId, 0) -> new ExecutorMetrics(executorMetrics))
     SparkListenerExecutorMetricsUpdate(executorId.toString, accum, executorUpdates)
+  }
+
+  case class JobInfo(
+      stageIds: Seq[Int],
+      stageToTaskIds: Map[Int, Seq[Long]],
+      stageToRddIds: Map[Int, Seq[Int]])
+
+  def pushJobEventsWithoutJobEnd(
+      listener: SparkListener,
+      jobId: Int,
+      jobProps: Properties,
+      execIds: Array[String],
+      time: Long): JobInfo = {
+    // Start a job with 1 stages / 4 tasks each
+    val rddsForStage = createRdds(2)
+    val stage = createStage(rddsForStage, Nil)
+
+    listener.onJobStart(SparkListenerJobStart(jobId, time, Seq(stage), jobProps))
+
+    // Submit stage
+    stage.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage, jobProps))
+
+    // Start tasks from stage
+    val s1Tasks = createTasks(4, execIds, time)
+    s1Tasks.foreach { task =>
+      listener.onTaskStart(SparkListenerTaskStart(stage.stageId,
+        stage.attemptNumber(), task))
+    }
+
+    // Succeed all tasks in stage.
+    val s1Metrics = TaskMetrics.empty
+    s1Metrics.setExecutorCpuTime(2L)
+    s1Metrics.setExecutorRunTime(4L)
+
+    s1Tasks.foreach { task =>
+      task.markFinished(TaskState.FINISHED, time)
+      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber,
+        "taskType", Success, task, new ExecutorMetrics, s1Metrics))
+    }
+
+    // End stage.
+    stage.completionTime = Some(time)
+    listener.onStageCompleted(SparkListenerStageCompleted(stage))
+
+    JobInfo(Seq(stage.stageId), Map(stage.stageId -> s1Tasks.map(_.taskId)),
+      Map(stage.stageId -> rddsForStage.map(_.id)))
   }
 
   private def nextTaskId(): Long = {

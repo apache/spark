@@ -17,7 +17,18 @@
 
 package org.apache.spark.deploy.history
 
+import java.util.ServiceLoader
+
+import scala.collection.JavaConverters._
+import scala.io.{Codec, Source}
+import scala.util.control.NonFatal
+
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.json4s.jackson.JsonMethods.parse
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
  * EventFilterBuilder provides the interface to gather the information from events being received
@@ -26,6 +37,28 @@ import org.apache.spark.scheduler._
  */
 private[spark] trait EventFilterBuilder extends SparkListenerInterface {
   def createFilter(): EventFilter
+}
+
+object EventFilterBuilder {
+  /**
+   * Loads all available EventFilterBuilders in classloader via ServiceLoader, and initializes
+   * them via replaying events in given files.
+   */
+  def initializeBuilders(fs: FileSystem, files: Seq[Path]): Seq[EventFilterBuilder] = {
+    val bus = new ReplayListenerBus()
+
+    val builders = ServiceLoader.load(classOf[EventFilterBuilder],
+      Utils.getContextOrSparkClassLoader).asScala.toSeq
+    builders.foreach(bus.addListener)
+
+    files.foreach { log =>
+      Utils.tryWithResource(EventLogFileReader.openEventLog(log, fs)) { in =>
+        bus.replay(in, log.getName)
+      }
+    }
+
+    builders
+  }
 }
 
 /**
@@ -96,3 +129,98 @@ private[spark] trait EventFilter {
   def filterOtherEvent(event: SparkListenerEvent): Option[Boolean] = None
 }
 
+object EventFilter {
+  def checkFilters(filters: Seq[EventFilter], event: SparkListenerEvent): Boolean = {
+    val results = filters.flatMap(filter => applyFilter(filter, event))
+    results.isEmpty || results.forall(_ == true)
+  }
+
+  private def applyFilter(filter: EventFilter, event: SparkListenerEvent): Option[Boolean] = {
+    // This pattern match should have same list of event types, but it would be safe even if
+    // it's out of sync, once filter doesn't mark events to filter out for unknown event types.
+    event match {
+      case event: SparkListenerStageSubmitted => filter.filterStageSubmitted(event)
+      case event: SparkListenerStageCompleted => filter.filterStageCompleted(event)
+      case event: SparkListenerJobStart => filter.filterJobStart(event)
+      case event: SparkListenerJobEnd => filter.filterJobEnd(event)
+      case event: SparkListenerTaskStart => filter.filterTaskStart(event)
+      case event: SparkListenerTaskGettingResult => filter.filterTaskGettingResult(event)
+      case event: SparkListenerTaskEnd => filter.filterTaskEnd(event)
+      case event: SparkListenerEnvironmentUpdate => filter.filterEnvironmentUpdate(event)
+      case event: SparkListenerBlockManagerAdded => filter.filterBlockManagerAdded(event)
+      case event: SparkListenerBlockManagerRemoved => filter.filterBlockManagerRemoved(event)
+      case event: SparkListenerUnpersistRDD => filter.filterUnpersistRDD(event)
+      case event: SparkListenerApplicationStart => filter.filterApplicationStart(event)
+      case event: SparkListenerApplicationEnd => filter.filterApplicationEnd(event)
+      case event: SparkListenerExecutorMetricsUpdate => filter.filterExecutorMetricsUpdate(event)
+      case event: SparkListenerStageExecutorMetrics => filter.filterStageExecutorMetrics(event)
+      case event: SparkListenerExecutorAdded => filter.filterExecutorAdded(event)
+      case event: SparkListenerExecutorRemoved => filter.filterExecutorRemoved(event)
+      case event: SparkListenerExecutorBlacklistedForStage =>
+        filter.filterExecutorBlacklistedForStage(event)
+      case event: SparkListenerNodeBlacklistedForStage =>
+        filter.filterNodeBlacklistedForStage(event)
+      case event: SparkListenerExecutorBlacklisted => filter.filterExecutorBlacklisted(event)
+      case event: SparkListenerExecutorUnblacklisted => filter.filterExecutorUnblacklisted(event)
+      case event: SparkListenerNodeBlacklisted => filter.filterNodeBlacklisted(event)
+      case event: SparkListenerNodeUnblacklisted => filter.filterNodeUnblacklisted(event)
+      case event: SparkListenerBlockUpdated => filter.filterBlockUpdated(event)
+      case event: SparkListenerSpeculativeTaskSubmitted =>
+        filter.filterSpeculativeTaskSubmitted(event)
+      case _ => filter.filterOtherEvent(event)
+    }
+  }
+}
+
+trait EventFilterApplier extends Logging {
+  val fs: FileSystem
+  val filters: Seq[EventFilter]
+
+  def applyFilter(path: Path): Unit = {
+    Utils.tryWithResource(EventLogFileReader.openEventLog(path, fs)) { in =>
+      val lines = Source.fromInputStream(in)(Codec.UTF8).getLines()
+
+      var currentLine: String = null
+      var lineNumber: Int = 0
+
+      try {
+        val lineEntries = lines.zipWithIndex
+        while (lineEntries.hasNext) {
+          val entry = lineEntries.next()
+
+          currentLine = entry._1
+          lineNumber = entry._2 + 1
+
+          val event = try {
+            Some(JsonProtocol.sparkEventFromJson(parse(currentLine)))
+          } catch {
+            // ignore any exception occurred from unidentified json
+            // just skip handling and write the line
+            case NonFatal(_) =>
+              handleUnidentifiedLine(currentLine)
+              None
+          }
+
+          event.foreach { e =>
+            if (EventFilter.checkFilters(filters, e)) {
+              handleFilteredInEvent(currentLine, e)
+            } else {
+              handleFilteredOutEvent(currentLine, e)
+            }
+          }
+        }
+      } catch {
+        case e: Exception =>
+          logError(s"Exception parsing Spark event log: ${path.getName}", e)
+          logError(s"Malformed line #$lineNumber: $currentLine\n")
+          throw e
+      }
+    }
+  }
+
+  protected def handleFilteredInEvent(line: String, event: SparkListenerEvent): Unit
+
+  protected def handleFilteredOutEvent(line: String, event: SparkListenerEvent): Unit
+
+  protected def handleUnidentifiedLine(line: String): Unit
+}
