@@ -104,6 +104,8 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
  * will return immediately.
  */
 object ScanOperation extends OperationHelper with PredicateHelper {
+  type ScanReturnType = Option[(Option[Seq[NamedExpression]],
+    Seq[Expression], LogicalPlan, AttributeMap[Expression])]
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
     collectProjectsAndFilters(plan) match {
@@ -123,9 +125,7 @@ object ScanOperation extends OperationHelper with PredicateHelper {
     }.exists(!_.deterministic))
   }
 
-  private def collectProjectsAndFilters(plan: LogicalPlan)
-    : Option[(Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan,
-    AttributeMap[Expression])] =
+  private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType =
       plan match {
         case Project(fields, child) =>
           collectProjectsAndFilters(child) match {
