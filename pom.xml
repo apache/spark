@@ -3013,6 +3013,10 @@
     
     <profile>
       <id>scala-2.13</id>
+      <properties>
+        <scala.version>2.13.1</scala.version>
+        <scala.binary.version>2.13</scala.binary.version>
+      </properties>
       <dependencyManagement>
         <dependencies>
           <dependency>
