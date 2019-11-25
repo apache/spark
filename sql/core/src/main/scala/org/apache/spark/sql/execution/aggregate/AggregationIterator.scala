@@ -170,14 +170,11 @@ abstract class AggregationIterator(
           }
         case _ => None
       }
-      var isFinalOrMerge = false
       val mergeExpressions = functions.zipWithIndex.collect {
         case (ae: DeclarativeAggregate, i) =>
           expressions(i).mode match {
             case Partial | Complete => ae.updateExpressions
-            case PartialMerge | Final =>
-              isFinalOrMerge = true
-              ae.mergeExpressions
+            case PartialMerge | Final => ae.mergeExpressions
           }
         case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
       }
@@ -212,6 +209,8 @@ abstract class AggregationIterator(
       // The following two situations will adopt a common implementation:
       // First, no filter predicate is specified for any aggregate expression.
       // Second, aggregate expressions are in merge or final mode.
+      val isFinalOrMerge = expressions.map(_.mode)
+        .collect { case PartialMerge | Final => true }.nonEmpty
       if (predicateOptions.isEmpty || isFinalOrMerge) {
         (currentBuffer: InternalRow, row: InternalRow) => {
           updateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
@@ -235,7 +234,7 @@ abstract class AggregationIterator(
           for (i <- 0 until expressions.length) {
             if ((expressions(i).mode == Partial || expressions(i).mode == Complete)) {
               if (predicateOptions(i).isDefined) {
-                if (predicateOption(i).get.eval(row)) {
+                if (predicateOptions(i).get.eval(row)) {
                   dynamicMergeExpressions ++= mergeExpressions(i)
                 } else {
                   dynamicMergeExpressions ++= Seq(NoOp)

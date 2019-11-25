@@ -2835,7 +2835,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(1, 3, 4) :: Row(2, 3, 4) :: Row(3, 3, 4) :: Nil)
   }
 
-  test("SPARK-27986: support filter clause for aggregate function with hash") {
+  test("Support filter clause for aggregate function with hash") {
     Seq(("APPROX_COUNT_DISTINCT(a)", 3), ("COUNT(a)", 3), ("FIRST(a)", 1), ("LAST(a)", 3),
       ("MAX(a)", 3), ("AVG(a)", 2.0), ("MIN(a)", 1), ("SUM(a)", 6), ("PERCENTILE(a, 1)", 3),
         ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0), ("COLLECT_LIST(a)", Seq(1, 2, 3)),
@@ -2856,7 +2856,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-27986: support filter clause for aggregate function uses SortAggregateExec") {
+  test("Support filter clause for aggregate function uses SortAggregateExec") {
     val origin = spark.conf.get(SQLConf.USE_OBJECT_HASH_AGG)
     spark.conf.set(SQLConf.USE_OBJECT_HASH_AGG.key, false)
     Seq(("PERCENTILE(a, 1)", 3), ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0),
@@ -2877,7 +2877,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     spark.conf.set(SQLConf.USE_OBJECT_HASH_AGG.key, origin)
   }
 
-  test("SPARK-27986: support filter clause for multiple aggregate function") {
+  test("Support filter clause for multiple aggregate function") {
     val query = """
                   | SELECT
                   | COUNT(a), COUNT(a) FILTER (WHERE b >= 2),
@@ -2896,7 +2896,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(6, 3, 12, 6, 3, 3, 1, 1, 2, 2) :: Nil)
   }
 
-  test("SPARK-27986: support filter clause for aggregate function with group") {
+  test("Support filter clause for aggregate function with group") {
     Seq("b = 2", "b = (select 2)").foreach{ predicate =>
       val query = s"SELECT b, MAX(a), MAX(a) FILTER (WHERE $predicate) FROM testData2 GROUP BY b"
       val df = sql(query)
