@@ -69,14 +69,10 @@ import org.apache.spark.sql.util.SchemaUtils
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
+    fileFormat: CatalogStorageFormat,
     provider: Option[String],
-    hiveFormat: Option[CatalogStorageFormat],
-    location: Option[String],
     properties: Map[String, String] = Map.empty,
     ifNotExists: Boolean) extends RunnableCommand {
-
-  assert(!(hiveFormat.isDefined && provider.isDefined),
-    "'STORED AS hiveFormats' and 'USING provider' should not be specified both")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -95,21 +91,24 @@ case class CreateTableLikeCommand(
       sourceTableDesc.provider
     }
 
-    val newStorage = hiveFormat match {
-      case Some(f) =>
-        sourceTableDesc.storage.copy(
-          inputFormat = f.inputFormat,
-          outputFormat = f.outputFormat,
-          serde = f.serde,
-          locationUri = location.map(CatalogUtils.stringToURI(_)))
-      case None =>
-        sourceTableDesc.storage.copy(
-          locationUri = location.map(CatalogUtils.stringToURI(_)))
+    val newStorage = if (fileFormat.inputFormat.isDefined) {
+      sourceTableDesc.storage.copy(
+        locationUri = fileFormat.locationUri,
+        inputFormat = fileFormat.inputFormat,
+        outputFormat = fileFormat.outputFormat,
+        serde = fileFormat.serde
+      )
+    } else {
+      sourceTableDesc.storage.copy(locationUri = fileFormat.locationUri)
     }
 
     // If the location is specified, we create an external table internally.
     // Otherwise create a managed table.
-    val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
+    val tblType = if (newStorage.locationUri.isEmpty) {
+      CatalogTableType.MANAGED
+    } else {
+      CatalogTableType.EXTERNAL
+    }
 
     val newTableDesc =
       CatalogTable(

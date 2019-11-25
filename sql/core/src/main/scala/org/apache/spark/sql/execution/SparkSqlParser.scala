@@ -568,11 +568,20 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
-    val hiveFormat = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
     val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val fileFormat = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat) match {
+      case Some(f) =>
+        if (provider.isDefined) {
+          throw new ParseException("'STORED AS hiveFormats' and 'USING provider' " +
+            "should not be specified both", ctx)
+        }
+        f.copy(locationUri = location.map(CatalogUtils.stringToURI))
+      case None =>
+        CatalogStorageFormat.empty.copy(locationUri = location.map(CatalogUtils.stringToURI))
+    }
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     CreateTableLikeCommand(
-      targetTable, sourceTable, provider, hiveFormat, location, properties, ctx.EXISTS != null)
+      targetTable, sourceTable, fileFormat, provider, properties, ctx.EXISTS != null)
   }
 
   /**
