@@ -393,8 +393,8 @@ object SQLConf {
         "must be a positive integer.")
       .createOptional
 
-  val OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.optimizedLocalShuffleReader.enabled")
+  val LOCAL_SHUFFLE_READER_ENABLED =
+    buildConf("spark.sql.adaptive.shuffle.localShuffleReader.enabled")
     .doc("When true and adaptive execution is enabled, this enables the optimization of" +
       " converting the shuffle reader to local shuffle reader for the shuffle exchange" +
       " of the broadcast hash join in probe side.")
@@ -1393,6 +1393,12 @@ object SQLConf {
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PLAN_STATS_ENABLED =
+    buildConf("spark.sql.cbo.planStats.enabled")
+      .doc("When true, the logical plan will fetch row counts and column statistics from catalog.")
       .booleanConf
       .createWithDefault(false)
 
@@ -2426,6 +2432,8 @@ class SQLConf extends Serializable with Logging {
   def percentileAccuracy: Int = getConf(PERCENTILE_ACCURACY)
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
+
+  def planStatsEnabled: Boolean = getConf(SQLConf.PLAN_STATS_ENABLED)
 
   def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
 

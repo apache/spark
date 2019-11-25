@@ -154,7 +154,7 @@ trait ProgressReporter extends Logging {
 
     val executionStats = extractExecutionStats(hasNewData)
     val processingTimeMills = currentTriggerEndTimestamp - currentTriggerStartTimestamp
-    val processingTimeSec = processingTimeMills.toDouble / MILLIS_PER_SECOND
+    val processingTimeSec = Math.max(1L, processingTimeMills).toDouble / MILLIS_PER_SECOND
 
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
       (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
