@@ -261,7 +261,6 @@ from interval_arithmetic;
 -- control characters as white spaces
 select interval '\t interval 1 day';
 
-
 select interval '1.41666666666666 year';
 select interval '1.41666666666667 year';
 select interval '1.1333333333301 months';
