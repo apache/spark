@@ -17,23 +17,23 @@
 
 package org.apache.spark.internal.plugin
 
-import org.apache.spark.api.plugin.DriverPlugin
+import org.apache.spark.api.plugin.PluginRpcEndpoint
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEnv}
 
 case class PluginMessage(pluginName: String, message: AnyRef)
 
 private class PluginEndpoint(
-    plugins: Map[String, DriverPlugin],
+    plugins: Map[String, PluginRpcEndpoint],
     override val rpcEnv: RpcEnv)
   extends IsolatedRpcEndpoint with Logging {
 
   override def receive: PartialFunction[Any, Unit] = {
     case PluginMessage(pluginName, message) =>
       plugins.get(pluginName) match {
-        case Some(plugin) =>
+        case Some(endpoint) =>
           try {
-            val reply = plugin.receive(message)
+            val reply = endpoint.receive(message)
             if (reply != null) {
               logInfo(
                 s"Plugin $pluginName returned reply for one-way message of type " +
@@ -53,8 +53,8 @@ private class PluginEndpoint(
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case PluginMessage(pluginName, message) =>
       plugins.get(pluginName) match {
-        case Some(plugin) =>
-          context.reply(plugin.receive(message))
+        case Some(endpoint) =>
+          context.reply(endpoint.receive(message))
 
         case None =>
           throw new IllegalArgumentException(s"Received message for unknown plugin $pluginName.")

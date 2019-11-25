@@ -37,12 +37,13 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.plugin.PluginContainer
+import org.apache.spark.internal.plugin.ExecutorPluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -138,8 +139,13 @@ private[spark] class Executor(
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
   // Plugins need to load using a class loader that includes the executor's user classpath
-  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
-    PluginContainer(env)
+  private val plugins = Utils.withContextClassLoader(replClassLoader) {
+    new ExecutorPluginContainer(env)
+  }
+
+  // If using the sort shuffle manager, register the plugin with the manager.
+  if (env.shuffleManager.isInstanceOf[SortShuffleManager]) {
+    env.shuffleManager.asInstanceOf[SortShuffleManager].registerShufflePlugin(plugins.shufflePlugin)
   }
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
@@ -266,7 +272,7 @@ private[spark] class Executor(
 
     // Notify plugins that executor is shutting down so they can terminate cleanly
     Utils.withContextClassLoader(replClassLoader) {
-      plugins.foreach(_.shutdown())
+      plugins.shutdown()
     }
     if (!isLocal) {
       env.stop()

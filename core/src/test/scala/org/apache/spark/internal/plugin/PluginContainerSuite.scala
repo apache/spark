@@ -35,6 +35,7 @@ import org.apache.spark._
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.shuffle.api._
 import org.apache.spark.util.Utils
 
 class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with LocalSparkContext {
@@ -101,13 +102,6 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     verify(TestSparkPlugin.executorPlugin).shutdown()
   }
 
-  test("do nothing if plugins are not configured") {
-    val conf = new SparkConf()
-    val env = mock(classOf[SparkEnv])
-    when(env.conf).thenReturn(conf)
-    assert(PluginContainer(env) === None)
-  }
-
   test("merging of config options") {
     val conf = new SparkConf()
       .setAppName(getClass().getName())
@@ -120,6 +114,25 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     sc = new SparkContext(conf)
     // Just check plugin is loaded. The plugin code below checks whether a single copy was loaded.
     assert(TestSparkPlugin.driverPlugin != null)
+  }
+
+  test("load custom shuffle io plugin") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+      .set(SHUFFLE_IO_PLUGIN_CLASS, classOf[TestShuffleDataIO].getName())
+
+    sc = new SparkContext(conf)
+    assert(TestSparkPlugin.shuffleDriverPluginLoaded)
+    assert(TestSparkPlugin.shuffleExecutorPluginLoaded)
+
+    val metricSources = sc.env.metricsSystem
+      .getSourcesByName(s"plugin.${classOf[TestShuffleDataIO].getName()}")
+    assert(metricSources.size === 1)
+
+    val shuffleMetric = metricSources.head.metricRegistry.getGauges().get("shuffleMetric")
+    assert(shuffleMetric != null)
+    assert(shuffleMetric.asInstanceOf[Gauge[Int]].getValue() === 168)
   }
 
   test("plugin initialization in non-local mode") {
@@ -189,7 +202,7 @@ class TestSparkPlugin extends SparkPlugin {
 
 }
 
-private class TestDriverPlugin extends DriverPlugin {
+private class TestDriverPlugin extends DriverPlugin with PluginRpcEndpoint {
 
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
     TestSparkPlugin.driverContext = ctx
@@ -230,11 +243,51 @@ private object TestSparkPlugin {
 
   var extraConf: JMap[String, String] = _
 
+  var shuffleDriverPluginLoaded: Boolean = false
+  var shuffleExecutorPluginLoaded: Boolean = false
+
   def reset(): Unit = {
     driverPlugin = null
     driverContext = null
     executorPlugin = null
     executorContext = null
     extraConf = null
+    shuffleDriverPluginLoaded = false
+    shuffleExecutorPluginLoaded = false
+  }
+}
+
+class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
+  override def driver(): ShuffleDriverComponents = new TestShuffleDriverComponents()
+
+  override def executor(): ShuffleExecutorComponents =
+    new TestShuffleExecutorComponentsInitialized()
+}
+
+class TestShuffleDriverComponents extends ShuffleDriverComponents {
+  override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
+    TestSparkPlugin.shuffleDriverPluginLoaded = true
+    Map("test-plugin-key" -> "plugin-set-value").asJava
+  }
+
+  override def registerMetrics(appId: String, ctx: PluginContext): Unit = {
+    ctx.metricRegistry().register("shuffleMetric", new Gauge[Int] {
+      override def getValue(): Int = 168
+    })
+  }
+}
+
+class TestShuffleExecutorComponentsInitialized extends ShuffleExecutorComponents {
+
+  override def init(ctx: PluginContext, extraConfigs: JMap[String, String]): Unit = {
+    assert(extraConfigs.get("test-plugin-key") == "plugin-set-value", extraConfigs)
+    TestSparkPlugin.shuffleExecutorPluginLoaded = true
+  }
+
+  override def createMapOutputWriter(
+      shuffleId: Int,
+      mapTaskId: Long,
+      numPartitions: Int): ShuffleMapOutputWriter = {
+    throw new UnsupportedOperationException()
   }
 }

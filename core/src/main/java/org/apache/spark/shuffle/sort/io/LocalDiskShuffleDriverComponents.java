@@ -20,7 +20,9 @@ package org.apache.spark.shuffle.sort.io;
 import java.util.Collections;
 import java.util.Map;
 
+import org.apache.spark.SparkContext;
 import org.apache.spark.SparkEnv;
+import org.apache.spark.api.plugin.PluginContext;
 import org.apache.spark.shuffle.api.ShuffleDriverComponents;
 import org.apache.spark.storage.BlockManagerMaster;
 
@@ -29,14 +31,9 @@ public class LocalDiskShuffleDriverComponents implements ShuffleDriverComponents
   private BlockManagerMaster blockManagerMaster;
 
   @Override
-  public Map<String, String> initializeApplication() {
-    blockManagerMaster = SparkEnv.get().blockManager().master();
+  public Map<String, String> init(SparkContext sc, PluginContext ctx) {
+    blockManagerMaster = sc.env().blockManager().master();
     return Collections.emptyMap();
-  }
-
-  @Override
-  public void cleanupApplication() {
-    // nothing to clean up
   }
 
   @Override

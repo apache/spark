@@ -20,57 +20,75 @@ package org.apache.spark.internal.plugin
 import scala.collection.JavaConverters._
 import scala.util.{Either, Left, Right}
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.shuffle.api._
 import org.apache.spark.util.Utils
 
-sealed abstract class PluginContainer {
+class DriverPluginContainer(sc: SparkContext) extends Logging {
 
-  def shutdown(): Unit
-  def registerMetrics(appId: String): Unit
-
-}
-
-private class DriverPluginContainer(sc: SparkContext, plugins: Seq[SparkPlugin])
-  extends PluginContainer with Logging {
-
-  private val driverPlugins: Seq[(String, DriverPlugin, PluginContextImpl)] = plugins.flatMap { p =>
-    val driverPlugin = p.driverPlugin()
-    if (driverPlugin != null) {
-      val name = p.getClass().getName()
-      val ctx = new PluginContextImpl(name, sc.env.rpcEnv, sc.env.metricsSystem, sc.conf,
-        sc.env.executorId)
-
-      val extraConf = driverPlugin.init(sc, ctx)
-      if (extraConf != null) {
-        extraConf.asScala.foreach { case (k, v) =>
-          sc.conf.set(s"${PluginContainer.EXTRA_CONF_PREFIX}$name.$k", v)
+  private val plugins: Seq[(String, DriverPlugin, PluginContextImpl)] =
+    PluginContainer.loadPlugins(sc.conf).flatMap { p =>
+      val driverPlugin = p.driverPlugin()
+      if (driverPlugin != null) {
+        val name = p match {
+          case shuffle: ShuffleDataIOAdapter => shuffle.shufflePluginClass
+          case _ => p.getClass().getName()
         }
+
+        val ctx = new PluginContextImpl(name, sc.env.rpcEnv, sc.env.metricsSystem, sc.conf,
+          sc.env.executorId)
+
+        val extraConf = driverPlugin.init(sc, ctx)
+        if (extraConf != null) {
+          extraConf.asScala.foreach { case (k, v) =>
+            sc.conf.set(s"${PluginContainer.EXTRA_CONF_PREFIX}$name.$k", v)
+          }
+        }
+        logInfo(s"Initialized driver component for plugin $name.")
+        Some((p.getClass().getName(), driverPlugin, ctx))
+      } else {
+        None
       }
-      logInfo(s"Initialized driver component for plugin $name.")
-      Some((p.getClass().getName(), driverPlugin, ctx))
-    } else {
-      None
+    }
+
+  private val _shufflePlugin: ShuffleDriverComponents = {
+    plugins.find { case (_, plugin, _) => plugin.isInstanceOf[ShuffleDriverComponents] }
+      .map { case (_, plugin, _) => plugin }
+      .getOrElse(throw new IllegalStateException("Could not find shuffle driver component."))
+      .asInstanceOf[ShuffleDriverComponents]
+  }
+
+
+  // Initialize the RPC endpoint only if at least one plugin needs it.
+  {
+    val endpoints = plugins.flatMap { case (name, plugin, _) =>
+      val pluginEndpoint = plugin.rpcEndpoint()
+      if (pluginEndpoint != null) {
+        Some((name, pluginEndpoint))
+      } else {
+        None
+      }
+    }.toMap
+    if (endpoints.nonEmpty) {
+      sc.env.rpcEnv.setupEndpoint(classOf[PluginEndpoint].getName(),
+        new PluginEndpoint(endpoints, sc.env.rpcEnv))
     }
   }
 
-  if (driverPlugins.nonEmpty) {
-    val pluginsByName = driverPlugins.map { case (name, plugin, _) => (name, plugin) }.toMap
-    sc.env.rpcEnv.setupEndpoint(classOf[PluginEndpoint].getName(),
-      new PluginEndpoint(pluginsByName, sc.env.rpcEnv))
-  }
+  def shufflePlugin: ShuffleDriverComponents = _shufflePlugin
 
-  override def registerMetrics(appId: String): Unit = {
-    driverPlugins.foreach { case (_, plugin, ctx) =>
+  def registerMetrics(appId: String): Unit = {
+    plugins.foreach { case (_, plugin, ctx) =>
       plugin.registerMetrics(appId, ctx)
       ctx.registerMetrics()
     }
   }
 
-  override def shutdown(): Unit = {
-    driverPlugins.foreach { case (name, plugin, _) =>
+  def shutdown(): Unit = {
+    plugins.foreach { case (name, plugin, _) =>
       try {
         logDebug(s"Stopping plugin $name.")
         plugin.shutdown()
@@ -83,16 +101,17 @@ private class DriverPluginContainer(sc: SparkContext, plugins: Seq[SparkPlugin])
 
 }
 
-private class ExecutorPluginContainer(env: SparkEnv, plugins: Seq[SparkPlugin])
-  extends PluginContainer with Logging {
+class ExecutorPluginContainer(env: SparkEnv) extends Logging {
 
-  private val executorPlugins: Seq[(String, ExecutorPlugin)] = {
-    val allExtraConf = env.conf.getAllWithPrefix(PluginContainer.EXTRA_CONF_PREFIX)
-
-    plugins.flatMap { p =>
+  private val plugins: Seq[(String, ExecutorPlugin)] = {
+    val allExtraConf = env.conf.getAllWithPrefix(PluginContainer.EXTRA_CONF_PREFIX).toMap
+    PluginContainer.loadPlugins(env.conf).flatMap { p =>
       val executorPlugin = p.executorPlugin()
       if (executorPlugin != null) {
-        val name = p.getClass().getName()
+        val name = p match {
+          case shuffle: ShuffleDataIOAdapter => shuffle.shufflePluginClass
+          case _ => p.getClass().getName()
+        }
         val prefix = name + "."
         val extraConf = allExtraConf
           .filter { case (k, v) => k.startsWith(prefix) }
@@ -112,12 +131,17 @@ private class ExecutorPluginContainer(env: SparkEnv, plugins: Seq[SparkPlugin])
     }
   }
 
-  override def registerMetrics(appId: String): Unit = {
-    throw new IllegalStateException("Should not be called for the executor container.")
+  private val _shufflePlugin: ShuffleExecutorComponents = {
+    plugins.find { case (_, plugin) => plugin.isInstanceOf[ShuffleExecutorComponents] }
+      .map { case (_, plugin) => plugin }
+      .getOrElse(throw new IllegalStateException("Could not find shuffle executor component."))
+      .asInstanceOf[ShuffleExecutorComponents]
   }
 
-  override def shutdown(): Unit = {
-    executorPlugins.foreach { case (name, plugin) =>
+  def shufflePlugin: ShuffleExecutorComponents = _shufflePlugin
+
+  def shutdown(): Unit = {
+    plugins.foreach { case (name, plugin) =>
       try {
         logDebug(s"Stopping plugin $name.")
         plugin.shutdown()
@@ -129,24 +153,34 @@ private class ExecutorPluginContainer(env: SparkEnv, plugins: Seq[SparkPlugin])
   }
 }
 
-object PluginContainer {
+private class ShuffleDataIOAdapter(conf: SparkConf) extends SparkPlugin {
+
+  val shufflePluginClass = conf.get(SHUFFLE_IO_PLUGIN_CLASS)
+
+  override def driverPlugin(): DriverPlugin = {
+    loadShuffleDataIO().driver()
+  }
+
+  override def executorPlugin(): ExecutorPlugin = {
+    loadShuffleDataIO().executor()
+  }
+
+  private def loadShuffleDataIO(): ShuffleDataIO = {
+    val maybeIO = Utils.loadExtensions(classOf[ShuffleDataIO], Seq(shufflePluginClass), conf)
+    require(maybeIO.nonEmpty, s"A valid shuffle plugin must be specified by config " +
+      s"${SHUFFLE_IO_PLUGIN_CLASS.key}, but $shufflePluginClass resulted in zero valid " +
+      s"plugins.")
+    maybeIO.head
+  }
+
+}
+
+private object PluginContainer {
 
   val EXTRA_CONF_PREFIX = "spark.plugins.internal.conf."
 
-  def apply(sc: SparkContext): Option[PluginContainer] = PluginContainer(Left(sc))
-
-  def apply(env: SparkEnv): Option[PluginContainer] = PluginContainer(Right(env))
-
-  private def apply(ctx: Either[SparkContext, SparkEnv]): Option[PluginContainer] = {
-    val conf = ctx.fold(_.conf, _.conf)
-    val plugins = Utils.loadExtensions(classOf[SparkPlugin], conf.get(PLUGINS).distinct, conf)
-    if (plugins.nonEmpty) {
-      ctx match {
-        case Left(sc) => Some(new DriverPluginContainer(sc, plugins))
-        case Right(env) => Some(new ExecutorPluginContainer(env, plugins))
-      }
-    } else {
-      None
-    }
+  def loadPlugins(conf: SparkConf): Seq[SparkPlugin] = {
+    val pluginClasses = conf.get(PLUGINS) ++ Seq(classOf[ShuffleDataIOAdapter].getName())
+    Utils.loadExtensions(classOf[SparkPlugin], pluginClasses.distinct, conf)
   }
 }

@@ -48,7 +48,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.internal.plugin.PluginContainer
+import org.apache.spark.internal.plugin.DriverPluginContainer
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
@@ -59,7 +59,6 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
-import org.apache.spark.shuffle.ShuffleDataIOUtils
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
@@ -220,8 +219,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
   private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
-  private var _shuffleDriverComponents: ShuffleDriverComponents = _
-  private var _plugins: Option[PluginContainer] = None
+  private var _plugins: DriverPluginContainer = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -324,7 +322,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = ds
   }
 
-  private[spark] def shuffleDriverComponents: ShuffleDriverComponents = _shuffleDriverComponents
+  private[spark] def shuffleDriverComponents: ShuffleDriverComponents = _plugins.shufflePlugin
 
   /**
    * A unique identifier for the Spark application.
@@ -531,18 +529,13 @@ class SparkContext(config: SparkConf) extends Logging {
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 
-    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
-    _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
-      _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
-    }
-
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
     // Initialize any plugins before the task scheduler is initialized.
-    _plugins = PluginContainer(this)
+    _plugins = new DriverPluginContainer(this)
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
@@ -591,7 +584,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _cleaner =
       if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
-        Some(new ContextCleaner(this, _shuffleDriverComponents))
+        Some(new ContextCleaner(this, shuffleDriverComponents))
       } else {
         None
       }
@@ -626,7 +619,7 @@ class SparkContext(config: SparkConf) extends Logging {
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
     }
     appStatusSource.foreach(_env.metricsSystem.registerSource(_))
-    _plugins.foreach(_.registerMetrics(applicationId))
+    _plugins.registerMetrics(applicationId)
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
@@ -1983,7 +1976,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     }
     Utils.tryLogNonFatalError {
-      _plugins.foreach(_.shutdown())
+      _plugins.shutdown()
     }
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
@@ -1993,11 +1986,6 @@ class SparkContext(config: SparkConf) extends Logging {
         _heartbeater.stop()
       }
       _heartbeater = null
-    }
-    if (_shuffleDriverComponents != null) {
-      Utils.tryLogNonFatalError {
-        _shuffleDriverComponents.cleanupApplication()
-      }
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {

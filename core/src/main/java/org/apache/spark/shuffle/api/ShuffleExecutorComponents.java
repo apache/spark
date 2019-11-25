@@ -22,26 +22,19 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.api.plugin.ExecutorPlugin;
 
 /**
  * :: Private ::
  * An interface for building shuffle support for Executors.
+ * <p>
+ * Lifecycle methods (such as initialization and shutdown callbacks) are inherited from the
+ * {@link ExecutorPlugin} interface.
  *
  * @since 3.0.0
  */
 @Private
-public interface ShuffleExecutorComponents {
-
-  /**
-   * Called once per executor to bootstrap this module with state that is specific to
-   * that executor, specifically the application ID and executor ID.
-   *
-   * @param appId The Spark application id
-   * @param execId The unique identifier of the executor being initialized
-   * @param extraConfigs Extra configs that were returned by
-   *                     {@link ShuffleDriverComponents#initializeApplication()}
-   */
-  void initializeExecutor(String appId, String execId, Map<String, String> extraConfigs);
+public interface ShuffleExecutorComponents extends ExecutorPlugin {
 
   /**
    * Called once per map task to create a writer that will be responsible for persisting all the

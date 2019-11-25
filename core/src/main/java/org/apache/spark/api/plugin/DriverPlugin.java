@@ -73,31 +73,14 @@ public interface DriverPlugin {
   default void registerMetrics(String appId, PluginContext pluginContext) {}
 
   /**
-   * RPC message handler.
-   * <p>
-   * Plugins can use Spark's RPC system to send messages from executors to the driver (but not
-   * the other way around, currently). Messages sent by the executor component of the plugin will
-   * be delivered to this method, and the returned value will be sent back to the executor as
-   * the reply, if the executor has requested one.
-   * <p>
-   * Any exception thrown will be sent back to the executor as an error, in case it is expecting
-   * a reply. In case a reply is not expected, a log message will be written to the driver log.
-   * <p>
-   * The implementation of this handler should be thread-safe.
-   * <p>
-   * Note all plugins share RPC dispatch threads, and this method is called synchronously. So
-   * performing expensive operations in this handler may affect the operation of other active
-   * plugins. Internal Spark endpoints are not directly affected, though, since they use different
-   * threads.
-   * <p>
-   * Spark guarantees that the driver component will be ready to receive messages through this
-   * handler when executors are started.
+   * RPC endpoint for the plugin. The default implementation checks whether the implementing class
+   * is an instance of {@link PluginRpcEndpoint}, and returns itself in that case. Otherwise
+   * it returns <code>null</code>
    *
-   * @param message The incoming message.
-   * @return Value to be returned to the caller. Ignored if the caller does not expect a reply.
+   * @return The RPC endpoint, or <code>null</code> if the plugin does not need one.
    */
-  default Object receive(Object message) throws Exception {
-    throw new UnsupportedOperationException();
+  default PluginRpcEndpoint rpcEndpoint() {
+    return (this instanceof PluginRpcEndpoint) ? ((PluginRpcEndpoint) this) : null;
   }
 
   /**

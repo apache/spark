@@ -20,32 +20,17 @@ package org.apache.spark.shuffle.api;
 import java.util.Map;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.api.plugin.DriverPlugin;
 
 /**
  * :: Private ::
  * An interface for building shuffle support modules for the Driver.
+ * <p>
+ * Lifecycle methods (such as initialization and shutdown callbacks) are inherited from the
+ * {@link DriverPlugin} interface.
  */
 @Private
-public interface ShuffleDriverComponents {
-
-  /**
-   * Called once in the driver to bootstrap this module that is specific to this application.
-   * This method is called before submitting executor requests to the cluster manager.
-   *
-   * This method should prepare the module with its shuffle components i.e. registering against
-   * an external file servers or shuffle services, or creating tables in a shuffle
-   * storage data database.
-   *
-   * @return additional SparkConf settings necessary for initializing the executor components.
-   * This would include configurations that cannot be statically set on the application, like
-   * the host:port of external services for shuffle storage.
-   */
-  Map<String, String> initializeApplication();
-
-  /**
-   * Called once at the end of the Spark application to clean up any existing shuffle state.
-   */
-  void cleanupApplication();
+public interface ShuffleDriverComponents extends DriverPlugin {
 
   /**
    * Called once per shuffle id when the shuffle id is first generated for a shuffle stage.

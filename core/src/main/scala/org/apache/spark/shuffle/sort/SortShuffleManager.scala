@@ -86,7 +86,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
    */
   private[this] val taskIdMapsForShuffle = new ConcurrentHashMap[Int, OpenHashSet[Long]]()
 
-  private lazy val shuffleExecutorComponents = loadShuffleExecutorComponents(conf)
+  private var shuffleExecutorComponents: ShuffleExecutorComponents = _
 
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
@@ -151,6 +151,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       mapId: Long,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
+    require(shuffleExecutorComponents != null, "Shuffle components not initialized.")
     val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
       handle.shuffleId, _ => new OpenHashSet[Long](16))
     mapTaskIds.synchronized { mapTaskIds.add(context.taskAttemptId()) }
@@ -193,6 +194,10 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
+  }
+
+  def registerShufflePlugin(plugin: ShuffleExecutorComponents): Unit = {
+    shuffleExecutorComponents = plugin
   }
 }
 
@@ -246,17 +251,6 @@ private[spark] object SortShuffleManager extends Logging {
       log.debug(s"Can use serialized shuffle for shuffle $shufId")
       true
     }
-  }
-
-  private def loadShuffleExecutorComponents(conf: SparkConf): ShuffleExecutorComponents = {
-    val executorComponents = ShuffleDataIOUtils.loadShuffleDataIO(conf).executor()
-    val extraConfigs = conf.getAllWithPrefix(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX)
-        .toMap
-    executorComponents.initializeExecutor(
-      conf.getAppId,
-      SparkEnv.get.executorId,
-      extraConfigs.asJava)
-    executorComponents
   }
 }
 
