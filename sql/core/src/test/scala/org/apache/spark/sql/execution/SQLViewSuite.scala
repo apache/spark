@@ -136,14 +136,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertNoSuchTable(s"ALTER TABLE $viewName SET SERDE 'whatever'")
       assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
       assertNoSuchTable(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
-      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
       assertNoSuchTable(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
       assertNoSuchTable(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
       assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
       assertNoSuchTable(s"ALTER TABLE $viewName RECOVER PARTITIONS")
 
       // For v2 ALTER TABLE statements, we have better error message saying view is not supported.
-      assertViewNotSupported(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
+        s"'$viewName' is a view not a table")
+
+      // For the following v2 ALERT TABLE statements, unsupported operations are checked first
+      // before resolving the relations.
+      assertAnalysisError(
+        s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'",
+        "ALTER TABLE SET LOCATION does not support partition for v2 tables")
     }
   }
 
@@ -177,9 +184,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertViewNotSupported(query: String): Unit = {
+  private def assertAnalysisError(query: String, message: String): Unit = {
     val e = intercept[AnalysisException](sql(query))
-    assert(e.message.contains("'testView' is a view not a table"))
+    assert(e.message.contains(message))
   }
 
   test("error handling: insert/load/truncate table commands against a view") {

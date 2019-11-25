@@ -27,6 +27,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPARK_TASK_PREFIX
 import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.util.Utils.executeAndGetOutput
 
@@ -42,13 +43,44 @@ private[spark] case class ResourceID(componentName: String, resourceName: String
   def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
 }
 
+/**
+ * Case class that represents a resource request at the executor level.
+ *
+ * The class used when discovering resources (using the discovery script),
+ * or via the context as it is parsing configuration, for SPARK_EXECUTOR_PREFIX.
+ *
+ * @param id object identifying the resource
+ * @param amount integer amount for the resource. Note that for a request (executor level),
+ *               fractional resources does not make sense, so amount is an integer.
+ * @param discoveryScript optional discovery script file name
+ * @param vendor optional vendor name
+ */
 private[spark] case class ResourceRequest(
     id: ResourceID,
     amount: Int,
     discoveryScript: Option[String],
     vendor: Option[String])
 
-private[spark] case class ResourceRequirement(resourceName: String, amount: Int)
+/**
+ * Case class that represents resource requirements for a component in a
+ * an application (components are driver, executor or task).
+ *
+ * A configuration of spark.task.resource.[resourceName].amount = 4, equates to:
+ * amount = 4, and numParts = 1.
+ *
+ * A configuration of spark.task.resource.[resourceName].amount = 0.25, equates to:
+ * amount = 1, and numParts = 4.
+ *
+ * @param resourceName gpu, fpga, etc.
+ * @param amount whole units of the resource we expect (e.g. 1 gpus, 2 fpgas)
+ * @param numParts if not 1, the number of ways a whole resource is subdivided.
+ *                 This is always an integer greater than or equal to 1,
+ *                 where 1 is whole resource, 2 is divide a resource in two, and so on.
+ */
+private[spark] case class ResourceRequirement(
+    resourceName: String,
+    amount: Int,
+    numParts: Int = 1)
 
 /**
  * Case class representing allocated resource addresses for a specific resource.
@@ -95,8 +127,28 @@ private[spark] object ResourceUtils extends Logging {
 
   def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
     : Seq[ResourceRequirement] = {
-    parseAllResourceRequests(sparkConf, componentName).map { request =>
-      ResourceRequirement(request.id.resourceName, request.amount)
+    listResourceIds(sparkConf, componentName).map { resourceId =>
+      val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
+      val amountDouble = settings.getOrElse(AMOUNT,
+        throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+      ).toDouble
+      val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
+        val parts = if (amountDouble <= 0.5) {
+          Math.floor(1.0 / amountDouble).toInt
+        } else if (amountDouble % 1 != 0) {
+          throw new SparkException(
+            s"The resource amount ${amountDouble} must be either <= 0.5, or a whole number.")
+        } else {
+          1
+        }
+        (Math.ceil(amountDouble).toInt, parts)
+      } else if (amountDouble % 1 != 0) {
+        throw new SparkException(
+          s"Only tasks support fractional resources, please check your $componentName settings")
+      } else {
+        (amountDouble.toInt, 1)
+      }
+      ResourceRequirement(resourceId.resourceName, amount, parts)
     }
   }
 

@@ -53,7 +53,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     env: SparkEnv,
     resourcesFileOpt: Option[String],
     resourceProfileId: Int)
-  extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
+  extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
 
   private implicit val formats = DefaultFormats
 

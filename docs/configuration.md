@@ -1009,6 +1009,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.rolling.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether rolling over event log files is enabled. If set to true, it cuts down each event
+    log file to the configured size.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.rolling.maxFileSize</code></td>
+  <td>128m</td>
+  <td>
+    The max size of event log file before it's rolled over.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.dagGraph.retainedRootRDDs</code></td>
   <td>Int.MaxValue</td>
   <td>
@@ -1982,9 +1997,15 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.resource.{resourceName}.amount</code></td>
   <td>1</td>
   <td>
-    Amount of a particular resource type to allocate for each task. If this is specified
-    you must also provide the executor config <code>spark.executor.resource.{resourceName}.amount</code>
-    and any corresponding discovery configs so that your executors are created with that resource type.
+    Amount of a particular resource type to allocate for each task, note that this can be a double.
+    If this is specified you must also provide the executor config 
+    <code>spark.executor.resource.{resourceName}.amount</code> and any corresponding discovery configs 
+    so that your executors are created with that resource type. In addition to whole amounts, 
+    a fractional amount (for example, 0.25, which means 1/4th of a resource) may be specified. 
+    Fractional amounts must be less than or equal to 0.5, or in other words, the minimum amount of
+    resource sharing is 2 tasks per resource. Additionally, fractional amounts are floored 
+    in order to assign resource slots (e.g. a 0.2222 configuration, or 1/0.2222 slots will become 
+    4 tasks/resource, not 5).
   </td>
 </tr>
 <tr>

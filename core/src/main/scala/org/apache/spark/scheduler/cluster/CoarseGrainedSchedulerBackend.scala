@@ -34,6 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceRequirement
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -68,6 +69,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val maxRegisteredWaitingTimeNs = TimeUnit.MILLISECONDS.toNanos(
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
   private val createTimeNs = System.nanoTime()
+
+  private val taskResourceNumParts: Map[String, Int] =
+    if (scheduler.resourcesReqsPerTask != null) {
+      scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req.numParts).toMap
+    } else {
+      Map.empty
+    }
 
   // Accessing `executorDataMap` in the inherited methods from ThreadSafeRpcEndpoint doesn't need
   // any protection. But accessing `executorDataMap` out of the inherited methods must be
@@ -112,7 +120,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
-  class DriverEndpoint extends ThreadSafeRpcEndpoint with Logging {
+  class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
 
@@ -216,7 +224,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val resourcesInfo = resources.map{ case (k, v) =>
-            (v.name, new ExecutorResourceInfo(v.name, v.addresses))}
+            (v.name,
+             new ExecutorResourceInfo(v.name, v.addresses,
+               // tell the executor it can schedule resources up to numParts times,
+               // as configured by the user, or set to 1 as that is the default (1 task/resource)
+               taskResourceNumParts.getOrElse(v.name, 1)))
+          }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
             resourcesInfo, resourceProfileId)

@@ -75,6 +75,11 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
     }
   }
 
+  override protected def validateInputType(inputType: DataType): Unit = {
+    require(inputType.isInstanceOf[VectorUDT],
+      s"Input type must be ${(new VectorUDT).catalogString} but got ${inputType.catalogString}.")
+  }
+
   override protected def outputDataType: DataType = new VectorUDT()
 }
 

@@ -21,35 +21,18 @@ import java.util.{Map => JMap}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.HashMap
 import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
+import org.apache.spark.resource.ResourceUtils.RESOURCE_PREFIX
 
 /**
  * Resource profile to associate with an RDD. A ResourceProfile allows the user to
  * specify executor and task requirements for an RDD that will get applied during a
  * stage. This allows the user to change the resource requirements between stages.
- *
- * Only support a subset of the resources for now. The config names supported correspond to the
- * regular Spark configs with the prefix removed. For instance overhead memory in this api
- * is memoryOverhead, which is spark.executor.memoryOverhead with spark.executor removed.
- * Resources like GPUs are resource.gpu (spark configs spark.executor.resource.gpu.*)
- *
- * Executor:
- *   memory - heap
- *   memoryOverhead
- *   pyspark.memory
- *   cores
- *   resource.[resourceName] - GPU, FPGA, etc
- *
- * Task requirements:
- *   cpus
- *   resource.[resourceName] - GPU, FPGA, etc
  *
  * This class is private now for initial development, once we have the feature in place
  * this will become public.
@@ -61,19 +44,8 @@ private[spark] class ResourceProfile() extends Serializable {
   private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
   private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
 
-  private val allowedExecutorResources = HashMap[String, Boolean](
-    (ResourceProfile.MEMORY -> true),
-    (ResourceProfile.OVERHEAD_MEM -> true),
-    (ResourceProfile.PYSPARK_MEM -> true),
-    (ResourceProfile.CORES -> true))
-
-  private val allowedTaskResources = HashMap[String, Boolean]((
-    ResourceProfile.CPUS -> true))
-
   def id: Int = _id
-
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.toMap
-
   def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.toMap
 
   /**
@@ -86,43 +58,20 @@ private[spark] class ResourceProfile() extends Serializable {
    */
   def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = _executorResources.asJava
 
-
   def reset(): Unit = {
     _taskResources.clear()
     _executorResources.clear()
   }
 
-  def require(request: TaskResourceRequest): this.type = {
-    if (allowedTaskResources.contains(request.resourceName) ||
-      request.resourceName.startsWith(RESOURCE_DOT)) {
-      _taskResources(request.resourceName) = request
-    } else {
-      throw new IllegalArgumentException(s"Task resource not allowed: ${request.resourceName}")
-    }
+  def require(requests: ExecutorResourceRequests): this.type = {
+    _executorResources ++= requests.requests
     this
   }
 
-  def require(request: ExecutorResourceRequest): this.type = {
-    if (allowedExecutorResources.contains(request.resourceName) ||
-        request.resourceName.startsWith(RESOURCE_DOT)) {
-      _executorResources(request.resourceName) = request
-    } else {
-      throw new IllegalArgumentException(s"Executor resource not allowed: ${request.resourceName}")
-    }
+  def require(requests: TaskResourceRequests): this.type = {
+    _taskResources ++= requests.requests
     this
   }
-
-  override def equals(obj: Any): Boolean = {
-    obj match {
-      case that: ResourceProfile =>
-        that.getClass == this.getClass &&
-          that._taskResources == _taskResources && that._executorResources == _executorResources
-      case _ =>
-        false
-    }
-  }
-
-  override def hashCode(): Int = Seq(_taskResources, _executorResources).hashCode()
 
   override def toString(): String = {
     s"Profile: id = ${_id}, executor resources: ${_executorResources}, " +
@@ -184,27 +133,26 @@ private[spark] object ResourceProfile extends Logging {
 
   private def addDefaultTaskResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
     val cpusPerTask = conf.get(CPUS_PER_TASK)
-    rprof.require(new TaskResourceRequest(CPUS, cpusPerTask))
+    val treqs = new TaskResourceRequests().cpus(cpusPerTask)
     val taskReq = ResourceUtils.parseResourceRequirements(conf, SPARK_TASK_PREFIX)
-
     taskReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.resourceName}"
-      rprof.require(new TaskResourceRequest(name, req.amount))
+      treqs.resource(name, req.amount)
     }
+    rprof.require(treqs)
   }
 
   private def addDefaultExecutorResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
-    rprof.require(new ExecutorResourceRequest(CORES, conf.get(EXECUTOR_CORES)))
-    rprof.require(
-      new ExecutorResourceRequest(MEMORY, conf.get(EXECUTOR_MEMORY).toInt, "b"))
+    val ereqs = new ExecutorResourceRequests()
+    ereqs.cores(conf.get(EXECUTOR_CORES))
+    ereqs.memory(conf.get(EXECUTOR_MEMORY).toString)
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
-
     execReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.id.resourceName}"
-      val execReq = new ExecutorResourceRequest(name, req.amount, "",
-        req.discoveryScript.getOrElse(""), req.vendor.getOrElse(""))
-      rprof.require(execReq)
+      ereqs.resource(name, req.amount, req.discoveryScript.getOrElse(""),
+        req.vendor.getOrElse(""))
     }
+    rprof.require(ereqs)
   }
 
   // for testing purposes

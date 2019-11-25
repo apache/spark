@@ -53,7 +53,7 @@ private[spark] trait ClassifierParams
     val validateInstance = (instance: Instance) => {
       val label = instance.label
       require(label.toLong == label && label >= 0 && label < numClasses, s"Classifier was given" +
-        s" dataset with invalid label $label.  Labels must be integers in range" +
+        s" dataset with invalid label $label. Labels must be integers in range" +
         s" [0, $numClasses).")
     }
     extractInstances(dataset, validateInstance)

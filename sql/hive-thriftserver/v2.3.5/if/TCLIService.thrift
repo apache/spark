@@ -1105,7 +1105,6 @@ enum TFetchOrientation {
   FETCH_NEXT,
 
   // Get the previous rowset. The fetch offset is ignored.
-  // NOT SUPPORTED
   FETCH_PRIOR,
 
   // Return the rowset at the given fetch offset relative
@@ -1133,8 +1132,8 @@ struct TFetchResultsReq {
   // Operation from which to fetch results.
   1: required TOperationHandle operationHandle
 
-  // The fetch orientation. For V1 this must be either
-  // FETCH_NEXT or FETCH_FIRST. Defaults to FETCH_NEXT.
+  // The fetch orientation. This must be either
+  // FETCH_NEXT, FETCH_PRIOR or FETCH_FIRST. Defaults to FETCH_NEXT.
   2: required TFetchOrientation orientation = TFetchOrientation.FETCH_NEXT
 
   // Max number of rows that should be returned in

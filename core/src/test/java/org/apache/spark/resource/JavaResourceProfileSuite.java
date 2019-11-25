@@ -30,13 +30,15 @@ public class JavaResourceProfileSuite {
 
   @Test
   public void testResourceProfileAccessFromJava() throws Exception {
-    ExecutorResourceRequest execReqGpu = new ExecutorResourceRequest(GpuResource, 2, "", "myscript");
-    ExecutorResourceRequest execReqFpga = new ExecutorResourceRequest(FPGAResource, 3, "", "myfpgascript", "nvidia");
+    ExecutorResourceRequests execReqGpu =
+      new ExecutorResourceRequests().resource(GpuResource, 2,"myscript", "");
+    ExecutorResourceRequests execReqFpga =
+      new ExecutorResourceRequests().resource(FPGAResource, 3, "myfpgascript", "nvidia");
 
     ResourceProfile rprof = new ResourceProfile();
     rprof.require(execReqGpu);
     rprof.require(execReqFpga);
-    TaskResourceRequest taskReq1 = new TaskResourceRequest(GpuResource, 1);
+    TaskResourceRequests taskReq1 = new TaskResourceRequests().resource(GpuResource, 1);
     rprof.require(taskReq1);
 
     assertEquals(rprof.executorResources().size(), 2);
@@ -46,14 +48,12 @@ public class JavaResourceProfileSuite {
     assertEquals(gpuReq.amount(), 2);
     assertEquals(gpuReq.discoveryScript(), "myscript");
     assertEquals(gpuReq.vendor(), "");
-    assertEquals(gpuReq.units(), "");
 
     assert(eresources.containsKey(FPGAResource));
     ExecutorResourceRequest fpgaReq = eresources.get(FPGAResource);
     assertEquals(fpgaReq.amount(), 3);
     assertEquals(fpgaReq.discoveryScript(), "myfpgascript");
     assertEquals(fpgaReq.vendor(), "nvidia");
-    assertEquals(fpgaReq.units(), "");
 
     assertEquals(rprof.taskResources().size(), 1);
     Map<String, TaskResourceRequest> tresources = rprof.taskResourcesJMap();
@@ -63,3 +63,4 @@ public class JavaResourceProfileSuite {
     assertEquals(taskReq.resourceName(), GpuResource);
   }
 }
+

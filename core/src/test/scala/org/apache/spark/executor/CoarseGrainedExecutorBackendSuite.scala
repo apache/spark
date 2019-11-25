@@ -99,7 +99,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.size === 1)
       assert(parsedResources.get(GPU).nonEmpty)
       assert(parsedResources.get(GPU).get.name === GPU)
-      assert(parsedResources.get(GPU).get.addresses.deep === Array("0", "1").deep)
+      assert(parsedResources.get(GPU).get.addresses.sameElements(Array("0", "1")))
     }
   }
 
@@ -151,10 +151,10 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.size === 2)
       assert(parsedResources.get(GPU).nonEmpty)
       assert(parsedResources.get(GPU).get.name === GPU)
-      assert(parsedResources.get(GPU).get.addresses.deep === Array("0", "1").deep)
+      assert(parsedResources.get(GPU).get.addresses.sameElements(Array("0", "1")))
       assert(parsedResources.get(FPGA).nonEmpty)
       assert(parsedResources.get(FPGA).get.name === FPGA)
-      assert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.get(FPGA).get.addresses.sameElements(Array("f1", "f2", "f3")))
     }
   }
 
@@ -262,7 +262,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.size === 1)
       assert(parsedResources.get(FPGA).nonEmpty)
       assert(parsedResources.get(FPGA).get.name === FPGA)
-      assert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.get(FPGA).get.addresses.sameElements(Array("f1", "f2", "f3")))
     }
   }
 
@@ -310,10 +310,10 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.size === 2)
       assert(parsedResources.get(GPU).nonEmpty)
       assert(parsedResources.get(GPU).get.name === GPU)
-      assert(parsedResources.get(GPU).get.addresses.deep === Array("0", "1").deep)
+      assert(parsedResources.get(GPU).get.addresses.sameElements(Array("0", "1")))
       assert(parsedResources.get(FPGA).nonEmpty)
       assert(parsedResources.get(FPGA).get.name === FPGA)
-      assert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.get(FPGA).get.addresses.sameElements(Array("f1", "f2", "f3")))
     }
   }
 

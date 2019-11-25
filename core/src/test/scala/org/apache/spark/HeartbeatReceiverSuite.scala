@@ -75,6 +75,7 @@ class HeartbeatReceiverSuite
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
     when(scheduler.nodeBlacklist).thenReturn(Predef.Set[String]())
+    when(scheduler.resourcesReqsPerTask).thenReturn(Seq.empty)
     when(scheduler.sc).thenReturn(sc)
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)

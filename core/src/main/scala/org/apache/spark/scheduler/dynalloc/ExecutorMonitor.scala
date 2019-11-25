@@ -40,11 +40,12 @@ private[spark] class ExecutorMonitor(
     listenerBus: LiveListenerBus,
     clock: Clock) extends SparkListener with CleanerListener with Logging {
 
-  private val idleTimeoutMs = TimeUnit.SECONDS.toMillis(
+  private val idleTimeoutNs = TimeUnit.SECONDS.toNanos(
     conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT))
-  private val storageTimeoutMs = TimeUnit.SECONDS.toMillis(
+  private val storageTimeoutNs = TimeUnit.SECONDS.toNanos(
     conf.get(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT))
-  private val shuffleTimeoutMs = conf.get(DYN_ALLOCATION_SHUFFLE_TIMEOUT)
+  private val shuffleTimeoutNs = TimeUnit.MILLISECONDS.toNanos(
+    conf.get(DYN_ALLOCATION_SHUFFLE_TIMEOUT))
 
   private val fetchFromShuffleSvcEnabled = conf.get(SHUFFLE_SERVICE_ENABLED) &&
     conf.get(SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
@@ -105,7 +106,7 @@ private[spark] class ExecutorMonitor(
    * Should only be called from the EAM thread.
    */
   def timedOutExecutors(): Seq[String] = {
-    val now = clock.getTimeMillis()
+    val now = clock.nanoTime()
     if (now >= nextTimeout.get()) {
       // Temporarily set the next timeout at Long.MaxValue. This ensures that after
       // scanning all executors below, we know when the next timeout for non-timed out
@@ -479,7 +480,7 @@ private[spark] class ExecutorMonitor(
 
     def updateRunningTasks(delta: Int): Unit = {
       runningTasks = math.max(0, runningTasks + delta)
-      idleStart = if (runningTasks == 0) clock.getTimeMillis() else -1L
+      idleStart = if (runningTasks == 0) clock.nanoTime() else -1L
       updateTimeout()
     }
 
@@ -487,15 +488,15 @@ private[spark] class ExecutorMonitor(
       val oldDeadline = timeoutAt
       val newDeadline = if (idleStart >= 0) {
         val timeout = if (cachedBlocks.nonEmpty || (shuffleIds != null && shuffleIds.nonEmpty)) {
-          val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutMs else Long.MaxValue
+          val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutNs else Long.MaxValue
           val _shuffleTimeout = if (shuffleIds != null && shuffleIds.nonEmpty) {
-            shuffleTimeoutMs
+            shuffleTimeoutNs
           } else {
             Long.MaxValue
           }
           math.min(_cacheTimeout, _shuffleTimeout)
         } else {
-          idleTimeoutMs
+          idleTimeoutNs
         }
         val deadline = idleStart + timeout
         if (deadline >= 0) deadline else Long.MaxValue

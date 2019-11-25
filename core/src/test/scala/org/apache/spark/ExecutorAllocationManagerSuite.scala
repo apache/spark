@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.mutable
 
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -541,7 +543,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addTime(manager) === NOT_SET)
     onSchedulerBacklogged(manager)
     val firstAddTime = addTime(manager)
-    assert(firstAddTime === clock.getTimeMillis + schedulerBacklogTimeout * 1000)
+    assert(firstAddTime === clock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeout))
     clock.advance(100L)
     onSchedulerBacklogged(manager)
     assert(addTime(manager) === firstAddTime) // timer is already started
@@ -555,7 +557,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addTime(manager) === NOT_SET)
     onSchedulerBacklogged(manager)
     val secondAddTime = addTime(manager)
-    assert(secondAddTime === clock.getTimeMillis + schedulerBacklogTimeout * 1000)
+    assert(secondAddTime === clock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeout))
     clock.advance(100L)
     onSchedulerBacklogged(manager)
     assert(addTime(manager) === secondAddTime) // timer is already started
@@ -936,7 +938,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
     clock.advance(1000)
-    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) === 2)
     val taskInfo0 = createTaskInfo(0, 0, "executor-1")
     post(SparkListenerTaskStart(0, 0, taskInfo0))
@@ -952,7 +954,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(maxNumExecutorsNeeded(manager) === 1)
     assert(numExecutorsTarget(manager) === 2)
     clock.advance(1000)
-    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) === 1)
     verify(client, never).killExecutors(any(), any(), any(), any())
 
