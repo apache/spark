@@ -126,6 +126,8 @@ object ScanOperation extends OperationHelper with PredicateHelper {
         case Project(fields, child) =>
           collectProjectsAndFilters(child) match {
             case Some((_, filters, other, aliases)) =>
+              // Follow CollapseProject and only keep going if the collected Projects
+              // do not have common non-deterministic expressions.
               if (!hasCommonNonDeterministic(fields, aliases)) {
                 val substitutedFields =
                   fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
@@ -139,6 +141,9 @@ object ScanOperation extends OperationHelper with PredicateHelper {
         case Filter(condition, child) =>
           collectProjectsAndFilters(child) match {
             case Some((fields, filters, other, aliases)) =>
+              // Follow CombineFilters and only keep going if the collected Filters
+              // are all deterministic and this filter doesn't have common non-deterministic
+              // expressions with lower Project.
               if (filters.forall(_.deterministic) &&
                 !hasCommonNonDeterministic(Seq(condition), aliases)) {
                 val substitutedCondition = substitute(aliases)(condition)
