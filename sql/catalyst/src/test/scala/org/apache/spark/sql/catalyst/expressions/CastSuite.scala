@@ -1216,7 +1216,7 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("SPARK-30008: collect_list/collect_set can cast to ArrayType not containsNull") {
+  test("collect_list/collect_set can cast to ArrayType not containsNull") {
     val list = CollectList(Literal(1))
     assert(Cast.canCast(list.dataType, ArrayType(IntegerType, false)))
     val set = CollectSet(Literal(1))
