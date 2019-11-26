@@ -5,9 +5,31 @@ CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
 AS testData(a, b);
 
+CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
+  (100, "emp 1", date "2005-01-01", 100.00D, 10),
+  (100, "emp 1", date "2005-01-01", 100.00D, 10),
+  (200, "emp 2", date "2003-01-01", 200.00D, 10),
+  (300, "emp 3", date "2002-01-01", 300.00D, 20),
+  (400, "emp 4", date "2005-01-01", 400.00D, 30),
+  (500, "emp 5", date "2001-01-01", 400.00D, NULL),
+  (600, "emp 6 - no dept", date "2001-01-01", 400.00D, 100),
+  (700, "emp 7", date "2010-01-01", 400.00D, 100),
+  (800, "emp 8", date "2016-01-01", 150.00D, 70)
+AS EMP(id, emp_name, hiredate, salary, dept_id);
+
+CREATE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
+  (10, "dept 1", "CA"),
+  (20, "dept 2", "NY"),
+  (30, "dept 3", "TX"),
+  (40, "dept 4 - unassigned", "OR"),
+  (50, "dept 5 - unassigned", "NJ"),
+  (70, "dept 7", "FL")
+AS DEPT(dept_id, dept_name, state);
+
 -- Aggregate with filter and empty GroupBy expressions.
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData;
 SELECT COUNT(a) FILTER (WHERE a = 1), COUNT(b) FILTER (WHERE a > 1) FROM testData;
+SELECT COUNT(id) FILTER (WHERE hiredate = date "2001-01-01") FROM emp;
 
 -- Aggregate with filter and non-empty GroupBy expressions.
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData GROUP BY a;
@@ -48,27 +70,6 @@ SELECT a, COUNT(1) FILTER (WHERE b > 1) FROM testData WHERE false GROUP BY a;
 -- Aggregate with filter, empty input and empty GroupBy expressions.
 SELECT COUNT(1) FILTER (WHERE b = 2) FROM testData WHERE false;
 SELECT 1 FROM (SELECT COUNT(1) FILTER (WHERE a >= 3 OR b <= 1) FROM testData WHERE false) t;
-
-CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
-  (100, "emp 1", date "2005-01-01", 100.00D, 10),
-  (100, "emp 1", date "2005-01-01", 100.00D, 10),
-  (200, "emp 2", date "2003-01-01", 200.00D, 10),
-  (300, "emp 3", date "2002-01-01", 300.00D, 20),
-  (400, "emp 4", date "2005-01-01", 400.00D, 30),
-  (500, "emp 5", date "2001-01-01", 400.00D, NULL),
-  (600, "emp 6 - no dept", date "2001-01-01", 400.00D, 100),
-  (700, "emp 7", date "2010-01-01", 400.00D, 100),
-  (800, "emp 8", date "2016-01-01", 150.00D, 70)
-AS EMP(id, emp_name, hiredate, salary, dept_id);
-
-CREATE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
-  (10, "dept 1", "CA"),
-  (20, "dept 2", "NY"),
-  (30, "dept 3", "TX"),
-  (40, "dept 4 - unassigned", "OR"),
-  (50, "dept 5 - unassigned", "NJ"),
-  (70, "dept 7", "FL")
-AS DEPT(dept_id, dept_name, state);
 
 -- Aggregate with filter contains exists subquery
 SELECT emp.dept_id,
