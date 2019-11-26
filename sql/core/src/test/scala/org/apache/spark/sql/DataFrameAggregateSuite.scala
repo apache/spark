@@ -29,7 +29,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -941,5 +942,25 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
       }
       assert(error.message.contains("function count_if requires boolean type"))
     }
+  }
+
+  test("calendar interval agg support hash aggregate") {
+    val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
+    val df2 = df1.select('a, 'b cast CalendarIntervalType).groupBy('a % 2)
+    checkAnswer(df2.sum("b"),
+      Row(0, new CalendarInterval(0, 2, 0)) ::
+        Row(1, new CalendarInterval(0, 4, 0)) :: Nil)
+    checkAnswer(df2.avg("b"),
+      Row(0, new CalendarInterval(0, 2, 0)) ::
+        Row(1, new CalendarInterval(0, 2, 0)) :: Nil)
+    checkAnswer(df2.mean("b"),
+      Row(0, new CalendarInterval(0, 2, 0)) ::
+        Row(1, new CalendarInterval(0, 2, 0)) :: Nil)
+    checkAnswer(df2.max("b"),
+      Row(0, new CalendarInterval(0, 2, 0)) ::
+        Row(1, new CalendarInterval(0, 3, 0)) :: Nil)
+    checkAnswer(df2.min("b"),
+      Row(0, new CalendarInterval(0, 2, 0)) ::
+        Row(1, new CalendarInterval(0, 1, 0)) :: Nil)
   }
 }
