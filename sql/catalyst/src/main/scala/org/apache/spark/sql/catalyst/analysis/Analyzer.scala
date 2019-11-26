@@ -748,32 +748,7 @@ class Analyzer(
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
       case u @ UnresolvedRelation(CatalogObjectIdentifier(catalog, ident))
           if CatalogV2Util.isSessionCatalog(catalog) =>
-        val newIdent = if (ident.namespace.isEmpty) {
-          val defaultNamespace = AnalysisContext.get.defaultDatabase match {
-            case Some(db) => Array(db)
-            case None => catalogManager.currentNamespace
-          }
-          Identifier.of(defaultNamespace, ident.name)
-        } else {
-          ident
-        }
-
-        require(newIdent.namespace.size == 1)
-
-        CatalogV2Util.loadTable(catalog, newIdent) match {
-          case Some(v1Table: V1Table) =>
-            val tableIdent = TableIdentifier(newIdent.name, newIdent.namespace.headOption)
-            if (isV2Provider(v1Table.v1Table.provider)) {
-              DataSourceV2Relation.create(v1Table)
-            } else if (!isRunningDirectlyOnFiles(tableIdent)) {
-              resolveRelation(v1SessionCatalog.createRelation(tableIdent, v1Table.v1Table))
-            } else {
-              u
-            }
-          case Some(table) =>
-            DataSourceV2Relation.create(table)
-          case None => u
-        }
+        lookupRelation(catalog, ident, recurse = true).getOrElse(u)
 
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
@@ -797,18 +772,19 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTables(plan).resolveOperatorsUp {
-      case i @ InsertIntoStatement(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
-          if child.resolved =>
-        EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
-          case v: View =>
-            u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
-          case other => i.copy(table = other)
-        }
-      case u: UnresolvedRelation => resolveRelation(u)
-    }
+      case i @ InsertIntoStatement(
+          u @ UnresolvedRelation(CatalogObjectIdentifier(catalog, ident)), _, _, _, _)
+            if i.query.resolved && CatalogV2Util.isSessionCatalog(catalog) =>
+        lookupRelation(catalog, ident, recurse = false)
+          .map { relation =>
+            EliminateSubqueryAliases(relation) match {
+              case v: View =>
+                u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+              case other => i.copy(table = other)
+            }
+          }.getOrElse(i)
 
-    private def isV2Provider(provider: Option[String]): Boolean = {
-      return false
+      case u: UnresolvedRelation => resolveRelation(u)
     }
 
     // Look up the table with the given name from catalog. The database we used is decided by the
@@ -817,18 +793,45 @@ class Analyzer(
     // 2. Use defaultDatabase, if it is defined(In this case, no temporary objects can be used,
     //    and the default database is only used to look up a view);
     // 3. Use the currentDb of the SessionCatalog.
-    private def lookupTableFromCatalog(
-        tableIdentifier: TableIdentifier,
-        u: UnresolvedRelation,
-        defaultDatabase: Option[String] = None): LogicalPlan = {
-      val tableIdentWithDb = tableIdentifier.copy(
-        database = tableIdentifier.database.orElse(defaultDatabase))
-      try {
-        v1SessionCatalog.lookupRelation(tableIdentWithDb)
-      } catch {
-        case _: NoSuchTableException | _: NoSuchDatabaseException =>
-          u
+    private def lookupRelation(
+        catalog: CatalogPlugin,
+        ident: Identifier,
+        recurse: Boolean): Option[LogicalPlan] = {
+      val newIdent = if (ident.namespace.isEmpty) {
+        val defaultNamespace = AnalysisContext.get.defaultDatabase match {
+          case Some(db) => Array(db)
+          case None => catalogManager.currentNamespace
+        }
+        Identifier.of(defaultNamespace, ident.name)
+      } else {
+        ident
       }
+
+      require(newIdent.namespace.size == 1)
+
+      CatalogV2Util.loadTable(catalog, newIdent) match {
+        case Some(v1Table: V1Table) =>
+          val tableIdent = TableIdentifier(newIdent.name, newIdent.namespace.headOption)
+          if (isV2Provider(v1Table.v1Table.provider)) {
+            Some(DataSourceV2Relation.create(v1Table))
+          } else if (!isRunningDirectlyOnFiles(tableIdent)) {
+            val relation = v1SessionCatalog.createRelation(tableIdent, v1Table.v1Table)
+            if (recurse) {
+              Some(resolveRelation(relation))
+            } else {
+              Some(relation)
+            }
+          } else {
+            None
+          }
+        case Some(table) =>
+          Some(DataSourceV2Relation.create(table))
+        case None => None
+      }
+    }
+
+    private def isV2Provider(provider: Option[String]): Boolean = {
+      return false
     }
 
     // If the database part is specified, and we support running SQL directly on files, and
