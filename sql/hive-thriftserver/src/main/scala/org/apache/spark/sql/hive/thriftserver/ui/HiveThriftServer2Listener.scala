@@ -199,7 +199,7 @@ private[thriftserver] class HiveThriftServer2Listener(
   def updateLiveStore(entity: LiveEntity, trigger: Boolean = false): Unit = {
     val now = System.nanoTime()
     if (live && liveUpdatePeriodNs >= 0 && now - entity.lastWriteTime > liveUpdatePeriodNs) {
-      entity.write(kvstore, System.nanoTime(), checkTriggers = trigger)
+      entity.write(kvstore, now, checkTriggers = trigger)
     }
   }
 
