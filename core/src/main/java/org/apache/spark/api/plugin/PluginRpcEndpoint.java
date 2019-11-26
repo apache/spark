@@ -17,10 +17,6 @@
 
 package org.apache.spark.api.plugin;
 
-import java.util.Collections;
-import java.util.Map;
-
-import org.apache.spark.SparkContext;
 import org.apache.spark.annotation.DeveloperApi;
 
 /**

@@ -17,8 +17,6 @@
 
 package org.apache.spark.shuffle.api;
 
-import java.util.Map;
-
 import org.apache.spark.annotation.Private;
 import org.apache.spark.api.plugin.DriverPlugin;
 

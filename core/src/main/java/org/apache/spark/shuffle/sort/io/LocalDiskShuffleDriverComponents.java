@@ -21,7 +21,6 @@ import java.util.Collections;
 import java.util.Map;
 
 import org.apache.spark.SparkContext;
-import org.apache.spark.SparkEnv;
 import org.apache.spark.api.plugin.PluginContext;
 import org.apache.spark.shuffle.api.ShuffleDriverComponents;
 import org.apache.spark.storage.BlockManagerMaster;
