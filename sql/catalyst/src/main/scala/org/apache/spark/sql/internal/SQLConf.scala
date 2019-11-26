@@ -1946,7 +1946,7 @@ object SQLConf {
   val LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED =
     buildConf("spark.sql.legacy.exponentLiteralAsDecimal.enabled")
       .internal()
-      .doc("When set to true, a literal with an exponent (e.g. 1E-30) would be parsed" +
+      .doc("When set to true, a literal with an exponent (e.g. 1E-30) would be parsed " +
         "as Decimal rather than Double.")
       .booleanConf
       .createWithDefault(false)
