@@ -23,10 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.CatalogPlugin
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog.COMMENT_TABLE_PROP
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog.LOCATION_TABLE_PROP
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog.RESERVED_PROPERTIES
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -34,25 +31,23 @@ import org.apache.spark.sql.types.StructType
  */
 case class DescribeNamespaceExec(
     output: Seq[Attribute],
-    catalog: CatalogPlugin,
+    catalog: SupportsNamespaces,
     namespace: Seq[String],
     isExtended: Boolean) extends V2CommandExec {
-
   private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
 
   override protected def run(): Seq[InternalRow] = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
     val rows = new ArrayBuffer[InternalRow]()
-    val nsCatalog = catalog.asNamespaceCatalog
     val ns = namespace.toArray
-    val metadata = nsCatalog.loadNamespaceMetadata(ns)
+    val metadata = catalog.loadNamespaceMetadata(ns)
 
     rows += toCatalystRow("Namespace Name", ns.last)
-    rows += toCatalystRow("Description", metadata.get(COMMENT_TABLE_PROP))
-    rows += toCatalystRow("Location", metadata.get(LOCATION_TABLE_PROP))
+    rows += toCatalystRow("Description", metadata.get(SupportsNamespaces.PROP_COMMENT))
+    rows += toCatalystRow("Location", metadata.get(SupportsNamespaces.PROP_LOCATION))
     if (isExtended) {
-      val properties = metadata.asScala.toSeq.filter(p => !RESERVED_PROPERTIES.contains(p._1))
+      val properties =
+        metadata.asScala.toSeq.filter(p =>
+          !SupportsNamespaces.RESERVED_PROPERTIES.contains(p._1))
       if (properties.nonEmpty) {
         rows += toCatalystRow("Properties", properties.mkString("(", ",", ")"))
       }

@@ -15,15 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory;
 
-package object config {
-
-  private[spark] val DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED =
-    ConfigBuilder("spark.sql.defaultUrlStreamHandlerFactory.enabled")
-      .doc("When true, set FsUrlStreamHandlerFactory to support ADD JAR against HDFS locations")
-      .booleanConf
-      .createWithDefault(true)
+/**
+ * This interface contains physical write information that data sources can use when
+ * generating a {@link DataWriterFactory} or a {@link StreamingDataWriterFactory}.
+ */
+@Evolving
+public interface PhysicalWriteInfo {
+  /**
+   * The number of partitions of the input data that is going to be written.
+   */
+  int numPartitions();
 }

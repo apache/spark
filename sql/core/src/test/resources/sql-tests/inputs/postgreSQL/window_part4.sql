@@ -3,6 +3,11 @@
 -- Window Functions Testing
 -- https://github.com/postgres/postgres/blob/REL_12_STABLE/src/test/regress/sql/window.sql#L913-L1278
 
+-- Test window operator with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 -- Spark doesn't handle UDFs in SQL
 -- test user-defined window function with named args and default args
 -- CREATE FUNCTION nth_value_def(val anyelement, n integer = 1) RETURNS anyelement

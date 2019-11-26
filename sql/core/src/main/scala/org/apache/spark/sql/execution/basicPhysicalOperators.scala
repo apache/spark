@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -227,7 +226,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val predicate = newPredicate(condition, child.output)
+      val predicate = Predicate.create(condition, child.output)
       predicate.initialize(0)
       iter.filter { row =>
         val r = predicate.eval(row)

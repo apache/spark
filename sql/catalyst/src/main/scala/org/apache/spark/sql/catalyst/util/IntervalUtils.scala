@@ -332,34 +332,8 @@ object IntervalUtils {
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
-  def toMultiUnitsString(interval: CalendarInterval): String = {
-    if (interval.months == 0 && interval.days == 0 && interval.microseconds == 0) {
-      return "0 seconds"
-    }
-    val sb = new StringBuilder
-    if (interval.months != 0) {
-      appendUnit(sb, interval.months / 12, "years")
-      appendUnit(sb, interval.months % 12, "months")
-    }
-    appendUnit(sb, interval.days, "days")
-    if (interval.microseconds != 0) {
-      var rest = interval.microseconds
-      appendUnit(sb, rest / MICROS_PER_HOUR, "hours")
-      rest %= MICROS_PER_HOUR
-      appendUnit(sb, rest / MICROS_PER_MINUTE, "minutes")
-      rest %= MICROS_PER_MINUTE
-      if (rest != 0) {
-        val s = BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString
-        sb.append(s).append(" seconds ")
-      }
-    }
-    sb.setLength(sb.length - 1)
-    sb.toString
-  }
-
-  private def appendUnit(sb: StringBuilder, value: Long, unit: String): Unit = {
-    if (value != 0) sb.append(value).append(' ').append(unit).append(' ')
-  }
+  // `toString` implementation in CalendarInterval is the multi-units format currently.
+  def toMultiUnitsString(interval: CalendarInterval): String = interval.toString
 
   def toSqlStandardString(interval: CalendarInterval): String = {
     val yearMonthPart = if (interval.months < 0) {
@@ -491,7 +465,7 @@ object IntervalUtils {
       throwIAE("interval string cannot be null")
     }
     // scalastyle:off caselocale .toLowerCase
-    val s = input.trim.toLowerCase
+    val s = input.trimAll().toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
     if (bytes.isEmpty) {
@@ -505,7 +479,9 @@ object IntervalUtils {
     var days: Int = 0
     var microseconds: Long = 0
     var fractionScale: Int = 0
+    val initialFractionScale = (NANOS_PER_SECOND / 10).toInt
     var fraction: Int = 0
+    var pointPrefixed: Boolean = false
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
       b match {
@@ -545,6 +521,7 @@ object IntervalUtils {
           // We preset the scale to an invalid value to track fraction presence in the UNIT_BEGIN
           // state. If we meet '.', the scale become valid for the VALUE_FRACTIONAL_PART state.
           fractionScale = -1
+          pointPrefixed = false
           b match {
             case '-' =>
               isNegative = true
@@ -556,7 +533,8 @@ object IntervalUtils {
               isNegative = false
             case '.' =>
               isNegative = false
-              fractionScale = (NANOS_PER_SECOND / 10).toInt
+              fractionScale = initialFractionScale
+              pointPrefixed = true
               i += 1
               state = VALUE_FRACTIONAL_PART
             case _ => throwIAE( s"unrecognized number '$currentWord'")
@@ -572,7 +550,7 @@ object IntervalUtils {
               }
             case ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
-              fractionScale = (NANOS_PER_SECOND / 10).toInt
+              fractionScale = initialFractionScale
               state = VALUE_FRACTIONAL_PART
             case _ => throwIAE(s"invalid value '$currentWord'")
           }
@@ -582,7 +560,7 @@ object IntervalUtils {
             case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
               fraction += (b - '0') * fractionScale
               fractionScale /= 10
-            case ' ' =>
+            case ' ' if !pointPrefixed || fractionScale < initialFractionScale =>
               fraction /= NANOS_PER_MICROS.toInt
               state = TRIM_BEFORE_UNIT
             case _ if '0' <= b && b <= '9' =>

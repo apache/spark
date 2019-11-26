@@ -247,6 +247,14 @@ case class AlterViewAsStatement(
     query: LogicalPlan) extends ParsedStatement
 
 /**
+ * ALTER TABLE ... RENAME TO command, as parsed from SQL.
+ */
+case class RenameTableStatement(
+    oldName: Seq[String],
+    newName: Seq[String],
+    isView: Boolean) extends ParsedStatement
+
+/**
  * A DROP TABLE statement, as parsed from SQL.
  */
 case class DropTableStatement(
@@ -337,11 +345,6 @@ case class CreateNamespaceStatement(
     ifNotExists: Boolean,
     properties: Map[String, String]) extends ParsedStatement
 
-object CreateNamespaceStatement {
-  val COMMENT_PROPERTY_KEY: String = "comment"
-  val LOCATION_PROPERTY_KEY: String = "location"
-}
-
 /**
  * A DROP NAMESPACE statement, as parsed from SQL.
  */
@@ -356,6 +359,13 @@ case class DropNamespaceStatement(
 case class AlterNamespaceSetPropertiesStatement(
     namespace: Seq[String],
     properties: Map[String, String]) extends ParsedStatement
+
+/**
+ * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command, as parsed from SQL.
+ */
+case class AlterNamespaceSetLocationStatement(
+    namespace: Seq[String],
+    location: String) extends ParsedStatement
 
 /**
  * A SHOW NAMESPACES statement, as parsed from SQL.

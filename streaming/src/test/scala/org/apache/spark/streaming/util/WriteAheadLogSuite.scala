@@ -34,6 +34,7 @@ import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
 import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.Assertions._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
 import org.scalatestplus.mockito.MockitoSugar

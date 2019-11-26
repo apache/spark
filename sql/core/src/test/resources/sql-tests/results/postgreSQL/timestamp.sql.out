@@ -11,7 +11,7 @@ struct<>
 
 
 -- !query 1
-INSERT INTO TIMESTAMP_TBL VALUES ('now')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'))
 -- !query 1 schema
 struct<>
 -- !query 1 output
@@ -19,7 +19,7 @@ struct<>
 
 
 -- !query 2
-INSERT INTO TIMESTAMP_TBL VALUES ('now')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'))
 -- !query 2 schema
 struct<>
 -- !query 2 output
@@ -27,7 +27,7 @@ struct<>
 
 
 -- !query 3
-INSERT INTO TIMESTAMP_TBL VALUES ('today')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('today'))
 -- !query 3 schema
 struct<>
 -- !query 3 output
@@ -35,7 +35,7 @@ struct<>
 
 
 -- !query 4
-INSERT INTO TIMESTAMP_TBL VALUES ('yesterday')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('yesterday'))
 -- !query 4 schema
 struct<>
 -- !query 4 output
@@ -43,7 +43,7 @@ struct<>
 
 
 -- !query 5
-INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow'))
 -- !query 5 schema
 struct<>
 -- !query 5 output
@@ -51,7 +51,7 @@ struct<>
 
 
 -- !query 6
-INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow EST')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow EST'))
 -- !query 6 schema
 struct<>
 -- !query 6 output
@@ -59,7 +59,7 @@ struct<>
 
 
 -- !query 7
-INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow Zulu')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow Zulu'))
 -- !query 7 schema
 struct<>
 -- !query 7 output
@@ -99,7 +99,7 @@ struct<>
 
 
 -- !query 12
-INSERT INTO TIMESTAMP_TBL VALUES ('epoch')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('epoch'))
 -- !query 12 schema
 struct<>
 -- !query 12 output
@@ -107,7 +107,7 @@ struct<>
 
 
 -- !query 13
-INSERT INTO TIMESTAMP_TBL VALUES ('1997-01-02')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('1997-01-02'))
 -- !query 13 schema
 struct<>
 -- !query 13 output
@@ -115,7 +115,7 @@ struct<>
 
 
 -- !query 14
-INSERT INTO TIMESTAMP_TBL VALUES ('1997-01-02 03:04:05')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('1997-01-02 03:04:05'))
 -- !query 14 schema
 struct<>
 -- !query 14 output
@@ -123,7 +123,7 @@ struct<>
 
 
 -- !query 15
-INSERT INTO TIMESTAMP_TBL VALUES ('1997-02-10 17:32:01-08')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('1997-02-10 17:32:01-08'))
 -- !query 15 schema
 struct<>
 -- !query 15 output
@@ -131,7 +131,7 @@ struct<>
 
 
 -- !query 16
-INSERT INTO TIMESTAMP_TBL VALUES ('2001-09-22T18:19:20')
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('2001-09-22T18:19:20'))
 -- !query 16 schema
 struct<>
 -- !query 16 output
@@ -219,11 +219,11 @@ SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
 -- !query 24 schema
 struct<54:string,diff:interval>
 -- !query 24 output
-	interval -236720 hours
-	interval 0 microseconds
-	interval 3 hours 4 minutes 5 seconds
-	interval 41393 hours 19 minutes 20 seconds
-	interval 953 hours 32 minutes 1 seconds
+	-236720 hours
+	0 seconds
+	3 hours 4 minutes 5 seconds
+	41393 hours 19 minutes 20 seconds
+	953 hours 32 minutes 1 seconds
 
 
 -- !query 25
@@ -242,11 +242,11 @@ SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
 -- !query 26 schema
 struct<54:string,diff:interval>
 -- !query 26 output
-	interval -236720 hours
-	interval 0 microseconds
-	interval 3 hours 4 minutes 5 seconds
-	interval 41393 hours 19 minutes 20 seconds
-	interval 953 hours 32 minutes 1 seconds
+	-236720 hours
+	0 seconds
+	3 hours 4 minutes 5 seconds
+	41393 hours 19 minutes 20 seconds
+	953 hours 32 minutes 1 seconds
 
 
 -- !query 27
