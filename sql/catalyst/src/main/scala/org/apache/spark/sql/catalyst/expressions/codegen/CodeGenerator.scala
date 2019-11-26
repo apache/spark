@@ -605,6 +605,7 @@ class CodegenContext extends Logging {
       s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
+    case CalendarIntervalType => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
@@ -1579,6 +1580,7 @@ object CodeGenerator extends Logging {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
+      case CalendarIntervalType => s"$row.setInterval($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
@@ -1602,8 +1604,10 @@ object CodeGenerator extends Logging {
       nullable: Boolean,
       isVectorized: Boolean = false): String = {
     if (nullable) {
-      // Can't call setNullAt on DecimalType, because we need to keep the offset
-      if (!isVectorized && dataType.isInstanceOf[DecimalType]) {
+      // Can't call setNullAt on DecimalType/CalendarIntervalType, because we need to keep the
+      // offset
+      if (!isVectorized && (dataType.isInstanceOf[DecimalType] ||
+        dataType.isInstanceOf[CalendarIntervalType])) {
         s"""
            |if (!${ev.isNull}) {
            |  ${setColumn(row, dataType, ordinal, ev.value)};
