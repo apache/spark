@@ -139,7 +139,7 @@
     <kafka.version>2.3.1</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.7</orc.version>
+    <orc.version>1.5.8</orc.version>
     <orc.classifier></orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
@@ -178,7 +178,7 @@
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.8.1</commons-lang3.version>
+    <commons-lang3.version>3.9</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
@@ -232,6 +232,8 @@
     <hive.storage.scope>compile</hive.storage.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>compile</hive.llap.scope>
+    <hive.serde.scope>compile</hive.serde.scope>
+    <hive.shims.scope>compile</hive.shims.scope>
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
@@ -2841,24 +2843,6 @@
           </execution>
         </executions>
       </plugin>
-      <plugin>
-        <groupId>org.antipathy</groupId>
-        <artifactId>mvn-scalafmt_2.12</artifactId>
-        <version>0.9_1.5.1</version>
-        <configuration>
-          <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
-          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
-          <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config locataion -->
-        </configuration>
-        <executions>
-          <execution>
-            <phase>validate</phase>
-            <goals>
-              <goal>format</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
       <!--
         Couple of dependencies are coming in bundle format (bundle is just a normal jar which
         contains OSGi metadata in the manifest). If one don't use OSGi, then a bundle will work as
@@ -2952,6 +2936,8 @@
         <hive.storage.scope>provided</hive.storage.scope>
         <hive.common.scope>provided</hive.common.scope>
         <hive.llap.scope>provided</hive.llap.scope>
+        <hive.serde.scope>provided</hive.serde.scope>
+        <hive.shims.scope>provided</hive.shims.scope>
         <orc.classifier>nohive</orc.classifier>
         <datanucleus-core.version>3.2.10</datanucleus-core.version>
       </properties>
@@ -3016,9 +3002,35 @@
       </properties>
     </profile>
 
-    <!-- Exists for backwards compatibility; profile doesn't do anything -->
     <profile>
       <id>scala-2.12</id>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <!-- SPARK-29293 currently not able to update to 1.x for Scala 2.13 -->
+            <plugin>
+              <groupId>org.antipathy</groupId>
+              <artifactId>mvn-scalafmt_2.12</artifactId>
+              <version>0.12_1.5.1</version>
+              <configuration>
+                <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
+                <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
+                <skipSources>${scalafmt.skip}</skipSources>
+                <skipTestSources>${scalafmt.skip}</skipTestSources>
+                <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
+              </configuration>
+              <executions>
+                <execution>
+                  <phase>validate</phase>
+                  <goals>
+                    <goal>format</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
     </profile>
     
     <profile>

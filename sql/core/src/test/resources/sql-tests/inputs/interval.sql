@@ -260,3 +260,7 @@ from interval_arithmetic;
 
 -- control characters as white spaces
 select interval '\t interval 1 day';
+select interval 'interval \t 1\tday';
+select interval 'interval\t1\tday';
+select interval '1\t' day;
+select interval '1 ' day;

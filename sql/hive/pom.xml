@@ -105,10 +105,12 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-serde</artifactId>
+      <scope>${hive.serde.scope}</scope>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-shims</artifactId>
+      <scope>${hive.shims.scope}</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
