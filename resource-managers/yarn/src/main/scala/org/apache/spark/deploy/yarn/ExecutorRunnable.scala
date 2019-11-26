@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import java.util.{Collections, Locale}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer}
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.hadoop.HadoopIllegalArgumentException
 import org.apache.hadoop.fs.Path
