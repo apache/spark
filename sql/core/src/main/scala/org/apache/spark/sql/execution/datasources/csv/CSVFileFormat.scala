@@ -163,3 +163,4 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
 }
+
