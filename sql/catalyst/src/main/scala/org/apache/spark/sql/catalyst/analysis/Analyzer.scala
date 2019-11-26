@@ -813,7 +813,7 @@ class Analyzer(
           if (isV2Provider(v1Table.v1Table.provider)) {
             Some(DataSourceV2Relation.create(v1Table))
           } else if (!isRunningDirectlyOnFiles(tableIdent)) {
-            val relation = v1SessionCatalog.createRelation(tableIdent, v1Table.v1Table)
+            val relation = v1SessionCatalog.lookupRelation(tableIdent, v1Table.v1Table)
             if (recurse) {
               Some(resolveRelation(relation))
             } else {

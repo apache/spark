@@ -747,14 +747,14 @@ class SessionCatalog(
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
-        createRelation(name, metadata)
+        lookupRelation(name, metadata)
       } else {
         SubqueryAlias(table, tempViews(table))
       }
     }
   }
 
-  def createRelation(name: TableIdentifier, metadata: CatalogTable): LogicalPlan = {
+  def lookupRelation(name: TableIdentifier, metadata: CatalogTable): LogicalPlan = {
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
 
