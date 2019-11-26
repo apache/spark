@@ -319,6 +319,8 @@ private[spark] class ExecutorMonitor(
         execResourceProfileCount(removed.resourceProfileId) = decCount
         decCount
       }
+      logInfo(s"Executor ${event.executorId} removed (ResourceProfile Id: " +
+        s"${removed.resourceProfileId}, new total for profile is ${countOption.getOrElse(0)})")
       if (countOption.contains(0)) execResourceProfileCount.remove(removed.resourceProfileId)
       if (!removed.pendingRemoval) {
         nextTimeout.set(Long.MinValue)
@@ -416,12 +418,15 @@ private[spark] class ExecutorMonitor(
   private def ensureExecutorIsTracked(id: String, resourceProfileId: Int): Tracker = {
     val numExecsWithRpId = execResourceProfileCount.getOrElseUpdate(resourceProfileId, 0)
     val execTracker = executors.computeIfAbsent(id, _ => {
-        execResourceProfileCount(resourceProfileId) = numExecsWithRpId + 1
+        val newcount = numExecsWithRpId + 1
+        execResourceProfileCount(resourceProfileId) = newcount
+        logDebug(s"Executor added with ResourceProfile id: $resourceProfileId " +
+          s"count is now $newcount")
         val tracker = new Tracker()
         tracker.resourceProfileId = resourceProfileId
         tracker
       })
-    // if we had added executor before knowing the resource profile id, fix it up
+    // if we had added executor before without knowing the resource profile id, fix it up
     if (execTracker.resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID &&
         resourceProfileId != UNKNOWN_RESOURCE_PROFILE_ID) {
       logDebug(s"Executor: $id, resource profile id was unknown, setting " +
