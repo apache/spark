@@ -19,7 +19,6 @@ package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
@@ -247,12 +246,12 @@ class NaiveBayes @Since("1.5.0") (
     $(modelType) match {
       case Multinomial | Bernoulli =>
         val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
-        new NaiveBayesModel(uid, pi.compressed, theta.compressed, null)
+        new NaiveBayesModel(uid, pi.compressed, theta.compressed, Matrices.zeros(0, 0))
           .setOldLabels(labelArray)
       case Complement =>
         // Since the CNB compute the coefficient in a complement way.
         val theta = new DenseMatrix(numLabels, numFeatures, thetaArray.map(v => -v), true)
-        new NaiveBayesModel(uid, pi.compressed, theta.compressed, null)
+        new NaiveBayesModel(uid, pi.compressed, theta.compressed, Matrices.zeros(0, 0))
     }
   }
 
@@ -580,8 +579,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
     import NaiveBayes._
 
-    private case class Data(pi: Vector, theta: Matrix)
-    private case class GaussianData(pi: Vector, theta: Matrix, sigma: Matrix)
+    private case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
@@ -590,21 +588,17 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
       instance.getModelType match {
         case Multinomial | Bernoulli | Complement =>
-          // Save model data: pi, theta
-          require(instance.sigma == null)
-          val data = Data(instance.pi, instance.theta)
-          sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
-
+          require(instance.sigma.numRows == 0 && instance.sigma.numCols == 0)
         case Gaussian =>
-          require(instance.sigma != null)
-          val data = GaussianData(instance.pi, instance.theta, instance.sigma)
-          sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+          require(instance.sigma.numRows != 0 && instance.sigma.numCols != 0)
       }
+
+      val data = Data(instance.pi, instance.theta, instance.sigma)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
   private class NaiveBayesModelReader extends MLReader[NaiveBayesModel] {
-    import NaiveBayes._
 
     /** Checked against metadata when loading model */
     private val className = classOf[NaiveBayesModel].getName
@@ -613,19 +607,17 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
-      val modelTypeJson = metadata.getParamValue("modelType")
-      val modelType = Param.jsonDecode[String](compact(render(modelTypeJson)))
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
       val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
 
-      val model = if (major.toInt < 3 || modelType != Gaussian) {
+      val model = if (major.toInt < 3) {
         val Row(pi: Vector, theta: Matrix) =
           MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
             .select("pi", "theta")
             .head()
-        new NaiveBayesModel(metadata.uid, pi, theta, null)
+        new NaiveBayesModel(metadata.uid, pi, theta, Matrices.zeros(0, 0))
       } else {
         val Row(pi: Vector, theta: Matrix, sigma: Matrix) =
           MLUtils.convertMatrixColumnsToML(vecConverted, "theta", "sigma")
