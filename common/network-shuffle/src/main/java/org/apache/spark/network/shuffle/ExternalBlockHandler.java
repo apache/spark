@@ -296,6 +296,10 @@ public class ExternalBlockHandler extends RpcHandler {
       final int[] mapIdAndReduceIds = new int[2 * blockIds.length];
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
+        if (blockIdParts.length == 5) {
+          throw new IllegalArgumentException("Continuous shuffle block fetching only works for " +
+            "new fetch protocol.");
+        }
         if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
           throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[i]);
         }
