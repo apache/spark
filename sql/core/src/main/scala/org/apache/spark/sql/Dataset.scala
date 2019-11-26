@@ -269,10 +269,8 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def numericCalculationSupportedColumns: Seq[Expression] = {
-    schema.fields.filter{ f =>
-      TypeCollection.NumericAndInterval.acceptsType(f.dataType)
-    }.map { n =>
-      queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
+    queryExecution.analyzed.output.filter { attr =>
+      TypeCollection.NumericAndInterval.acceptsType(attr.dataType)
     }
   }
 
