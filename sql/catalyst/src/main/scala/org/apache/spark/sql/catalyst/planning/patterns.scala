@@ -122,46 +122,47 @@ object ScanOperation extends OperationHelper with PredicateHelper {
     }.exists(!_.deterministic))
   }
 
-  private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType =
-      plan match {
-        case Project(fields, child) =>
-          collectProjectsAndFilters(child) match {
-            case Some((_, filters, other, aliases)) =>
-              // Follow CollapseProject and only keep going if the collected Projects
-              // do not have common non-deterministic expressions.
-              if (!hasCommonNonDeterministic(fields, aliases)) {
-                val substitutedFields =
-                  fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
-                Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
-              } else {
-                None
-              }
-            case None => None
-          }
+  private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
+    plan match {
+      case Project(fields, child) =>
+        collectProjectsAndFilters(child) match {
+          case Some((_, filters, other, aliases)) =>
+            // Follow CollapseProject and only keep going if the collected Projects
+            // do not have common non-deterministic expressions.
+            if (!hasCommonNonDeterministic(fields, aliases)) {
+              val substitutedFields =
+                fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
+              Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
+            } else {
+              None
+            }
+          case None => None
+        }
 
-        case Filter(condition, child) =>
-          collectProjectsAndFilters(child) match {
-            case Some((fields, filters, other, aliases)) =>
-              // Follow CombineFilters and only keep going if the collected Filters
-              // are all deterministic and this filter doesn't have common non-deterministic
-              // expressions with lower Project.
-              if (filters.forall(_.deterministic) &&
-                !hasCommonNonDeterministic(Seq(condition), aliases)) {
-                val substitutedCondition = substitute(aliases)(condition)
-                Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
-                  other, aliases))
-              } else {
-                None
-              }
-            case None => None
-          }
+      case Filter(condition, child) =>
+        collectProjectsAndFilters(child) match {
+          case Some((fields, filters, other, aliases)) =>
+            // Follow CombineFilters and only keep going if the collected Filters
+            // are all deterministic and this filter doesn't have common non-deterministic
+            // expressions with lower Project.
+            if (filters.forall(_.deterministic) &&
+              !hasCommonNonDeterministic(Seq(condition), aliases)) {
+              val substitutedCondition = substitute(aliases)(condition)
+              Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
+                other, aliases))
+            } else {
+              None
+            }
+          case None => None
+        }
 
-        case h: ResolvedHint =>
-          collectProjectsAndFilters(h.child)
+      case h: ResolvedHint =>
+        collectProjectsAndFilters(h.child)
 
-        case other =>
-          Some((None, Nil, other, AttributeMap(Seq())))
-      }
+      case other =>
+        Some((None, Nil, other, AttributeMap(Seq())))
+    }
+  }
 }
 
 /**
