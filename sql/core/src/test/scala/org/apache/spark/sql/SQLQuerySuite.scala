@@ -2857,9 +2857,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("Support filter clause for aggregate function uses SortAggregateExec") {
-    withSQLConf(SQLConf.USE_OBJECT_HASH_AGG -> "false") {
-      Seq(("PERCENTILE(a, 1)", 3), ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0),
-        ("COLLECT_LIST(a)", Seq(1, 2, 3)), ("COLLECT_SET(a)", Seq(1, 2, 3))).foreach { funcToResult =>
+    withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+      Seq(("PERCENTILE(a, 1)", 3),
+        ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0),
+        ("COLLECT_LIST(a)", Seq(1, 2, 3)),
+        ("COLLECT_SET(a)", Seq(1, 2, 3))).foreach { funcToResult =>
           val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
           val df = sql(query)
           val physical = df.queryExecution.sparkPlan
