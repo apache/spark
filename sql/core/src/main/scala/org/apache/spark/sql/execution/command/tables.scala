@@ -96,7 +96,9 @@ case class CreateTableLikeCommand(
         locationUri = fileFormat.locationUri,
         inputFormat = fileFormat.inputFormat,
         outputFormat = fileFormat.outputFormat,
-        serde = fileFormat.serde
+        serde = fileFormat.serde,
+        compressed = sourceTableDesc.storage.compressed,
+        properties = sourceTableDesc.storage.properties
       )
     } else {
       sourceTableDesc.storage.copy(locationUri = fileFormat.locationUri)
