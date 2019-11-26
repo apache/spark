@@ -1950,7 +1950,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a decimal literal for a regular decimal number.
+   * Create a decimal literal for a regular decimal number or a scientific decimal number.
    */
   override def visitLegacyDecimalLiteral(
       ctx: LegacyDecimalLiteralContext): Literal = withOrigin(ctx) {
