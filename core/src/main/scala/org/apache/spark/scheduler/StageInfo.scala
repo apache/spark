@@ -108,6 +108,6 @@ private[spark] object StageInfo {
       shuffleDepId)
   }
 
-  val INVALID_STAGE_ID = -1
-  val INVALID_ATTEMPT_ID = -1
+  final val INVALID_STAGE_ID = -1
+  final val INVALID_ATTEMPT_ID = -1
 }

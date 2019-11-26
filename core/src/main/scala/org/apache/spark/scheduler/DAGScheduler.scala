@@ -703,7 +703,8 @@ private[spark] class DAGScheduler(
           callSite.shortForm,
           0,
           Seq.empty[RDDInfo],
-          Seq.empty[Int], "")
+          Seq.empty[Int],
+          "")
       listenerBus.post(
         SparkListenerJobStart(
           jobId, time, Seq[StageInfo](dummyStageInfo), Utils.cloneProperties(properties)))
