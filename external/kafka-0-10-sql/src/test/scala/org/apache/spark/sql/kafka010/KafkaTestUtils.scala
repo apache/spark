@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.io.{File, IOException}
+import java.io.{File, IOException, PrintWriter}
 import java.lang.{Integer => JInt}
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit
 import javax.security.auth.login.Configuration
 
 import scala.collection.JavaConverters._
+import scala.io.Source
 import scala.util.Random
 
 import com.google.common.io.Files
@@ -138,6 +139,20 @@ class KafkaTestUtils(
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
     kdc = new MiniKdc(kdcConf, kdcDir)
     kdc.start()
+    val krb5Conf = Source.fromFile(kdc.getKrb5conf, "UTF-8").getLines()
+    val rewriteKrb5Conf = krb5Conf.map(s => if (s.contains("libdefaults")) {
+      s + "\n" +
+        "    default_tkt_enctypes=aes128-cts-hmac-sha1-96\n" +
+        "    default_tgs_enctypes=aes128-cts-hmac-sha1-96 "
+    } else {
+      s
+    })
+    kdc.getKrb5conf.delete()
+    val writer = new PrintWriter(kdc.getKrb5conf)
+    // scalastyle:off
+    rewriteKrb5Conf.foreach(writer.println)
+    writer.flush()
+    writer.close()
     kdcReady = true
   }
 
