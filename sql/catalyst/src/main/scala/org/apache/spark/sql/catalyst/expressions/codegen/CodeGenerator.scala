@@ -1638,6 +1638,7 @@ object CodeGenerator extends Logging {
       case _ if isPrimitiveType(jt) =>
         s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
       case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
+      case CalendarIntervalType => s"$vector.putInterval($rowId, $value);"
       case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
