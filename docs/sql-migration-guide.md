@@ -226,7 +226,7 @@ license: |
 
   - Since Spark 3.0, when casting string value to date, timestamp and interval values, the leading and trailing white spaces(<= ACSII 32) will be trimmed before casing, e.g. `cast('2019-10-10\t as date)` results the date value `2019-10-10`. In Spark version 2.4 and earlier, only the trailing space will be removed, thus, the result is `null`.
 
-  - Since Spark 3.0, we pad decimal numbers with trailing zeros to the scale of the column for Hive result, for example:
+  - Since Spark 3.0, we pad decimal numbers with trailing zeros to the scale of the column for `spark-sql` interface, for example:
     <table class="table">
         <tr>
           <th>
