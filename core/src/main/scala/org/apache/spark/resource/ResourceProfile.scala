@@ -92,17 +92,18 @@ private[spark] object ResourceProfile extends Logging {
   val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
 
   private def resourceProfileIntConfPrefix(rpId: Int): String = {
-    s"$SPARK_RP_EXEC_PREFIX.$rpId.${RESOURCE_DOT}"
+    s"$SPARK_RP_EXEC_PREFIX.$rpId."
   }
 
   // Helper class for constructing the resource profile internal configs used to pass to
   // executors. The configs look like:
-  // spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
+  // spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
+  // Note custom resources have name like resource.gpu.
   case class ResourceProfileInternalConf(id: Int, resourceName: String) {
     def resourceNameConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceName"
-    def resourceNameAndAmount: String = s"$resourceName${ResourceUtils.AMOUNT}"
-    def resourceNameAndDiscovery: String = s"$resourceName${ResourceUtils.DISCOVERY_SCRIPT}"
-    def resourceNameAndVendor: String = s"$resourceName${ResourceUtils.VENDOR}"
+    def resourceNameAndAmount: String = s"$resourceName.${ResourceUtils.AMOUNT}"
+    def resourceNameAndDiscovery: String = s"$resourceName.${ResourceUtils.DISCOVERY_SCRIPT}"
+    def resourceNameAndVendor: String = s"$resourceName.${ResourceUtils.VENDOR}"
 
     def amountConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceNameAndAmount"
     def discoveryScriptConf: String =
@@ -171,7 +172,7 @@ private[spark] object ResourceProfile extends Logging {
    * It pulls any "resource." resources from the ResourceProfile and returns a Map of key
    * to value where the keys get formatted as:
    *
-   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
+   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
    *
    * Keep this here as utility a function rather then in public ResourceProfile interface because
    * end users doesn't need this.
@@ -201,7 +202,8 @@ private[spark] object ResourceProfile extends Logging {
   /**
    * Get the executor ResourceRequests from the internal ResourceProfile confs.
    * The configs looks like:
-   * spark.resourceProfile.executor.[rpId].resource.gpu.[amount, vendor, discoveryScript]
+   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
+   * Note that custom resources have names prefixed with resource., ie resource.gpu
    */
   def getResourceRequestsFromInternalConfs(
       sparkConf: SparkConf,
@@ -214,7 +216,12 @@ private[spark] object ResourceProfile extends Logging {
       val amount = execConfs.get(intConf.resourceNameAndAmount).get.toInt
       val vendor = execConfs.get(intConf.resourceNameAndVendor)
       val discoveryScript = execConfs.get(intConf.resourceNameAndDiscovery)
-      ResourceRequest(ResourceID(SPARK_EXECUTOR_PREFIX, rName), amount, discoveryScript, vendor)
+      // note resourceName at this point is resource.[something] because with ResourceProfiles
+      // the name matches the spark conf. Strip off the resource. part here to match how global
+      // custom resource confs are parsed and how any resource files are handled.
+      val shortResourceName = rName.substring(RESOURCE_DOT.length)
+      val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, shortResourceName)
+      ResourceRequest(resourceId, amount, discoveryScript, vendor)
     }
     resourceReqs
   }

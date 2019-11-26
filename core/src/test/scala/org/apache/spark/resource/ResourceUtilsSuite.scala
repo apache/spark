@@ -134,7 +134,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       val expectedFpgaInfo = new ResourceInformation(FPGA, fpgaAddrs.toArray)
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
-      val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(1, "gpu")
+      val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(1, "resource.gpu")
       val gpuDiscovery = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript", """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(gpuInternalConf.amountConf, "2")
@@ -146,7 +146,6 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(resourcesFromBoth(GPU) === expectedGpuInfo)
     }
   }
-
 
   test("list resource ids") {
     val conf = new SparkConf

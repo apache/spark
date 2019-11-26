@@ -166,7 +166,7 @@ class ResourceProfileSuite extends SparkFunSuite {
   test("Internal confs") {
     val rprof = new ResourceProfile()
     val gpuExecReq =
-      new ExecutorResourceRequests().resource("resource.gpu", 2, "", "someScript")
+      new ExecutorResourceRequests().resource("resource.gpu", 2, "someScript")
     rprof.require(gpuExecReq)
     val internalResourceConfs = ResourceProfile.createResourceProfileInternalConfs(rprof)
     val sparkConf = new SparkConf
