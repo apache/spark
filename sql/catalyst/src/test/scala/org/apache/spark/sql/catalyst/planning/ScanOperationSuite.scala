@@ -18,75 +18,87 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualTo, Literal, MonotonicallyIncreasingID, Rand}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, OneRowRelation, Project}
-import org.apache.spark.sql.types.{DoubleType, StringType}
-
-case class TestRelation() extends LeafNode {
-  override def output: Seq[Attribute] = Seq(
-    AttributeReference("a", StringType)(),
-    AttributeReference("b", StringType)())
-}
+import org.apache.spark.sql.catalyst.analysis.TestRelations
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.DoubleType
 
 class ScanOperationSuite extends SparkFunSuite {
-  test("Collect projects and filters through non-deterministic expressions") {
-    val relation = TestRelation()
-    val colA = relation.output(0)
-    val colB = relation.output(1)
-    val aliasR = Alias(Rand(1), "r")()
-    val aliasId = Alias(MonotonicallyIncreasingID(), "id")()
-    val colR = AttributeReference("r", DoubleType)(aliasR.exprId, aliasR.qualifier)
+  private val relation = TestRelations.testRelation2
+  private val colA = relation.output(0)
+  private val colB = relation.output(1)
+  private val aliasR = Alias(Rand(1), "r")()
+  private val aliasId = Alias(MonotonicallyIncreasingID(), "id")()
+  private val colR = AttributeReference("r", DoubleType)(aliasR.exprId, aliasR.qualifier)
 
-    // Project with a non-deterministic field and a deterministic child Filter
+  test("Project with a non-deterministic field and a deterministic child Filter") {
     val project1 = Project(Seq(colB, aliasR), Filter(EqualTo(colA, Literal(1)), relation))
     project1 match {
-      case ScanOperation(projects, filters, _: TestRelation) =>
+      case ScanOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
         assert(projects(0) === colB)
         assert(projects(1) === aliasR)
         assert(filters.size === 1)
     }
+  }
 
-    // Project with all deterministic fields but a non-deterministic Filter
+  test("Project with all deterministic fields but a non-deterministic child Filter") {
     val project2 = Project(Seq(colA, colB), Filter(EqualTo(aliasR, Literal(1)), relation))
     project2 match {
-      case ScanOperation(projects, filters, _: TestRelation) =>
+      case ScanOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
         assert(projects(0) === colA)
         assert(projects(1) === colB)
         assert(filters.size === 1)
     }
+  }
 
-    // Project which has the same non-deterministic expression with its child Project
+  test("Project which has the same non-deterministic expression with its child Project") {
     val project3 = Project(Seq(colA, colR), Project(Seq(colA, aliasR), relation))
     assert(ScanOperation.unapply(project3).isEmpty)
+  }
 
-    // Project which has different non-deterministic expressions with its child Project
+  test("Project which has different non-deterministic expressions with its child Project") {
     val project4 = Project(Seq(colA, aliasId), Project(Seq(colA, aliasR), relation))
     project4 match {
-      case ScanOperation(projects, _, _: TestRelation) =>
+      case ScanOperation(projects, _, _: LocalRelation) =>
         assert(projects.size === 2)
         assert(projects(0) === colA)
         assert(projects(1) === aliasId)
     }
+  }
 
-    // Filter which has the same non-deterministic expression with its child Project
+  test("Filter which has the same non-deterministic expression with its child Project") {
     val filter1 = Filter(EqualTo(colR, Literal(1)), Project(Seq(colA, aliasR), relation))
     assert(ScanOperation.unapply(filter1).isEmpty)
+  }
 
-    // Filter which doesn't have the same non-deterministic expression with its child Project
+  test("Deterministic filter with a child Project with a non-deterministic expression") {
     val filter2 = Filter(EqualTo(colA, Literal(1)), Project(Seq(colA, aliasR), relation))
     filter2 match {
-      case ScanOperation(projects, filters, _: TestRelation) =>
+      case ScanOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
         assert(projects(0) === colA)
         assert(projects(1) === aliasR)
         assert(filters.size === 1)
     }
+  }
 
-    // Filter which has a non-deterministic child Filter
-    val filter3 = Filter(EqualTo(colA, Literal(1)), Filter(EqualTo(aliasR, Literal(1)), relation))
-    assert(ScanOperation.unapply(filter3).isEmpty)
+  test("Filter which has different non-deterministic expressions with its child Project") {
+    val filter3 = Filter(EqualTo(MonotonicallyIncreasingID(), Literal(1)),
+      Project(Seq(colA, aliasR), relation))
+    filter3 match {
+      case ScanOperation(projects, filters, _: LocalRelation) =>
+        assert(projects.size === 2)
+        assert(projects(0) === colA)
+        assert(projects(1) === aliasR)
+        assert(filters.size === 1)
+    }
+  }
 
+
+  test("Deterministic filter which has a non-deterministic child Filter") {
+    val filter4 = Filter(EqualTo(colA, Literal(1)), Filter(EqualTo(aliasR, Literal(1)), relation))
+    assert(ScanOperation.unapply(filter4).isEmpty)
   }
 }
