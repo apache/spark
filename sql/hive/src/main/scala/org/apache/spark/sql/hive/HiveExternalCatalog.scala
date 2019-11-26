@@ -537,7 +537,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       rawTable.storage
     }
 
-    val newTable = rawTable.copy(
+    // Fills in Hive provider if necessary. Otherwise, `Hive.alterTable` will overwrite
+    // important table metadata like bucketing when altering table.
+    val tableMeta = rawTable.properties.get(DATASOURCE_PROVIDER) match {
+      // This is a Hive serde table, set its provider.
+      case None if rawTable.tableType != VIEW =>
+        rawTable.copy(provider = Some(DDLUtils.HIVE_PROVIDER))
+      case _ =>
+        rawTable
+    }
+
+    val newTable = tableMeta.copy(
       identifier = TableIdentifier(newName, Some(db)),
       storage = storageWithNewPath)
 

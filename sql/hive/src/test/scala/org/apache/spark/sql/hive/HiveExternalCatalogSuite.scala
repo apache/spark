@@ -128,6 +128,26 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     assert(bucketString2.contains("10"))
   }
 
+  test("SPARK-30050: rename table should not erase the bucketing metadata at hive side") {
+    val catalog = newBasicCatalog()
+    externalCatalog.client.runSqlHive(
+      """
+        |CREATE TABLE db1.t(a string, b string)
+        |CLUSTERED BY (a, b) SORTED BY (a, b) INTO 10 BUCKETS
+        |STORED AS PARQUET
+      """.stripMargin)
+
+    val bucketString1 = externalCatalog.client.runSqlHive("DESC FORMATTED db1.t")
+      .filter(_.contains("Num Buckets")).head
+    assert(bucketString1.contains("10"))
+
+    catalog.renameTable("db1", "t", "t2")
+
+    val bucketString2 = externalCatalog.client.runSqlHive("DESC FORMATTED db1.t2")
+      .filter(_.contains("Num Buckets")).head
+    assert(bucketString2.contains("10"))
+  }
+
   test("SPARK-23001: NullPointerException when running desc database") {
     val catalog = newBasicCatalog()
     catalog.createDatabase(newDb("dbWithNullDesc").copy(description = null), ignoreIfExists = false)
