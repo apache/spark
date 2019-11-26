@@ -719,9 +719,9 @@ class Analyzer(
    */
   object ResolveRelations extends Rule[LogicalPlan] {
 
-    // If the unresolved relation is running directly on files, we just return the original
-    // UnresolvedRelation, the plan will get resolved later. Else we look up the table from catalog
-    // and change the default database name(in AnalysisContext) if it is a view.
+    // If an unresolved relation is given, it is looked up from the session catalog and either v1
+    // or v2 relation is returned. Otherwise, we look up the table from catalog
+    // and change the default database name (in AnalysisContext) if it is a view.
     // We usually look up a table from the default database if the table identifier has an empty
     // database part, for a view the default database should be the currentDb when the view was
     // created. When the case comes to resolving a nested view, the view may have different default
@@ -775,38 +775,37 @@ class Analyzer(
       case i @ InsertIntoStatement(
           u @ UnresolvedRelation(CatalogObjectIdentifier(catalog, ident)), _, _, _, _)
             if i.query.resolved && CatalogV2Util.isSessionCatalog(catalog) =>
-        lookupRelation(catalog, ident, recurse = false)
-          .map { relation =>
-            EliminateSubqueryAliases(relation) match {
-              case v: View =>
-                u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
-              case other => i.copy(table = other)
-            }
-          }.getOrElse(i)
+        val relation = ResolveTempViews(u) match {
+          case unresolved: UnresolvedRelation =>
+            lookupRelation(catalog, ident, recurse = false).getOrElse(unresolved)
+          case tempView => tempView
+        }
+
+        EliminateSubqueryAliases(relation) match {
+          case v: View =>
+            u.failAnalysis(
+              s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+          case other => i.copy(table = other)
+        }
 
       case u: UnresolvedRelation => resolveRelation(u)
     }
 
-    // Look up the table with the given name from catalog. The database we used is decided by the
-    // precedence:
-    // 1. Use the database part of the table identifier, if it is defined;
-    // 2. Use defaultDatabase, if it is defined(In this case, no temporary objects can be used,
-    //    and the default database is only used to look up a view);
-    // 3. Use the currentDb of the SessionCatalog.
+    // Look up a relation from a given session catalog with the following logic:
+    // 1) If a relation is not found in the catalog, return None.
+    // 2) If a relation is found and is not a v1 table, create a v2 relation.
+    // 3) If a relation is found and is a v1 table,
+    //   a) If it has a v2 provider, create a v2 relation.
+    //   b) If it doesn't have a v2 provider and is not running on files, create v1 relation.
+    //      Relation that runs directly on files will be
+    //   c) Otherwise, return None.
+    // If recurse is set to true, it will call `resolveRelation` recursively to resolve
+    // relations with the correct AnalysisContext.defaultDatabase scope.
     private def lookupRelation(
         catalog: CatalogPlugin,
         ident: Identifier,
         recurse: Boolean): Option[LogicalPlan] = {
-      val newIdent = if (ident.namespace.isEmpty) {
-        val defaultNamespace = AnalysisContext.get.defaultDatabase match {
-          case Some(db) => Array(db)
-          case None => catalogManager.currentNamespace
-        }
-        Identifier.of(defaultNamespace, ident.name)
-      } else {
-        ident
-      }
-
+      val newIdent = withNewNamespace(ident)
       require(newIdent.namespace.size == 1)
 
       CatalogV2Util.loadTable(catalog, newIdent) match {
@@ -827,6 +826,24 @@ class Analyzer(
         case Some(table) =>
           Some(DataSourceV2Relation.create(table))
         case None => None
+      }
+    }
+
+    // The namespace used for lookup is decided by the following precedence:
+    // 1. Use the existing namespace if it is defined.
+    // 2. Use defaultDatabase fom AnalysisContext, if it is defined. In this case, no temporary
+    //    objects can be used, and the default database is only used to look up a view.
+    // 3. Use the current namespace. Note that the catalog will be a session catalog since
+    //    this function gets called only when the catalog is resolved to a session catalog.
+    private def withNewNamespace(ident: Identifier): Identifier = {
+      if (ident.namespace.nonEmpty) {
+        ident
+      } else {
+        val defaultNamespace = AnalysisContext.get.defaultDatabase match {
+          case Some(db) => Array(db)
+          case None => catalogManager.currentNamespace
+        }
+        Identifier.of(defaultNamespace, ident.name)
       }
     }
 
