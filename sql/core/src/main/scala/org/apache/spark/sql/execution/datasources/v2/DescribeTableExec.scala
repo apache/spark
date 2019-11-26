@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.catalog.{Table, TableCatalog}
 import org.apache.spark.sql.types.StructType
 
 case class DescribeTableExec(
@@ -38,10 +38,26 @@ case class DescribeTableExec(
     addSchema(rows)
 
     if (isExtended) {
+      addDescription(rows)
+      addLocation(rows)
       addPartitioning(rows)
       addProperties(rows)
     }
     rows
+  }
+
+  private def addDescription(rows: ArrayBuffer[InternalRow]): Unit = {
+    if (table.properties.containsKey(TableCatalog.PROP_COMMENT)) {
+      rows += emptyRow()
+      rows += toCatalystRow("Description", table.properties.get(TableCatalog.PROP_COMMENT), "")
+    }
+  }
+
+  private def addLocation(rows: ArrayBuffer[InternalRow]): Unit = {
+    if (table.properties.containsKey(TableCatalog.PROP_LOCATION)) {
+      rows += emptyRow()
+      rows += toCatalystRow("Location", table.properties.get(TableCatalog.PROP_LOCATION), "")
+    }
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -68,7 +84,8 @@ case class DescribeTableExec(
     rows += emptyRow()
     rows += toCatalystRow(" Table Property", " Value", "")
     rows += toCatalystRow("----------------", "-------", "")
-    rows ++= table.properties.asScala.toList.sortBy(_._1).map {
+    rows ++= table.properties.asScala.toList
+      .filter(kv => !TableCatalog.RESERVED_PROPERTIES.contains(kv._1)).sortBy(_._1).map {
       case (key, value) => toCatalystRow(key, value, "")
     }
   }

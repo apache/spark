@@ -24,6 +24,8 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.types.StructType;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -48,6 +50,11 @@ public interface TableCatalog extends CatalogPlugin {
    * A property to specify the description of the table.
    */
   String PROP_COMMENT = "comment";
+
+  /**
+   * The list of reserved table properties.
+   */
+  List<String> RESERVED_PROPERTIES = Arrays.asList(PROP_COMMENT, PROP_LOCATION);
 
   /**
    * List the tables in a namespace from the catalog.

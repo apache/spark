@@ -125,7 +125,9 @@ class DataSourceV2SQLSuite
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
       " USING foo" +
       " PARTITIONED BY (id)" +
-      " TBLPROPERTIES ('bar'='baz')")
+      " TBLPROPERTIES ('bar'='baz')" +
+      " COMMENT 'this is a test table'" +
+      " LOCATION '/tmp/testcat/table_name'")
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
     assert(descriptionDf.schema.map(field => (field.name, field.dataType))
       === Seq(
@@ -137,6 +139,10 @@ class DataSourceV2SQLSuite
       .map(_.toArray.map(_.toString.trim)) === Array(
       Array("id", "bigint", ""),
       Array("data", "string", ""),
+      Array("", "", ""),
+      Array("Description", "this is a test table", ""),
+      Array("", "", ""),
+      Array("Location", "/tmp/testcat/table_name", ""),
       Array("", "", ""),
       Array("Partitioning", "", ""),
       Array("--------------", "", ""),
