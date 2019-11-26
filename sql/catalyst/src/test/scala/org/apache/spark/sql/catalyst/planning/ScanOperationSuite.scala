@@ -25,18 +25,17 @@ import org.apache.spark.sql.types.{DoubleType, StringType}
 case class TestRelation() extends LeafNode {
   override def output: Seq[Attribute] = Seq(
     AttributeReference("a", StringType)(),
-    AttributeReference("b", StringType)(),
-    AttributeReference("c", StringType)())
+    AttributeReference("b", StringType)())
 }
 
 class ScanOperationSuite extends SparkFunSuite {
   test("Collect projects and filters through non-deterministic expressions") {
-    val colA = AttributeReference("a", StringType)()
-    val colB = AttributeReference("b", StringType)()
+    val relation = TestRelation()
+    val colA = relation.output(0)
+    val colB = relation.output(1)
     val aliasR = Alias(Rand(1), "r")()
     val aliasId = Alias(MonotonicallyIncreasingID(), "id")()
     val colR = AttributeReference("r", DoubleType)(aliasR.exprId, aliasR.qualifier)
-    val relation = TestRelation()
 
     // Project with a non-deterministic field and a deterministic child Filter
     val project1 = Project(Seq(colB, aliasR), Filter(EqualTo(colA, Literal(1)), relation))
