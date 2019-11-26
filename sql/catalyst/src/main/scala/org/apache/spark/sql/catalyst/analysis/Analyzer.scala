@@ -758,21 +758,21 @@ class Analyzer(
           ident
         }
 
+        require(newIdent.namespace.size == 1)
+
         CatalogV2Util.loadTable(catalog, newIdent) match {
-          case Some(v1Table: V1Table) if isV2Provider(v1Table.v1Table.provider) =>
-            DataSourceV2Relation.create(v1Table)
+          case Some(v1Table: V1Table) =>
+            val tableIdent = TableIdentifier(newIdent.name, newIdent.namespace.headOption)
+            if (isV2Provider(v1Table.v1Table.provider)) {
+              DataSourceV2Relation.create(v1Table)
+            } else if (!isRunningDirectlyOnFiles(tableIdent)) {
+              resolveRelation(v1SessionCatalog.createRelation(tableIdent, v1Table.v1Table))
+            } else {
+              u
+            }
           case Some(table) =>
             DataSourceV2Relation.create(table)
           case None => u
-        }
-
-      case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
-        val defaultDatabase = AnalysisContext.get.defaultDatabase
-        val foundRelation = lookupTableFromCatalog(ident, u, defaultDatabase)
-        if (foundRelation != u) {
-          resolveRelation(foundRelation)
-        } else {
-          u
         }
 
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
@@ -2875,13 +2875,6 @@ class Analyzer(
       case CatalogObjectIdentifier(catalog, ident) if !CatalogV2Util.isSessionCatalog(catalog) =>
         CatalogV2Util.loadTable(catalog, ident) match {
           case Some(table) => Some((DataSourceV2Relation.create(table), catalog, ident))
-          case None => None
-        }
-      case CatalogObjectIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
-        CatalogV2Util.loadTable(catalog, ident) match {
-          case Some(_: V1Table) => None
-          case Some(table) =>
-            Some((DataSourceV2Relation.create(table), catalog, ident))
           case None => None
         }
       case _ => None
