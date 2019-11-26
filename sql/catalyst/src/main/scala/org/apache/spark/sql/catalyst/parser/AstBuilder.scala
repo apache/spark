@@ -1942,8 +1942,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create a decimal literal for a regular decimal number.
    */
-  override def visitLegacyDecimalLiteral(ctx: LegacyDecimalLiteralContext)
-    : Literal = withOrigin(ctx) {
+  override def visitLegacyDecimalLiteral(
+      ctx: LegacyDecimalLiteralContext): Literal = withOrigin(ctx) {
     Literal(BigDecimal(ctx.getText).underlying())
   }
 
