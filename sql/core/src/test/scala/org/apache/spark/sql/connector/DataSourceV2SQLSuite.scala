@@ -24,8 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
@@ -830,7 +829,7 @@ class DataSourceV2SQLSuite
         sql(s"CREATE NAMESPACE testcat.test LOCATION '$path'")
         val metadata =
           catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("test")).asScala
-        val catalogPath = metadata(V2SessionCatalog.LOCATION_TABLE_PROP)
+        val catalogPath = metadata(SupportsNamespaces.PROP_LOCATION)
         assert(catalogPath.equals(catalogPath))
       }
     }
@@ -1783,6 +1782,20 @@ class DataSourceV2SQLSuite
       val expected = Seq(Row(nonExistingKey, s"Table $t does not have property: $nonExistingKey"))
 
       assert(expected === properties.collect())
+    }
+  }
+
+  test("global temp view should not be masked by v2 catalog") {
+    val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+
+    try {
+      sql("create global temp view v as select 1")
+      sql(s"alter view $globalTempDB.v rename to v2")
+      checkAnswer(spark.table(s"$globalTempDB.v2"), Row(1))
+      sql(s"drop view $globalTempDB.v2")
+    } finally {
+      spark.sharedState.globalTempViewManager.clear()
     }
   }
 

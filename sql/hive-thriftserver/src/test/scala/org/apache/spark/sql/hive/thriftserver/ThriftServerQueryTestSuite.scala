@@ -83,9 +83,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  // We only test this test suite with the default configuration to reduce test time.
-  override val isTestWithConfigSets = false
-
   /** List of test cases to ignore, in lower cases. */
   override def blackList: Set[String] = super.blackList ++ Set(
     // Missing UDF
@@ -103,28 +100,31 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "subquery/in-subquery/in-group-by.sql",
     "subquery/in-subquery/simple-in.sql",
     "subquery/in-subquery/in-order-by.sql",
-    "subquery/in-subquery/in-set-operations.sql",
-    // SPARK-29783: need to set conf
-    "interval-display-iso_8601.sql",
-    "interval-display-sql_standard.sql"
+    "subquery/in-subquery/in-set-operations.sql"
   )
 
   override def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Option[Seq[(String, String)]]): Unit = {
+      configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
     withJdbcStatement { statement =>
 
       loadTestData(statement)
 
+      configSet.foreach { case (k, v) =>
+        statement.execute(s"SET $k = $v")
+      }
+
       testCase match {
         case _: PgSQLTest =>
-          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
         case _: AnsiTest =>
+          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
           statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
         case _ =>
+          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
+          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = false")
       }
 
       // Run the SQL queries preparing them for comparison.

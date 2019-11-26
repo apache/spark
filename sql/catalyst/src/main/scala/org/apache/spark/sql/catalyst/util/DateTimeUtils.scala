@@ -205,7 +205,7 @@ object DateTimeUtils {
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
     var i = 0
     var currentSegmentValue = 0
-    val bytes = s.trim.getBytes
+    val bytes = s.trimAll().getBytes
     val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
     if (specialTimestamp.isDefined) return specialTimestamp
     var j = 0
@@ -372,7 +372,7 @@ object DateTimeUtils {
     val segments: Array[Int] = Array[Int](1, 1, 1)
     var i = 0
     var currentSegmentValue = 0
-    val bytes = s.trim.getBytes
+    val bytes = s.trimAll().getBytes
     val specialDate = convertSpecialDate(bytes, zoneId)
     if (specialDate.isDefined) return specialDate
     var j = 0

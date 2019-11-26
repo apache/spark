@@ -82,7 +82,6 @@ case class AdaptiveSparkPlanExec(
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    OptimizeLocalShuffleReader(conf),
     ensureRequirements
   )
 
@@ -90,16 +89,10 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, subqueryCache),
-
-    // When adding local shuffle readers in 'OptimizeLocalShuffleReader`, we revert all the local
-    // readers if additional shuffles are introduced. This may be too conservative: maybe there is
-    // only one local reader that introduces shuffle, and we can still keep other local readers.
-    // Here we re-execute this rule with the sub-plan-tree of a query stage, to make sure necessary
-    // local readers are added before executing the query stage.
-    // This rule must be executed before `ReduceNumShufflePartitions`, as local shuffle readers
-    // can't change number of partitions.
-    OptimizeLocalShuffleReader(conf),
     ReduceNumShufflePartitions(conf),
+    // The rule of 'OptimizeLocalShuffleReader' need to make use of the 'partitionStartIndices'
+    // in 'ReduceNumShufflePartitions' rule. So it must be after 'ReduceNumShufflePartitions' rule.
+    OptimizeLocalShuffleReader(conf),
     ApplyColumnarRulesAndInsertTransitions(session.sessionState.conf,
       session.sessionState.columnarRules),
     CollapseCodegenStages(conf)
@@ -133,10 +126,8 @@ case class AdaptiveSparkPlanExec(
 
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
-  override def doExecute(): RDD[InternalRow] = lock.synchronized {
-    if (isFinalPlan) {
-      currentPhysicalPlan.execute()
-    } else {
+  private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
+    if (!isFinalPlan) {
       // Make sure we only update Spark UI if this plan's `QueryExecution` object matches the one
       // retrieved by the `sparkContext`'s current execution ID. Note that sub-queries do not have
       // their own execution IDs and therefore rely on the main query to update UI.
@@ -217,12 +208,21 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       isFinalPlan = true
-
-      val ret = currentPhysicalPlan.execute()
       logDebug(s"Final plan: $currentPhysicalPlan")
-      executionId.foreach(onUpdatePlan)
-      ret
     }
+    currentPhysicalPlan
+  }
+
+  override def executeCollect(): Array[InternalRow] = {
+    getFinalPhysicalPlan().executeCollect()
+  }
+
+  override def executeTake(n: Int): Array[InternalRow] = {
+    getFinalPhysicalPlan().executeTake(n)
+  }
+
+  override def doExecute(): RDD[InternalRow] = {
+    getFinalPhysicalPlan().execute()
   }
 
   override def verboseString(maxFields: Int): String = simpleString(maxFields)

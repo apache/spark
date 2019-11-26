@@ -257,3 +257,6 @@ select
   interval '99 11:22:33.123456789' day to second + interval '10 9:8:7.123456789' day to second,
   interval '99 11:22:33.123456789' day to second - interval '10 9:8:7.123456789' day to second
 from interval_arithmetic;
+
+-- control characters as white spaces
+select interval '\t interval 1 day';

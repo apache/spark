@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
@@ -1859,6 +1860,27 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
         assert(errorMsg.getMessage.contains(s"did you mean to quote the `$colName` column?"))
       }
     }
+  }
+
+  test("groupBy.as") {
+    val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData( 3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+    val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData( 3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+
+    val df3 = df1.groupBy("id").as[Int, DoubleData]
+      .cogroup(df2.groupBy("id").as[Int, DoubleData]) { case (key, data1, data2) =>
+        if (key == 1) {
+          Iterator(DoubleData(key, (data1 ++ data2).foldLeft("")((cur, next) => cur + next.val1)))
+        } else Iterator.empty
+      }
+    checkDataset(df3, DoubleData(1, "onetwo"))
+
+    // Assert that no extra shuffle introduced by cogroup.
+    val exchanges = df3.queryExecution.executedPlan.collect {
+      case h: ShuffleExchangeExec => h
+    }
+    assert(exchanges.size == 2)
   }
 }
 

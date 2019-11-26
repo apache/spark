@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
@@ -71,7 +73,7 @@ object HashedRelationMetricsBenchmark extends SqlBasedBenchmark {
           thread.start()
           thread
         }
-        threads.map(_.join())
+        threads.foreach(_.join())
         map.free()
       }
       benchmark.run()

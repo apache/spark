@@ -37,6 +37,18 @@ import java.util.Map;
  */
 @Experimental
 public interface TableCatalog extends CatalogPlugin {
+
+  /**
+   * A property to specify the location of the table. The files of the table
+   * should be under this location.
+   */
+  String PROP_LOCATION = "location";
+
+  /**
+   * A property to specify the description of the table.
+   */
+  String PROP_COMMENT = "comment";
+
   /**
    * List the tables in a namespace from the catalog.
    * <p>

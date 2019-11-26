@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRea
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
-import org.apache.spark.sql.connector.write.{WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{PhysicalWriteInfo, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
@@ -68,7 +68,8 @@ class FakeScanBuilder extends ScanBuilder with Scan {
 
 class FakeWriteBuilder extends WriteBuilder with StreamingWrite {
   override def buildForStreaming(): StreamingWrite = this
-  override def createStreamingWriterFactory(): StreamingDataWriterFactory = {
+  override def createStreamingWriterFactory(
+      info: PhysicalWriteInfo): StreamingDataWriterFactory = {
     throw new IllegalStateException("fake sink - cannot actually write")
   }
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
