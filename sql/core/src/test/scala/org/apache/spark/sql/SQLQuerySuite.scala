@@ -2847,8 +2847,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         case agg: HashAggregateExec => agg.aggregateExpressions
         case agg: ObjectHashAggregateExec => agg.aggregateExpressions
       }
-      assert (aggregateExpressions.isDefined)
-      assert (aggregateExpressions.get.size == 1)
+      assert(aggregateExpressions.isDefined)
+      assert(aggregateExpressions.get.size == 1)
       aggregateExpressions.get.foreach{ expr =>
         assert(expr.filter.isDefined)
       }
@@ -2891,10 +2891,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     val df = sql(query)
     val physical = df.queryExecution.sparkPlan
     val aggregateExpressions = physical.collectFirst {
-      case agg : HashAggregateExec => agg.aggregateExpressions
+      case agg: HashAggregateExec => agg.aggregateExpressions
     }
-    assert (aggregateExpressions.isDefined)
-    assert (aggregateExpressions.get.size == 10)
+    assert(aggregateExpressions.isDefined)
+    assert(aggregateExpressions.get.size == 10)
     checkAnswer(df, Row(6, 3, 12, 6, 3, 3, 1, 1, 2, 2) :: Nil)
   }
 
@@ -2904,11 +2904,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       val df = sql(query)
       val physical = df.queryExecution.sparkPlan
       val aggregateExpressions = physical.collectFirst {
-        case agg : HashAggregateExec => agg.aggregateExpressions
-        case agg : SortAggregateExec => agg.aggregateExpressions
+        case agg: HashAggregateExec => agg.aggregateExpressions
+        case agg: SortAggregateExec => agg.aggregateExpressions
       }
-      assert (aggregateExpressions.isDefined)
-      assert (aggregateExpressions.get.size == 2)
+      assert(aggregateExpressions.isDefined)
+      assert(aggregateExpressions.get.size == 2)
       checkAnswer(df, Row(1, 3, null) :: Row(2, 3, 3) :: Nil)
     }
   }
