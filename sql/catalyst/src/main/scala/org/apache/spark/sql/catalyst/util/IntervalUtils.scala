@@ -491,10 +491,10 @@ object IntervalUtils {
       }
     }
 
-    def currentWord: UTF8String = {
-      val sep = UTF8String.fromString("\\s+")
-      val strings = s.split(sep, -1)
-      val lenRight = s.substring(i, s.numBytes()).split(sep, -1).length
+    def currentWord: String = {
+      val sep = "\\s+"
+      val strings = s.toString.split(sep)
+      val lenRight = s.substring(i, s.numBytes()).toString.split(sep).length
       strings(strings.length - lenRight)
     }
 
