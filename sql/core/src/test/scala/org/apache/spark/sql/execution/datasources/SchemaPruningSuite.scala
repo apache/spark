@@ -90,6 +90,17 @@ abstract class SchemaPruningSuite
     briefContacts.map { case BriefContact(id, name, address) =>
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
 
+  testSchemaPruning("select only top-level fields") {
+    val query = sql("select address from contacts")
+    checkScan(query, "struct<address:string>")
+    checkAnswer(query.orderBy("id"),
+      Row("123 Main Street") ::
+      Row("321 Wall Street") ::
+      Row("567 Maple Drive") ::
+      Row("6242 Ash Street") ::
+      Nil)
+  }
+
   testSchemaPruning("select a single complex field") {
     val query = sql("select name.middle from contacts")
     checkScan(query, "struct<name:struct<middle:string>>")
@@ -376,6 +387,20 @@ abstract class SchemaPruningSuite
     val query = sql("select id from mixedcase where Col2.b = 2")
     checkScan(query, "struct<id:int,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"), Row(1) :: Nil)
+  }
+
+  testMixedCaseQueryPruning("subquery filter with different-case column names") {
+    withTempView("temp") {
+      val spark = this.spark
+      import spark.implicits._
+
+      val df = Seq(2).toDF("col2")
+      df.createOrReplaceTempView("temp")
+
+      val query = sql("select id from mixedcase where Col2.b IN (select col2 from temp)")
+      checkScan(query, "struct<id:int,coL2:struct<B:int>>")
+      checkAnswer(query.orderBy("id"), Row(1) :: Nil)
+    }
   }
 
   // Tests schema pruning for a query whose column and field names are exactly the same as the table

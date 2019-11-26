@@ -68,6 +68,10 @@ case class ParquetScanBuilder(
   // All filters that can be converted to Parquet are pushed down.
   override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
       readPartitionSchema(), pushedParquetFilters, options)

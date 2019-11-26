@@ -64,4 +64,8 @@ case class OrcScanBuilder(
   }
 
   override def pushedFilters(): Array[Filter] = _pushedFilters
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
 }
