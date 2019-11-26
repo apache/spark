@@ -698,8 +698,18 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         new mutable.HashMap[String, String]()
       }
 
-    val oldTableNonStatsProps = rawTable.properties.filterNot(_._1.startsWith(STATISTICS_PREFIX))
-    val updatedTable = rawTable.copy(properties = oldTableNonStatsProps ++ statsProperties)
+    // Fills in Hive provider if necessary. Otherwise, `Hive.alterTable` will overwrite
+    // important table metadata like bucketing when altering table.
+    val tableMeta = rawTable.properties.get(DATASOURCE_PROVIDER) match {
+      // This is a Hive serde table, set its provider.
+      case None if rawTable.tableType != VIEW =>
+        rawTable.copy(provider = Some(DDLUtils.HIVE_PROVIDER))
+      case _ =>
+        rawTable
+    }
+
+    val oldTableNonStatsProps = tableMeta.properties.filterNot(_._1.startsWith(STATISTICS_PREFIX))
+    val updatedTable = tableMeta.copy(properties = oldTableNonStatsProps ++ statsProperties)
     client.alterTable(updatedTable)
   }
 
