@@ -597,11 +597,10 @@ package object config {
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
-      .doc("The capacity config for listener bus event queue when the event queue doesn't " +
-        "config the capacity using its own specific capacity config. It means Spark will " +
-        "firstly try to init the capacity of event queue using spark.scheduler.listenerbus." +
-        "eventqueue.queueName.capacity. If it's not configured explicitly, then Spark will " +
-        "fallback to this config.")
+      .doc("The default capacity for event queues. Spark will try to initialize " +
+        "an event queue using capacity specified by `spark.scheduler.listenerbus" +
+        ".eventqueue.queueName.capacity` first. If it's not configured, Spark will " +
+        "use the default capacity specified by this config.")
       .intConf
       .checkValue(_ > 0, "The capacity of listener bus event queue must be positive")
       .createWithDefault(10000)
