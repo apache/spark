@@ -225,6 +225,8 @@ license: |
   - Since Spark 3.0, when casting string value to integral types, including tinyint, smallint, int and bigint type, the leading and trailing white spaces(<= ACSII 32) will be trimmed before convert to integral values, e.g. `cast(' 1 ' as int)` results `1`. In Spark version 2.4 and earlier, the result will be `null`.
 
   - Since Spark 3.0, when casting string value to date, timestamp and interval values, the leading and trailing white spaces(<= ACSII 32) will be trimmed before casing, e.g. `cast('2019-10-10\t as date)` results the date value `2019-10-10`. In Spark version 2.4 and earlier, only the trailing space will be removed, thus, the result is `null`.
+  
+  - Since Spark 3.0, the scientific decimal literal(e.g. `1E2`) would be parsed as Double while in Spark version 2.4 it's parsed as Decimal. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.exponentLiteralAsDecimal.enabled` to `true`.
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
