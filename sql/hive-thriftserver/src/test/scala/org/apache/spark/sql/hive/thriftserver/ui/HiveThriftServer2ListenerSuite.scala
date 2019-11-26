@@ -23,7 +23,7 @@ import org.mockito.Mockito.{mock, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.config.Status.ASYNC_TRACKING_ENABLED
+import org.apache.spark.internal.config.Status.{ASYNC_TRACKING_ENABLED, LIVE_ENTITY_UPDATE_PERIOD}
 import org.apache.spark.scheduler.SparkListenerJobStart
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.internal.SQLConf
@@ -41,73 +41,131 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
-  Seq(true, false).foreach { live =>
-    test(s"listener events should store successfully (live = $live") {
-      val (statusStore: HiveThriftServer2AppStatusStore,
-      listener: HiveThriftServer2Listener) = createAppStatusStore(live)
+  test(s"listener events should store successfully (live = true)") {
+    val (statusStore: HiveThriftServer2AppStatusStore,
+    listener: HiveThriftServer2Listener) = createAppStatusStore(true)
 
-      listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId",
-        "user", System.currentTimeMillis()))
-      listener.onOtherEvent(SparkListenerThriftServerOperationStart("id", "sessionId",
-        "dummy query", "groupId", System.currentTimeMillis(), "user"))
-      listener.onOtherEvent(SparkListenerThriftServerOperationParsed("id", "dummy plan"))
-      listener.onJobStart(SparkListenerJobStart(
-        0,
-        System.currentTimeMillis(),
-        Nil,
-        createProperties))
-      listener.onOtherEvent(SparkListenerThriftServerOperationFinish("id",
-        System.currentTimeMillis()))
-      listener.onOtherEvent(SparkListenerThriftServerOperationClosed("id",
-        System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId",
+      "user", System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerOperationStart("id", "sessionId",
+      "dummy query", "groupId", System.currentTimeMillis(), "user"))
+    listener.onOtherEvent(SparkListenerThriftServerOperationParsed("id", "dummy plan"))
+    listener.onJobStart(SparkListenerJobStart(
+      0,
+      System.currentTimeMillis(),
+      Nil,
+      createProperties))
+    listener.onOtherEvent(SparkListenerThriftServerOperationFinish("id",
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerOperationClosed("id",
+      System.currentTimeMillis()))
 
-      assert(statusStore.getOnlineSessionNum === 1)
 
-      listener.onOtherEvent(SparkListenerSessionClosed("sessionId", System.currentTimeMillis()))
+    assert(statusStore.getOnlineSessionNum === 1)
 
-      assert(statusStore.getOnlineSessionNum === 0)
-      assert(statusStore.getExecutionList.size === 1)
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionId", System.currentTimeMillis()))
 
-      val storeExecData = statusStore.getExecutionList.head
+    assert(statusStore.getOnlineSessionNum === 0)
+    assert(statusStore.getExecutionList.size === 1)
 
-      assert(storeExecData.execId === "id")
-      assert(storeExecData.sessionId === "sessionId")
-      assert(storeExecData.executePlan === "dummy plan")
-      assert(storeExecData.jobId === Seq("0"))
-      assert(listener.noLiveData())
-    }
+    val storeExecData = statusStore.getExecutionList.head
+
+    assert(storeExecData.execId === "id")
+    assert(storeExecData.sessionId === "sessionId")
+    assert(storeExecData.executePlan === "dummy plan")
+    assert(storeExecData.jobId === Seq("0"))
+    assert(listener.noLiveData())
   }
 
-  Seq(true, false).foreach { live =>
-    test(s"cleanup session if exceeds the threshold (live = $live)") {
-      val (statusStore: HiveThriftServer2AppStatusStore,
-      listener: HiveThriftServer2Listener) = createAppStatusStore(live)
-      var time = 0
-      listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId1",
-        "user", time))
-      time += 1
-      listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId2",
-        "user", time))
+  test(s"listener events should store successfully (live = false)") {
+    val (statusStore: HiveThriftServer2AppStatusStore,
+    listener: HiveThriftServer2Listener) = createAppStatusStore(false)
 
-      assert(statusStore.getOnlineSessionNum === 2)
-      assert(statusStore.getSessionCount === 2)
+    listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId",
+      "user", System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerOperationStart("id", "sessionId",
+      "dummy query", "groupId", System.currentTimeMillis(), "user"))
+    listener.onOtherEvent(SparkListenerThriftServerOperationParsed("id", "dummy plan"))
+    listener.onJobStart(SparkListenerJobStart(
+      0,
+      System.currentTimeMillis(),
+      Nil,
+      createProperties))
+    listener.onOtherEvent(SparkListenerThriftServerOperationFinish("id",
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerOperationClosed("id",
+      System.currentTimeMillis()))
 
-      time += 1
-      listener.onOtherEvent(SparkListenerSessionClosed("sessionId1", time))
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionId", System.currentTimeMillis()))
 
-      time += 1
-      listener.onOtherEvent(SparkListenerSessionClosed("sessionId2", time))
+    kvstore.close(false)
+    assert(statusStore.getOnlineSessionNum === 0)
+    assert(statusStore.getExecutionList.size === 1)
 
-      listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId3",
-        "user", time))
-      assert(statusStore.getOnlineSessionNum === 1)
-      assert(statusStore.getSessionCount === 1)
-      assert(statusStore.getSession("sessionId1") === None)
-      time += 1
-      listener.onOtherEvent(SparkListenerSessionClosed("sessionId3", 4))
+    val storeExecData = statusStore.getExecutionList.head
 
-      assert(listener.noLiveData())
-    }
+    assert(storeExecData.execId === "id")
+    assert(storeExecData.sessionId === "sessionId")
+    assert(storeExecData.executePlan === "dummy plan")
+    assert(storeExecData.jobId === Seq("0"))
+    assert(listener.noLiveData())
+  }
+
+  test(s"cleanup session if exceeds the threshold (live = true)") {
+    val (statusStore: HiveThriftServer2AppStatusStore,
+    listener: HiveThriftServer2Listener) = createAppStatusStore(true)
+    var time = 0
+    listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId1",
+      "user", time))
+    time += 1
+    listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId2",
+      "user", time))
+
+    assert(statusStore.getOnlineSessionNum === 2)
+
+    assert(statusStore.getSessionCount === 2)
+
+    time += 1
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionId1", time))
+
+    time += 1
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionId2", time))
+
+    listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId3",
+      "user", time))
+    assert(statusStore.getOnlineSessionNum === 1)
+    assert(statusStore.getSessionCount === 1)
+    assert(statusStore.getSession("sessionId1") === None)
+    time += 1
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionId3", 4))
+    assert(listener.noLiveData())
+  }
+
+  test(s"cleanup session if exceeds the threshold (live = false)") {
+    val (statusStore: HiveThriftServer2AppStatusStore,
+    listener: HiveThriftServer2Listener) = createAppStatusStore(true)
+    var time = 0
+    listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId1",
+      "user", time))
+    time += 1
+    listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId2",
+      "user", time))
+
+    time += 1
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionId1", time))
+
+    time += 1
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionId2", time))
+
+    listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId3",
+      "user", time))
+    time += 1
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionId3", 4))
+    kvstore.close(false)
+    assert(statusStore.getOnlineSessionNum === 0)
+    assert(statusStore.getSessionCount === 1)
+    assert(statusStore.getSession("sessionId1") === None)
+    assert(listener.noLiveData())
   }
 
   test("update execution info when jobstart event come after execution end event") {
@@ -131,7 +189,7 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
     listener.onOtherEvent(SparkListenerSessionClosed("sessionId", System.currentTimeMillis()))
     val exec = statusStore.getExecution("id")
     assert(exec.isDefined)
-    assert(exec.get.jobId.toSeq === Seq("0"))
+    assert(exec.get.jobId === Seq("0"))
     assert(listener.noLiveData())
   }
 
@@ -144,7 +202,8 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
   private def createAppStatusStore(live: Boolean) = {
     val sparkConf = new SparkConf()
     sparkConf.set(ASYNC_TRACKING_ENABLED, false)
-    sparkConf.set(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT.key, "1")
+      .set(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT.key, "1")
+      .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     kvstore = new ElementTrackingStore(new InMemoryStore, sparkConf)
     if (live) {
       val server = mock(classOf[HiveThriftServer2], RETURNS_SMART_NULLS)

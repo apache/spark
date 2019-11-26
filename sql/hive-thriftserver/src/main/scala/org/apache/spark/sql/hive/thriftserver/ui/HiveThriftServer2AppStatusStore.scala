@@ -115,6 +115,7 @@ private[thriftserver] class ExecutionInfo(
     finishTimestamp
   } else -1L
 
+  @JsonIgnore @KVIndex("isExecutionActive")
   def isExecutionActive: Boolean = {
     !(state == ExecutionState.FAILED ||
       state == ExecutionState.CANCELED ||

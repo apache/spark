@@ -377,6 +377,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         otherTabs :+ plugin
       }
     }
+    // SQL tab should come first, then JDBC/ODBC server tab
     sqlTab.foreach(_.setupUI(ui))
     jdbcTab.foreach(_.setupUI(ui))
     otherTabs.foreach(_.setupUI(ui))

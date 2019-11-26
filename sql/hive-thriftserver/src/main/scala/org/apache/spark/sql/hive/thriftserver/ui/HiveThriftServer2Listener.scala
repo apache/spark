@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.ExecutionState
 import org.apache.spark.sql.internal.SQLConf
@@ -47,6 +48,11 @@ private[thriftserver] class HiveThriftServer2Listener(
       sparkConf.get(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT))
   }
 
+  // How often to update live entities. -1 means "never update" when replaying applications,
+  // meaning only the last write will happen. For live applications, this avoids a few
+  // operations that we can live without when rapidly processing incoming task events.
+  private val liveUpdatePeriodNs = if (live) sparkConf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
+
   // Returns true if this listener has no live data. Exposed for tests only.
   private[thriftserver] def noLiveData(): Boolean = {
     sessionList.isEmpty && executionList.isEmpty
@@ -62,8 +68,7 @@ private[thriftserver] class HiveThriftServer2Listener(
 
   kvstore.onFlush {
     if (!live) {
-      val now = System.nanoTime()
-      flush(update(_, now))
+      flush(updateStore(_, trigger = true))
     }
   }
 
@@ -102,7 +107,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         val liveExec = getOrCreateExecution(exec.execId, exec.statement, exec.sessionId,
           exec.startTimestamp, exec.userName)
         liveExec.jobId += jobId.toString
-        updateLiveStore(liveExec, true)
+        updateStore(liveExec, trigger = true)
         executionList.remove(liveExec.execId)
       }
     }
@@ -125,13 +130,13 @@ private[thriftserver] class HiveThriftServer2Listener(
   private def onSessionCreated(e: SparkListenerThriftServerSessionCreated): Unit = {
     val session = getOrCreateSession(e.sessionId, e.startTime, e.ip, e.userName)
     sessionList.put(e.sessionId, session)
-    updateLiveStore(session, true)
+    updateLiveStore(session)
   }
 
   private def onSessionClosed(e: SparkListenerSessionClosed): Unit = {
     val session = sessionList.get(e.sessionId)
     session.finishTimestamp = e.finishTime
-    updateLiveStore(session, true)
+    updateStore(session, trigger = true)
     sessionList.remove(e.sessionId)
   }
 
@@ -148,7 +153,7 @@ private[thriftserver] class HiveThriftServer2Listener(
     sessionList.get(e.sessionId).totalExecution += 1
     executionList.get(e.id).groupId = e.groupId
     updateLiveStore(executionList.get(e.id))
-    updateLiveStore(sessionList.get(e.sessionId), true)
+    updateLiveStore(sessionList.get(e.sessionId))
   }
 
   private def onOperationParsed(e: SparkListenerThriftServerOperationParsed): Unit = {
@@ -179,24 +184,29 @@ private[thriftserver] class HiveThriftServer2Listener(
   private def onOperationClosed(e: SparkListenerThriftServerOperationClosed): Unit = {
     executionList.get(e.id).closeTimestamp = e.closeTime
     executionList.get(e.id).state = ExecutionState.CLOSED
-    updateLiveStore(executionList.get(e.id), true)
+    updateStore(executionList.get(e.id), trigger = true)
     executionList.remove(e.id)
+  }
+
+  // Update both live and history stores. If trigger is enabled, it will cleanup
+  // entity which exceeds the threshold.
+  def updateStore(entity: LiveEntity, trigger: Boolean = false): Unit = {
+    entity.write(kvstore, System.nanoTime(), checkTriggers = trigger)
+  }
+
+  // Update only live stores. If trigger is enabled, it will cleanup entity
+  // which exceeds the threshold.
+  def updateLiveStore(entity: LiveEntity, trigger: Boolean = false): Unit = {
+    val now = System.nanoTime()
+    if (live && liveUpdatePeriodNs >= 0 && now - entity.lastWriteTime > liveUpdatePeriodNs) {
+      entity.write(kvstore, System.nanoTime(), checkTriggers = trigger)
+    }
   }
 
   /** Go through all `LiveEntity`s and use `entityFlushFunc(entity)` to flush them. */
   private def flush(entityFlushFunc: LiveEntity => Unit): Unit = {
     sessionList.values.asScala.foreach(entityFlushFunc)
     executionList.values.asScala.foreach(entityFlushFunc)
-  }
-
-  private def update(entity: LiveEntity, now: Long): Unit = {
-    entity.write(kvstore, now)
-  }
-
-  def updateLiveStore(session: LiveEntity, force: Boolean = false): Unit = {
-    if (live || force == true) {
-      session.write(kvstore, System.nanoTime())
-    }
   }
 
   private def getOrCreateSession(
