@@ -162,7 +162,7 @@ abstract class AggregationIterator(
           mode match {
             case Partial | Complete =>
               if (filter.isDefined) {
-                ae.updateExpressions.zip(ae.aggBufferAttributes).map{
+                ae.updateExpressions.zip(ae.aggBufferAttributes).map {
                   case (newVal, attr) => If(filter.get, newVal, attr)
                 }
               } else {
