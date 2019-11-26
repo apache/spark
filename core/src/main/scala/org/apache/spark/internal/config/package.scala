@@ -35,6 +35,7 @@ package object config {
   private[spark] val SPARK_DRIVER_PREFIX = "spark.driver"
   private[spark] val SPARK_EXECUTOR_PREFIX = "spark.executor"
   private[spark] val SPARK_TASK_PREFIX = "spark.task"
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_PREFIX = "spark.scheduler.listenerbus.eventqueue"
 
   private[spark] val SPARK_RESOURCES_COORDINATE =
     ConfigBuilder("spark.resources.coordinate.enable")
@@ -596,6 +597,10 @@ package object config {
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
+      .doc("The default capacity for event queues. Spark will try to initialize " +
+        "an event queue using capacity specified by `spark.scheduler.listenerbus" +
+        ".eventqueue.queueName.capacity` first. If it's not configured, Spark will " +
+        "use the default capacity specified by this config.")
       .intConf
       .checkValue(_ > 0, "The capacity of listener bus event queue must be positive")
       .createWithDefault(10000)
