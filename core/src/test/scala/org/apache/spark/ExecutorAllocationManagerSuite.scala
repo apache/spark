@@ -29,6 +29,7 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{Clock, ManualClock, SystemClock}
@@ -1018,8 +1019,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager
   }
 
+  private val execInfo = new ExecutorInfo("host1", 1, Map.empty,
+    Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+
   private def onExecutorAdded(manager: ExecutorAllocationManager, id: String): Unit = {
-    post(SparkListenerExecutorAdded(0L, id, null))
+    post(SparkListenerExecutorAdded(0L, id, execInfo))
   }
 
   private def onExecutorRemoved(manager: ExecutorAllocationManager, id: String): Unit = {

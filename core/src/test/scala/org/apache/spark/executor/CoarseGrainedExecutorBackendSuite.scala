@@ -100,9 +100,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("parsing multiple resources resource profile") {
     val gpuExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$GPU")
     val fpgaExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$FPGA")
     testParsingMultipleResources(gpuExecInternalConf.amountConf,
       fpgaExecInternalConf.amountConf, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
@@ -184,7 +184,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("executor resource found less than required resource profile") {
     val gpuExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$GPU")
     testExecutorResourceFoundLessThanRequired(gpuExecInternalConf.amountConf,
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
@@ -245,7 +245,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("use resource discovery and allocated file option with resource profile") {
     val fpgaExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$FPGA")
     allocatedFileAndConfigsResourceDiscoveryTestFpga(fpgaExecInternalConf.amountConf,
       fpgaExecInternalConf.discoveryScriptConf,
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
@@ -292,7 +292,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("resource profile id missing from confs") {
     val fpgaExecInternalConf = ResourceProfile.ResourceProfileInternalConf(
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$FPGA")
     val conf = new SparkConf
     conf.set(fpgaExecInternalConf.amountConf, "3")
     assume(!(Utils.isWindows))
