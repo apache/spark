@@ -783,8 +783,7 @@ class Analyzer(
 
         EliminateSubqueryAliases(relation) match {
           case v: View =>
-            u.failAnalysis(
-              s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+            u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
           case other => i.copy(table = other)
         }
 
