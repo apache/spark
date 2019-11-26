@@ -72,7 +72,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("unsupported data types to cast to timestamp") {
-    assert(PostgreCastToTimestamp(Literal(1), None).checkInputDataTypes().isFailure)
+    assert(PostgreCastToTimestamp(Literal(1.toInt), None).checkInputDataTypes().isFailure)
     assert(PostgreCastToTimestamp(Literal(1.toByte), None).checkInputDataTypes().isFailure)
     assert(PostgreCastToTimestamp(Literal(1.toDouble), None).checkInputDataTypes().isFailure)
     assert(PostgreCastToTimestamp(Literal(1.toFloat), None).checkInputDataTypes().isFailure)

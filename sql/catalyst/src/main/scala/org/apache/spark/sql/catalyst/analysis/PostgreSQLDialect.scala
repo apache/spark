@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.postgreSQL._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, TimestampType}
+import org.apache.spark.sql.types._
 
 object PostgreSQLDialect {
   val postgreSQLDialectRules: Seq[Rule[LogicalPlan]] = Seq(
@@ -52,7 +52,7 @@ object PostgreSQLDialect {
       if (SQLConf.get.usePostgreSQLDialect) {
         plan.transformExpressions {
           case Cast(child, dataType, timeZoneId)
-            if dataType == TimestampType =>
+            if child.dataType != TimestampType && dataType == TimestampType =>
             PostgreCastToTimestamp(child, timeZoneId)
         }
       } else {
