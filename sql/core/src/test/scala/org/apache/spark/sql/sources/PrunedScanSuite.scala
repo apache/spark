@@ -115,6 +115,10 @@ class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
   testPruning("SELECT b, b FROM oneToTenPruned", "b")
   testPruning("SELECT a FROM oneToTenPruned", "a")
   testPruning("SELECT b FROM oneToTenPruned", "b")
+  testPruning("SELECT a, rand() FROM oneToTenPruned WHERE a > 5", "a")
+  testPruning("SELECT a FROM oneToTenPruned WHERE rand() > 5", "a")
+  testPruning("SELECT a, rand() FROM oneToTenPruned WHERE rand() > 5", "a")
+  testPruning("SELECT a, rand() FROM oneToTenPruned WHERE b > 5", "a", "b")
 
   def testPruning(sqlString: String, expectedColumns: String*): Unit = {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
@@ -146,28 +150,6 @@ class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
         spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
-    }
-  }
-
-  testNonDeterministicPruning("SELECT a, rand() FROM oneToTenPruned WHERE a > 5", "a")
-
-  testNonDeterministicPruning("SELECT a FROM oneToTenPruned WHERE rand() > 5", "a")
-
-  testNonDeterministicPruning("SELECT a, rand() FROM oneToTenPruned WHERE rand() > 5", "a")
-
-  testNonDeterministicPruning("SELECT a, rand() FROM oneToTenPruned WHERE b > 5", "a", "b")
-
-  def testNonDeterministicPruning(sqlString: String, expectedColumns: String*): Unit = {
-    test(s"SPARK-29768: Column pruning through non-deterministic expressions - $sqlString") {
-      val schema = StructType(expectedColumns.map { col => StructField(col, IntegerType, false) })
-      val queryExecution = sql(sqlString).queryExecution
-      val scan = queryExecution.executedPlan.collect {
-        case scan: execution.RowDataSourceScanExec => scan
-      } match {
-        case Seq(p) => p
-        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
-      }
-      assert(scan.output.toStructType === schema)
     }
   }
 }
