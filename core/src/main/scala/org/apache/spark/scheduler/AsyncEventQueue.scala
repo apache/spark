@@ -20,6 +20,8 @@ package org.apache.spark.scheduler
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
+import scala.collection.JavaConverters._
+
 import com.codahale.metrics.{Gauge, Timer}
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -95,18 +97,26 @@ private class AsyncEventQueue(
   }
 
   private def dispatch(): Unit = LiveListenerBus.withinListenerThread.withValue(true) {
-    var next: SparkListenerEvent = eventQueue.take()
-    while (next != POISON_PILL) {
-      val ctx = processingTime.time()
-      try {
-        super.postToAll(next)
-      } finally {
-        ctx.stop()
+    try {
+      var next: SparkListenerEvent = eventQueue.take()
+      while (next != POISON_PILL) {
+        val ctx = processingTime.time()
+        try {
+          super.postToAll(next)
+        } finally {
+          ctx.stop()
+        }
+        eventCount.decrementAndGet()
+        next = eventQueue.take()
       }
       eventCount.decrementAndGet()
-      next = eventQueue.take()
+    } catch {
+      case ie: InterruptedException =>
+        logInfo(s"Interrupted while dispatch event in queue $name. " +
+          s"Removing all its listeners: " +
+          s"${listeners.asScala.map(Utils.getFormattedClassName(_)).mkString(",")}.", ie)
+        listeners.asScala.foreach(removeListenerOnError)
     }
-    eventCount.decrementAndGet()
   }
 
   override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
