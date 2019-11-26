@@ -17,56 +17,65 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
+import java.util.Arrays;
+
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+
+import org.apache.spark.network.protocol.Encoders;
 
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
-/** The reply to remove blocks giving back the number of removed blocks. */
-public class BlocksRemoved extends BlockTransferMessage {
-  public final int numRemovedBlocks;
+/** Request to get the local dirs for the given executors. */
+public class GetLocalDirsForExecutors extends BlockTransferMessage {
+  public final String appId;
+  public final String[] execIds;
 
-  public BlocksRemoved(int numRemovedBlocks) {
-    this.numRemovedBlocks = numRemovedBlocks;
+  public GetLocalDirsForExecutors(String appId, String[] execIds) {
+    this.appId = appId;
+    this.execIds = execIds;
   }
 
   @Override
-  protected Type type() { return Type.BLOCKS_REMOVED; }
+  protected Type type() { return Type.GET_LOCAL_DIRS_FOR_EXECUTORS; }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(numRemovedBlocks);
+    return Objects.hashCode(appId) * 41 + Arrays.hashCode(execIds);
   }
 
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-      .add("numRemovedBlocks", numRemovedBlocks)
+      .add("appId", appId)
+      .add("execIds", Arrays.toString(execIds))
       .toString();
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof BlocksRemoved) {
-      BlocksRemoved o = (BlocksRemoved) other;
-      return numRemovedBlocks == o.numRemovedBlocks;
+    if (other instanceof GetLocalDirsForExecutors) {
+      GetLocalDirsForExecutors o = (GetLocalDirsForExecutors) other;
+      return appId.equals(o.appId) && Arrays.equals(execIds, o.execIds);
     }
     return false;
   }
 
   @Override
   public int encodedLength() {
-    return 4;
+    return Encoders.Strings.encodedLength(appId) + Encoders.StringArrays.encodedLength(execIds);
   }
 
   @Override
   public void encode(ByteBuf buf) {
-    buf.writeInt(numRemovedBlocks);
+    Encoders.Strings.encode(buf, appId);
+    Encoders.StringArrays.encode(buf, execIds);
   }
 
-  public static BlocksRemoved decode(ByteBuf buf) {
-    int numRemovedBlocks = buf.readInt();
-    return new BlocksRemoved(numRemovedBlocks);
+  public static GetLocalDirsForExecutors decode(ByteBuf buf) {
+    String appId = Encoders.Strings.decode(buf);
+    String[] execIds = Encoders.StringArrays.decode(buf);
+    return new GetLocalDirsForExecutors(appId, execIds);
   }
 }
