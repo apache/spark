@@ -92,10 +92,10 @@ class RelationalGroupedDataset protected[sql](
       colNames: String*)(f: Expression => AggregateFunction): DataFrame = {
 
     val columnExprs = if (colNames.isEmpty) {
-      // No columns specified. Use all numeric columns.
-      df.numericColumns
+      // No columns specified. Use all numeric calculation supported columns.
+      df.numericCalculationSupportedColumns
     } else {
-      // Make sure all specified columns are numeric.
+      // Make sure all specified columns are numeric calculation supported columns.
       colNames.map { colName =>
         val namedExpr = df.resolve(colName)
         if (!TypeCollection.NumericAndInterval.acceptsType(namedExpr.dataType)) {
