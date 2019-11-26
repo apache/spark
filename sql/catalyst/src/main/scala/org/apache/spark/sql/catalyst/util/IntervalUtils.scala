@@ -414,7 +414,8 @@ object IntervalUtils {
   private object ParseState extends Enumeration {
     type ParseState = Value
 
-    val TRIM_BEFORE_SIGN,
+    val PREFIX,
+        TRIM_BEFORE_SIGN,
         SIGN,
         TRIM_BEFORE_VALUE,
         VALUE,
@@ -424,6 +425,7 @@ object IntervalUtils {
         UNIT_SUFFIX,
         UNIT_END = Value
   }
+  private final val intervalStr = UTF8String.fromString("interval")
   private def unitToUtf8(unit: IntervalUnit): UTF8String = {
     UTF8String.fromString(unit.toString)
   }
@@ -462,17 +464,14 @@ object IntervalUtils {
     if (input == null) {
       throwIAE("interval string cannot be null")
     }
-    val strs = input.trimAll().toLowerCase().split(UTF8String.fromString("interval\\s+"), -1)
-      .filterNot(UTF8String.EMPTY_UTF8.equals)
-    if (strs.isEmpty) {
+    // scalastyle:off caselocale .toLowerCase
+    val s = input.trimAll().toLowerCase
+    // scalastyle:on
+    val bytes = s.getBytes
+    if (bytes.isEmpty) {
       throwIAE("interval string cannot be empty")
     }
-    if (strs.length > 1) {
-      throwIAE("`interval` word must be a prefix")
-    }
-    val s = strs(0)
-    val bytes = s.getBytes
-    var state = TRIM_BEFORE_SIGN
+    var state = PREFIX
     var i = 0
     var currentValue: Long = 0
     var isNegative: Boolean = false
@@ -501,6 +500,17 @@ object IntervalUtils {
     while (i < bytes.length) {
       val b = bytes(i)
       state match {
+        case PREFIX =>
+          if (s.startsWith(intervalStr)) {
+            if (s.numBytes() == intervalStr.numBytes()) {
+              throwIAE("interval string cannot be empty")
+            } else if (bytes(i + intervalStr.numBytes()) > ' ') {
+              throwIAE(s"invalid interval prefix $currentWord")
+            } else {
+              i += intervalStr.numBytes() + 1
+            }
+          }
+          state = TRIM_BEFORE_SIGN
         case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
         case SIGN =>
           currentValue = 0
