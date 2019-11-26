@@ -716,58 +716,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create or replace a view. This creates a [[CreateViewCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_name
-   *   [(column_name [COMMENT column_comment], ...) ]
-   *   create_view_clauses
-   *
-   *   AS SELECT ...;
-   *
-   *   create_view_clauses (order insensitive):
-   *     [COMMENT view_comment]
-   *     [TBLPROPERTIES (property_name = property_value, ...)]
-   * }}}
-   */
-  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
-    if (!ctx.identifierList.isEmpty) {
-      operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
-    }
-
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-
-    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
-      icl.identifierComment.asScala.map { ic =>
-        ic.identifier.getText -> Option(ic.STRING).map(string)
-      }
-    }
-
-    val viewType = if (ctx.TEMPORARY == null) {
-      PersistedView
-    } else if (ctx.GLOBAL != null) {
-      GlobalTempView
-    } else {
-      LocalTempView
-    }
-
-    CreateViewCommand(
-      name = visitTableIdentifier(ctx.tableIdentifier),
-      userSpecifiedColumns = userSpecifiedColumns,
-      comment = ctx.STRING.asScala.headOption.map(string),
-      properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
-        .getOrElse(Map.empty),
-      originalText = Option(source(ctx.query)),
-      child = plan(ctx.query),
-      allowExisting = ctx.EXISTS != null,
-      replace = ctx.REPLACE != null,
-      viewType = viewType)
-  }
-
-  /**
    * Create a [[ScriptInputOutputSchema]].
    */
   override protected def withScriptIOSchema(

@@ -3229,6 +3229,57 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create or replace a view. This creates a [[CreateViewStatement]]
+   *
+   * For example:
+   * {{{
+   *   CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] multi_part_name
+   *   [(column_name [COMMENT column_comment], ...) ]
+   *   create_view_clauses
+   *
+   *   AS SELECT ...;
+   *
+   *   create_view_clauses (order insensitive):
+   *     [COMMENT view_comment]
+   *     [TBLPROPERTIES (property_name = property_value, ...)]
+   * }}}
+   */
+  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
+    if (!ctx.identifierList.isEmpty) {
+      operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
+    }
+
+    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.STRING).map(string)
+      }
+    }
+
+    val viewType = if (ctx.TEMPORARY == null) {
+      PersistedView
+    } else if (ctx.GLOBAL != null) {
+      GlobalTempView
+    } else {
+      LocalTempView
+    }
+    CreateViewStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      userSpecifiedColumns,
+      ctx.STRING.asScala.headOption.map(string),
+      ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
+        .getOrElse(Map.empty),
+      Option(source(ctx.query)),
+      plan(ctx.query),
+      ctx.EXISTS != null,
+      ctx.REPLACE != null,
+      viewType)
+  }
+
+  /**
    * Alter the query of a view. This creates a [[AlterViewAsStatement]]
    *
    * For example:

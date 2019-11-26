@@ -1728,6 +1728,14 @@ class DataSourceV2SQLSuite
     assert(e.message.contains("ALTER VIEW QUERY is only supported with v1 tables"))
   }
 
+  test("CREATE VIEW") {
+    val v = "testcat.ns1.ns2.v"
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
+    }
+    assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
+  }
+
   test("SHOW TBLPROPERTIES: v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
