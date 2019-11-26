@@ -497,9 +497,9 @@ final class ShuffleBlockFetcherIterator(
                 dirs.get(hostLocalBmId.executorId),
                 hostLocalBmId)
             }
-            logDebug(s"Got host-local blocks (without cached executors' dir) in " +
-              s"${Utils.getUsedTimeNs(startTimeNs)}")
           }
+          logDebug(s"Got host-local blocks (without cached executors' dir) in " +
+            s"${Utils.getUsedTimeNs(startTimeNs)}")
 
         case Failure(throwable) =>
           logError(s"Error occurred while fetching host local blocks", throwable)
