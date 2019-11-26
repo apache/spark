@@ -101,4 +101,4 @@ FROM emp
 GROUP BY dept_id; 
 
 -- Aggregate with filter is subquery
-SELECT t1.a, t1.b FROM (SELECT a, COUNT(b) FILTER (WHERE a >= 2) AS b FROM testData) t1;
+SELECT t1.b FROM (SELECT COUNT(b) FILTER (WHERE a >= 2) AS b FROM testData) t1;
