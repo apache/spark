@@ -77,7 +77,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
   Rscript -e "devtools::install_github('jimhester/lintr')" && \
   # Install tools needed to build the documentation.
-  $APT_INSTALL ruby2.3 ruby2.3-dev mkdocs && \
+  $APT_INSTALL ruby ruby-dev mkdocs && \
   gem install jekyll --no-rdoc --no-ri -v 3.8.6 && \
   gem install jekyll-redirect-from && \
   gem install rogue
