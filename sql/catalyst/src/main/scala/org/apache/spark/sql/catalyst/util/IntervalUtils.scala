@@ -484,9 +484,10 @@ object IntervalUtils {
     var pointPrefixed: Boolean = false
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
-      b match {
-        case _ if b <= ' ' => i += 1
-        case _ => state = next
+      if (b <= ' ') {
+        i += 1
+      } else {
+        state = next
       }
     }
 
@@ -559,17 +560,17 @@ object IntervalUtils {
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
-          b match {
-            case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
-              fraction += (b - '0') * fractionScale
-              fractionScale /= 10
-            case _ if b <= ' ' && (!pointPrefixed || fractionScale < initialFractionScale) =>
-              fraction /= NANOS_PER_MICROS.toInt
-              state = TRIM_BEFORE_UNIT
-            case _ if '0' <= b && b <= '9' =>
-              throwIAE(s"interval can only support nanosecond precision, '$currentWord' is out" +
-                s" of range")
-            case _ => throwIAE(s"invalid value '$currentWord'")
+          if ('0' <= b && b <= '9' && fractionScale > 0) {
+            fraction += (b - '0') * fractionScale
+            fractionScale /= 10
+          } else if (b <= ' ' && (!pointPrefixed || fractionScale < initialFractionScale)) {
+            fraction /= NANOS_PER_MICROS.toInt
+            state = TRIM_BEFORE_UNIT
+          } else if ('0' <= b && b <= '9') {
+            throwIAE(s"interval can only support nanosecond precision, '$currentWord' is out" +
+              s" of range")
+          } else {
+            throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
@@ -635,11 +636,11 @@ object IntervalUtils {
           }
           i += 1
         case UNIT_END =>
-          b match {
-            case _ if b <= ' ' =>
-              i += 1
-              state = TRIM_BEFORE_SIGN
-            case _ => throwIAE(s"invalid unit '$currentWord'")
+          if (b <= ' ') {
+            i += 1
+            state = TRIM_BEFORE_SIGN
+          } else {
+            throwIAE(s"invalid unit '$currentWord'")
           }
       }
     }
