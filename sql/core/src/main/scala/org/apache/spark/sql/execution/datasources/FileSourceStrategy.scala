@@ -177,6 +177,8 @@ object FileSourceStrategy extends Strategy with Logging {
       // Partition keys are not available in the statistics of the files.
       val dataFilters =
         normalizedFiltersWithoutSubqueries.filter(_.references.intersect(partitionSet).isEmpty)
+      logInfo(s"Pushed Filters: " +
+        s"${dataFilters.flatMap(DataSourceStrategy.translateFilter).mkString(",")}")
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)

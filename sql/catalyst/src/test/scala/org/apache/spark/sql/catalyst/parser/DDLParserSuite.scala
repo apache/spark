@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -623,6 +623,15 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("alter table/view: rename table/view") {
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = false))
+    comparePlans(
+      parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = true))
+  }
+
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumnStatement(
@@ -651,6 +660,13 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
     assert(caught.getMessage.contains(
         "DESC TABLE COLUMN for a specific partition is not supported"))
+  }
+
+  test("describe database") {
+    val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
+    val sql2 = "DESCRIBE DATABASE a.b"
+    comparePlans(parsePlan(sql1), DescribeNamespaceStatement(Seq("a", "b"), extended = true))
+    comparePlans(parsePlan(sql2), DescribeNamespaceStatement(Seq("a", "b"), extended = false))
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
@@ -1022,6 +1038,31 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
+  test("show table extended") {
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED LIKE '*test*'"),
+      ShowTableStatement(None, "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*'"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*'"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09', hr=11)"),
+      ShowTableStatement(None, "*test*", Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
+        Some(Map("ds" -> "2008-04-09"))))
+    comparePlans(
+      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*' " +
+        "PARTITION(ds='2008-04-09')"),
+      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
+        Some(Map("ds" -> "2008-04-09"))))
+  }
+
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
     val expected = CreateNamespaceStatement(
       Seq("a", "b", "c"),
@@ -1126,6 +1167,52 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c CASCADE"),
       DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = true))
+  }
+
+  test("set namespace properties") {
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a")))
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("b" -> "b")))
+
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("a" -> "a")))
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
+      AlterNamespaceSetPropertiesStatement(
+        Seq("a", "b", "c"), Map("b" -> "b")))
+  }
+
+  test("set namespace location") {
+    comparePlans(
+      parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+
+    comparePlans(
+      parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
+
+    comparePlans(
+      parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
   }
 
   test("show databases: basic") {
@@ -1580,6 +1667,105 @@ class DDLParserSuite extends AnalysisTest {
     val expected = AlterViewAsStatement(
       Seq("a", "b", "c"), "SELECT 1", parsePlan("SELECT 1"))
     comparePlans(parsed, expected)
+  }
+
+  test("create view -- basic") {
+    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
+    val parsed1 = parsePlan(v1)
+
+    val expected1 = CreateViewStatement(
+      Seq("view1"),
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parsePlan("SELECT * FROM tab1"),
+      false,
+      false,
+      PersistedView)
+    comparePlans(parsed1, expected1)
+
+    val v2 = "CREATE TEMPORARY VIEW a.b.c AS SELECT * FROM tab1"
+    val parsed2 = parsePlan(v2)
+
+    val expected2 = CreateViewStatement(
+      Seq("a", "b", "c"),
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parsePlan("SELECT * FROM tab1"),
+      false,
+      false,
+      LocalTempView)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("create view - full") {
+    val v1 =
+      """
+        |CREATE OR REPLACE VIEW view1
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    val parsed1 = parsePlan(v1)
+    val expected1 = CreateViewStatement(
+      Seq("view1"),
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map("prop1Key" -> "prop1Val"),
+      Some("SELECT * FROM tab1"),
+      parsePlan("SELECT * FROM tab1"),
+      false,
+      true,
+      PersistedView)
+    comparePlans(parsed1, expected1)
+
+    val v2 =
+      """
+        |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a.b.c
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    val parsed2 = parsePlan(v2)
+    val expected2 = CreateViewStatement(
+      Seq("a", "b", "c"),
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map("prop1Key" -> "prop1Val"),
+      Some("SELECT * FROM tab1"),
+      parsePlan("SELECT * FROM tab1"),
+      false,
+      true,
+      GlobalTempView)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("create view -- partitioned view") {
+    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
+    intercept[ParseException] {
+      parsePlan(v1)
+    }
+  }
+
+  test("create view - duplicate clauses") {
+    def createViewStatement(duplicateClause: String): String = {
+      s"""
+         |CREATE OR REPLACE VIEW view1
+         |(col1, col3 COMMENT 'hello')
+         |$duplicateClause
+         |$duplicateClause
+         |AS SELECT * FROM tab1
+      """.stripMargin
+    }
+    val sql1 = createViewStatement("COMMENT 'BLABLA'")
+    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
 
   test("SHOW TBLPROPERTIES table") {

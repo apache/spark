@@ -978,6 +978,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=false",
     javaOptions in Test += "-Dderby.system.durability=test",
+    javaOptions in Test += "-Dio.netty.tryReflectionSetAccessible=true",
     javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",

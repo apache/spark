@@ -1,9 +1,17 @@
 -- A test suite for IN JOINS in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
--- List of configuration the test suite is run against:
---SET spark.sql.autoBroadcastJoinThreshold=10485760
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
+
+-- There are 2 dimensions we want to test
+--  1. run with broadcast hash join, sort merge join or shuffle hash join.
+--  2. run with whole-stage-codegen, operator codegen or no codegen.
+
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=10485760
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
+
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
 create temporary view t1 as select * from values
   ("val1a", 6S, 8, 10L, float(15.0), 20D, 20E2, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
