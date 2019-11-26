@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -121,7 +121,7 @@ abstract class AggregationIterator(
   // func2 and func3 are imperative aggregate functions.
   // ImperativeAggregateFunctionPositions will be [1, 2].
   protected[this] val allImperativeAggregateFunctionPositions: Array[Int] = {
-    val positions = new mutable.ArrayBuffer[Int]()
+    val positions = new ArrayBuffer[Int]()
     var i = 0
     while (i < aggregateFunctions.length) {
       aggregateFunctions(i) match {
@@ -157,16 +157,16 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
-      val mergeExpressions = functions.zip(expressions).flatMap {
-        case (ae: DeclarativeAggregate, expression) =>
-          expression.mode match {
+      val mergeExpressions = functions.zip(expressions.map(ae => (ae.mode, ae.filter))).flatMap {
+        case (ae: DeclarativeAggregate, (mode, filter)) =>
+          mode match {
             case Partial | Complete =>
-              expression match {
-                case AggregateExpression(_, _, _, Some(filter), _) =>
-                  ae.updateExpressions.zip(ae.aggBufferAttributes).map{
-                    case (newVal, attr) => If(filter, newVal, attr)
-                  }
-                case _ => ae.updateExpressions
+              if (filter.isDefined) {
+                ae.updateExpressions.zip(ae.aggBufferAttributes).map{
+                  case (newVal, attr) => If(filter.get, newVal, attr)
+                }
+              } else {
+                ae.updateExpressions
               }
             case PartialMerge | Final => ae.mergeExpressions
           }

@@ -153,6 +153,7 @@ case class HashAggregateExec(
 
   override def supportCodegen: Boolean = {
     // ImperativeAggregate and filter predicate are not supported right now
+    // TODO: SPARK-30027 Support codegen for filter exprs in HashAggregateExec
     !(aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) ||
         aggregateExpressions.exists(_.filter.isDefined))
   }
