@@ -1392,14 +1392,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
   }
 
   class EligibilityCallTrackingFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
-    override def mergeApplicationListing(
-        reader: EventLogFileReader,
-        scanTime: Long,
-        enableOptimizations: Boolean,
-        compactible: Option[Boolean]): Unit = {
-      super.mergeApplicationListing(reader, scanTime, enableOptimizations, compactible)
-    }
-
     var checkEligibilityForCompactionCall = 0
     override protected def checkEligibilityForCompaction(
         info: LogInfo,
@@ -1492,14 +1484,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       provider.getOrUpdateCompactible(reader3)
 
       assert(1 === provider.checkEligibilityForCompactionCall)
-      // All events in log file are expected to be filtered out - so 'compactible' should be true.
+      // Most of events in log file are expected to be filtered out - so 'compactible' should
+      // be true.
       assertCompactibleInLogInfo(provider, reader3, Some(true))
     }
   }
 
   test("update eligibility for compaction - single event log") {
-    // To simplify the test, this test directly calls mergeApplicationListing() instead of going
-    // through checkForLogs().
     withTempDir { dir =>
       val provider = new EligibilityCallTrackingFsHistoryProvider
 
