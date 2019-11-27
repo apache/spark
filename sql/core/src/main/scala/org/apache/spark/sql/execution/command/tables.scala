@@ -62,7 +62,9 @@ import org.apache.spark.sql.util.SchemaUtils
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name [USING provider | STORED AS hiveFormat]
+ *   LIKE [other_db_name.]existing_table_name
+ *   [ROW FORMAT row_format]
+ *   [USING provider | STORED AS hiveFormat]
  *   [locationSpec] [TBLPROPERTIES (property_name=property_value, ...)]
  * }}}
  */
@@ -77,12 +79,20 @@ case class CreateTableLikeCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
+    // In below three cases, the target tale is a Hive table.
+    // We should use fileFormat.serde and fileFormat.properties in target table.
+    // (1) provider set to hive
+    // (2) provider is empty and fileFormat is defined
+    // (3) provider and fileFormat are all undefined, but the source table is hive table
+    var isTargetHiveTable = false
 
     val newProvider = if (provider.isDefined) {
       if (!DDLUtils.isHiveTable(provider)) {
         // check the validation of provider input, invalid provider will throw
         // AnalysisException, ClassNotFoundException, or NoClassDefFoundError
         DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
+      } else {
+        isTargetHiveTable = true // case (1)
       }
       provider
     } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
@@ -92,16 +102,25 @@ case class CreateTableLikeCommand(
     }
 
     val newStorage = if (fileFormat.inputFormat.isDefined) {
+      isTargetHiveTable = true // case (2)
       sourceTableDesc.storage.copy(
         locationUri = fileFormat.locationUri,
         inputFormat = fileFormat.inputFormat,
         outputFormat = fileFormat.outputFormat,
         serde = fileFormat.serde,
-        compressed = sourceTableDesc.storage.compressed,
-        properties = sourceTableDesc.storage.properties
+        properties = fileFormat.properties,
+        compressed = sourceTableDesc.storage.compressed
       )
     } else {
-      sourceTableDesc.storage.copy(locationUri = fileFormat.locationUri)
+      isTargetHiveTable = isTargetHiveTable || DDLUtils.isHiveTable(sourceTableDesc) // case (3)
+      if (isTargetHiveTable) {
+        sourceTableDesc.storage.copy(
+          locationUri = fileFormat.locationUri,
+          serde = fileFormat.serde.orElse(sourceTableDesc.storage.serde),
+          properties = fileFormat.properties)
+      } else {
+        sourceTableDesc.storage.copy(locationUri = fileFormat.locationUri)
+      }
     }
 
     // If the location is specified, we create an external table internally.

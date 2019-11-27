@@ -116,7 +116,9 @@ statement
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier
-        ((tableProvider | createFileFormat) |
+        (tableProvider |
+        rowFormat |
+        createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=tablePropertyList))*                 #createTableLike
     | replaceTableHeader ('(' colTypeList ')')? tableProvider

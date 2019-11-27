@@ -2596,4 +2596,59 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("Create Table LIKE with row format") {
+    val catalog = spark.sessionState.catalog
+    withTable("sourceHiveTable", "sourceDsTable", "targetHiveTable1", "targetHiveTable2") {
+      sql("CREATE TABLE sourceHiveTable(a INT, b INT) STORED AS PARQUET")
+      sql("CREATE TABLE sourceDsTable(a INT, b INT) USING PARQUET")
+
+      // row format not works in create targetDsTable
+      var e = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |CREATE TABLE targetDsTable LIKE sourceHiveTable USING PARQUET
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+            """.stripMargin)
+      }.getMessage
+      assert(e.contains("'ROW FORMAT' can not used in datasource table"))
+
+      // row format works with provider hive
+      spark.sql(
+        """
+          |CREATE TABLE targetHiveTable1 LIKE sourceHiveTable USING hive
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |WITH SERDEPROPERTIES ('test' = 'test')
+          """.stripMargin)
+      var table = catalog.getTableMetadata(TableIdentifier("targetHiveTable1"))
+      assert(table.provider === Some("hive"))
+      assert(table.storage.serde === Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+      assert(table.storage.properties("test") == "test")
+
+      // row format not works with source DS table
+      spark.sql(
+        """
+          |CREATE TABLE targetDsTable LIKE sourceDsTable
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |WITH SERDEPROPERTIES ('test' = 'test')
+          """.stripMargin)
+      table = catalog.getTableMetadata(TableIdentifier("targetDsTable"))
+      assert(table.provider === Some("PARQUET"))
+      assert(table.storage.serde ===
+        Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+      assert(table.storage.properties.get("test") === None)
+
+      // row format works with source hive table
+      spark.sql(
+        """
+          |CREATE TABLE targetHiveTable2 LIKE sourceHiveTable
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |WITH SERDEPROPERTIES ('test' = 'test')
+          """.stripMargin)
+      table = catalog.getTableMetadata(TableIdentifier("targetHiveTable2"))
+      assert(table.provider === Some("hive"))
+      assert(table.storage.serde === Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+      assert(table.storage.properties("test") == "test")
+    }
+  }
 }
