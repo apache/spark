@@ -944,7 +944,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("calendar interval agg support hash aggregate") {
+  test("Dataset agg functions support calendar intervals") {
     val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
     val df2 = df1.select('a, 'b cast CalendarIntervalType).groupBy('a % 2)
     checkAnswer(df2.sum("b"),
