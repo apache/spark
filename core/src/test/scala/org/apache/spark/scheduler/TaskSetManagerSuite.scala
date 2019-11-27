@@ -1783,6 +1783,11 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       numTasks: Int): Unit = {
     sc = new SparkContext("local", "test")
     sc.conf.set(config.SPECULATION_ENABLED, true)
+    // Set the quantile to be 1.0 so that regular speculation would not be triggered
+    sc.conf.set(config.SPECULATION_QUANTILE.key, "1.0")
+    // Set the number of slots per executor
+    sc.conf.set(config.EXECUTOR_CORES.key, "2")
+    sc.conf.set(config.CPUS_PER_TASK.key, "1")
     // Set the threshold to be 60 minutes
     if (speculationThresholdProvided) {
       sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, "60min")

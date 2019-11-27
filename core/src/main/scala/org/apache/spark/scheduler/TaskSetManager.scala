@@ -83,6 +83,10 @@ private[spark] class TaskSetManager(
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
   // User provided threshold for speculation regardless of whether the quantile has been reached
   val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
+  // Only when unfinished tasks are less than this threshold, we would try speculative run based
+  // on the time threshold. SPARK-29976: We set this value to be the max number of slots on a
+  // single executor so that we wouldn't speculate too aggressive but still handle basic cases.
+  val speculationTaskNumThres = conf.get(EXECUTOR_CORES) / conf.get(CPUS_PER_TASK)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -1003,6 +1007,7 @@ private[spark] class TaskSetManager(
     // `successfulTaskDurations` may not equal to `tasksSuccessful`. Here we should only count the
     // tasks that are submitted by this `TaskSetManager` and are completed successfully.
     val numSuccessfulTasks = successfulTaskDurations.size()
+    val numUnfinishedTasks = numTasks - numSuccessfulTasks
     if (numSuccessfulTasks >= minFinishedForSpeculation) {
       val time = clock.getTimeMillis()
       val medianDuration = successfulTaskDurations.median
@@ -1013,11 +1018,11 @@ private[spark] class TaskSetManager(
       for (tid <- runningTasksSet) {
         foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
       }
-    }
-    if (speculationTaskDurationThresOpt.isDefined) {
+    } else if (speculationTaskDurationThresOpt.isDefined &&
+        numUnfinishedTasks <= speculationTaskNumThres) {
       val time = clock.getTimeMillis()
       val threshold = speculationTaskDurationThresOpt.get
-      logDebug("Checking tasks taking long time than provided speculation threshold: " + threshold)
+      logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")
       for (tid <- runningTasksSet) {
         foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
       }

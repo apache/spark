@@ -1464,8 +1464,9 @@ package object config {
   private[spark] val SPECULATION_TASK_DURATION_THRESHOLD =
     ConfigBuilder("spark.speculation.task.duration.threshold")
       .doc("Task duration after which scheduler would try to speculative run the task. If " +
-        "provided, tasks would be rerun as long as they exceed the threshold no matter whether" +
-        "the speculation quantile has been reached or not.")
+        "provided, tasks would be speculatively run if there are less unfinished tasks than " +
+        "the number of slots on a single executor and the task is taking longer time than " +
+        "the threshold. This config helps speculate stage with very few tasks.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
