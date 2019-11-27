@@ -85,7 +85,7 @@ private[spark] class TaskSetManager(
   val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
   // Only when unfinished tasks are less than this threshold, we would try speculative run based
   // on the time threshold. SPARK-29976: We set this value to be the max number of slots on a
-  // single executor so that we wouldn't speculate too aggressive but still handle basic cases.
+  // single executor so that we wouldn't speculate too aggressively but still handle basic cases.
   val speculationTaskNumThres = conf.get(EXECUTOR_CORES) / conf.get(CPUS_PER_TASK)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be

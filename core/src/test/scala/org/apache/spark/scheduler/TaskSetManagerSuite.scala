@@ -1838,7 +1838,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   test("SPARK-29976 when a speculation time threshold is provided, should not speculative " +
-    "if there are too many unfinished tasks even though time threshold is provided") {
+      "if there are too many unfinished tasks even though time threshold is provided") {
     testSpeculationDurationThreshold(true, 2, 1)
   }
 
