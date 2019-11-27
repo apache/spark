@@ -2849,7 +2849,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       }
       assert(aggregateExpressions.isDefined)
       assert(aggregateExpressions.get.size == 1)
-      aggregateExpressions.get.foreach{ expr =>
+      aggregateExpressions.get.foreach { expr =>
         assert(expr.filter.isDefined)
       }
       checkAnswer(df, Row(funcToResult._2) :: Nil)
