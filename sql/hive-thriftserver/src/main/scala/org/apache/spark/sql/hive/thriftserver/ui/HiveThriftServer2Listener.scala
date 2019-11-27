@@ -68,7 +68,7 @@ private[thriftserver] class HiveThriftServer2Listener(
 
   kvstore.onFlush {
     if (!live) {
-      flush(updateStore(_, trigger = true))
+      flush((entity: LiveEntity) => updateStoreWithTriggerEnabled(entity))
     }
   }
 
@@ -101,13 +101,16 @@ private[thriftserver] class HiveThriftServer2Listener(
         updateLiveStore(exec)
       }
     } else {
-      // Here will come only if JobStart event comes after Execution End event.
+      // It may possible that event reordering happens such a way that JobStart event come after
+      // Execution end event (Refer SPARK-27019). To handle that situation, if occurs in
+      // Thriftserver, following code will take care. Here will come only if JobStart event comes
+      // after Execution End event.
       val storeExecInfo = kvstore.view(classOf[ExecutionInfo]).asScala.filter(_.groupId == groupId)
       storeExecInfo.foreach { exec =>
         val liveExec = getOrCreateExecution(exec.execId, exec.statement, exec.sessionId,
           exec.startTimestamp, exec.userName)
         liveExec.jobId += jobId.toString
-        updateStore(liveExec, trigger = true)
+        updateStoreWithTriggerEnabled(liveExec)
         executionList.remove(liveExec.execId)
       }
     }
@@ -136,7 +139,7 @@ private[thriftserver] class HiveThriftServer2Listener(
   private def onSessionClosed(e: SparkListenerSessionClosed): Unit = {
     val session = sessionList.get(e.sessionId)
     session.finishTimestamp = e.finishTime
-    updateStore(session, trigger = true)
+    updateStoreWithTriggerEnabled(session)
     sessionList.remove(e.sessionId)
   }
 
@@ -184,14 +187,14 @@ private[thriftserver] class HiveThriftServer2Listener(
   private def onOperationClosed(e: SparkListenerThriftServerOperationClosed): Unit = {
     executionList.get(e.id).closeTimestamp = e.closeTime
     executionList.get(e.id).state = ExecutionState.CLOSED
-    updateStore(executionList.get(e.id), trigger = true)
+    updateStoreWithTriggerEnabled(executionList.get(e.id))
     executionList.remove(e.id)
   }
 
-  // Update both live and history stores. If trigger is enabled, it will cleanup
-  // entity which exceeds the threshold.
-  def updateStore(entity: LiveEntity, trigger: Boolean = false): Unit = {
-    entity.write(kvstore, System.nanoTime(), checkTriggers = trigger)
+  // Update both live and history stores. Trigger is enabled by default, hence
+  // it will cleanup the entity which exceeds the threshold.
+  def updateStoreWithTriggerEnabled(entity: LiveEntity): Unit = {
+    entity.write(kvstore, System.nanoTime(), checkTriggers = true)
   }
 
   // Update only live stores. If trigger is enabled, it will cleanup entity

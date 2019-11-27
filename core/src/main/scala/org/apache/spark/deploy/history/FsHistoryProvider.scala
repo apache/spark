@@ -366,7 +366,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     var sqlTab: Option[AppHistoryServerPlugin] = None
     var jdbcTab: Option[AppHistoryServerPlugin] = None
-    val otherTabs: Seq[AppHistoryServerPlugin] = Seq()
+    var otherTabs: Seq[AppHistoryServerPlugin] = Seq()
 
     plugins.foreach{ plugin =>
       if (plugin.toString.contains("SQLHistoryServerPlugin")) {
@@ -374,7 +374,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       } else if (plugin.toString.contains("HiveThriftServer2HistoryServerPlugin")) {
         jdbcTab = Some(plugin)
       } else {
-        otherTabs :+ plugin
+        otherTabs = otherTabs :+ plugin
       }
     }
     // SQL tab should come first, then JDBC/ODBC server tab
