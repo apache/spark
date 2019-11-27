@@ -23,7 +23,7 @@ WHERE  b = 1.0 -- Matches (null, 1.0)
 -- !query 1 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 1 output
-NULL	1
+NULL	1.0
 
 
 -- !query 2
@@ -45,4 +45,4 @@ WHERE  b = 5.0 -- Matches (4, 5.0)
 -- !query 3 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 3 output
-4	5
+4	5.0
