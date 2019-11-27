@@ -535,7 +535,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map("provider" -> source) ++ getLocationIfExists,
+          Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
           extraOptions.toMap,
           orCreate = true)      // Create the table if it doesn't exist
 
@@ -548,7 +548,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map("provider" -> source) ++ getLocationIfExists,
+          Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
           extraOptions.toMap,
           ignoreIfExists = other == SaveMode.Ignore)
     }
