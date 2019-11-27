@@ -137,7 +137,7 @@ public abstract class UnsafeWriter {
 
     if (input == null) {
       BitSetMethods.set(getBuffer(), startingOffset, ordinal);
-      setOffsetAndSize(ordinal, 0);
+      setOffsetAndSize(ordinal, 16);
     } else {
       // Write the months, days and microseconds fields of Interval to the variable length portion.
       Platform.putInt(getBuffer(), cursor(), input.months);
