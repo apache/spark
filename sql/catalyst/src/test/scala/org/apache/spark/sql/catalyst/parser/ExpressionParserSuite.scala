@@ -510,6 +510,21 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("1.20E-38BD", "decimal can only support precision up to 38")
   }
 
+  test("SPARK-29956: scientific decimal should be parsed as Decimal in legacy mode") {
+    def testDecimal(value: String, parser: ParserInterface): Unit = {
+      assertEqual(value, Literal(BigDecimal(value).underlying), parser)
+    }
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED, true)
+    val parser = new CatalystSqlParser(conf)
+    testDecimal("9e1", parser)
+    testDecimal("9e-1", parser)
+    testDecimal("-9e1", parser)
+    testDecimal("9.0e1", parser)
+    testDecimal(".9e+2", parser)
+    testDecimal("0.9e+2", parser)
+  }
+
   test("strings") {
     Seq(true, false).foreach { escape =>
       val conf = new SQLConf()
