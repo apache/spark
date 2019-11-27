@@ -365,6 +365,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     DeleteFromTable(aliasedTable, predicate)
   }
 
+  override def visitVacuumFromTable(ctx: VacuumFromTableContext): LogicalPlan = withOrigin(ctx) {
+    val table = UnresolvedRelation(visitMultipartIdentifier(ctx.multipartIdentifier()))
+    val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "VACUUM")
+    val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
+
+    VacuumTable(aliasedTable)
+  }
+
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
     val table = UnresolvedRelation(visitMultipartIdentifier(ctx.multipartIdentifier()))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")

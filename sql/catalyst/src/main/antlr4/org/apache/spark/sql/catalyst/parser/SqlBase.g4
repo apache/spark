@@ -391,6 +391,7 @@ dmlStatementNoWith
     : insertInto queryTerm queryOrganization                                       #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     | DELETE FROM multipartIdentifier tableAlias whereClause?                      #deleteFromTable
+    | VACUUM multipartIdentifier tableAlias                                        #vacuumFromTable
     | UPDATE multipartIdentifier tableAlias setClause whereClause?                 #updateTable
     | MERGE INTO target=multipartIdentifier targetAlias=tableAlias
         USING (source=multipartIdentifier |
@@ -1149,6 +1150,7 @@ ansiNonReserved
     | UNSET
     | UPDATE
     | USE
+    | VACUUM
     | VALUES
     | VIEW
     | WEEK
@@ -1425,6 +1427,7 @@ nonReserved
     | UPDATE
     | USE
     | USER
+    | VACUUM
     | VALUES
     | VIEW
     | WEEK
@@ -1698,6 +1701,7 @@ UPDATE: 'UPDATE';
 USE: 'USE';
 USER: 'USER';
 USING: 'USING';
+VACUUM: 'VACUUM';
 VALUES: 'VALUES';
 VIEW: 'VIEW';
 WEEK: 'WEEK';

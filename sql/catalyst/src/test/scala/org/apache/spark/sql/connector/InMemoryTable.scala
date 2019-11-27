@@ -19,11 +19,11 @@ package org.apache.spark.sql.connector
 
 import java.util
 
+import org.apache.spark.internal.Logging
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-
 import org.scalatest.Assertions._
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, Transform}
@@ -41,7 +41,8 @@ class InMemoryTable(
     val schema: StructType,
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String])
-  extends Table with SupportsRead with SupportsWrite with SupportsDelete {
+  extends Table with SupportsRead with SupportsWrite with SupportsDelete
+    with SupportsVacuum with Logging {
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
@@ -162,6 +163,12 @@ class InMemoryTable(
 
   override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
     dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+  }
+
+  var vacuumed = false
+  override def vacuum(): Unit = {
+    log.info("vacuuming table...")
+    vacuumed = true
   }
 }
 

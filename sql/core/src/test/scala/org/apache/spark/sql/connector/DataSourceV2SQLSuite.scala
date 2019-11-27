@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector
 
+import java.util
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
@@ -27,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2SQLSuite
@@ -1418,6 +1420,33 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("Vacuum") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"VACUUM $t")
+      val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
+        .asInstanceOf[InMemoryTable]
+      assert(table.vacuumed)
+    }
+  }
+
+  test("Vacuum: vacuum is only supported with v2 tables") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    val v1Table = "tbl"
+    withTable(v1Table) {
+      sql(s"CREATE TABLE $v1Table" +
+        s" USING ${classOf[SimpleScanSource].getName} OPTIONS (from=0,to=1)")
+      val exc = intercept[AnalysisException] {
+        sql(s"VACUUM $v1Table")
+      }
+
+      assert(exc.getMessage.contains("VACUUM is only supported with v2 tables"))
+    }
+  }
+
   test("UPDATE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1828,4 +1857,22 @@ class FakeV2Provider extends TableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }
+}
+
+class VacuumableTableProvider extends TableProvider {
+
+  override def getTable (options: CaseInsensitiveStringMap): Table =
+    new VacuumableTable
+  class VacuumableTable extends Table with SupportsVacuum {
+
+    override def name(): String = "vacuum"
+
+    override def schema(): StructType =
+      StructType(Seq(StructField("id", IntegerType)))
+
+    override def capabilities(): util.Set[TableCapability] =
+      Set(TableCapability.ACCEPT_ANY_SCHEMA).asJava
+
+    override def vacuum(): Unit = {println("VACUUM!!")}
+  };
 }

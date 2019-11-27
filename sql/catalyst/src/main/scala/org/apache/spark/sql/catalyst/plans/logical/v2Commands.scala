@@ -304,8 +304,15 @@ case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Comm
  * The logical plan of the DELETE FROM command that works for v2 tables.
  */
 case class DeleteFromTable(
-    table: LogicalPlan,
-    condition: Option[Expression]) extends Command with SupportsSubquery {
+                            table: LogicalPlan,
+                            condition: Option[Expression]) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the DELETE FROM command that works for v2 tables.
+ */
+case class VacuumTable(table: LogicalPlan) extends Command with SupportsSubquery {
   override def children: Seq[LogicalPlan] = table :: Nil
 }
 

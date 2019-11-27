@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.SupportsDelete
+import org.apache.spark.sql.connector.catalog.{SupportsDelete, SupportsVacuum}
 import org.apache.spark.sql.sources.Filter
 
 case class DeleteFromTableExec(
@@ -28,6 +28,16 @@ case class DeleteFromTableExec(
 
   override protected def run(): Seq[InternalRow] = {
     table.deleteWhere(condition)
+    Seq.empty
+  }
+
+  override def output: Seq[Attribute] = Nil
+}
+
+case class VacuumTableExec(table: SupportsVacuum) extends V2CommandExec {
+
+  override protected def run(): Seq[InternalRow] = {
+    table.vacuum
     Seq.empty
   }
 
