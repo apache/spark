@@ -142,13 +142,16 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
 
     assert(unsafeRow.getLong(0) === 0)
     assert(unsafeRow.getString(1) === "Hello")
-    // Date is represented as Int in unsafeRow
     assert(unsafeRow.getInterval(2) === interval1)
 
     val interval2 = new CalendarInterval(1, 2, 3L)
-
     unsafeRow.setInterval(2, interval2)
     assert(unsafeRow.getInterval(2) === interval2)
+
+    val offset = unsafeRow.getLong(2) >>> 32
+    unsafeRow.setInterval(2, null)
+    assert(unsafeRow.getInterval(2) === null)
+    assert(unsafeRow.getLong(2) >>> 32 === offset)
   }
 
   testBothCodegenAndInterpreted("null handling") {
