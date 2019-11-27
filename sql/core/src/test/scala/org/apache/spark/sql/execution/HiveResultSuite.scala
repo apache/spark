@@ -43,19 +43,4 @@ class HiveResultSuite extends SharedSparkSession {
     val tpe = new ExamplePointUDT()
     assert(HiveResult.toHiveString((point, tpe)) === "(50.0, 50.0)")
   }
-
-  test("decimal formatting in hive result") {
-    val df = Seq(new java.math.BigDecimal("1")).toDS()
-    Seq(2, 6, 18).foreach { scala =>
-      val executedPlan =
-        df.selectExpr(s"CAST(value AS decimal(38, $scala))").queryExecution.executedPlan
-      val result = HiveResult.hiveResultString(executedPlan)
-      assert(result.head.split("\\.").last.length === scala)
-    }
-
-    val executedPlan = Seq(java.math.BigDecimal.ZERO).toDS()
-      .selectExpr(s"CAST(value AS decimal(38, 8))").queryExecution.executedPlan
-    val result = HiveResult.hiveResultString(executedPlan)
-    assert(result.head === "0.00000000")
-  }
 }

@@ -956,7 +956,7 @@ SELECT * FROM tt1
 struct<a:string,b:string,c:decimal(12,2),d:string>
 -- !query 83 output
 0123456789	abc	42.12	abc
-abc	0123456789	42.00	abcd
+abc	0123456789	42	abcd
 
 
 -- !query 84

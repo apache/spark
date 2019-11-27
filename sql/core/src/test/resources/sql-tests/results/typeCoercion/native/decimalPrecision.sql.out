@@ -2211,7 +2211,7 @@ SELECT cast(1 as tinyint) / cast(1 as decimal(3, 0)) FROM t
 -- !query 265 schema
 struct<(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) / CAST(1 AS DECIMAL(3,0))):decimal(9,6)>
 -- !query 265 output
-1.000000
+1
 
 
 -- !query 266
@@ -2219,7 +2219,7 @@ SELECT cast(1 as tinyint) / cast(1 as decimal(5, 0)) FROM t
 -- !query 266 schema
 struct<(CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(5,0)) / CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(5,0))):decimal(9,6)>
 -- !query 266 output
-1.000000
+1
 
 
 -- !query 267
@@ -2227,7 +2227,7 @@ SELECT cast(1 as tinyint) / cast(1 as decimal(10, 0)) FROM t
 -- !query 267 schema
 struct<(CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(14,11)>
 -- !query 267 output
-1.00000000000
+1
 
 
 -- !query 268
@@ -2235,7 +2235,7 @@ SELECT cast(1 as tinyint) / cast(1 as decimal(20, 0)) FROM t
 -- !query 268 schema
 struct<(CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(20,0))):decimal(24,21)>
 -- !query 268 output
-1.000000000000000000000
+1
 
 
 -- !query 269
@@ -2243,7 +2243,7 @@ SELECT cast(1 as smallint) / cast(1 as decimal(3, 0)) FROM t
 -- !query 269 schema
 struct<(CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(5,0)) / CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(5,0))):decimal(11,6)>
 -- !query 269 output
-1.000000
+1
 
 
 -- !query 270
@@ -2251,7 +2251,7 @@ SELECT cast(1 as smallint) / cast(1 as decimal(5, 0)) FROM t
 -- !query 270 schema
 struct<(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) / CAST(1 AS DECIMAL(5,0))):decimal(11,6)>
 -- !query 270 output
-1.000000
+1
 
 
 -- !query 271
@@ -2259,7 +2259,7 @@ SELECT cast(1 as smallint) / cast(1 as decimal(10, 0)) FROM t
 -- !query 271 schema
 struct<(CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(16,11)>
 -- !query 271 output
-1.00000000000
+1
 
 
 -- !query 272
@@ -2267,7 +2267,7 @@ SELECT cast(1 as smallint) / cast(1 as decimal(20, 0)) FROM t
 -- !query 272 schema
 struct<(CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(20,0))):decimal(26,21)>
 -- !query 272 output
-1.000000000000000000000
+1
 
 
 -- !query 273
@@ -2275,7 +2275,7 @@ SELECT cast(1 as int) / cast(1 as decimal(3, 0)) FROM t
 -- !query 273 schema
 struct<(CAST(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(10,0))):decimal(16,6)>
 -- !query 273 output
-1.000000
+1
 
 
 -- !query 274
@@ -2283,7 +2283,7 @@ SELECT cast(1 as int) / cast(1 as decimal(5, 0)) FROM t
 -- !query 274 schema
 struct<(CAST(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(10,0))):decimal(16,6)>
 -- !query 274 output
-1.000000
+1
 
 
 -- !query 275
@@ -2291,7 +2291,7 @@ SELECT cast(1 as int) / cast(1 as decimal(10, 0)) FROM t
 -- !query 275 schema
 struct<(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 275 output
-1.00000000000
+1
 
 
 -- !query 276
@@ -2299,7 +2299,7 @@ SELECT cast(1 as int) / cast(1 as decimal(20, 0)) FROM t
 -- !query 276 schema
 struct<(CAST(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(20,0))):decimal(31,21)>
 -- !query 276 output
-1.000000000000000000000
+1
 
 
 -- !query 277
@@ -2307,7 +2307,7 @@ SELECT cast(1 as bigint) / cast(1 as decimal(3, 0)) FROM t
 -- !query 277 schema
 struct<(CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(20,0))):decimal(26,6)>
 -- !query 277 output
-1.000000
+1
 
 
 -- !query 278
@@ -2315,7 +2315,7 @@ SELECT cast(1 as bigint) / cast(1 as decimal(5, 0)) FROM t
 -- !query 278 schema
 struct<(CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(20,0))):decimal(26,6)>
 -- !query 278 output
-1.000000
+1
 
 
 -- !query 279
@@ -2323,7 +2323,7 @@ SELECT cast(1 as bigint) / cast(1 as decimal(10, 0)) FROM t
 -- !query 279 schema
 struct<(CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0))):decimal(31,11)>
 -- !query 279 output
-1.00000000000
+1
 
 
 -- !query 280
@@ -2331,7 +2331,7 @@ SELECT cast(1 as bigint) / cast(1 as decimal(20, 0)) FROM t
 -- !query 280 schema
 struct<(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) / CAST(1 AS DECIMAL(20,0))):decimal(38,18)>
 -- !query 280 output
-1.000000000000000000
+1
 
 
 -- !query 281
@@ -2403,7 +2403,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(3, 0)) FROM t
 -- !query 289 schema
 struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(10,0))):decimal(16,6)>
 -- !query 289 output
-1.000000
+1
 
 
 -- !query 290
@@ -2411,7 +2411,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(5, 0)) FROM t
 -- !query 290 schema
 struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(10,0))):decimal(16,6)>
 -- !query 290 output
-1.000000
+1
 
 
 -- !query 291
@@ -2419,7 +2419,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(10, 0)) FROM t
 -- !query 291 schema
 struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 291 output
-1.00000000000
+1
 
 
 -- !query 292
@@ -2427,7 +2427,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(20, 0)) FROM t
 -- !query 292 schema
 struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(20,0))):decimal(31,21)>
 -- !query 292 output
-1.000000000000000000000
+1
 
 
 -- !query 293
@@ -2543,7 +2543,7 @@ SELECT cast(1 as decimal(3, 0))  / cast(1 as tinyint) FROM t
 -- !query 305 schema
 struct<(CAST(1 AS DECIMAL(3,0)) / CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0))):decimal(9,6)>
 -- !query 305 output
-1.000000
+1
 
 
 -- !query 306
@@ -2551,7 +2551,7 @@ SELECT cast(1 as decimal(5, 0))  / cast(1 as tinyint) FROM t
 -- !query 306 schema
 struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(5,0)) / CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(5,0))):decimal(11,6)>
 -- !query 306 output
-1.000000
+1
 
 
 -- !query 307
@@ -2559,7 +2559,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as tinyint) FROM t
 -- !query 307 schema
 struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(10,0))):decimal(16,6)>
 -- !query 307 output
-1.000000
+1
 
 
 -- !query 308
@@ -2567,7 +2567,7 @@ SELECT cast(1 as decimal(20, 0)) / cast(1 as tinyint) FROM t
 -- !query 308 schema
 struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(20,0))):decimal(26,6)>
 -- !query 308 output
-1.000000
+1
 
 
 -- !query 309
@@ -2575,7 +2575,7 @@ SELECT cast(1 as decimal(3, 0))  / cast(1 as smallint) FROM t
 -- !query 309 schema
 struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(5,0)) / CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(5,0))):decimal(9,6)>
 -- !query 309 output
-1.000000
+1
 
 
 -- !query 310
@@ -2583,7 +2583,7 @@ SELECT cast(1 as decimal(5, 0))  / cast(1 as smallint) FROM t
 -- !query 310 schema
 struct<(CAST(1 AS DECIMAL(5,0)) / CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0))):decimal(11,6)>
 -- !query 310 output
-1.000000
+1
 
 
 -- !query 311
@@ -2591,7 +2591,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as smallint) FROM t
 -- !query 311 schema
 struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(10,0))):decimal(16,6)>
 -- !query 311 output
-1.000000
+1
 
 
 -- !query 312
@@ -2599,7 +2599,7 @@ SELECT cast(1 as decimal(20, 0)) / cast(1 as smallint) FROM t
 -- !query 312 schema
 struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(20,0))):decimal(26,6)>
 -- !query 312 output
-1.000000
+1
 
 
 -- !query 313
@@ -2607,7 +2607,7 @@ SELECT cast(1 as decimal(3, 0))  / cast(1 as int) FROM t
 -- !query 313 schema
 struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(14,11)>
 -- !query 313 output
-1.00000000000
+1
 
 
 -- !query 314
@@ -2615,7 +2615,7 @@ SELECT cast(1 as decimal(5, 0))  / cast(1 as int) FROM t
 -- !query 314 schema
 struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(16,11)>
 -- !query 314 output
-1.00000000000
+1
 
 
 -- !query 315
@@ -2623,7 +2623,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as int) FROM t
 -- !query 315 schema
 struct<(CAST(1 AS DECIMAL(10,0)) / CAST(CAST(1 AS INT) AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 315 output
-1.00000000000
+1
 
 
 -- !query 316
@@ -2631,7 +2631,7 @@ SELECT cast(1 as decimal(20, 0)) / cast(1 as int) FROM t
 -- !query 316 schema
 struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) AS DECIMAL(20,0))):decimal(31,11)>
 -- !query 316 output
-1.00000000000
+1
 
 
 -- !query 317
@@ -2639,7 +2639,7 @@ SELECT cast(1 as decimal(3, 0))  / cast(1 as bigint) FROM t
 -- !query 317 schema
 struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(20,0)) / CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0))):decimal(24,21)>
 -- !query 317 output
-1.000000000000000000000
+1
 
 
 -- !query 318
@@ -2647,7 +2647,7 @@ SELECT cast(1 as decimal(5, 0))  / cast(1 as bigint) FROM t
 -- !query 318 schema
 struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(20,0)) / CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0))):decimal(26,21)>
 -- !query 318 output
-1.000000000000000000000
+1
 
 
 -- !query 319
@@ -2655,7 +2655,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as bigint) FROM t
 -- !query 319 schema
 struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0)) / CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0))):decimal(31,21)>
 -- !query 319 output
-1.000000000000000000000
+1
 
 
 -- !query 320
@@ -2663,7 +2663,7 @@ SELECT cast(1 as decimal(20, 0)) / cast(1 as bigint) FROM t
 -- !query 320 schema
 struct<(CAST(1 AS DECIMAL(20,0)) / CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0))):decimal(38,18)>
 -- !query 320 output
-1.000000000000000000
+1
 
 
 -- !query 321
@@ -2735,7 +2735,7 @@ SELECT cast(1 as decimal(3, 0))  / cast(1 as decimal(10, 0)) FROM t
 -- !query 329 schema
 struct<(CAST(CAST(1 AS DECIMAL(3,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(14,11)>
 -- !query 329 output
-1.00000000000
+1
 
 
 -- !query 330
@@ -2743,7 +2743,7 @@ SELECT cast(1 as decimal(5, 0))  / cast(1 as decimal(10, 0)) FROM t
 -- !query 330 schema
 struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(16,11)>
 -- !query 330 output
-1.00000000000
+1
 
 
 -- !query 331
@@ -2751,7 +2751,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(10, 0)) FROM t
 -- !query 331 schema
 struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 331 output
-1.00000000000
+1
 
 
 -- !query 332
@@ -2759,7 +2759,7 @@ SELECT cast(1 as decimal(20, 0)) / cast(1 as decimal(10, 0)) FROM t
 -- !query 332 schema
 struct<(CAST(CAST(1 AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0))):decimal(31,11)>
 -- !query 332 output
-1.00000000000
+1
 
 
 -- !query 333

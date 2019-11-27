@@ -111,9 +111,9 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   examples = """
     Examples:
       > SELECT CASE WHEN 1 > 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END;
-       1.0
+       1
       > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END;
-       2.0
+       2
       > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 < 0 THEN 2.0 END;
        NULL
   """)

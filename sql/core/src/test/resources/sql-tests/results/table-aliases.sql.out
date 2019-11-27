@@ -93,5 +93,5 @@ SELECT * FROM (src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id) dst(a, b, c, d)
 struct<a:int,b:string,c:int,d:decimal(2,1)>
 -- !query 10 output
 1	a	1	8.5
-2	b	2	1.0
+2	b	2	1
 3	c	3	3.2
