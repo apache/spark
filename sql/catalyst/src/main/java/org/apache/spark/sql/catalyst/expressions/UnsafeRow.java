@@ -305,6 +305,11 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     assert cursor > 0 : "invalid cursor " + cursor;
     if (value == null) {
       setNullAt(ordinal);
+      // zero-out the bytes
+      Platform.putInt(baseObject, baseOffset + cursor, 0);
+      Platform.putInt(baseObject, baseOffset + cursor + 4, 0);
+      Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
+      // keep the offset for future update
       Platform.putLong(baseObject, getFieldOffset(ordinal), (cursor << 32) | 16L);
     } else {
       Platform.putInt(baseObject, baseOffset + cursor, value.months);
