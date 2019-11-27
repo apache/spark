@@ -361,6 +361,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     Some(loadedUI)
   }
 
+  /**
+   * This method is mainly to handle ordering of the tab compared to
+   * the Live UI. For Thriftserver applications, this method ensure
+   * SQL tab to come first, then JDBC/ODBC tab.
+   * @param ui
+   */
   private def setupPluginUI(ui: SparkUI): Unit = {
     val plugins = loadPlugins().toSeq
 
