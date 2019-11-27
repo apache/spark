@@ -226,7 +226,7 @@ license: |
 
   - Since Spark 3.0, when casting string value to date, timestamp and interval values, the leading and trailing white spaces(<= ACSII 32) will be trimmed before casing, e.g. `cast('2019-10-10\t as date)` results the date value `2019-10-10`. In Spark version 2.4 and earlier, only the trailing space will be removed, thus, the result is `null`.
   
-  - Since Spark 3.0, numbers written in scientific notation(e.g. `1E2`) would be parsed as Double. In Spark version 2.4 and earlier, they're parsed as Decimal. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.exponentLiteralAsDecimal.enabled` to `true`.
+  - Since Spark 3.0, numeric literals written in scientific notation(e.g. `1E2`) would be parsed as Double. In Spark version 2.4 and earlier, they're parsed as Decimal. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.exponentLiteralAsDecimal.enabled` to `true`.
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
