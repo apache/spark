@@ -557,9 +557,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * {{{
    *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
    *   LIKE [other_db_name.]existing_table_name
-   *   [ROW FORMAT row_format]
-   *   [USING provider | STORED AS hiveFormat]
-   *   [locationSpec] [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [USING provider |
+   *    [
+   *     [ROW FORMAT row_format]
+   *     [STORED AS file_format] [WITH SERDEPROPERTIES (...)]
+   *    ]
+   *   ]
+   *   [locationSpec]
+   *   [TBLPROPERTIES (property_name=property_value, ...)]
    * }}}
    */
   override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
@@ -572,14 +577,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
     val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
-    // rowStorage used to determine CatalogStorageFormat.serde and CatalogStorageFormat.properties
-    // for Hive table.
+    // rowStorage used to determine CatalogStorageFormat.serde and
+    // CatalogStorageFormat.properties in STORED AS clause.
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
       .getOrElse(CatalogStorageFormat.empty)
-    if (provider.isDefined && provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER &&
-        rowStorage.serde.isDefined) {
-      throw new ParseException("'ROW FORMAT' can not used in datasource table", ctx)
-    }
     val fileFormat = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat) match {
       case Some(f) =>
         if (provider.isDefined) {
@@ -591,10 +592,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
           serde = rowStorage.serde.orElse(f.serde),
           properties = rowStorage.properties ++ f.properties)
       case None =>
-        CatalogStorageFormat.empty.copy(
-          locationUri = location.map(CatalogUtils.stringToURI),
-          serde = rowStorage.serde,
-          properties = rowStorage.properties)
+        if (rowStorage.serde.isDefined) {
+          throw new ParseException("'ROW FORMAT' must be used with 'STORED AS'", ctx)
+        }
+        CatalogStorageFormat.empty.copy(locationUri = location.map(CatalogUtils.stringToURI))
     }
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     CreateTableLikeCommand(

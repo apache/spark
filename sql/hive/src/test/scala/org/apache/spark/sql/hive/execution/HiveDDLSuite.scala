@@ -2603,7 +2603,7 @@ class HiveDDLSuite
       sql("CREATE TABLE sourceHiveTable(a INT, b INT) STORED AS PARQUET")
       sql("CREATE TABLE sourceDsTable(a INT, b INT) USING PARQUET")
 
-      // row format not works in create targetDsTable
+      // row format doesn't work in create targetDsTable
       var e = intercept[AnalysisException] {
         spark.sql(
           """
@@ -2611,42 +2611,55 @@ class HiveDDLSuite
             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
             """.stripMargin)
       }.getMessage
-      assert(e.contains("'ROW FORMAT' can not used in datasource table"))
+      assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
 
-      // row format works with provider hive
+      // row format doesn't work with provider hive
+      e = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |CREATE TABLE targetHiveTable LIKE sourceHiveTable USING hive
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+            |WITH SERDEPROPERTIES ('test' = 'test')
+          """.stripMargin)
+      }.getMessage
+      assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+
+      // row format doesn't work without 'STORED AS'
+      e = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |CREATE TABLE targetDsTable LIKE sourceDsTable
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+            |WITH SERDEPROPERTIES ('test' = 'test')
+          """.stripMargin)
+      }.getMessage
+      assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+
+      // row format works with STORED AS hive format (from hive table)
       spark.sql(
         """
-          |CREATE TABLE targetHiveTable1 LIKE sourceHiveTable USING hive
+          |CREATE TABLE targetHiveTable1 LIKE sourceHiveTable STORED AS PARQUET
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES ('test' = 'test')
           """.stripMargin)
       var table = catalog.getTableMetadata(TableIdentifier("targetHiveTable1"))
       assert(table.provider === Some("hive"))
+      assert(table.storage.inputFormat ===
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
       assert(table.storage.serde === Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
       assert(table.storage.properties("test") == "test")
 
-      // row format not works with source DS table
+      // row format works with STORED AS hive format (from datasource table)
       spark.sql(
         """
-          |CREATE TABLE targetDsTable LIKE sourceDsTable
-          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |WITH SERDEPROPERTIES ('test' = 'test')
-          """.stripMargin)
-      table = catalog.getTableMetadata(TableIdentifier("targetDsTable"))
-      assert(table.provider === Some("PARQUET"))
-      assert(table.storage.serde ===
-        Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
-      assert(table.storage.properties.get("test") === None)
-
-      // row format works with source hive table
-      spark.sql(
-        """
-          |CREATE TABLE targetHiveTable2 LIKE sourceHiveTable
+          |CREATE TABLE targetHiveTable2 LIKE sourceDsTable STORED AS PARQUET
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES ('test' = 'test')
           """.stripMargin)
       table = catalog.getTableMetadata(TableIdentifier("targetHiveTable2"))
       assert(table.provider === Some("hive"))
+      assert(table.storage.inputFormat ===
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
       assert(table.storage.serde === Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
       assert(table.storage.properties("test") == "test")
     }
