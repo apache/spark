@@ -451,6 +451,22 @@ class ResolveSessionCatalog(
         originalText,
         query)
 
+    case CreateViewStatement(
+      tableName, userSpecifiedColumns, comment, properties,
+      originalText, child, allowExisting, replace, viewType) =>
+
+      val v1TableName = parseV1Table(tableName, "CREATE VIEW")
+      CreateViewCommand(
+        v1TableName.asTableIdentifier,
+        userSpecifiedColumns,
+        comment,
+        properties,
+        originalText,
+        child,
+        allowExisting,
+        replace,
+        viewType)
+
     case ShowTablePropertiesStatement(SessionCatalog(_, tableName), propertyKey) =>
       ShowTablePropertiesCommand(
         tableName.asTableIdentifier,

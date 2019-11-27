@@ -50,7 +50,7 @@ public class BlocksRemoved extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof BlocksRemoved) {
       BlocksRemoved o = (BlocksRemoved) other;
-      return Objects.equal(numRemovedBlocks, o.numRemovedBlocks);
+      return numRemovedBlocks == o.numRemovedBlocks;
     }
     return false;
   }

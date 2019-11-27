@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.analysis.ViewType
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -85,6 +86,20 @@ case class CreateTableAsSelectStatement(
 
   override def children: Seq[LogicalPlan] = Seq(asSelect)
 }
+
+/**
+ * A CREATE VIEW statement, as parsed from SQL.
+ */
+case class CreateViewStatement(
+    viewName: Seq[String],
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: Option[String],
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean,
+    viewType: ViewType) extends ParsedStatement
 
 /**
  * A REPLACE TABLE command, as parsed from SQL.

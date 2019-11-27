@@ -228,6 +228,32 @@ license: |
   
   - Since Spark 3.0, numbers written in scientific notation(e.g. `1E2`) would be parsed as Double. In Spark version 2.4 and earlier, they're parsed as Decimal. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.exponentLiteralAsDecimal.enabled` to `true`.
 
+  - Since Spark 3.0, we pad decimal numbers with trailing zeros to the scale of the column for `spark-sql` interface, for example:
+    <table class="table">
+        <tr>
+          <th>
+            <b>Query</b>
+          </th>
+          <th>
+            <b>Spark 2.4 or Prior</b>
+          </th>
+          <th>
+            <b>Spark 3.0</b>
+          </th>
+        </tr>
+        <tr>
+          <td>
+            <code>SELECT CAST(1 AS decimal(38, 18));</code>
+          </td>
+          <td>
+            <code>1</code>
+          </td>
+          <td>
+            <code>1.000000000000000000</code>
+          </td>
+        </tr>
+    </table>
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was
