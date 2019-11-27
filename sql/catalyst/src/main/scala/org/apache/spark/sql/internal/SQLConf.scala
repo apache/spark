@@ -875,8 +875,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val FAIL_AMBIGUOUS_SELF_JOIN =
-    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin")
+  val FAIL_AMBIGUOUS_SELF_JOIN_ENABLED =
+    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin.enabled")
       .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
       .internal()
       .booleanConf
