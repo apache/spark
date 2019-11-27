@@ -1780,13 +1780,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
   private def testSpeculationDurationThreshold(
       speculationThresholdProvided: Boolean,
-      numTasks: Int): Unit = {
+      numTasks: Int,
+      numSlots: Int): Unit = {
     sc = new SparkContext("local", "test")
     sc.conf.set(config.SPECULATION_ENABLED, true)
     // Set the quantile to be 1.0 so that regular speculation would not be triggered
     sc.conf.set(config.SPECULATION_QUANTILE.key, "1.0")
     // Set the number of slots per executor
-    sc.conf.set(config.EXECUTOR_CORES.key, "2")
+    sc.conf.set(config.EXECUTOR_CORES.key, numSlots.toString)
     sc.conf.set(config.CPUS_PER_TASK.key, "1")
     // Set the threshold to be 60 minutes
     if (speculationThresholdProvided) {
@@ -1811,7 +1812,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Now the task should have been running for 60 minutes and 1 second
     clock.advance(1)
-    if (speculationThresholdProvided) {
+    if (speculationThresholdProvided && numSlots >= numTasks) {
       assert(manager.checkSpeculatableTasks(0))
       assert(sched.speculativeTasks.size == numTasks)
       // Should not submit duplicated tasks
@@ -1827,13 +1828,18 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   Seq(1, 2).foreach { numTasks =>
     test("SPARK-29976 when a speculation time threshold is provided, should speculative " +
       s"run the task even if there are not enough successful runs, total tasks: $numTasks") {
-      testSpeculationDurationThreshold(true, numTasks)
+      testSpeculationDurationThreshold(true, numTasks, numTasks)
     }
 
     test("SPARK-29976: when the speculation time threshold is not provided," +
       s"don't speculative run if there are not enough successful runs, total tasks: $numTasks") {
-      testSpeculationDurationThreshold(false, numTasks)
+      testSpeculationDurationThreshold(false, numTasks, numTasks)
     }
+  }
+
+  test("SPARK-29976 when a speculation time threshold is provided, should not speculative " +
+    "if there are too many unfinished tasks even though time threshold is provided") {
+    testSpeculationDurationThreshold(true, 2, 1)
   }
 
   test("TaskOutputFileAlreadyExistException lead to task set abortion") {
