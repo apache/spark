@@ -50,6 +50,67 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     nextTaskSetToSchedule.get.addRunningTask(taskId)
     assert(nextTaskSetToSchedule.get.stageId === expectedStageId)
   }
+  test("validate FIFO slot distributions") {
+    sc = new SparkContext(LOCAL, APP_NAME)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    val rootPool = new Pool("", FIFO, 0, 0)
+    val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
+
+    val taskSetManager0 = createTaskSetManager(0, 2, taskScheduler)
+    val taskSetManager1 = createTaskSetManager(1, 2, taskScheduler)
+    val taskSetManager2 = createTaskSetManager(2, 2, taskScheduler)
+    schedulableBuilder.addTaskSetManager(taskSetManager0, null)
+    schedulableBuilder.addTaskSetManager(taskSetManager1, null)
+    schedulableBuilder.addTaskSetManager(taskSetManager2, null)
+
+    rootPool.updateAvailableSlots(9)
+    assert(taskSetManager0.numAvailableSlot === 9)
+    assert(taskSetManager1.numAvailableSlot === 0)
+    assert(taskSetManager2.numAvailableSlot === 0)
+  }
+
+  test("validate FAIR slot distributions") {
+    val xmlPath = getClass.getClassLoader.getResource("fairscheduler-with-valid-data.xml").getFile()
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, xmlPath)
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    val rootPool = new Pool("", FAIR, 0, 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    schedulableBuilder.buildPools()
+
+    val taskSetManager0 = createTaskSetManager(0, 2, taskScheduler)
+    val taskSetManager1 = createTaskSetManager(1, 2, taskScheduler)
+    sc.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, "pool1")
+    var localProperties = sc.getLocalProperties
+    schedulableBuilder.addTaskSetManager(taskSetManager0, localProperties)
+    schedulableBuilder.addTaskSetManager(taskSetManager1, localProperties)
+
+    sc.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, "pool2")
+    localProperties = sc.getLocalProperties
+    val taskSetManager2 = createTaskSetManager(2, 2, taskScheduler)
+    val taskSetManager3 = createTaskSetManager(3, 2, taskScheduler)
+    schedulableBuilder.addTaskSetManager(taskSetManager2, localProperties)
+    schedulableBuilder.addTaskSetManager(taskSetManager3, localProperties)
+
+
+    rootPool.updateAvailableSlots(12)
+    // pool 1 weight is 1, pool 2 weight is 2, so they get 4 and 8 slots respectively
+    // since pool 1 is FIFO TSM 0 gets all 4 slots of pool 1
+    // since pool 2 is FAIR TSM 3 and 4 each get half (4) of pool 2's 8 slots
+    assert(taskSetManager0.numAvailableSlot === 4)
+    assert(taskSetManager1.numAvailableSlot === 0)
+    assert(taskSetManager2.numAvailableSlot === 4)
+    assert(taskSetManager3.numAvailableSlot === 4)
+
+    rootPool.updateAvailableSlots(6)
+    // similar to above but pool 1 has 3 slots due to having minShare of 3
+    assert(taskSetManager0.numAvailableSlot === 3)
+    assert(taskSetManager1.numAvailableSlot === 0)
+    assert(taskSetManager2.numAvailableSlot === 2)
+    assert(taskSetManager3.numAvailableSlot === 2)
+  }
 
   test("FIFO Scheduler Test") {
     sc = new SparkContext(LOCAL, APP_NAME)

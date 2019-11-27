@@ -195,6 +195,66 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
+  test("executors should not sit idle for too long") {
+    val LOCALITY_WAIT_MS = 3000
+    val clock = new ManualClock
+    val conf = new SparkConf()
+    sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
+    // import org.slf4j.{Logger, LoggerFactory}
+    import org.apache.log4j.{Logger, Level}
+    Logger.getLogger("org.apache.spark.scheduler.TaskSetManager").setLevel(Level.DEBUG)
+    val taskScheduler = new TaskSchedulerImpl(sc,
+      sc.conf.get(config.TASK_MAX_FAILURES),
+      clock = clock) {
+      override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
+        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+      }
+      override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
+        // Don't shuffle the offers around for this test.  Instead, we'll just pass in all
+        // the permutations we care about directly.
+        offers
+      }
+    }
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+
+      override def executorAdded(execId: String, host: String): Unit = {}
+    }
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    val taskSet = FakeTask.createTaskSet(5, 1, 1,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1"))
+    )
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+    taskScheduler.submitTasks(taskSet)
+
+    // First offer host2, exec2: no task should be chosen due to bad data locality
+    assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1)))
+      .flatten.isEmpty)
+    val task0 = taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+      .flatten.head
+    assert(task0.index === 0)
+    taskScheduler.statusUpdate(task0.taskId, TaskState.FINISHED, ByteBuffer.allocate(0))
+
+    clock.advance(LOCALITY_WAIT_MS * 2)
+    val task1 = taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+      .flatten.head
+    assert(task1.index === 1)
+    val task2 = taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1)))
+      .flatten.head
+    assert(task2.index === 2)
+    taskScheduler.statusUpdate(task1.taskId, TaskState.FINISHED, ByteBuffer.allocate(0))
+    assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host2", 1)))
+      .flatten.head.index === 3)
+    assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1)))
+      .flatten.isEmpty)
+  }
+
   test("Scheduler does not crash when tasks are not serializable") {
     val taskCpus = 2
     val taskScheduler = setupSchedulerWithMaster(
@@ -910,6 +970,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("SPARK-16106 locality levels updated if executor added to existing host") {
     val taskScheduler = setupScheduler()
 
+    taskScheduler.resourceOffers(IndexedSeq(new WorkerOffer("executor0", "host0", 1)))
     taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0,
       (0 until 2).map { _ => Seq(TaskLocation("host0", "executor2")) }: _*
     ))

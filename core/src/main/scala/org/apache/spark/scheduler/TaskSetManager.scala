@@ -75,6 +75,7 @@ private[spark] class TaskSetManager(
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
+  var numAvailableSlot: Float = 0
 
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
   // Quantile of tasks at which to start speculation
@@ -412,7 +413,8 @@ private[spark] class TaskSetManager(
         taskAttempts(index) = info :: taskAttempts(index)
         // Update our locality level for delay scheduling
         // NO_PREF will not affect the variables related to delay scheduling
-        if (maxLocality != TaskLocality.NO_PREF) {
+        val utilizingAllSlots = runningTasks + 1 >= numAvailableSlot
+        if (maxLocality != TaskLocality.NO_PREF && utilizingAllSlots) {
           currentLocalityIndex = getLocalityIndex(taskLocality)
           lastLaunchTime = curTime
         }
@@ -1053,6 +1055,10 @@ private[spark] class TaskSetManager(
 
   def executorAdded(): Unit = {
     recomputeLocality()
+  }
+
+  override def updateAvailableSlots(numSlots: Float): Unit = {
+    numAvailableSlot = numSlots
   }
 }
 

@@ -119,4 +119,28 @@ private[spark] class Pool(
       parent.decreaseRunningTasks(taskNum)
     }
   }
+
+  override def updateAvailableSlots(numSlots: Float): Unit = {
+    schedulingMode match {
+      case SchedulingMode.FAIR =>
+        val usableWeights = schedulableQueue.asScala
+          .map(s => if (s.getSortedTaskSetQueue.nonEmpty) (s, s.weight) else (s, 0))
+        val totalWeights = usableWeights.map(_._2).sum
+        usableWeights.foreach({case (schedulable, usableWeight) =>
+          schedulable.updateAvailableSlots(
+            Math.max(numSlots * usableWeight / totalWeights, schedulable.minShare))
+        })
+      case SchedulingMode.FIFO =>
+        val sortedSchedulableQueue =
+          schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
+        var isFirst = true
+        for (schedulable <- sortedSchedulableQueue) {
+          schedulable.updateAvailableSlots(if (isFirst) numSlots else 0)
+          isFirst = false
+        }
+      case _ =>
+        val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
+        throw new IllegalArgumentException(msg)
+    }
+  }
 }

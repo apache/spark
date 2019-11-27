@@ -39,6 +39,7 @@ private[spark] trait Schedulable {
   def stageId: Int
   def name: String
 
+  def updateAvailableSlots(numSlots: Float): Unit
   def addSchedulable(schedulable: Schedulable): Unit
   def removeSchedulable(schedulable: Schedulable): Unit
   def getSchedulableByName(name: String): Schedulable

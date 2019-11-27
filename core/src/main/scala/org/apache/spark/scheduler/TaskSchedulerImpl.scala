@@ -36,7 +36,7 @@ import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -61,7 +61,8 @@ import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    isLocal: Boolean = false)
+    isLocal: Boolean = false,
+    clock: Clock = new SystemClock)
   extends TaskScheduler with Logging {
 
   import TaskSchedulerImpl._
@@ -125,10 +126,10 @@ private[spark] class TaskSchedulerImpl(
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
+  protected  val executorIdToCores = new HashMap[String, Int]
   protected val executorIdToHost = new HashMap[String, String]
 
   private val abortTimer = new Timer(true)
-  private val clock = new SystemClock
   // Exposed for testing
   val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
@@ -403,6 +404,7 @@ private[spark] class TaskSchedulerImpl(
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
         hostToExecutors(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
+        executorIdToCores(o.executorId) = o.cores
         executorIdToHost(o.executorId) = o.host
         executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
         newExecAvail = true
@@ -438,6 +440,9 @@ private[spark] class TaskSchedulerImpl(
         taskSet.executorAdded()
       }
     }
+
+    val availableSlots = executorIdToCores.values.map(c => c / CPUS_PER_TASK).sum
+    rootPool.updateAvailableSlots(availableSlots)
 
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
@@ -808,6 +813,7 @@ private[spark] class TaskSchedulerImpl(
       // happen below in the rootPool.executorLost() call.
       taskIds.foreach(cleanupTaskState)
     }
+    executorIdToCores.remove(executorId)
 
     val host = executorIdToHost(executorId)
     val execs = hostToExecutors.getOrElse(host, new HashSet)
