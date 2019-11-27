@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.Decimal
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class UnsafeRowWriterSuite extends SparkFunSuite {
 
@@ -48,5 +49,16 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     val res2 = unsafeRowWriter2.getRow
     // The two rows should be the equal
     assert(res1 == res2)
+  }
+
+  test("write and get calendar intervals through UnsafeRowWriter") {
+    val rowWriter1 = new UnsafeRowWriter(2)
+    rowWriter1.resetRowWriter()
+    rowWriter1.write(0, null.asInstanceOf[CalendarInterval])
+    assert(rowWriter1.getRow.isNullAt(0))
+    assert(rowWriter1.getRow.getInterval(0) === null)
+    val interval = new CalendarInterval(0, 1, 0)
+    rowWriter1.write(1, interval)
+    assert(rowWriter1.getRow.getInterval(1) === interval)
   }
 }
