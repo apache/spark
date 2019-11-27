@@ -46,7 +46,7 @@ case class DescribeTableExec(
 
   private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
-    rows += toCatalystRow("#Detailed Table Information", "", "")
+    rows += toCatalystRow("# Detailed Table Information", "", "")
     rows += toCatalystRow("Name", table.name(), "")
 
     TableCatalog.RESERVED_PROPERTIES.asScala.toList.foreach(propKey => {
@@ -72,7 +72,7 @@ case class DescribeTableExec(
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
-    rows += toCatalystRow("#Partition Information", "", "")
+    rows += toCatalystRow("# Partitioning", "", "")
     if (table.partitioning.isEmpty) {
       rows += toCatalystRow("Not partitioned", "", "")
     } else {

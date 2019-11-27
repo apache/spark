@@ -114,7 +114,7 @@ class DataSourceV2SQLSuite
       Row("id", "bigint", ""),
       Row("data", "string", ""),
       Row("", "", ""),
-      Row("#Partition Information", "", ""),
+      Row("# Partitioning", "", ""),
       Row("Part 0", "id", "")))
   }
 
@@ -143,10 +143,10 @@ class DataSourceV2SQLSuite
       Array("id", "bigint", ""),
       Array("data", "string", ""),
       Array("", "", ""),
-      Array("#Partition Information", "", ""),
+      Array("# Partitioning", "", ""),
       Array("Part 0", "id", ""),
       Array("", "", ""),
-      Array("#Detailed Table Information", "", ""),
+      Array("# Detailed Table Information", "", ""),
       Array("Name", "testcat.table_name", ""),
       Array("Comment", "this is a test table", ""),
       Array("Location", "/tmp/testcat/table_name", ""),
