@@ -50,7 +50,7 @@ private[thriftserver] class HiveThriftServer2Listener(
 
   // How often to update live entities. -1 means "never update" when replaying applications,
   // meaning only the last write will happen. For live applications, this avoids a few
-  // operations that we can live without when rapidly processing incoming task events.
+  // operations that we can live without when rapidly processing incoming events.
   private val liveUpdatePeriodNs = if (live) sparkConf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
 
   // Returns true if this listener has no live data. Exposed for tests only.
@@ -88,11 +88,6 @@ private[thriftserver] class HiveThriftServer2Listener(
       }
     }
 
-  /**
-   * This method is to handle out of order events. ie. if Job event come after execution end event.
-   * @param jobId
-   * @param groupId
-   */
   private def updateJobDetails(jobId: String, groupId: String): Unit = {
     val execList = executionList.values().asScala.filter(_.groupId == groupId).toSeq
     if (execList.nonEmpty) {
@@ -101,7 +96,7 @@ private[thriftserver] class HiveThriftServer2Listener(
         updateLiveStore(exec)
       }
     } else {
-      // It may possible that event reordering happens such a way that JobStart event come after
+      // It may possible that event reordering happens, such a way that JobStart event come after
       // Execution end event (Refer SPARK-27019). To handle that situation, if occurs in
       // Thriftserver, following code will take care. Here will come only if JobStart event comes
       // after Execution End event.
@@ -119,7 +114,7 @@ private[thriftserver] class HiveThriftServer2Listener(
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
       case e: SparkListenerThriftServerSessionCreated => onSessionCreated(e)
-      case e: SparkListenerSessionClosed => onSessionClosed(e)
+      case e: SparkListenerThriftServerSessionClosed => onSessionClosed(e)
       case e: SparkListenerThriftServerOperationStart => onOperationStart(e)
       case e: SparkListenerThriftServerOperationParsed => onOperationParsed(e)
       case e: SparkListenerThriftServerOperationCanceled => onOperationCanceled(e)
@@ -136,7 +131,7 @@ private[thriftserver] class HiveThriftServer2Listener(
     updateLiveStore(session)
   }
 
-  private def onSessionClosed(e: SparkListenerSessionClosed): Unit = {
+  private def onSessionClosed(e: SparkListenerThriftServerSessionClosed): Unit = {
     val session = sessionList.get(e.sessionId)
     session.finishTimestamp = e.finishTime
     updateStoreWithTriggerEnabled(session)
@@ -298,7 +293,6 @@ private[thriftserver] class LiveExecutionData(
       groupId)
   }
 }
-
 
 private[thriftserver] class LiveSessionData(
     val sessionId: String,

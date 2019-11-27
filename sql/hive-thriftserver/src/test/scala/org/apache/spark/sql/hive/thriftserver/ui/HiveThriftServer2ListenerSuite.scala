@@ -65,7 +65,8 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(statusStore.getOnlineSessionNum === 1)
       }
 
-      listener.onOtherEvent(SparkListenerSessionClosed("sessionId", System.currentTimeMillis()))
+      listener.onOtherEvent(SparkListenerThriftServerSessionClosed("sessionId",
+        System.currentTimeMillis()))
 
       if (!live) {
         // To update history store
@@ -96,15 +97,15 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
         "user", time))
 
       time += 1
-      listener.onOtherEvent(SparkListenerSessionClosed("sessionId1", time))
+      listener.onOtherEvent(SparkListenerThriftServerSessionClosed("sessionId1", time))
 
       time += 1
-      listener.onOtherEvent(SparkListenerSessionClosed("sessionId2", time))
+      listener.onOtherEvent(SparkListenerThriftServerSessionClosed("sessionId2", time))
 
       listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId3",
         "user", time))
       time += 1
-      listener.onOtherEvent(SparkListenerSessionClosed("sessionId3", 4))
+      listener.onOtherEvent(SparkListenerThriftServerSessionClosed("sessionId3", 4))
 
       if (!live) {
         kvstore.close(false)
@@ -134,7 +135,8 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
       System.currentTimeMillis(),
       Nil,
       createProperties))
-    listener.onOtherEvent(SparkListenerSessionClosed("sessionId", System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerThriftServerSessionClosed("sessionId",
+      System.currentTimeMillis()))
     val exec = statusStore.getExecution("id")
     assert(exec.isDefined)
     assert(exec.get.jobId === Seq("0"))

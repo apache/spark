@@ -35,7 +35,8 @@ private[thriftserver] class HiveThriftServer2EventManager(sc: SparkContext) {
   }
 
   def onSessionClosed(sessionId: String): Unit = {
-    postLiveListenerBus(SparkListenerSessionClosed(sessionId, System.currentTimeMillis()))
+    postLiveListenerBus(SparkListenerThriftServerSessionClosed(sessionId,
+      System.currentTimeMillis()))
   }
 
   def onStatementStart(
@@ -77,7 +78,7 @@ private[thriftserver] case class SparkListenerThriftServerSessionCreated(
     userName: String,
     startTime: Long) extends SparkListenerEvent
 
-private[thriftserver] case class SparkListenerSessionClosed(
+private[thriftserver] case class SparkListenerThriftServerSessionClosed(
     sessionId: String, finishTime: Long) extends SparkListenerEvent
 
 private[thriftserver] case class SparkListenerThriftServerOperationStart(
