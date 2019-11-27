@@ -475,3 +475,12 @@ case class ShowCurrentNamespaceStatement() extends ParsedStatement
 case class ShowTablePropertiesStatement(
     tableName: Seq[String],
     propertyKey: Option[String]) extends ParsedStatement
+
+/**
+ *  SHOW FUNCTIONS statement, as parsed from SQL
+ */
+case class ShowFunctionsStatement(
+    userScope: Boolean,
+    systemScope: Boolean,
+    pattern: Option[String],
+    functionName: Option[Seq[String]]) extends ParsedStatement

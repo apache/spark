@@ -1786,6 +1786,15 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SHOW FUNCTIONS not valid v1 namespace") {
+    val function = "testcat.ns1.ns2.fun"
+
+    val e = intercept[AnalysisException] {
+      sql(s"SHOW FUNCTIONS LIKE $function")
+    }
+    assert(e.message.contains(s"SHOW FUNCTIONS is only supported in v1 catalog"))
+  }
+
   test("global temp view should not be masked by v2 catalog") {
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
     spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)

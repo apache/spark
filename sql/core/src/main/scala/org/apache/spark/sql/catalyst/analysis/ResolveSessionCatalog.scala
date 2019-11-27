@@ -455,6 +455,23 @@ class ResolveSessionCatalog(
       ShowTablePropertiesCommand(
         tableName.asTableIdentifier,
         propertyKey)
+
+    case ShowFunctionsStatement(userScope, systemScope, pattern, fun) =>
+      val (database, function) = fun match {
+        case Some(CatalogAndIdentifierParts(catalog, functionName)) =>
+          if (isSessionCatalog(catalog)) {
+            functionName match {
+              case Seq(db, fn) => (Some(db), Some(fn))
+              case Seq(fn) => (None, Some(fn))
+              case _ =>
+                throw new AnalysisException(s"Unsupported function name '${functionName.quoted}'")
+            }
+          } else {
+            throw new AnalysisException (s"SHOW FUNCTIONS is only supported in v1 catalog")
+          }
+        case None => (None, pattern)
+      }
+      ShowFunctionsCommand(database, function, userScope, systemScope)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
