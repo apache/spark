@@ -363,10 +363,11 @@ class FileIndexSuite extends SharedSparkSession {
       wrongBasePath.mkdir()
       val parameters = Map("basePath" -> wrongBasePath.getCanonicalPath)
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
-      intercept[IllegalArgumentException] {
+      val msg = intercept[IllegalArgumentException] {
         // trigger inferPartitioning()
         fileIndex.partitionSpec()
-      }
+      }.getMessage
+      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
     }
   }
 
