@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.expressions.postgreSQL._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -27,32 +26,18 @@ import org.apache.spark.sql.types._
 
 object PostgreSQLDialect {
   val postgreSQLDialectRules: Seq[Rule[LogicalPlan]] = Seq(
-    CastToBoolean,
-    CastToTimestamp
+    PostgresCast
   )
 
-  object CastToBoolean extends Rule[LogicalPlan] with Logging {
+  object PostgresCast extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      // The SQL configuration `spark.sql.dialect` can be changed in runtime.
-      // To make sure the configuration is effective, we have to check it during rule execution.
       if (SQLConf.get.usePostgreSQLDialect) {
         plan.transformExpressions {
           case Cast(child, dataType, timeZoneId)
-            if child.dataType != BooleanType && dataType == BooleanType =>
+            if dataType == BooleanType && child.dataType != BooleanType =>
             PostgreCastToBoolean(child, timeZoneId)
-        }
-      } else {
-        plan
-      }
-    }
-  }
-
-  object CastToTimestamp extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = {
-      if (SQLConf.get.usePostgreSQLDialect) {
-        plan.transformExpressions {
           case Cast(child, dataType, timeZoneId)
-            if child.dataType != TimestampType && dataType == TimestampType =>
+            if dataType == TimestampType && child.dataType != TimestampType =>
             PostgreCastToTimestamp(child, timeZoneId)
         }
       } else {
