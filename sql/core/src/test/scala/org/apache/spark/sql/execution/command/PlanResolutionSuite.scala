@@ -112,6 +112,8 @@ class PlanResolutionSuite extends AnalysisTest {
     })
     when(manager.currentCatalog).thenReturn(testCat)
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
+    // manager.currentNamespace is called inside ResolveRelations only for session catalog.
+    when(manager.currentNamespace).thenReturn(Array(v1SessionCatalog.getCurrentDatabase))
     manager
   }
 
@@ -127,6 +129,8 @@ class PlanResolutionSuite extends AnalysisTest {
     })
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
+    // manager.currentNamespace is called inside ResolveRelations only for session catalog.
+    when(manager.currentNamespace).thenReturn(Array(v1SessionCatalog.getCurrentDatabase))
     manager
   }
 
@@ -141,7 +145,8 @@ class PlanResolutionSuite extends AnalysisTest {
       CTESubstitution,
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
-      analyzer.ResolveTables)
+      analyzer.ResolveTables,
+      analyzer.ResolveRelations)
     rules.foldLeft(parsePlan(query)) {
       case (plan, rule) => rule.apply(plan)
     }
