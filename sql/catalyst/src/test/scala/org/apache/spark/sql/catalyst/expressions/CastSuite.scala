@@ -27,6 +27,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -1213,6 +1214,13 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(134.12), DecimalType(3, 2)), null)
     }
+  }
+
+  test("collect_list/collect_set can cast to ArrayType not containsNull") {
+    val list = CollectList(Literal(1))
+    assert(Cast.canCast(list.dataType, ArrayType(IntegerType, false)))
+    val set = CollectSet(Literal(1))
+    assert(Cast.canCast(set.dataType, ArrayType(StringType, false)))
   }
 }
 
