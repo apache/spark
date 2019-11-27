@@ -425,7 +425,7 @@ object IntervalUtils {
         UNIT_SUFFIX,
         UNIT_END = Value
   }
-  private final val intervalStr = UTF8String.fromString("interval ")
+  private final val intervalStr = UTF8String.fromString("interval")
   private def unitToUtf8(unit: IntervalUnit): UTF8String = {
     UTF8String.fromString(unit.toString)
   }
@@ -483,15 +483,17 @@ object IntervalUtils {
     var pointPrefixed: Boolean = false
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
-      b match {
-        case ' ' => i += 1
-        case _ => state = next
+      if (b <= ' ') {
+        i += 1
+      } else {
+        state = next
       }
     }
 
-    def currentWord: UTF8String = {
-      val strings = s.split(UTF8String.blankString(1), -1)
-      val lenRight = s.substring(i, s.numBytes()).split(UTF8String.blankString(1), -1).length
+    def currentWord: String = {
+      val sep = "\\s+"
+      val strings = s.toString.split(sep)
+      val lenRight = s.substring(i, s.numBytes()).toString.split(sep).length
       strings(strings.length - lenRight)
     }
 
@@ -502,8 +504,10 @@ object IntervalUtils {
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
               throwIAE("interval string cannot be empty")
+            } else if (bytes(i + intervalStr.numBytes()) > ' ') {
+              throwIAE(s"invalid interval prefix $currentWord")
             } else {
-              i += intervalStr.numBytes()
+              i += intervalStr.numBytes() + 1
             }
           }
           state = TRIM_BEFORE_SIGN
@@ -541,18 +545,19 @@ object IntervalUtils {
               } catch {
                 case e: ArithmeticException => throwIAE(e.getMessage, e)
               }
-            case ' ' => state = TRIM_BEFORE_UNIT
+            case _ if b <= ' ' => state = TRIM_BEFORE_UNIT
             case '.' => state = VALUE_FRACTIONAL_PART
             case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
-          b match {
-            case _ if '0' <= b && b <= '9' =>
-              fraction += (b - '0') / fractionScale
-              fractionScale *= 10
-            case ' ' if !pointPrefixed || fractionScale > 10 => state = TRIM_BEFORE_UNIT
-            case _ => throwIAE(s"invalid value '$currentWord'")
+          if ('0' <= b && b <= '9') {
+            fraction += (b - '0') / fractionScale
+            fractionScale *= 10
+          } else if (b <= ' ' && (!pointPrefixed || fractionScale > 10)) {
+            state = TRIM_BEFORE_UNIT
+          } else {
+            throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
@@ -611,16 +616,16 @@ object IntervalUtils {
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
-            case ' ' => state = TRIM_BEFORE_SIGN
+            case _ if b <= ' ' => state = TRIM_BEFORE_SIGN
             case _ => throwIAE(s"invalid unit '$currentWord'")
           }
           i += 1
         case UNIT_END =>
-          b match {
-            case ' ' =>
-              i += 1
-              state = TRIM_BEFORE_SIGN
-            case _ => throwIAE(s"invalid unit '$currentWord'")
+          if (b <= ' ') {
+            i += 1
+            state = TRIM_BEFORE_SIGN
+          } else {
+            throwIAE(s"invalid unit '$currentWord'")
           }
       }
     }

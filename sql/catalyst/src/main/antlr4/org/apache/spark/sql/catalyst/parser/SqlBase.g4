@@ -165,7 +165,7 @@ statement
     | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
-        VIEW (IF NOT EXISTS)? tableIdentifier
+        VIEW (IF NOT EXISTS)? multipartIdentifier
         identifierCommentList?
         ((COMMENT STRING) |
          (PARTITIONED ON identifierList) |
