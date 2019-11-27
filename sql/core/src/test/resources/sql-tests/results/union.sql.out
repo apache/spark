@@ -42,12 +42,12 @@ FROM   (SELECT * FROM t1
 -- !query 3 schema
 struct<c1:decimal(11,1),c2:string>
 -- !query 3 output
-1.0	1
-1.0	1
-1.0	a
-2.0	4
-2.0	4
-2.0	b
+1	1
+1	1
+1	a
+2	4
+2	4
+2	b
 
 
 -- !query 4

@@ -576,7 +576,7 @@ SELECT EXTRACT(EPOCH FROM DATE        '1970-01-01')
 -- !query 54 schema
 struct<date_part('EPOCH', DATE '1970-01-01'):decimal(20,6)>
 -- !query 54 output
-0.000000
+0
 
 
 -- !query 55
@@ -584,7 +584,7 @@ SELECT EXTRACT(EPOCH FROM TIMESTAMP   '1970-01-01')
 -- !query 55 schema
 struct<date_part('EPOCH', TIMESTAMP '1970-01-01 00:00:00'):decimal(20,6)>
 -- !query 55 output
-0.000000
+0
 
 
 -- !query 56
