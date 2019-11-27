@@ -46,7 +46,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
     val analyzed = query.analyzed
     logDebug(s"Result Schema: ${analyzed.output}")
     if (analyzed.output.isEmpty) {
-      new Schema(Arrays.asList(new FieldSchema("Response code", "string", "")), null)
+      new Schema(Arrays.asList(), null)
     } else {
       val fieldSchemas = analyzed.output.map { attr =>
         new FieldSchema(attr.name, attr.dataType.catalogString, "")
@@ -89,6 +89,20 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       res.asInstanceOf[JArrayList[String]].addAll(hiveResponse.asJava)
       hiveResponse = null
       true
+    }
+  }
+
+  /**
+   * Provides results as a scala Seq of rows of Seq
+   * @return Seq[Seq[String]] as rows[columns]
+   */
+  def getResultsAsScala: Seq[Seq[String]] = {
+    if (hiveResponse == null) {
+      Nil
+    } else {
+      val result:Seq[Seq[String]] = hiveResponse.map(_.split("\t").toSeq)
+      hiveResponse = null
+      result
     }
   }
 
