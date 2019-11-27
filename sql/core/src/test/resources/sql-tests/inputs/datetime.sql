@@ -43,4 +43,6 @@ select timestamp '2019-01-01\t';
 select date '2001-09-28' + null;
 select date '2001-09-28' - null;
 select null + date '2001-09-28';
-select timestamp'2019-10-06 10:11:12.345678' - null;
+select null - date '2019-10-06';
+select null - timestamp '2019-10-06 10:11:12.345678';
+select timestamp '2019-10-06 10:11:12.345678' - null;
