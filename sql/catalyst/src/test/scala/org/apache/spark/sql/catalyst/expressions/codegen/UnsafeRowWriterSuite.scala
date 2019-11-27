@@ -52,13 +52,13 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
   }
 
   test("write and get calendar intervals through UnsafeRowWriter") {
-    val rowWriter1 = new UnsafeRowWriter(2)
-    rowWriter1.resetRowWriter()
-    rowWriter1.write(0, null.asInstanceOf[CalendarInterval])
-    assert(rowWriter1.getRow.isNullAt(0))
-    assert(rowWriter1.getRow.getInterval(0) === null)
+    val rowWriter = new UnsafeRowWriter(2)
+    rowWriter.resetRowWriter()
+    rowWriter.write(0, null.asInstanceOf[CalendarInterval])
+    assert(rowWriter.getRow.isNullAt(0))
+    assert(rowWriter.getRow.getInterval(0) === null)
     val interval = new CalendarInterval(0, 1, 0)
-    rowWriter1.write(1, interval)
-    assert(rowWriter1.getRow.getInterval(1) === interval)
+    rowWriter.write(1, interval)
+    assert(rowWriter.getRow.getInterval(1) === interval)
   }
 }
