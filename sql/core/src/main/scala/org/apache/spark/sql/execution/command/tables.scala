@@ -100,14 +100,7 @@ case class CreateTableLikeCommand(
     }
 
     val newStorage = if (fileFormat.inputFormat.isDefined) {
-      sourceTableDesc.storage.copy(
-        locationUri = fileFormat.locationUri,
-        inputFormat = fileFormat.inputFormat,
-        outputFormat = fileFormat.outputFormat,
-        serde = fileFormat.serde,
-        properties = fileFormat.properties,
-        compressed = sourceTableDesc.storage.compressed
-      )
+      fileFormat
     } else {
       sourceTableDesc.storage.copy(locationUri = fileFormat.locationUri)
     }
