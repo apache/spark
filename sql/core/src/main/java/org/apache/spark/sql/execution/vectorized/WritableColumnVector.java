@@ -21,7 +21,6 @@ import java.math.BigInteger;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.apache.orc.OrcProto;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;

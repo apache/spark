@@ -955,6 +955,5 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
         Row(2, new CalendarInterval(0, 2, 0)) ::
         Row(3, new CalendarInterval(0, 3, 0)) :: Nil)
     assert(df3.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
-
   }
 }

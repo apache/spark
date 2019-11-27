@@ -148,7 +148,6 @@ public abstract class UnsafeWriter {
     }
     // move the cursor forward.
     increaseCursor(16);
-
   }
 
   public final void write(int ordinal, UnsafeRow row) {
