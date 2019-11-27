@@ -35,9 +35,11 @@ SELECT COUNT(id) FILTER (WHERE hiredate = date "2001-01-01") FROM emp;
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData GROUP BY a;
 SELECT a, COUNT(b) FILTER (WHERE a != 2) FROM testData GROUP BY b;
 SELECT COUNT(a) FILTER (WHERE a >= 0), COUNT(b) FILTER (WHERE a >= 3) FROM testData GROUP BY a;
+SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > date "2003-01-01") FROM emp GROUP BY dept_id;
 
 -- Aggregate with filter and grouped by literals.
 SELECT 'foo', COUNT(a) FILTER (WHERE b <= 2) FROM testData GROUP BY 1;
+SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= date "2003-01-01") FROM emp GROUP BY 1;
 
 -- Aggregate with filter and grouped by literals (hash aggregate).
 SELECT 'foo', APPROX_COUNT_DISTINCT(a) FILTER (WHERE b >= 0) FROM testData WHERE a = 0 GROUP BY 1;
@@ -56,7 +58,12 @@ FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY a;
 
 -- Aliases in SELECT could be used in GROUP BY
 SELECT a AS k, COUNT(b) FILTER (WHERE b = 1 OR b = 2) FROM testData GROUP BY k;
+SELECT dept_id as k,
+       SUM(salary) FILTER (WHERE hiredate < date "2005-01-01" OR hiredate > date "2010-01-01")
+FROM emp GROUP BY k;
 SELECT a AS k, COUNT(b) FILTER (WHERE NOT b < 0) FROM testData GROUP BY k HAVING k > 1;
+SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= date "2005-01-01")
+FROM emp GROUP BY k HAVING k < 70;
 
 -- Aggregate functions cannot be used in GROUP BY
 SELECT COUNT(b) FILTER (WHERE a > 0) AS k FROM testData GROUP BY k;
