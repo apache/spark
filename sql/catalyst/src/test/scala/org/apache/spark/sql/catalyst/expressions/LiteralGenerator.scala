@@ -22,8 +22,9 @@ import java.time.{Duration, Instant, LocalDate}
 import java.util.concurrent.TimeUnit
 
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.Assertions._
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -107,7 +108,7 @@ object LiteralGenerator {
     val minDay = LocalDate.of(1, 1, 1).toEpochDay
     val maxDay = LocalDate.of(9999, 12, 31).toEpochDay
     for { day <- Gen.choose(minDay, maxDay) }
-      yield Literal.create(new Date(day * DateTimeUtils.MILLIS_PER_DAY), DateType)
+      yield Literal.create(new Date(day * MILLIS_PER_DAY), DateType)
   }
 
   lazy val timestampLiteralGen: Gen[Literal] = {

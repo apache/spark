@@ -444,7 +444,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _eventLogCodec = {
       val compress = _conf.get(EVENT_LOG_COMPRESS)
       if (compress && isEventLogEnabled) {
-        Some(CompressionCodec.getCodecName(_conf)).map(CompressionCodec.getShortName)
+        Some(_conf.get(EVENT_LOG_COMPRESSION_CODEC)).map(CompressionCodec.getShortName)
       } else {
         None
       }
@@ -573,7 +573,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
-    _env.metricsSystem.start()
+    _env.metricsSystem.start(_conf.get(METRICS_STATIC_SOURCES_ENABLED))
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
@@ -2883,6 +2883,14 @@ object SparkContext extends Logging {
             "Asked to launch cluster with %d MiB RAM / worker but requested %d MiB/worker".format(
               memoryPerSlaveInt, sc.executorMemory))
         }
+
+        // For host local mode setting the default of SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED
+        // to false because this mode is intended to be used for testing and in this case all the
+        // executors are running on the same host. So if host local reading was enabled here then
+        // testing of the remote fetching would be secondary as setting this config explicitly to
+        // false would be required in most of the unit test (despite the fact that remote fetching
+        // is much more frequent in production).
+        sc.conf.setIfMissing(SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
 
         val scheduler = new TaskSchedulerImpl(sc)
         val localCluster = new LocalSparkCluster(

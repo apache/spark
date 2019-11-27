@@ -123,7 +123,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="bottom"' +
+           |    'data-toggle="tooltip" data-placement="top"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
            |    'data-html="true">Executor ${e.id} added</div>'
@@ -139,7 +139,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-toggle="tooltip" data-placement="top"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -183,7 +183,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="right">
+      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="top">
         Event Timeline
       </a>
     </span> ++
@@ -629,7 +629,11 @@ private[ui] class JobPagedTable(
       </td>
       <td>{jobTableRow.formattedDuration}</td>
       <td class="stage-progress-cell">
-        {job.numCompletedStages}/{job.stageIds.size - job.numSkippedStages}
+        {job.numCompletedStages}/{
+          // A job contains at least 1 stage but if a job has no partitions(tasks),
+          // the stage is not submitted so the total stage should be regarded as 0.
+          if (job.numTasks > 0) job.stageIds.size - job.numSkippedStages else 0
+        }
         {if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)"}
         {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
       </td>

@@ -21,10 +21,10 @@ import java.time.LocalDateTime
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_HOUR
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{FloatType, TimestampType}
+import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class ExpressionSQLBuilderSuite extends SparkFunSuite {
@@ -89,7 +89,7 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     val timestamp = LocalDateTime.of(2016, 1, 1, 0, 0, 0, 987654321)
       .atZone(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       .toInstant
-    checkSQL(Literal(timestamp), "TIMESTAMP('2016-01-01 00:00:00.987654')")
+    checkSQL(Literal(timestamp), "TIMESTAMP '2016-01-01 00:00:00.987654'")
     // TODO tests for decimals
   }
 
@@ -165,16 +165,16 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
   }
 
   test("interval arithmetic") {
-    val interval = Literal(new CalendarInterval(0, 0, CalendarInterval.MICROS_PER_HOUR))
+    val interval = Literal(new CalendarInterval(0, 0, MICROS_PER_HOUR))
 
     checkSQL(
       TimeAdd('a, interval),
-      "`a` + interval 1 hours"
+      "`a` + INTERVAL '1 hours'"
     )
 
     checkSQL(
       TimeSub('a, interval),
-      "`a` - interval 1 hours"
+      "`a` - INTERVAL '1 hours'"
     )
   }
 }

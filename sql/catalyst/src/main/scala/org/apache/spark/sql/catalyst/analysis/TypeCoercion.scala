@@ -132,12 +132,9 @@ object TypeCoercion {
     case (NullType, StringType) => Some(StringType)
 
     // Cast to TimestampType when we compare DateType with TimestampType
-    // if conf.compareDateTimestampInTimestamp is true
     // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
-    case (TimestampType, DateType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
-    case (DateType, TimestampType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
+    case (TimestampType, DateType) => Some(TimestampType)
+    case (DateType, TimestampType) => Some(TimestampType)
 
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
@@ -855,6 +852,11 @@ object TypeCoercion {
       case Divide(l @ CalendarIntervalType(), r @ NumericType()) =>
         DivideInterval(l, r)
 
+      case b @ BinaryOperator(l @ CalendarIntervalType(), r @ NullType()) =>
+        b.withNewChildren(Seq(l, Cast(r, CalendarIntervalType)))
+      case b @ BinaryOperator(l @ NullType(), r @ CalendarIntervalType()) =>
+        b.withNewChildren(Seq(Cast(l, CalendarIntervalType), r))
+
       case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
       case Add(l @ DateType(), r @ NullType()) => DateAdd(l, Cast(r, IntegerType))
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
@@ -884,8 +886,12 @@ object TypeCoercion {
       case e if !e.childrenResolved => e
 
       // If DecimalType operands are involved, DecimalPrecision will handle it
+      // If CalendarIntervalType operands are involved, DateTimeOperations will handle it
       case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
-          !right.dataType.isInstanceOf[DecimalType] && left.dataType != right.dataType =>
+          !right.dataType.isInstanceOf[DecimalType] &&
+          !left.dataType.isInstanceOf[CalendarIntervalType] &&
+          !right.dataType.isInstanceOf[CalendarIntervalType] &&
+          left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.

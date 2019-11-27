@@ -1,9 +1,17 @@
 -- Tests EXISTS subquery support. Tests Exists subquery
 -- used in Joins (Both when joins occurs in outer and suquery blocks)
--- List of configuration the test suite is run against:
---SET spark.sql.autoBroadcastJoinThreshold=10485760
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
+
+-- There are 2 dimensions we want to test
+--  1. run with broadcast hash join, sort merge join or shuffle hash join.
+--  2. run with whole-stage-codegen, operator codegen or no codegen.
+
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=10485760
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
+
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),

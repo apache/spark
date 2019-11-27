@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Comparator
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
@@ -283,6 +284,113 @@ case class ArrayTransform(
   }
 
   override def prettyName: String = "transform"
+}
+
+/**
+ * Sorts elements in an array using a comparator function.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_(expr, func) - Sorts the input array in ascending order. The elements of the
+    input array must be orderable. Null elements will be placed at the end of the returned
+    array. Since 3.0.0 this function also sorts and returns the array based on the given
+    comparator function. The comparator will take two arguments
+    representing two elements of the array.
+    It returns -1, 0, or 1 as the first element is less than, equal to, or greater
+    than the second element. If the comparator function returns other
+    values (including null), the function will fail and raise an error.
+    """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(5, 6, 1), (left, right) -> case when left < right then -1 when left > right then 1 else 0 end);
+       [1,5,6]
+      > SELECT _FUNC_(array('bc', 'ab', 'dc'), (left, right) -> case when left is null and right is null then 0 when left is null then -1 when right is null then 1 when left < right then 1 when left > right then -1 else 0 end);
+       ["dc","bc","ab"]
+      > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
+       ["a","b","c","d",null]
+  """,
+  since = "2.4.0")
+// scalastyle:on line.size.limit
+case class ArraySort(
+    argument: Expression,
+    function: Expression)
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  def this(argument: Expression) = this(argument, ArraySort.defaultComparator)
+
+  @transient lazy val elementType: DataType =
+    argument.dataType.asInstanceOf[ArrayType].elementType
+
+  override def dataType: ArrayType = argument.dataType.asInstanceOf[ArrayType]
+  override def checkInputDataTypes(): TypeCheckResult = {
+    checkArgumentDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        argument.dataType match {
+          case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+            if (function.dataType == IntegerType) {
+              TypeCheckResult.TypeCheckSuccess
+            } else {
+              TypeCheckResult.TypeCheckFailure("Return type of the given function has to be " +
+                "IntegerType")
+            }
+          case ArrayType(dt, _) =>
+            val dtSimple = dt.catalogString
+            TypeCheckResult.TypeCheckFailure(
+              s"$prettyName does not support sorting array of type $dtSimple which is not " +
+                "orderable")
+          case _ =>
+            TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
+        }
+      case failure => failure
+    }
+  }
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySort = {
+    val ArrayType(elementType, containsNull) = argument.dataType
+        copy(function =
+          f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
+  }
+
+  @transient lazy val LambdaFunction(_,
+    Seq(firstElemVar: NamedLambdaVariable, secondElemVar: NamedLambdaVariable), _) = function
+
+  def comparator(inputRow: InternalRow): Comparator[Any] = {
+    val f = functionForEval
+    (o1: Any, o2: Any) => {
+      firstElemVar.value.set(o1)
+      secondElemVar.value.set(o2)
+      f.eval(inputRow).asInstanceOf[Int]
+    }
+  }
+
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    if (elementType != NullType) {
+      java.util.Arrays.sort(arr, comparator(inputRow))
+    }
+    new GenericArrayData(arr.asInstanceOf[Array[Any]])
+  }
+
+  override def prettyName: String = "array_sort"
+}
+
+object ArraySort {
+
+  def comparator(left: Expression, right: Expression): Expression = {
+    val lit0 = Literal(0)
+    val lit1 = Literal(1)
+    val litm1 = Literal(-1)
+
+    If(And(IsNull(left), IsNull(right)), lit0,
+      If(IsNull(left), lit1, If(IsNull(right), litm1,
+        If(LessThan(left, right), litm1, If(GreaterThan(left, right), lit1, lit0)))))
+  }
+
+  val defaultComparator: LambdaFunction = {
+    val left = UnresolvedNamedLambdaVariable(Seq("left"))
+    val right = UnresolvedNamedLambdaVariable(Seq("right"))
+    LambdaFunction(comparator(left, right), Seq(left, right))
+  }
 }
 
 /**

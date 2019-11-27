@@ -414,7 +414,8 @@ private[spark] class AppStatusListener(
         val e = it.next()
         if (job.stageIds.contains(e.getKey()._1)) {
           val stage = e.getValue()
-          if (v1.StageStatus.PENDING.equals(stage.status)) {
+          // If a stage has no partitions(tasks), the stage should not be marked as skipped.
+          if (v1.StageStatus.PENDING.equals(stage.status) && stage.info.numTasks > 0) {
             stage.status = v1.StageStatus.SKIPPED
             job.skippedStages += stage.info.stageId
             job.skippedTasks += stage.info.numTasks

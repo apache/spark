@@ -519,7 +519,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     def getLocationIfExists: Option[(String, String)] = {
       val opts = CaseInsensitiveMap(extraOptions.toMap)
-      opts.get("path").map("location" -> _)
+      opts.get("path").map(TableCatalog.PROP_LOCATION -> _)
     }
 
     val command = (mode, tableOpt) match {
@@ -527,7 +527,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
-        AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan)
+        AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
         ReplaceTableAsSelect(

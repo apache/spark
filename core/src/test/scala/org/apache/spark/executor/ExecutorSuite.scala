@@ -33,6 +33,7 @@ import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.Assertions._
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar

@@ -313,11 +313,11 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expression[EveryAgg]("every"),
-    expression[EveryAgg]("bool_and"),
-    expression[AnyAgg]("any"),
-    expression[AnyAgg]("some"),
-    expression[AnyAgg]("bool_or"),
+    expression[BoolAnd]("every"),
+    expression[BoolAnd]("bool_and"),
+    expression[BoolOr]("any"),
+    expression[BoolOr]("some"),
+    expression[BoolOr]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -419,6 +419,10 @@ object FunctionRegistry {
     expression[TimeWindow]("window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[MakeInterval]("make_interval"),
+    expression[JustifyDays]("justify_days"),
+    expression[JustifyHours]("justify_hours"),
+    expression[JustifyInterval]("justify_interval"),
     expression[DatePart]("date_part"),
 
     // collection functions
@@ -486,7 +490,8 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method"),
-    expression[Version]("version"),
+    expression[SparkVersion]("version"),
+    expression[TypeOf]("typeof"),
 
     // grouping sets
     expression[Cube]("cube"),
