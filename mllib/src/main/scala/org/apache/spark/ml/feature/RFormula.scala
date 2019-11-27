@@ -32,6 +32,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, expr}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.VersionUtils
 
 /**
  * Base trait for [[RFormula]] and [[RFormulaModel]].
@@ -499,8 +500,9 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       val label = data.getString(0)
       val terms = data.getAs[Seq[Seq[String]]](1)
       val hasIntercept = data.getBoolean(2)
-      // Check for old saved models which do not have evalExprs.
-      val evalExprs = if (data.size==4) data.getAs[Seq[String]](3) else Seq[String]()
+      // Check for old saved models (spark version < 3), they do not have evalExprs.
+      val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+      val evalExprs = if (major.toInt < 3) Seq[String]() else data.getAs[Seq[String]](3)
       val resolvedRFormula = ResolvedRFormula(label, terms, hasIntercept, evalExprs)
 
       val pmPath = new Path(path, "pipelineModel").toString
