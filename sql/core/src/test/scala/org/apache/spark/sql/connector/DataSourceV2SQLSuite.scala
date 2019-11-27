@@ -1807,6 +1807,18 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-30001: session catalog name can be specified in SQL statements") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+
+    withTable("t") {
+      sql("CREATE TABLE t USING json AS SELECT 1 AS i")
+      checkAnswer(sql("select * from t"), Row(1))
+      checkAnswer(sql("select * from spark_catalog.t"), Row(1))
+      checkAnswer(sql("select * from spark_catalog.default.t"), Row(1))
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
