@@ -36,28 +36,31 @@ case class DescribeTableExec(
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
+    addPartitioning(rows)
 
     if (isExtended) {
-      addDescription(rows)
-      addLocation(rows)
-      addPartitioning(rows)
-      addProperties(rows)
+      addTableDetails(rows)
     }
     rows
   }
 
-  private def addDescription(rows: ArrayBuffer[InternalRow]): Unit = {
-    if (table.properties.containsKey(TableCatalog.PROP_COMMENT)) {
-      rows += emptyRow()
-      rows += toCatalystRow("Description", table.properties.get(TableCatalog.PROP_COMMENT), "")
-    }
-  }
+  private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
+    rows += emptyRow()
+    rows += toCatalystRow("#Detailed Table Information", "", "")
+    rows += toCatalystRow("Name", table.name(), "")
 
-  private def addLocation(rows: ArrayBuffer[InternalRow]): Unit = {
-    if (table.properties.containsKey(TableCatalog.PROP_LOCATION)) {
-      rows += emptyRow()
-      rows += toCatalystRow("Location", table.properties.get(TableCatalog.PROP_LOCATION), "")
-    }
+    TableCatalog.RESERVED_PROPERTIES.asScala.toList.foreach(propKey => {
+      if (table.properties.containsKey(propKey)) {
+        rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
+      }
+    })
+    val properties =
+      table.properties.asScala.toList
+        .filter(kv => !TableCatalog.RESERVED_PROPERTIES.contains(kv._1))
+        .sortBy(_._1).map {
+        case (key, value) => key + "=" + value
+      }.mkString("[", ",", "]")
+    rows += toCatalystRow("Table Properties", properties, "")
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -69,24 +72,13 @@ case class DescribeTableExec(
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
-    rows += toCatalystRow(" Partitioning", "", "")
-    rows += toCatalystRow("--------------", "", "")
+    rows += toCatalystRow("#Partition Information", "", "")
     if (table.partitioning.isEmpty) {
       rows += toCatalystRow("Not partitioned", "", "")
     } else {
       rows ++= table.partitioning.zipWithIndex.map {
         case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
       }
-    }
-  }
-
-  private def addProperties(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows += emptyRow()
-    rows += toCatalystRow(" Table Property", " Value", "")
-    rows += toCatalystRow("----------------", "-------", "")
-    rows ++= table.properties.asScala.toList
-      .filter(kv => !TableCatalog.RESERVED_PROPERTIES.contains(kv._1)).sortBy(_._1).map {
-      case (key, value) => toCatalystRow(key, value, "")
     }
   }
 

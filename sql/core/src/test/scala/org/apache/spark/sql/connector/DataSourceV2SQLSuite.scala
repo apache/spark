@@ -112,7 +112,10 @@ class DataSourceV2SQLSuite
     val description = descriptionDf.collect()
     assert(description === Seq(
       Row("id", "bigint", ""),
-      Row("data", "string", "")))
+      Row("data", "string", ""),
+      Row("", "", ""),
+      Row("#Partition Information", "", ""),
+      Row("Part 0", "id", "")))
   }
 
   test("DescribeTable with v2 catalog when table does not exist.") {
@@ -140,18 +143,15 @@ class DataSourceV2SQLSuite
       Array("id", "bigint", ""),
       Array("data", "string", ""),
       Array("", "", ""),
-      Array("Description", "this is a test table", ""),
-      Array("", "", ""),
-      Array("Location", "/tmp/testcat/table_name", ""),
-      Array("", "", ""),
-      Array("Partitioning", "", ""),
-      Array("--------------", "", ""),
+      Array("#Partition Information", "", ""),
       Array("Part 0", "id", ""),
       Array("", "", ""),
-      Array("Table Property", "Value", ""),
-      Array("----------------", "-------", ""),
-      Array("bar", "baz", ""),
-      Array("provider", "foo", "")))
+      Array("#Detailed Table Information", "", ""),
+      Array("Name", "testcat.table_name", ""),
+      Array("Comment", "this is a test table", ""),
+      Array("Location", "/tmp/testcat/table_name", ""),
+      Array("Provider", "foo", ""),
+      Array("Table Properties", "[bar=baz]", "")))
 
   }
 
