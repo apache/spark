@@ -1124,6 +1124,20 @@ See the [configuration page](configuration.html) for information on Spark config
     File should specified as <code>file://path/to/file </code> or absolute path.
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.driver.restartPolicy</code></td>
+  <td>Never</td>
+  <td>
+    Restart policy of the driver pod.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.restartPolicy</code></td>
+  <td>Always</td>
+  <td>
+    Restart policy of the executor pods.
+  </td>
+</tr>
 </table>
 
 #### Pod template properties
@@ -1186,9 +1200,10 @@ See the below table for the full list of pod specifications that will be overwri
 </tr>
 <tr>
   <td>restartPolicy</td>
-  <td><code>"never"</code></td>
+  <td>Value of <code>spark.kubernetes.driver.restartPolicy</code> or <code>spark.kubernetes.executor.restartPolicy</code></td>
   <td>
-    Spark assumes that both drivers and executors never restart.
+    Spark will override <code>restartPolicy</code> with the configured values if specified,
+    otherwise defaulting to "Never" for the driver and "Always" for the executors.
   </td>
 </tr>
 <tr>

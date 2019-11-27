@@ -41,6 +41,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     .get(DRIVER_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
+  private val driverRestartPolicy = conf.get(KUBERNETES_DRIVER_RESTART_POLICY)
+
   // CPU settings
   private val driverCpuCores = conf.get(DRIVER_CORES)
   private val driverCoresRequest = conf
@@ -141,7 +143,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .addToAnnotations(conf.annotations.asJava)
         .endMetadata()
       .editOrNewSpec()
-        .withRestartPolicy("Never")
+        .withRestartPolicy(driverRestartPolicy)
         .addToNodeSelector(conf.nodeSelector.asJava)
         .addToImagePullSecrets(conf.imagePullSecrets: _*)
         .endSpec()

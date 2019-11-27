@@ -43,6 +43,8 @@ private[spark] class BasicExecutorFeatureStep(
     .sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
+  private val executorRestartPolicy = kubernetesConf.get(KUBERNETES_EXECUTOR_RESTART_POLICY)
+
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
   private val driverUrl = RpcEndpointAddress(
@@ -204,7 +206,7 @@ private[spark] class BasicExecutorFeatureStep(
         .endMetadata()
       .editOrNewSpec()
         .withHostname(hostname)
-        .withRestartPolicy("Never")
+        .withRestartPolicy(executorRestartPolicy)
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
         .endSpec()

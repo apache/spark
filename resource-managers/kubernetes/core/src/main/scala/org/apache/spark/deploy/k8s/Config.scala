@@ -338,6 +338,20 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_EXECUTOR_RESTART_POLICY =
+    ConfigBuilder("spark.kubernetes.executor.restartPolicy")
+    .doc("Restart policy of the executor pods")
+    .stringConf
+    .checkValues(Set("Always", "Never", "OnFailure"))
+    .createWithDefault("Always")
+
+  val KUBERNETES_DRIVER_RESTART_POLICY =
+    ConfigBuilder("spark.kubernetes.driver.restartPolicy")
+    .doc("Restart policy of the driver pod")
+    .stringConf
+    .checkValues(Set("Always", "Never", "OnFailure"))
+    .createWithDefault("Never")
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
