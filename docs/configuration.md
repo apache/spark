@@ -1852,9 +1852,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
   <td>10000</td>
   <td>
-    Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
-    value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
-    driver using more memory.
+    The default capacity for event queues. Spark will try to initialize an event queue 
+    using capacity specified by `spark.scheduler.listenerbus.eventqueue.queueName.capacity` 
+    first. If it's not configured, Spark will use the default capacity specified by this 
+    config. Note that capacity must be greater than 0. Consider increasing value (e.g. 20000) 
+    if listener events are dropped. Increasing this value may result in the driver using more memory.
   </td>
 </tr>
 <tr>

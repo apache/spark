@@ -40,7 +40,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   override def nullable: Boolean = true
 
-  override def dataType: DataType = ArrayType(child.dataType)
+  override def dataType: DataType = ArrayType(child.dataType, false)
 
   // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
   // actual order of input rows.
