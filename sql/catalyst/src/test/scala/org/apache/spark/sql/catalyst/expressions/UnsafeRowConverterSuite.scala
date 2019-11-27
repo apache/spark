@@ -124,6 +124,33 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     (Timestamp.valueOf("2015-06-22 08:10:25"))
   }
 
+  testBothCodegenAndInterpreted(
+    "basic conversion with primitive, string and interval types") {
+    val factory = UnsafeProjection
+    val fieldTypes: Array[DataType] = Array(LongType, StringType, CalendarIntervalType)
+    val converter = factory.create(fieldTypes)
+
+    val row = new SpecificInternalRow(fieldTypes)
+    row.setLong(0, 0)
+    row.update(1, UTF8String.fromString("Hello"))
+    val interval1 = new CalendarInterval(3, 1, 1000L)
+    row.update(2, interval1)
+
+    val unsafeRow: UnsafeRow = converter.apply(row)
+    assert(unsafeRow.getSizeInBytes ===
+      8 + 8 * 3 + roundedSize("Hello".getBytes(StandardCharsets.UTF_8).length) + 16)
+
+    assert(unsafeRow.getLong(0) === 0)
+    assert(unsafeRow.getString(1) === "Hello")
+    // Date is represented as Int in unsafeRow
+    assert(unsafeRow.getInterval(2) === interval1)
+
+    val interval2 = new CalendarInterval(1, 2, 3L)
+
+    unsafeRow.setInterval(2, interval2)
+    assert(unsafeRow.getInterval(2) === interval2)
+  }
+
   testBothCodegenAndInterpreted("null handling") {
     val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
