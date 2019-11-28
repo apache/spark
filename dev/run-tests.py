@@ -283,12 +283,16 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.7": ["-Phadoop-2.7", "-Phive-1.2"],
-        "hadoop3.2": ["-Phadoop-3.2", "-Phive-2.3"],
+        "hadoop2.7": ["-Phadoop-2.7"],
+        "hadoop3.2": ["-Phadoop-3.2"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
-        return sbt_maven_hadoop_profiles[hadoop_version]
+        if ("ghprbPullTitle" in os.environ and
+                "test-hive1.2" in os.environ["ghprbPullTitle"].lower()):
+            return sbt_maven_hadoop_profiles[hadoop_version] + ["-Phive-1.2"]
+        else:
+            return sbt_maven_hadoop_profiles[hadoop_version]
     else:
         print("[error] Could not find", hadoop_version, "in the list. Valid options",
               " are", sbt_maven_hadoop_profiles.keys())
