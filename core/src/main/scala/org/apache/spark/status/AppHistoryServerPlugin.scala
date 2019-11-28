@@ -35,4 +35,11 @@ private[spark] trait AppHistoryServerPlugin {
    * Sets up UI of this plugin to rebuild the history UI.
    */
   def setupUI(ui: SparkUI): Unit
+
+  /**
+   * Order of the plugin tab that need to display in the history UI.
+   */
+  def displayOrder: Int = {
+    Integer.MAX_VALUE
+  }
 }

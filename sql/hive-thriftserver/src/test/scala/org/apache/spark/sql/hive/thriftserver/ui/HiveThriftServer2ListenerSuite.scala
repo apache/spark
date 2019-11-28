@@ -95,17 +95,14 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
       time += 1
       listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId2",
         "user", time))
-
       time += 1
       listener.onOtherEvent(SparkListenerThriftServerSessionClosed("sessionId1", time))
-
       time += 1
       listener.onOtherEvent(SparkListenerThriftServerSessionClosed("sessionId2", time))
-
       listener.onOtherEvent(SparkListenerThriftServerSessionCreated("localhost", "sessionId3",
         "user", time))
       time += 1
-      listener.onOtherEvent(SparkListenerThriftServerSessionClosed("sessionId3", 4))
+      listener.onOtherEvent(SparkListenerThriftServerSessionClosed("sessionId3", time))
 
       if (!live) {
         kvstore.close(false)
@@ -152,7 +149,7 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
   private def createAppStatusStore(live: Boolean) = {
     val sparkConf = new SparkConf()
     sparkConf.set(ASYNC_TRACKING_ENABLED, false)
-      .set(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT.key, "1")
+      .set(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT, 1)
       .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     kvstore = new ElementTrackingStore(new InMemoryStore, sparkConf)
     if (live) {

@@ -33,4 +33,12 @@ class SQLHistoryServerPlugin extends AppHistoryServerPlugin {
       new SQLTab(sqlStatusStore, ui)
     }
   }
+
+  override def displayOrder: Int = {
+    SQLHistoryServerPlugin.DISPLAY_ORDER
+  }
+}
+
+private object SQLHistoryServerPlugin {
+  val DISPLAY_ORDER = 0
 }

@@ -352,41 +352,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val ui = SparkUI.create(None, new HistoryAppStatusStore(conf, kvstore), conf, secManager,
       app.info.name, HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
       attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
-    setupPluginUI(ui)
+
+    // place the tab in UI based on the display order
+    loadPlugins().toSeq.sortBy(_.displayOrder).foreach(_.setupUI(ui))
+
     val loadedUI = LoadedAppUI(ui)
     synchronized {
       activeUIs((appId, attemptId)) = loadedUI
     }
 
     Some(loadedUI)
-  }
-
-  /**
-   * This method is mainly to handle ordering of the tab compared to
-   * the Live UI. For Thriftserver applications, this method ensure
-   * SQL tab to come first, then JDBC/ODBC tab.
-   * @param ui
-   */
-  private def setupPluginUI(ui: SparkUI): Unit = {
-    val plugins = loadPlugins().toSeq
-
-    var sqlTab: Option[AppHistoryServerPlugin] = None
-    var jdbcTab: Option[AppHistoryServerPlugin] = None
-    var otherTabs: Seq[AppHistoryServerPlugin] = Seq()
-
-    plugins.foreach{ plugin =>
-      if (plugin.toString.contains("SQLHistoryServerPlugin")) {
-        sqlTab = Some(plugin)
-      } else if (plugin.toString.contains("HiveThriftServer2HistoryServerPlugin")) {
-        jdbcTab = Some(plugin)
-      } else {
-        otherTabs = otherTabs :+ plugin
-      }
-    }
-    // SQL tab should come first, then JDBC/ODBC server tab
-    sqlTab.foreach(_.setupUI(ui))
-    jdbcTab.foreach(_.setupUI(ui))
-    otherTabs.foreach(_.setupUI(ui))
   }
 
   override def getEmptyListingHtml(): Seq[Node] = {

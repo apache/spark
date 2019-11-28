@@ -34,5 +34,13 @@ class HiveThriftServer2HistoryServerPlugin extends AppHistoryServerPlugin {
       new ThriftServerTab(store, ui)
     }
   }
+
+  override def displayOrder: Int = {
+    HiveThriftServer2HistoryServerPlugin.DISPLAY_ORDER
+  }
+}
+
+private object HiveThriftServer2HistoryServerPlugin {
+  val DISPLAY_ORDER = 1
 }
 
