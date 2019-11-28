@@ -1432,8 +1432,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       reader
     }
 
-    // To simplify the test, this test directly calls mergeApplicationListing() instead of going
-    // through checkForLogs().
     withTempDir { dir =>
       val provider = new EligibilityCallTrackingFsHistoryProvider
 

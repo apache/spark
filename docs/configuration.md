@@ -1031,7 +1031,14 @@ Apart from these, the following properties are also available, and may be useful
     By default, all event log files will be retained. Please set the configuration and
     <code>spark.eventLog.rolling.maxFileSize</code> accordingly if you want to control
     the overall size of event log files. The event log files older than these retained
-    files will be compacted into single file and deleted afterwards.
+    files will be compacted into single file and deleted afterwards.<br/>
+    NOTE 1: Compaction will happen in Spark History Server, which means the same value
+    will be applied across applications which are being loaded in Spark History Server,
+    as well as compaction and cleanup would require running Spark History Server.<br/>
+    NOTE 2: Spark History Server may not compact the old event log files if it figures
+    out compaction on event log for such application won't reduce the size at expected
+    rate threshold. For streaming query (including Structured Streaming) we normally
+    expect compaction will run, but for batch query compaction won't run in most cases.
   </td>
 </tr>
 <tr>

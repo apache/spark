@@ -21,19 +21,18 @@ import scala.collection.mutable
 import scala.io.{Codec, Source}
 
 import org.apache.hadoop.fs.Path
-import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper.{TestEventFilter1, TestEventFilter2}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.Utils
 
 class FilteredEventLogFileRewriterSuite extends SparkFunSuite {
   test("rewrite files with test filters") {
     def writeEventToWriter(writer: EventLogFileWriter, event: SparkListenerEvent): String = {
-      val line = convertEvent(event)
+      val line = EventLogTestHelper.convertEvent(event)
       writer.writeEvent(line, flushLogger = true)
       line
     }
@@ -87,9 +86,5 @@ class FilteredEventLogFileRewriterSuite extends SparkFunSuite {
           s"is not expected: expected ${expectedLines.length} / actual $linesLength")
       }
     }
-  }
-
-  private def convertEvent(event: SparkListenerEvent): String = {
-    compact(render(JsonProtocol.sparkEventToJson(event)))
   }
 }
