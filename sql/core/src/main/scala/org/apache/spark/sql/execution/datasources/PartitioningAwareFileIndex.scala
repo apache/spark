@@ -224,13 +224,12 @@ abstract class PartitioningAwareFileIndex(
         def qualifiedPath(path: Path): Path = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
         val qualifiedBasePath = qualifiedPath(userDefinedBasePath)
-        rootPaths.find(p => !qualifiedPath(p).toString.
-          startsWith(qualifiedBasePath.toString)) match {
-          case Some(rp) => throw new IllegalArgumentException(
-            s"Wrong basePath $userDefinedBasePath for the root path: $rp")
-
-          case None => // valid basePath
-        }
+        rootPaths
+          .find(p => !qualifiedPath(p).toString.startsWith(qualifiedBasePath.toString))
+          .foreach { rp =>
+            throw new IllegalArgumentException(
+              s"Wrong basePath $userDefinedBasePath for the root path: $rp")
+          }
         Set(fs.makeQualified(userDefinedBasePath))
 
       case None =>
