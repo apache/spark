@@ -48,7 +48,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[ml] trait FactorizationMachinesParams
   extends PredictorParams
-  with HasMaxIter with HasStepSize with HasTol with HasSolver {
+  with HasMaxIter with HasStepSize with HasTol with HasSolver with HasSeed {
 
   /**
    * Param for dimensionality of the factors (&gt;= 0)
@@ -142,9 +142,10 @@ private[ml] trait FactorizationMachinesParams
 private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
 
   private[ml] def initCoefficients(numFeatures: Int): OldVector = {
+    val rnd = new Random($(seed))
     val initialCoefficients =
       OldVectors.dense(
-        Array.fill($(factorSize) * numFeatures)(Random.nextGaussian() * $(initStd)) ++
+        Array.fill($(factorSize) * numFeatures)(rnd.nextGaussian() * $(initStd)) ++
         (if ($(fitLinear)) new Array[Double](numFeatures) else Array.emptyDoubleArray) ++
         (if ($(fitBias)) new Array[Double](1) else Array.emptyDoubleArray))
     initialCoefficients
@@ -210,7 +211,9 @@ private[ml] object FactorizationMachines {
       factorSize: Int,
       fitBias: Boolean,
       fitLinear: Boolean,
-      numFeatures: Int): BaseFactorizationMachinesGradient = {
+      numFeatures: Int
+    ): BaseFactorizationMachinesGradient = {
+
     lossFunc match {
       case LogisticLoss =>
         new LogisticFactorizationMachinesGradient(factorSize, fitBias, fitLinear, numFeatures)
@@ -221,15 +224,22 @@ private[ml] object FactorizationMachines {
   }
 
   def splitCoefficients(
-    coefficients: Vector,
-    numFeatures: Int,
-    factorSize: Int,
-    fitBias: Boolean,
-    fitLinear: Boolean
-  ): (Double, Vector, Matrix) = {
+      coefficients: Vector,
+      numFeatures: Int,
+      factorSize: Int,
+      fitBias: Boolean,
+      fitLinear: Boolean
+    ): (Double, Vector, Matrix) = {
+
+    val coefficientsSize = numFeatures * factorSize +
+      (if (fitLinear) numFeatures else 0) + (if (fitBias) 1 else 0)
+    require(coefficientsSize == coefficients.size,
+      s"coefficients.size did not match the excepted size ${coefficientsSize}")
+
     val bias = if (fitBias) coefficients(coefficients.size - 1) else 0.0
     val linear: Vector = if (fitLinear) {
-      new DenseVector(coefficients.toArray.slice(numFeatures * factorSize, coefficients.size - 1))
+      new DenseVector(coefficients.toArray.slice(
+        numFeatures * factorSize, numFeatures * factorSize + numFeatures))
     } else {
       Vectors.sparse(numFeatures, Seq.empty)
     }
@@ -239,16 +249,38 @@ private[ml] object FactorizationMachines {
   }
 
   def combineCoefficients(
-    bias: Double,
-    linear: Vector,
-    factors: Matrix,
-    fitBias: Boolean,
-    fitLinear: Boolean
-  ): Vector = {
+      bias: Double,
+      linear: Vector,
+      factors: Matrix,
+      fitBias: Boolean,
+      fitLinear: Boolean
+    ): Vector = {
+
     val coefficients = factors.toDense.values ++
       (if (fitLinear) linear.toArray else Array.emptyDoubleArray) ++
       (if (fitBias) Array(bias) else Array.emptyDoubleArray)
     new DenseVector(coefficients)
+  }
+
+  def getRawPrediction(
+      features: Vector,
+      bias: Double,
+      linear: Vector,
+      factors: Matrix
+    ): Double = {
+    var rawPrediction = bias + features.dot(linear)
+    (0 until factors.numCols).foreach { f =>
+      var sumSquare = 0.0
+      var sum = 0.0
+      features.foreachActive { case (index, value) =>
+        val vx = factors(index, f) * value
+        sumSquare += vx * vx
+        sum += vx
+      }
+      rawPrediction += 0.5 * (sum * sum - sumSquare)
+    }
+
+    rawPrediction
   }
 }
 
@@ -283,7 +315,7 @@ private[regression] trait FMRegressorParams extends FactorizationMachinesParams 
 @Since("3.0.0")
 class FMRegressor @Since("3.0.0") (
     @Since("3.0.0") override val uid: String)
-  extends Predictor[Vector, FMRegressor, FMRegressorModel]
+  extends Predictor[Vector, FMRegressor, FMRegressionModel]
   with FactorizationMachines with FMRegressorParams with DefaultParamsWritable with Logging {
 
   @Since("3.0.0")
@@ -390,14 +422,19 @@ class FMRegressor @Since("3.0.0") (
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> AdamW)
 
-  override protected[spark] def train(dataset: Dataset[_]): FMRegressorModel = {
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    train(dataset, handlePersistence)
-  }
+  /**
+   * Set the random seed for weight initialization.
+   *
+   * @group setParam
+   */
+  @Since("3.0.0")
+  def setSeed(value: Long): this.type = set(seed, value)
 
-  protected[spark] def train(
-      dataset: Dataset[_],
-      handlePersistence: Boolean): FMRegressorModel = instrumented { instr =>
+  override protected[spark] def train(
+      dataset: Dataset[_]
+    ): FMRegressionModel = instrumented { instr =>
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val data: RDD[(Double, OldVector)] =
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
@@ -421,7 +458,7 @@ class FMRegressor @Since("3.0.0") (
 
     if (handlePersistence) data.unpersist()
 
-    copyValues(new FMRegressorModel(uid, bias, linear, factors))
+    copyValues(new FMRegressionModel(uid, bias, linear, factors))
   }
 
   @Since("3.0.0")
@@ -439,56 +476,49 @@ object FMRegressor extends DefaultParamsReadable[FMRegressor] {
  * Model produced by [[FMRegressor]].
  */
 @Since("3.0.0")
-class FMRegressorModel private[regression] (
+class FMRegressionModel private[regression] (
     @Since("3.0.0") override val uid: String,
     @Since("3.0.0") val bias: Double,
     @Since("3.0.0") val linear: Vector,
     @Since("3.0.0") val factors: Matrix)
-  extends PredictionModel[Vector, FMRegressorModel]
+  extends PredictionModel[Vector, FMRegressionModel]
   with FMRegressorParams with MLWritable {
 
   @Since("3.0.0")
   override val numFeatures: Int = linear.size
 
-  @transient private lazy val oldCoefficients: OldVector =
-    combineCoefficients(bias, linear, factors, $(fitBias), $(fitLinear))
-
-  @transient private lazy val gradient = parseLoss(
-    SquaredError, $(factorSize), $(fitBias), $(fitLinear), numFeatures)
-
   override def predict(features: Vector): Double = {
-    val (rawPrediction, _) = gradient.getRawPrediction(features, oldCoefficients)
-    gradient.getPrediction(rawPrediction)
+    getRawPrediction(features, bias, linear, factors)
   }
 
   @Since("3.0.0")
-  override def copy(extra: ParamMap): FMRegressorModel = {
-    copyValues(new FMRegressorModel(uid, bias, linear, factors), extra)
+  override def copy(extra: ParamMap): FMRegressionModel = {
+    copyValues(new FMRegressionModel(uid, bias, linear, factors), extra)
   }
 
   @Since("3.0.0")
   override def write: MLWriter =
-    new FMRegressorModel.FMRegressorModelWriter(this)
+    new FMRegressionModel.FMRegressionModelWriter(this)
 
   override def toString: String = {
-    s"FMRegressorModel: " +
+    s"FMRegressionModel: " +
       s"uid = ${super.toString}, numFeatures = $numFeatures, " +
       s"factorSize = ${$(factorSize)}, fitLinear = ${$(fitLinear)}, fitBias = ${$(fitBias)}"
   }
 }
 
 @Since("3.0.0")
-object FMRegressorModel extends MLReadable[FMRegressorModel] {
+object FMRegressionModel extends MLReadable[FMRegressionModel] {
 
   @Since("3.0.0")
-  override def read: MLReader[FMRegressorModel] = new FMRegressorModelReader
+  override def read: MLReader[FMRegressionModel] = new FMRegressionModelReader
 
   @Since("3.0.0")
-  override def load(path: String): FMRegressorModel = super.load(path)
+  override def load(path: String): FMRegressionModel = super.load(path)
 
-  /** [[MLWriter]] instance for [[FMRegressorModel]] */
-  private[FMRegressorModel] class FMRegressorModelWriter(
-      instance: FMRegressorModel) extends MLWriter with Logging {
+  /** [[MLWriter]] instance for [[FMRegressionModel]] */
+  private[FMRegressionModel] class FMRegressionModelWriter(
+      instance: FMRegressionModel) extends MLWriter with Logging {
 
     private case class Data(
         bias: Double,
@@ -503,18 +533,18 @@ object FMRegressorModel extends MLReadable[FMRegressorModel] {
     }
   }
 
-  private class FMRegressorModelReader extends MLReader[FMRegressorModel] {
+  private class FMRegressionModelReader extends MLReader[FMRegressionModel] {
 
-    private val className = classOf[FMRegressorModel].getName
+    private val className = classOf[FMRegressionModel].getName
 
-    override def load(path: String): FMRegressorModel = {
+    override def load(path: String): FMRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
       val Row(bias: Double, linear: Vector, factors: Matrix) = data
         .select("bias", "linear", "factors").head()
-      val model = new FMRegressorModel(metadata.uid, bias, linear, factors)
+      val model = new FMRegressionModel(metadata.uid, bias, linear, factors)
       metadata.getAndSetParams(model)
       model
     }

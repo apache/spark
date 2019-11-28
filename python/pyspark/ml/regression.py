@@ -35,7 +35,7 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
            'RandomForestRegressor', 'RandomForestRegressionModel',
-           'FMRegressor', 'FMRegressorModel']
+           'FMRegressor', 'FMRegressionModel']
 
 
 @inherit_doc
@@ -2128,7 +2128,7 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
 
 
 @inherit_doc
-class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
+class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver, HasSeed,
                   JavaMLWritable, JavaMLReadable):
     """
     Factorization Machines learning algorithm for regression.
@@ -2192,12 +2192,12 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                 tol=1e-6, solver="adamW"):
+                 tol=1e-6, solver="adamW", seed=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                 tol=1e-6, solver="adamW")
+                 tol=1e-6, solver="adamW", seed=None)
         """
         super(FMRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -2213,19 +2213,19 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                  tol=1e-6, solver="adamW"):
+                  tol=1e-6, solver="adamW", seed=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                  tol=1e-6, solver="adamW")
+                  tol=1e-6, solver="adamW", seed=None)
         Sets Params for FMRegressor.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
-        return FMRegressorModel(java_model)
+        return FMRegressionModel(java_model)
 
     @since("3.0.0")
     def setFactorSize(self, value):
@@ -2263,7 +2263,7 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
         return self._set(initStd=value)
 
 
-class FMRegressorModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class FMRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`FMRegressor`.
 

@@ -68,7 +68,7 @@ private[classification] trait FMClassifierParams extends ProbabilisticClassifier
 @Since("3.0.0")
 class FMClassifier @Since("3.0.0") (
     @Since("3.0.0") override val uid: String)
-  extends ProbabilisticClassifier[Vector, FMClassifier, FMClassifierModel]
+  extends ProbabilisticClassifier[Vector, FMClassifier, FMClassificationModel]
   with FactorizationMachines with FMClassifierParams with DefaultParamsWritable with Logging {
 
   @Since("3.0.0")
@@ -175,14 +175,19 @@ class FMClassifier @Since("3.0.0") (
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> AdamW)
 
-  override protected[spark] def train(dataset: Dataset[_]): FMClassifierModel = {
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    train(dataset, handlePersistence)
-  }
+  /**
+   * Set the random seed for weight initialization.
+   *
+   * @group setParam
+   */
+  @Since("3.0.0")
+  def setSeed(value: Long): this.type = set(seed, value)
 
-  protected[spark] def train(
-      dataset: Dataset[_],
-      handlePersistence: Boolean): FMClassifierModel = instrumented { instr =>
+  override protected[spark] def train(
+      dataset: Dataset[_]
+    ): FMClassificationModel = instrumented { instr =>
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val data: RDD[(Double, OldVector)] =
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
@@ -217,7 +222,7 @@ class FMClassifier @Since("3.0.0") (
 
     if (handlePersistence) data.unpersist()
 
-    copyValues(new FMClassifierModel(uid, bias, linear, factors))
+    copyValues(new FMClassificationModel(uid, bias, linear, factors))
   }
 
   @Since("3.0.0")
@@ -235,12 +240,12 @@ object FMClassifier extends DefaultParamsReadable[FMClassifier] {
  * Model produced by [[FMClassifier]]
  */
 @Since("3.0.0")
-class FMClassifierModel private[classification] (
+class FMClassificationModel private[classification] (
   @Since("3.0.0") override val uid: String,
   @Since("3.0.0") val bias: Double,
   @Since("3.0.0") val linear: Vector,
   @Since("3.0.0") val factors: Matrix)
-  extends ProbabilisticClassificationModel[Vector, FMClassifierModel]
+  extends ProbabilisticClassificationModel[Vector, FMClassificationModel]
     with FMClassifierParams with MLWritable {
 
   @Since("3.0.0")
@@ -249,57 +254,51 @@ class FMClassifierModel private[classification] (
   @Since("3.0.0")
   override val numFeatures: Int = linear.size
 
-  @transient private lazy val oldCoefficients: OldVector =
-    combineCoefficients(bias, linear, factors, $(fitBias), $(fitLinear))
-
-  @transient private lazy val gradient = parseLoss(
-    LogisticLoss, $(factorSize), $(fitBias), $(fitLinear), numFeatures)
-
   override protected def predictRaw(features: Vector): Vector = {
-    val (rawPrediction, _) = gradient.getRawPrediction(features, oldCoefficients)
+    val rawPrediction = getRawPrediction(features, bias, linear, factors)
     Vectors.dense(Array(-rawPrediction, rawPrediction))
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
       case dv: DenseVector =>
-        dv.values(1) = gradient.getPrediction(dv.values(1))
+        dv.values(1) = 1.0 / (1.0 + math.exp(-dv.values(1)))
         dv.values(0) = 1.0 - dv.values(1)
         dv
       case sv: SparseVector =>
-        throw new RuntimeException("Unexpected error in FMClassifierModel:" +
+        throw new RuntimeException("Unexpected error in FMClassificationModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
   }
 
   @Since("3.0.0")
-  override def copy(extra: ParamMap): FMClassifierModel = {
-    copyValues(new FMClassifierModel(uid, bias, linear, factors), extra)
+  override def copy(extra: ParamMap): FMClassificationModel = {
+    copyValues(new FMClassificationModel(uid, bias, linear, factors), extra)
   }
 
   @Since("3.0.0")
   override def write: MLWriter =
-    new FMClassifierModel.FMClassifierModelWriter(this)
+    new FMClassificationModel.FMClassificationModelWriter(this)
 
   override def toString: String = {
-    s"FMClassifierModel: " +
+    s"FMClassificationModel: " +
       s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures, " +
       s"factorSize = ${$(factorSize)}, fitLinear = ${$(fitLinear)}, fitBias = ${$(fitBias)}"
   }
 }
 
 @Since("3.0.0")
-object FMClassifierModel extends MLReadable[FMClassifierModel] {
+object FMClassificationModel extends MLReadable[FMClassificationModel] {
 
   @Since("3.0.0")
-  override def read: MLReader[FMClassifierModel] = new FMClassifierModelReader
+  override def read: MLReader[FMClassificationModel] = new FMClassificationModelReader
 
   @Since("3.0.0")
-  override def load(path: String): FMClassifierModel = super.load(path)
+  override def load(path: String): FMClassificationModel = super.load(path)
 
-  /** [[MLWriter]] instance for [[FMClassifierModel]] */
-  private[FMClassifierModel] class FMClassifierModelWriter(
-    instance: FMClassifierModel) extends MLWriter with Logging {
+  /** [[MLWriter]] instance for [[FMClassificationModel]] */
+  private[FMClassificationModel] class FMClassificationModelWriter(
+    instance: FMClassificationModel) extends MLWriter with Logging {
 
     private case class Data(
       bias: Double,
@@ -314,18 +313,18 @@ object FMClassifierModel extends MLReadable[FMClassifierModel] {
     }
   }
 
-  private class FMClassifierModelReader extends MLReader[FMClassifierModel] {
+  private class FMClassificationModelReader extends MLReader[FMClassificationModel] {
 
-    private val className = classOf[FMClassifierModel].getName
+    private val className = classOf[FMClassificationModel].getName
 
-    override def load(path: String): FMClassifierModel = {
+    override def load(path: String): FMClassificationModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
       val Row(bias: Double, linear: Vector, factors: Matrix) =
         data.select("bias", "linear", "factors").head()
-      val model = new FMClassifierModel(metadata.uid, bias, linear, factors)
+      val model = new FMClassificationModel(metadata.uid, bias, linear, factors)
       metadata.getAndSetParams(model)
       model
     }

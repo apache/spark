@@ -45,7 +45,7 @@ __all__ = ['LinearSVC', 'LinearSVCModel',
            'NaiveBayes', 'NaiveBayesModel',
            'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
            'OneVsRest', 'OneVsRestModel',
-           'FMClassifier', 'FMClassifierModel']
+           'FMClassifier', 'FMClassificationModel']
 
 
 class JavaClassifierParams(HasRawPredictionCol, JavaPredictorParams):
@@ -2363,7 +2363,7 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol, HasSolver,
+class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol, HasSolver, HasSeed,
                    JavaMLWritable, JavaMLReadable):
     """
     Factorization Machines learning algorithm for classification.
@@ -2426,13 +2426,13 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                 tol=1e-6, solver="adamW", thresholds=None):
+                 tol=1e-6, solver="adamW", thresholds=None, seed=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                 tol=1e-6, solver="adamW", thresholds=None)
+                 tol=1e-6, solver="adamW", thresholds=None, seed=None)
         """
         super(FMClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -2449,20 +2449,20 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                  tol=1e-6, solver="adamW", thresholds=None):
+                  tol=1e-6, solver="adamW", thresholds=None, seed=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                  tol=1e-6, solver="adamW", thresholds=None)
+                  tol=1e-6, solver="adamW", thresholds=None, seed=None)
         Sets Params for FMClassifier.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
-        return FMClassifierModel(java_model)
+        return FMClassificationModel(java_model)
 
     @since("3.0.0")
     def setFactorSize(self, value):
@@ -2500,7 +2500,7 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
         return self._set(initStd=value)
 
 
-class FMClassifierModel(JavaProbabilisticClassificationModel, JavaMLWritable, JavaMLReadable):
+class FMClassificationModel(JavaProbabilisticClassificationModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`FMClassifier`.
 

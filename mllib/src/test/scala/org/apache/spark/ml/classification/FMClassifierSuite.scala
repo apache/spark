@@ -40,7 +40,7 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new FMClassifier)
-    val model = new FMClassifierModel("fmc_test", 0.0, Vectors.dense(0.0),
+    val model = new FMClassificationModel("fmc_test", 0.0, Vectors.dense(0.0),
       new DenseMatrix(1, 8, new Array[Double](8)))
     ParamsSuite.checkParams(model)
   }
@@ -70,7 +70,7 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
     }
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, FMClassifierModel](this, model, smallBinaryDataset)
+      Vector, FMClassificationModel](this, model, smallBinaryDataset)
   }
 
   test("factorization machines logisticLoss") {
@@ -101,8 +101,8 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   test("read/write") {
     def checkModelData(
-      model: FMClassifierModel,
-      model2: FMClassifierModel
+      model: FMClassificationModel,
+      model2: FMClassificationModel
     ): Unit = {
       assert(model.bias === model2.bias)
       assert(model.linear.toArray === model2.linear.toArray)
@@ -141,6 +141,7 @@ object FMClassifierSuite {
     "stepSize" -> 0.1,
     "tol" -> 1e-4,
     "solver" -> "gd",
+    "seed" -> 10L,
     "thresholds" -> Array(0.4, 0.6)
   )
 }
