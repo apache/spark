@@ -81,6 +81,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case DoubleType => classOf[DoubleColumnAccessor].getName
         case StringType => classOf[StringColumnAccessor].getName
         case BinaryType => classOf[BinaryColumnAccessor].getName
+        case CalendarIntervalType => classOf[IntervalColumnAccessor].getName
         case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
           classOf[CompactDecimalColumnAccessor].getName
         case dt: DecimalType => classOf[DecimalColumnAccessor].getName
@@ -107,6 +108,14 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           s"""
             if (mutableRow.isNullAt($index)) {
               rowWriter.write($index, (Decimal) null, $p, $s);
+            }
+           """
+        case CalendarIntervalType =>
+          // For CalendarInterval, it should have 16 bytes to store months(Int), days(Int),
+          // microseconds(Long) for future update even it's null now.
+          s"""
+            if (mutableRow.isNullAt($index)) {
+              rowWriter.write($index, (CalendarInterval) null);
             }
            """
         case other => ""

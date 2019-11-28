@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 
 /**
@@ -705,6 +705,34 @@ private[columnar] case class MAP(dataType: MapType)
   override def clone(v: UnsafeMapData): UnsafeMapData = v.copy()
 }
 
+private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] {
+
+  override def dataType: DataType = CalendarIntervalType
+
+  override def defaultSize: Int = 16
+
+  override def getField(row: InternalRow, ordinal: Int): CalendarInterval = row.getInterval(ordinal)
+
+  override def setField(row: InternalRow, ordinal: Int, value: CalendarInterval): Unit = {
+    // TODO: use set interval after SPARK-30047 merged
+    // row.setInterval(ordinal, value)
+    row.update(ordinal, value)
+  }
+
+  override def extract(buffer: ByteBuffer): CalendarInterval = {
+    val months = ByteBufferHelper.getInt(buffer)
+    val days = ByteBufferHelper.getInt(buffer)
+    val microseconds = ByteBufferHelper.getLong(buffer)
+    new CalendarInterval(months, days, microseconds)
+  }
+
+  override def append(v: CalendarInterval, buffer: ByteBuffer): Unit = {
+    ByteBufferHelper.putInt(buffer, v.months)
+    ByteBufferHelper.putInt(buffer, v.days)
+    ByteBufferHelper.putLong(buffer, v.microseconds)
+  }
+}
+
 private[columnar] object ColumnType {
   @tailrec
   def apply(dataType: DataType): ColumnType[_] = {
@@ -719,6 +747,7 @@ private[columnar] object ColumnType {
       case DoubleType => DOUBLE
       case StringType => STRING
       case BinaryType => BINARY
+      case i: CalendarIntervalType => CALENDAR_INTERVAL
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => COMPACT_DECIMAL(dt)
       case dt: DecimalType => LARGE_DECIMAL(dt)
       case arr: ArrayType => ARRAY(arr)
