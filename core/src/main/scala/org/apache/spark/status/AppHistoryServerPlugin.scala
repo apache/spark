@@ -37,9 +37,7 @@ private[spark] trait AppHistoryServerPlugin {
   def setupUI(ui: SparkUI): Unit
 
   /**
-   * Order of the plugin tab that need to display in the history UI.
+   * The position of a plugin tab relative to the other plugin tabs in the history UI.
    */
-  def displayOrder: Int = {
-    Integer.MAX_VALUE
-  }
+  def displayOrder: Int = Integer.MAX_VALUE
 }

@@ -34,11 +34,6 @@ class SQLHistoryServerPlugin extends AppHistoryServerPlugin {
     }
   }
 
-  override def displayOrder: Int = {
-    SQLHistoryServerPlugin.DISPLAY_ORDER
-  }
+  override def displayOrder: Int = 0
 }
 
-private object SQLHistoryServerPlugin {
-  val DISPLAY_ORDER = 0
-}
