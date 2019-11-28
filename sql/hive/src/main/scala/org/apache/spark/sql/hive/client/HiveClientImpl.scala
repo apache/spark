@@ -1222,7 +1222,7 @@ private[hive] object HiveClientImpl {
     } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
       Some(CatalogStatistics(
         sizeInBytes = rawDataSize.get,
-        deserFactor = deserFactor,
+        deserFactor = None,
         rowCount = rowCount.filter(_ > 0)))
     } else {
       // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?
