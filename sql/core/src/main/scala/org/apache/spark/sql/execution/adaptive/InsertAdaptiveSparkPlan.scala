@@ -109,7 +109,6 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
   }
 
   def compileSubquery(plan: LogicalPlan): SparkPlan = {
-    val queryExec = new QueryExecution(session, plan)
     // Apply the same instance of this rule to sub-queries so that sub-queries all share the
     // same `stageCache` for Exchange reuse.
     this.applyInternal(
