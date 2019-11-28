@@ -137,21 +137,31 @@ class KafkaTestUtils(
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
     kdc = new MiniKdc(kdcConf, kdcDir)
     kdc.start()
+    rewriteKrb5Conf()
+    kdcReady = true
+  }
+
+  private def rewriteKrb5Conf(): Unit = {
     val krb5Conf = Source.fromFile(kdc.getKrb5conf, "UTF-8").getLines()
-    val rewriteKrb5Conf = krb5Conf.map(s => if (s.contains("libdefaults")) {
-      s + "\n" +
-        "    default_tkt_enctypes=aes128-cts-hmac-sha1-96\n" +
-        "    default_tgs_enctypes=aes128-cts-hmac-sha1-96 "
-    } else {
-      s
-    })
+    val rewriteKrb5Conf = krb5Conf.map(s =>
+      if (s.contains("libdefaults")) {
+        val addedConfig =
+          addedKrb5Config("default_tkt_enctypes", "aes128-cts-hmac-sha1-96") +
+            addedKrb5Config("default_tgs_enctypes", "aes128-cts-hmac-sha1-96")
+        s + addedConfig
+      } else {
+        s
+      })
     kdc.getKrb5conf.delete()
     val writer = new PrintWriter(kdc.getKrb5conf)
     // scalastyle:off
     rewriteKrb5Conf.foreach(writer.println)
-    writer.flush()
+    // scalastyle:on
     writer.close()
-    kdcReady = true
+  }
+
+  private def addedKrb5Config(key: String, value: String): String = {
+    System.lineSeparator() + s"    $key=$value"
   }
 
   private def createKeytabsAndJaasConfigFile(): String = {
