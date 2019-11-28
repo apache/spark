@@ -30,16 +30,22 @@ AS DEPT(dept_id, dept_name, state);
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData;
 SELECT COUNT(a) FILTER (WHERE a = 1), COUNT(b) FILTER (WHERE a > 1) FROM testData;
 SELECT COUNT(id) FILTER (WHERE hiredate = date "2001-01-01") FROM emp;
+SELECT COUNT(id) FILTER (WHERE hiredate = to_date('2001-01-01 00:00:00')) FROM emp;
+SELECT COUNT(id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00") FROM emp;
 
 -- Aggregate with filter and non-empty GroupBy expressions.
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData GROUP BY a;
 SELECT a, COUNT(b) FILTER (WHERE a != 2) FROM testData GROUP BY b;
 SELECT COUNT(a) FILTER (WHERE a >= 0), COUNT(b) FILTER (WHERE a >= 3) FROM testData GROUP BY a;
 SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > date "2003-01-01") FROM emp GROUP BY dept_id;
+SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_date("2003-01-01")) FROM emp GROUP BY dept_id;
+SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_timestamp("2003-01-01 00:00:00")) FROM emp GROUP BY dept_id;
 
 -- Aggregate with filter and grouped by literals.
 SELECT 'foo', COUNT(a) FILTER (WHERE b <= 2) FROM testData GROUP BY 1;
 SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= date "2003-01-01") FROM emp GROUP BY 1;
+SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= to_date("2003-01-01")) FROM emp GROUP BY 1;
+SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= to_timestamp("2003-01-01")) FROM emp GROUP BY 1;
 
 -- Aggregate with filter and grouped by literals (hash aggregate).
 SELECT 'foo', APPROX_COUNT_DISTINCT(a) FILTER (WHERE b >= 0) FROM testData WHERE a = 0 GROUP BY 1;
@@ -61,8 +67,20 @@ SELECT a AS k, COUNT(b) FILTER (WHERE b = 1 OR b = 2) FROM testData GROUP BY k;
 SELECT dept_id as k,
        SUM(salary) FILTER (WHERE hiredate < date "2005-01-01" OR hiredate > date "2010-01-01")
 FROM emp GROUP BY k;
+SELECT dept_id as k,
+       SUM(salary) FILTER (WHERE hiredate < to_date("2005-01-01") OR hiredate > to_date("2010-01-01"))
+FROM emp GROUP BY k;
+SELECT dept_id as k,
+       SUM(salary) FILTER (WHERE hiredate < to_timestamp("2005-01-01") OR hiredate > to_timestamp("2010-01-01 00:00:00"))
+FROM emp GROUP BY k;
 SELECT a AS k, COUNT(b) FILTER (WHERE NOT b < 0) FROM testData GROUP BY k HAVING k > 1;
 SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= date "2005-01-01")
+FROM emp GROUP BY k HAVING k < 70;
+SELECT a AS k, COUNT(b) FILTER (WHERE NOT b < 0) FROM testData GROUP BY k HAVING k > 1;
+SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= to_date("2005-01-01"))
+FROM emp GROUP BY k HAVING k < 70;
+SELECT a AS k, COUNT(b) FILTER (WHERE NOT b < 0) FROM testData GROUP BY k HAVING k > 1;
+SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= to_timestamp("2005-01-01 00:00:00"))
 FROM emp GROUP BY k HAVING k < 70;
 
 -- Aggregate functions cannot be used in GROUP BY
