@@ -267,13 +267,14 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(message.contains("Reference 'f2' is ambiguous"))
   }
 
-  test("fill with col(*)") {
+  test("fill/drop with col(*)") {
     val df = createDF()
     // If columns are specified with "*", they are ignored.
     checkAnswer(df.na.fill("new name", Seq("*")), df.collect())
+    checkAnswer(df.na.drop("any", Seq("*")), df.collect())
   }
 
-  test("fill with nested columns") {
+  test("fill/drop with nested columns") {
     val schema = new StructType()
       .add("c1", new StructType()
         .add("c1-1", StringType)
@@ -290,8 +291,9 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select("c1.c1-1"),
       Row(null) :: Row("b1") :: Row(null) :: Nil)
 
-    // Nested columns are ignored for fill().
+    // Nested columns are ignored for fill() and drop().
     checkAnswer(df.na.fill("a1", Seq("c1.c1-1")), data)
+    checkAnswer(df.na.drop("any", Seq("c1.c1-1")), data)
   }
 
   test("replace") {
@@ -384,5 +386,22 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.na.fill("hello"),
       Row("1", "hello", "2") :: Row("3", "4", "hello") :: Nil)
+  }
+
+  test("SPARK-30065: duplicate names are allowed for drop() if column names are not specified.") {
+    val left = Seq(("1", null), ("3", "4"), ("5", "6")).toDF("col1", "col2")
+    val right = Seq(("1", "2"), ("3", null), ("5", "6")).toDF("col1", "col2")
+    val df = left.join(right, Seq("col1"))
+
+    // If column names are specified, the following fails due to ambiguity.
+    val exception = intercept[AnalysisException] {
+      df.na.drop("any", Seq("col2"))
+    }
+    assert(exception.getMessage.contains("Reference 'col2' is ambiguous"))
+
+    // If column names are not specified, drop() is applied to all the eligible rows.
+    checkAnswer(
+      df.na.drop("any"),
+      Row("5", "6", "6") :: Nil)
   }
 }
