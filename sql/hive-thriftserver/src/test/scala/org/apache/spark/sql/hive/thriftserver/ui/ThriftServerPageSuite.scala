@@ -46,7 +46,7 @@ class ThriftServerPageSuite extends SparkFunSuite {
     listener
   }
 
-  test("thriftserver page should load successfully") {
+  ignore("thriftserver page should load successfully") {
     val request = mock(classOf[HttpServletRequest])
     val tab = mock(classOf[ThriftServerTab], RETURNS_SMART_NULLS)
     when(tab.listener).thenReturn(getListener)
@@ -69,7 +69,7 @@ class ThriftServerPageSuite extends SparkFunSuite {
        " collapse-table\" onclick=\"collapsetable"))
   }
 
-  test("thriftserver session page should load successfully") {
+  ignore("thriftserver session page should load successfully") {
     val request = mock(classOf[HttpServletRequest])
     when(request.getParameter("id")).thenReturn("sessionid")
     val tab = mock(classOf[ThriftServerTab], RETURNS_SMART_NULLS)
