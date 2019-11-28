@@ -97,7 +97,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
 
       val stagesTable =
         new StageTableBase(parent.store, request, stages, statusName(status), stageTag(status),
-          parent.basePath, subPath, parent.isFairScheduler, killEnabled, isFailedStage)
+          parent.basePath, subPath, isFairScheduler, killEnabled, isFailedStage)
       val stagesSize = stages.size
       (Some(summary(appSummary, status, stagesSize)),
         Some(table(appSummary, status, stagesTable, stagesSize)))
