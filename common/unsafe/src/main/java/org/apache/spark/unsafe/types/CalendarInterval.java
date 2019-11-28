@@ -34,6 +34,9 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
   public final int days;
   public final long microseconds;
 
+  // Previous CalendarInterval has 2 fields: months and microseconds. Here we add one more days
+  // fields due to one logical day interval may have different number of microseconds (daylight
+  // saving).
   public CalendarInterval(int months, int days, long microseconds) {
     this.months = months;
     this.days = days;
