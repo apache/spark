@@ -487,8 +487,11 @@ case class AlterTableAddPartitionCommand(
     table.stats.foreach { stats =>
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
         val sizesWithFactors =
-          CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
-            parts.map(_.storage.locationUri))
+          CommandUtils.calculateMultipleLocationSizes(
+            sparkSession,
+            table.identifier,
+            parts.map(_.storage.locationUri),
+            table.storage.serde)
         val newPartsTotalSizeAndDeserializationFactor =
           CommandUtils.sumSizeWithMaxDeserializationFactor(sizesWithFactors)
         val addedSize = newPartsTotalSizeAndDeserializationFactor.sizeInBytes

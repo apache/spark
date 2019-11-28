@@ -74,20 +74,28 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable)
-    : SizeInBytesWithDeserFactor = {
+  def calculateTotalSize(
+      spark: SparkSession,
+      catalogTable: CatalogTable): SizeInBytesWithDeserFactor = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
     val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateSingleLocationSize(sessionState, catalogTable.identifier,
-        catalogTable.storage.locationUri)
+      calculateSingleLocationSize(
+        sessionState,
+        catalogTable.identifier,
+        catalogTable.storage.locationUri,
+        catalogTable.storage.serde)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       val paths = partitions.map(_.storage.locationUri)
       sumSizeWithMaxDeserializationFactor(
-        calculateMultipleLocationSizes(spark, catalogTable.identifier, paths))
+        calculateMultipleLocationSizes(
+          spark,
+          catalogTable.identifier,
+          paths,
+          catalogTable.storage.serde))
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
@@ -105,15 +113,13 @@ object CommandUtils extends Logging {
   def sizeInBytesWithDeserFactor(
       calcDeserFact: Boolean,
       hadoopConf: Configuration,
-      fStatus: FileStatus): SizeInBytesWithDeserFactor = {
+      fStatus: FileStatus,
+      serde: Option[String]): SizeInBytesWithDeserFactor = {
     assert(fStatus.isFile)
     val factor = if (calcDeserFact) {
-      val rawSize = if (fStatus.getPath.getName.endsWith(".orc")) {
-        Some(OrcUtils.rawSize(hadoopConf, fStatus.getPath))
-      } else {
-        None
-      }
-
+      val isOrc = serde.contains("org.apache.hadoop.hive.ql.io.orc.OrcSerde") ||
+        fStatus.getPath.getName.endsWith(".orc")
+      val rawSize = if (isOrc) Some(OrcUtils.rawSize(hadoopConf, fStatus.getPath)) else None
       rawSize.map { rawSize =>
         // deserialization factor is a ratio of the data size in memory to file size rounded up
         // to the next integer number
@@ -133,7 +139,8 @@ object CommandUtils extends Logging {
   def calculateSingleLocationSize(
       sessionState: SessionState,
       identifier: TableIdentifier,
-      locationUri: Option[URI]): SizeInBytesWithDeserFactor = {
+      locationUri: Option[URI],
+      serde: Option[String]): SizeInBytesWithDeserFactor = {
     // This method is mainly based on
     // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
     // in Hive 0.13 (except that we do not use fs.getContentSummary).
@@ -158,11 +165,12 @@ object CommandUtils extends Logging {
         }
         sumSizeWithMaxDeserializationFactor(fileSizesWithDeserFactor)
       } else {
-        sizeInBytesWithDeserFactor(calcDeserFactEnabled, hadoopConf, fileStatus)
+        sizeInBytesWithDeserFactor(calcDeserFactEnabled, hadoopConf, fileStatus, serde)
       }
     }
 
     val startTime = System.nanoTime()
+
     val fileSizesWithDeserFactor = locationUri.map { p =>
       val path = new Path(p)
       try {
@@ -185,11 +193,12 @@ object CommandUtils extends Logging {
   def calculateMultipleLocationSizes(
       sparkSession: SparkSession,
       tid: TableIdentifier,
-      paths: Seq[Option[URI]]): Seq[SizeInBytesWithDeserFactor] = {
+      paths: Seq[Option[URI]],
+      serde: Option[String]): Seq[SizeInBytesWithDeserFactor] = {
     if (sparkSession.sessionState.conf.parallelFileListingInStatsComputation) {
-      calculateMultipleLocationSizesInParallel(sparkSession, paths.map(_.map(new Path(_))))
+      calculateMultipleLocationSizesInParallel(sparkSession, paths.map(_.map(new Path(_))), serde)
     } else {
-      paths.map(p => calculateSingleLocationSize(sparkSession.sessionState, tid, p))
+      paths.map(p => calculateSingleLocationSize(sparkSession.sessionState, tid, p, serde))
     }
   }
 
@@ -203,7 +212,8 @@ object CommandUtils extends Logging {
    */
   def calculateMultipleLocationSizesInParallel(
       sparkSession: SparkSession,
-      paths: Seq[Option[Path]]): Seq[SizeInBytesWithDeserFactor] = {
+      paths: Seq[Option[Path]],
+      serde: Option[String]): Seq[SizeInBytesWithDeserFactor] = {
     val stagingDir = sparkSession.sessionState.conf
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
@@ -213,7 +223,7 @@ object CommandUtils extends Logging {
       sparkSession.sessionState.newHadoopConf(), filter, sparkSession, areRootPaths = true).map {
       case (_, files) =>
         sumSizeWithMaxDeserializationFactor(
-          files.map(sizeInBytesWithDeserFactor(calcDeserFactEnabled, hadoopConf, _)))
+          files.map(sizeInBytesWithDeserFactor(calcDeserFactEnabled, hadoopConf, _, serde)))
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
     paths.zipWithIndex.map { case (p, idx) =>
