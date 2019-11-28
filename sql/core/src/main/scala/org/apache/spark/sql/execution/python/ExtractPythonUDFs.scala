@@ -205,7 +205,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // SPARK-26293: A subquery will be rewritten into join later, and will go through this rule
     // eventually. Here we skip subquery, as Python UDF only needs to be extracted once.
-    case _: Subquery => plan
+    case s: Subquery if s.correlated => plan
 
     case _ => plan transformUp {
       // A safe guard. `ExtractPythonUDFs` only runs once, so we will not hit `BatchEvalPython` and

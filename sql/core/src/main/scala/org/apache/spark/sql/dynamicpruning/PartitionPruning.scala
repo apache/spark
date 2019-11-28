@@ -252,7 +252,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // Do not rewrite subqueries.
-    case _: Subquery => plan
+    case s: Subquery if s.correlated => plan
     case _ if !SQLConf.get.dynamicPartitionPruningEnabled => plan
     case _ => prune(plan)
   }
