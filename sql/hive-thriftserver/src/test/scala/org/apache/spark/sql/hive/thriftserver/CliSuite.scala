@@ -195,7 +195,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "hive_test"
     )
 
-    runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "INSERT INTO hive_test VALUES (1, 'test');"))(
+    runCliWithin(2.minute,
+      Seq("--database", "hive_test_db", "-e", "INSERT INTO hive_test VALUES (1, 'test');"))(
       "SELECT * FROM hive_test;" -> "1"
     )
   }

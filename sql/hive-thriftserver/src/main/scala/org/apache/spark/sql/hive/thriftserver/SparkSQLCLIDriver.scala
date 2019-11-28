@@ -19,10 +19,11 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.{Locale, ArrayList => JArrayList, List => JList}
+import java.util.{ArrayList => JArrayList, List => JList, Locale}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
@@ -37,6 +38,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
 import sun.misc.{Signal, SignalHandler}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -389,7 +391,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       paddedRows.tail.foreach(_.addString(sb, "|", "|", "|\n"))
       sb.append(sep)
     } else {
-      //Only data, no headers.
+      // Only data, no headers.
       for (elem <- paddedRows) elem.addString(sb, "|", "|", "|\n")
       sb.append(sep)
     }
@@ -465,16 +467,18 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             // Getting Column names if "hive.cli.print.header" is set to true.
             val headers: Option[Seq[String]] =
               if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
-                Some(driver.getSchema.getFieldSchemas.asScala.map(x => x.getName).asInstanceOf[Seq[String]])
+                Some(driver.getSchema.getFieldSchemas.
+                  asScala.map(x => x.getName).asInstanceOf[Seq[String]])
               } else {
                 None
               }
 
-            //Flushes the print stream
+            // Flushes the print stream
             out.checkError()
-            //Print results only if there is a header or data present.
-            if (headers.getOrElse(Nil) != Nil || tmpRows.nonEmpty)
+            // Print results only if there is a header or data present.
+            if (headers.getOrElse(Nil) != Nil || tmpRows.nonEmpty) {
               out.println(showQueryResults(tmpRows, headers.getOrElse(Nil)))
+            }
 
           } catch {
             case e: IOException =>

@@ -100,7 +100,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
     if (hiveResponse == null) {
       Nil
     } else {
-      val result:Seq[Seq[String]] = hiveResponse.map(_.split("\t").toSeq)
+      val result: Seq[Seq[String]] = hiveResponse.map(_.split("\t").toSeq)
       hiveResponse = null
       result
     }
