@@ -26,6 +26,28 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
+trait OperationHelper {
+  type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
+
+  protected def collectAliases(fields: Seq[Expression]): AttributeMap[Expression] =
+    AttributeMap(fields.collect {
+      case a: Alias => (a.toAttribute, a.child)
+    })
+
+  protected def substitute(aliases: AttributeMap[Expression])(expr: Expression): Expression = {
+    expr.transform {
+      case a @ Alias(ref: AttributeReference, name) =>
+        aliases.get(ref)
+          .map(Alias(_, name)(a.exprId, a.qualifier))
+          .getOrElse(a)
+
+      case a: AttributeReference =>
+        aliases.get(a)
+          .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
+    }
+  }
+}
+
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
  * operator.  All filter operators are collected and their conditions are broken up and returned
@@ -33,8 +55,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
  * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
  * necessary.
  */
-object PhysicalOperation extends PredicateHelper {
-  type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
+object PhysicalOperation extends OperationHelper with PredicateHelper {
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
     val (fields, filters, child, _) = collectProjectsAndFilters(plan)
@@ -56,7 +77,7 @@ object PhysicalOperation extends PredicateHelper {
    * }}}
    */
   private def collectProjectsAndFilters(plan: LogicalPlan):
-      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
+      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, AttributeMap[Expression]) =
     plan match {
       case Project(fields, child) if fields.forall(_.deterministic) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child)
@@ -72,23 +93,74 @@ object PhysicalOperation extends PredicateHelper {
         collectProjectsAndFilters(h.child)
 
       case other =>
-        (None, Nil, other, Map.empty)
+        (None, Nil, other, AttributeMap(Seq()))
     }
+}
 
-  private def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
-    case a @ Alias(child, _) => a.toAttribute -> child
-  }.toMap
+/**
+ * A variant of [[PhysicalOperation]]. It matches any number of project or filter
+ * operations even if they are non-deterministic, as long as they satisfy the
+ * requirement of CollapseProject and CombineFilters.
+ */
+object ScanOperation extends OperationHelper with PredicateHelper {
+  type ScanReturnType = Option[(Option[Seq[NamedExpression]],
+    Seq[Expression], LogicalPlan, AttributeMap[Expression])]
 
-  private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
-    expr.transform {
-      case a @ Alias(ref: AttributeReference, name) =>
-        aliases.get(ref)
-          .map(Alias(_, name)(a.exprId, a.qualifier))
-          .getOrElse(a)
+  def unapply(plan: LogicalPlan): Option[ReturnType] = {
+    collectProjectsAndFilters(plan) match {
+      case Some((fields, filters, child, _)) =>
+        Some((fields.getOrElse(child.output), filters, child))
+      case None => None
+    }
+  }
 
-      case a: AttributeReference =>
-        aliases.get(a)
-          .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
+  private def hasCommonNonDeterministic(
+      expr: Seq[Expression],
+      aliases: AttributeMap[Expression]): Boolean = {
+    expr.exists(_.collect {
+      case a: AttributeReference if aliases.contains(a) => aliases(a)
+    }.exists(!_.deterministic))
+  }
+
+  private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
+    plan match {
+      case Project(fields, child) =>
+        collectProjectsAndFilters(child) match {
+          case Some((_, filters, other, aliases)) =>
+            // Follow CollapseProject and only keep going if the collected Projects
+            // do not have common non-deterministic expressions.
+            if (!hasCommonNonDeterministic(fields, aliases)) {
+              val substitutedFields =
+                fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
+              Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
+            } else {
+              None
+            }
+          case None => None
+        }
+
+      case Filter(condition, child) =>
+        collectProjectsAndFilters(child) match {
+          case Some((fields, filters, other, aliases)) =>
+            // Follow CombineFilters and only keep going if the collected Filters
+            // are all deterministic and this filter doesn't have common non-deterministic
+            // expressions with lower Project.
+            if (filters.forall(_.deterministic) &&
+              !hasCommonNonDeterministic(Seq(condition), aliases)) {
+              val substitutedCondition = substitute(aliases)(condition)
+              Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
+                other, aliases))
+            } else {
+              None
+            }
+          case None => None
+        }
+
+      case h: ResolvedHint =>
+        collectProjectsAndFilters(h.child)
+
+      case other =>
+        Some((None, Nil, other, AttributeMap(Seq())))
     }
   }
 }

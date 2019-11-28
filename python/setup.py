@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -16,15 +16,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import print_function
 import glob
 import os
 import sys
 from setuptools import setup
 from shutil import copyfile, copytree, rmtree
 
-if sys.version_info < (2, 7):
-    print("Python versions prior to 2.7 are not supported for pip installed PySpark.",
+if sys.version_info < (3, 6):
+    print("Python versions prior to 3.6 are not supported for pip installed PySpark.",
           file=sys.stderr)
     sys.exit(-1)
 
@@ -106,7 +105,7 @@ if (in_spark):
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 _minimum_pandas_version = "0.23.2"
-_minimum_pyarrow_version = "0.12.1"
+_minimum_pyarrow_version = "0.15.1"
 
 try:
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
@@ -230,6 +229,7 @@ try:
             'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
+            'Programming Language :: Python :: 3.8',
             'Programming Language :: Python :: Implementation :: CPython',
             'Programming Language :: Python :: Implementation :: PyPy']
     )

@@ -48,6 +48,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
@@ -58,6 +59,8 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
+import org.apache.spark.shuffle.ShuffleDataIOUtils
+import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage._
@@ -217,6 +220,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
   private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
+  private var _shuffleDriverComponents: ShuffleDriverComponents = _
+  private var _plugins: Option[PluginContainer] = None
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -318,6 +323,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def dagScheduler_=(ds: DAGScheduler): Unit = {
     _dagScheduler = ds
   }
+
+  private[spark] def shuffleDriverComponents: ShuffleDriverComponents = _shuffleDriverComponents
 
   /**
    * A unique identifier for the Spark application.
@@ -437,7 +444,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _eventLogCodec = {
       val compress = _conf.get(EVENT_LOG_COMPRESS)
       if (compress && isEventLogEnabled) {
-        Some(CompressionCodec.getCodecName(_conf)).map(CompressionCodec.getShortName)
+        Some(_conf.get(EVENT_LOG_COMPRESSION_CODEC)).map(CompressionCodec.getShortName)
       } else {
         None
       }
@@ -524,10 +531,18 @@ class SparkContext(config: SparkConf) extends Logging {
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 
+    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
+    _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
+      _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
+    }
+
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
+
+    // Initialize any plugins before the task scheduler is initialized.
+    _plugins = PluginContainer(this)
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
@@ -558,7 +573,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
-    _env.metricsSystem.start()
+    _env.metricsSystem.start(_conf.get(METRICS_STATIC_SOURCES_ENABLED))
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
@@ -576,7 +591,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _cleaner =
       if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
-        Some(new ContextCleaner(this))
+        Some(new ContextCleaner(this, _shuffleDriverComponents))
       } else {
         None
       }
@@ -611,6 +626,7 @@ class SparkContext(config: SparkConf) extends Logging {
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
     }
     appStatusSource.foreach(_env.metricsSystem.registerSource(_))
+    _plugins.foreach(_.registerMetrics(applicationId))
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
@@ -1967,6 +1983,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     }
     Utils.tryLogNonFatalError {
+      _plugins.foreach(_.shutdown())
+    }
+    Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
     }
     if (_heartbeater != null) {
@@ -1974,6 +1993,11 @@ class SparkContext(config: SparkConf) extends Logging {
         _heartbeater.stop()
       }
       _heartbeater = null
+    }
+    if (_shuffleDriverComponents != null) {
+      Utils.tryLogNonFatalError {
+        _shuffleDriverComponents.cleanupApplication()
+      }
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {
@@ -2775,7 +2799,10 @@ object SparkContext extends Logging {
             s" = ${taskReq.amount}")
         }
         // Compare and update the max slots each executor can provide.
-        val resourceNumSlots = execAmount / taskReq.amount
+        // If the configured amount per task was < 1.0, a task is subdividing
+        // executor resources. If the amount per task was > 1.0, the task wants
+        // multiple executor resources.
+        val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
         if (resourceNumSlots < numSlots) {
           numSlots = resourceNumSlots
           limitingResourceName = taskReq.resourceName
@@ -2785,11 +2812,19 @@ object SparkContext extends Logging {
       // large enough if any task resources were specified.
       taskResourceRequirements.foreach { taskReq =>
         val execAmount = executorResourcesAndAmounts(taskReq.resourceName)
-        if (taskReq.amount * numSlots < execAmount) {
+        if ((numSlots * taskReq.amount / taskReq.numParts) < execAmount) {
+          val taskReqStr = if (taskReq.numParts > 1) {
+            s"${taskReq.amount}/${taskReq.numParts}"
+          } else {
+            s"${taskReq.amount}"
+          }
+          val resourceNumSlots = Math.floor(execAmount * taskReq.numParts/taskReq.amount).toInt
           val message = s"The configuration of resource: ${taskReq.resourceName} " +
-            s"(exec = ${execAmount}, task = ${taskReq.amount}) will result in wasted " +
-            s"resources due to resource ${limitingResourceName} limiting the number of " +
-            s"runnable tasks per executor to: ${numSlots}. Please adjust your configuration."
+            s"(exec = ${execAmount}, task = ${taskReqStr}, " +
+            s"runnable tasks = ${resourceNumSlots}) will " +
+            s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
+            s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
+            s"your configuration."
           if (Utils.isTesting) {
             throw new SparkException(message)
           } else {
@@ -2848,6 +2883,14 @@ object SparkContext extends Logging {
             "Asked to launch cluster with %d MiB RAM / worker but requested %d MiB/worker".format(
               memoryPerSlaveInt, sc.executorMemory))
         }
+
+        // For host local mode setting the default of SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED
+        // to false because this mode is intended to be used for testing and in this case all the
+        // executors are running on the same host. So if host local reading was enabled here then
+        // testing of the remote fetching would be secondary as setting this config explicitly to
+        // false would be required in most of the unit test (despite the fact that remote fetching
+        // is much more frequent in production).
+        sc.conf.setIfMissing(SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
 
         val scheduler = new TaskSchedulerImpl(sc)
         val localCluster = new LocalSparkCluster(

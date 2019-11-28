@@ -128,19 +128,19 @@
     <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>2.7.1</curator.version>
     <okapi.version>0.4.2</okapi.version>
-    <hive.group>org.spark-project.hive</hive.group>
-    <hive.classifier></hive.classifier>
+    <hive.group>org.apache.hive</hive.group>
+    <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>1.2.1.spark2</hive.version>
+    <hive.version>2.3.6</hive.version>
     <hive23.version>2.3.6</hive23.version>
     <!-- Version used for internal directory structure -->
-    <hive.version.short>1.2.1</hive.version.short>
+    <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.3.0</kafka.version>
+    <kafka.version>2.3.1</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.6</orc.version>
-    <orc.classifier>nohive</orc.classifier>
+    <orc.version>1.5.8</orc.version>
+    <orc.classifier></orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.18.v20190429</jetty.version>
@@ -148,10 +148,10 @@
     <chill.version>0.9.3</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
-    <codahale.metrics.version>3.1.5</codahale.metrics.version>
+    <codahale.metrics.version>4.1.1</codahale.metrics.version>
     <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-    <aws.kinesis.client.version>1.8.10</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.271</aws.java.sdk.version>
     <!-- the producer is used in tests -->
@@ -170,8 +170,7 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.9.10</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.9.10</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.10.0</fasterxml.jackson.version>
     <snappy.version>1.1.7.3</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.10</commons-codec.version>
@@ -179,13 +178,13 @@
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.8.1</commons-lang3.version>
+    <commons-lang3.version>3.9</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
-    <datanucleus-core.version>3.2.10</datanucleus-core.version>
+    <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <janino.version>3.0.15</janino.version>
     <jersey.version>2.29</jersey.version>
-    <joda.version>2.9.3</joda.version>
+    <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -201,9 +200,9 @@
     <commons-crypto.version>1.0.0</commons-crypto.version>
     <!--
     If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
-    ./python/run-tests.py and ./python/setup.py too.
+    and ./python/setup.py too.
     -->
-    <arrow.version>0.12.0</arrow.version>
+    <arrow.version>0.15.1</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -229,7 +228,12 @@
     -->
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
-    <hive.parquet.scope>${hive.deps.scope}</hive.parquet.scope>
+    <hive.parquet.scope>provided</hive.parquet.scope>
+    <hive.storage.scope>compile</hive.storage.scope>
+    <hive.common.scope>compile</hive.common.scope>
+    <hive.llap.scope>compile</hive.llap.scope>
+    <hive.serde.scope>compile</hive.serde.scope>
+    <hive.shims.scope>compile</hive.shims.scope>
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
@@ -334,7 +338,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.14</version>
+        <version>4.15</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -682,12 +686,12 @@
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
-        <artifactId>metrics-ganglia</artifactId>
+        <artifactId>metrics-graphite</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
-        <artifactId>metrics-graphite</artifactId>
+        <artifactId>metrics-jmx</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
@@ -698,7 +702,7 @@
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
-        <version>${fasterxml.jackson.databind.version}</version>
+        <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
@@ -2180,6 +2184,23 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <dependency>
+        <groupId>com.univocity</groupId>
+        <artifactId>univocity-parsers</artifactId>
+        <version>2.8.3</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-storage-api</artifactId>
+        <version>2.6.0</version>
+        <scope>${hive.storage.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -2237,7 +2258,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.2.0</version>
+          <version>4.3.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2295,7 +2316,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.0</version>
+          <version>3.8.1</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -2322,7 +2343,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2372,7 +2393,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
             <stderr/>
             <environmentVariables>
               <!--
@@ -2458,7 +2479,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.0.1</version>
+          <version>3.1.1</version>
           <configuration>
             <additionalJOptions>
               <additionalJOption>-Xdoclint:all</additionalJOption>
@@ -2519,12 +2540,12 @@
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>7.1</version>
+              <version>7.2</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>7.1</version>
+              <version>7.2</version>
             </dependency>
           </dependencies>
         </plugin>
@@ -2739,16 +2760,20 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.0.0</version>
+        <version>3.1.0</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
           <sourceDirectories>
             <directory>${basedir}/src/main/java</directory>
             <directory>${basedir}/src/main/scala</directory>
+            <directory>${basedir}/v${hive.version.short}/src/main/java</directory>
+            <directory>${basedir}/v${hive.version.short}/src/main/scala</directory>
           </sourceDirectories>
           <testSourceDirectories>
             <directory>${basedir}/src/test/java</directory>
+            <directory>${basedir}/v${hive.version.short}/src/test/java</directory>
+            <directory>${basedir}/v${hive.version.short}/src/test/scala</directory>
           </testSourceDirectories>
           <configLocation>dev/checkstyle.xml</configLocation>
           <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>
@@ -2759,7 +2784,7 @@
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.23</version>
+            <version>8.25</version>
           </dependency>
         </dependencies>
         <executions>
@@ -2815,24 +2840,6 @@
                 <exclude>log4j.properties</exclude>
               </excludes>
             </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.antipathy</groupId>
-        <artifactId>mvn-scalafmt_2.12</artifactId>
-        <version>0.9_1.5.1</version>
-        <configuration>
-          <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
-          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
-          <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config locataion -->
-        </configuration>
-        <executions>
-          <execution>
-            <phase>validate</phase>
-            <goals>
-              <goal>format</goal>
-            </goals>
           </execution>
         </executions>
       </plugin>
@@ -2913,24 +2920,32 @@
       <properties>
         <hadoop.version>3.2.0</hadoop.version>
         <curator.version>2.13.0</curator.version>
-        <hive.group>org.apache.hive</hive.group>
-        <hive.classifier>core</hive.classifier>
-        <hive.version>${hive23.version}</hive.version>
-        <hive.version.short>2.3.5</hive.version.short>
-        <!-- Do not need parquet-hadoop-bundle because we already have
-          parquet-common, parquet-column and parquet-hadoop -->
-        <hive.parquet.scope>provided</hive.parquet.scope>
-        <orc.classifier></orc.classifier>
-        <datanucleus-core.version>4.1.17</datanucleus-core.version>
       </properties>
-      <dependencies>
-        <!-- Both Hive and ORC need hive-storage-api, but it is excluded by orc-mapreduce -->
-        <dependency>
-          <groupId>org.apache.hive</groupId>
-          <artifactId>hive-storage-api</artifactId>
-          <version>2.6.0</version>
-        </dependency>
-      </dependencies>
+    </profile>
+
+    <profile>
+      <id>hive-1.2</id>
+      <properties>
+        <hive.group>org.spark-project.hive</hive.group>
+        <hive.classifier></hive.classifier>
+        <!-- Version used in Maven Hive dependency -->
+        <hive.version>1.2.1.spark2</hive.version>
+        <!-- Version used for internal directory structure -->
+        <hive.version.short>1.2</hive.version.short>
+        <hive.parquet.scope>${hive.deps.scope}</hive.parquet.scope>
+        <hive.storage.scope>provided</hive.storage.scope>
+        <hive.common.scope>provided</hive.common.scope>
+        <hive.llap.scope>provided</hive.llap.scope>
+        <hive.serde.scope>provided</hive.serde.scope>
+        <hive.shims.scope>provided</hive.shims.scope>
+        <orc.classifier>nohive</orc.classifier>
+        <datanucleus-core.version>3.2.10</datanucleus-core.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>hive-2.3</id>
+      <!-- Default hive profile. Uses global properties. -->
     </profile>
 
     <profile>
@@ -2987,13 +3002,43 @@
       </properties>
     </profile>
 
-    <!-- Exists for backwards compatibility; profile doesn't do anything -->
     <profile>
       <id>scala-2.12</id>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <!-- SPARK-29293 currently not able to update to 1.x for Scala 2.13 -->
+            <plugin>
+              <groupId>org.antipathy</groupId>
+              <artifactId>mvn-scalafmt_2.12</artifactId>
+              <version>0.12_1.5.1</version>
+              <configuration>
+                <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
+                <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
+                <skipSources>${scalafmt.skip}</skipSources>
+                <skipTestSources>${scalafmt.skip}</skipTestSources>
+                <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
+              </configuration>
+              <executions>
+                <execution>
+                  <phase>validate</phase>
+                  <goals>
+                    <goal>format</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
     </profile>
     
     <profile>
       <id>scala-2.13</id>
+      <properties>
+        <scala.version>2.13.1</scala.version>
+        <scala.binary.version>2.13</scala.binary.version>
+      </properties>
       <dependencyManagement>
         <dependencies>
           <dependency>

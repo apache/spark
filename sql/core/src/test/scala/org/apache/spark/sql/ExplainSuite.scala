@@ -95,8 +95,8 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
       // plan should show the rewritten aggregate expression.
       val df = sql("SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k")
       checkKeywordsExistsInExplain(df,
-        "Aggregate [k#x], [k#x, min(v#x) AS every(v)#x, max(v#x) AS some(v)#x, " +
-          "max(v#x) AS any(v)#x]")
+        "Aggregate [k#x], [k#x, min(v#x) AS bool_and(v)#x, max(v#x) AS bool_or(v)#x, " +
+          "max(v#x) AS bool_or(v)#x]")
     }
   }
 
@@ -241,9 +241,22 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
               |FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2
               |""".stripMargin
 
-          val expected_pattern = "Subquery:1 Hosting operator id = 1 Hosting Expression = k#x"
+          val expected_pattern1 =
+            "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN subquery#x"
+          val expected_pattern2 =
+            "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
+              "IN subquery#x\\)\\]"
+          val expected_pattern3 =
+            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+              "/df2/.*, ... 99 entries\\]"
+          val expected_pattern4 =
+            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+              "/df1/.*, ... 999 entries\\]"
           withNormalizedExplain(sqlText) { normalizedOutput =>
-            assert(expected_pattern.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern2.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 2)
+            assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
           }
         }
       }

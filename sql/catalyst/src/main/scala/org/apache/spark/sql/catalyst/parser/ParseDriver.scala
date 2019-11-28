@@ -28,12 +28,13 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.Dialect
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractSqlParser extends ParserInterface with Logging {
+abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Logging {
 
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
@@ -88,19 +89,26 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
+    // When we use PostgreSQL dialect or use Spark dialect with setting
+    // `spark.sql.dialect.spark.ansi.enabled=true`, the parser will use ANSI SQL standard keywords.
+    val SQLStandardKeywordBehavior = conf.dialect match {
+      case Dialect.POSTGRESQL => true
+      case Dialect.SPARK => conf.dialectSparkAnsiEnabled
+    }
+
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
-    lexer.ansi = SQLConf.get.ansiEnabled
+    lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    lexer.SQL_standard_keyword_behavior = SQLStandardKeywordBehavior
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
-    parser.ansi = SQLConf.get.ansiEnabled
+    parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    parser.SQL_standard_keyword_behavior = SQLStandardKeywordBehavior
 
     try {
       try {
@@ -134,12 +142,12 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
-class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
+class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
   val astBuilder = new AstBuilder(conf)
 }
 
 /** For test-only. */
-object CatalystSqlParser extends AbstractSqlParser {
+object CatalystSqlParser extends AbstractSqlParser(SQLConf.get) {
   val astBuilder = new AstBuilder(SQLConf.get)
 }
 

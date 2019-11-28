@@ -2471,15 +2471,6 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
     emptyString(BinaryType, "".getBytes(StandardCharsets.UTF_8))
   }
 
-  test("do not produce empty files for empty partitions") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.emptyDataset[String].write.json(path)
-      val files = new File(path).listFiles()
-      assert(!files.exists(_.getName.endsWith("json")))
-    }
-  }
-
   test("return partial result for bad records") {
     val schema = "a double, b array<int>, c string, _corrupt_record string"
     val badRecords = Seq(

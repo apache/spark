@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.Row
@@ -32,6 +33,8 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
+import org.apache.spark.sql.streaming.StreamingQuerySuite.clock
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.StructType
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
@@ -242,6 +245,45 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
       } finally {
         query.stop()
       }
+    }
+  }
+
+  test("SPARK-29973: Make `processedRowsPerSecond` calculated more accurately and meaningfully") {
+    import testImplicits._
+
+    clock = new StreamManualClock
+    val inputData = MemoryStream[Int]
+    val query = inputData.toDS()
+
+    testStream(query)(
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
+      AdvanceManualClock(1000),
+      waitUntilBatchProcessed,
+      AssertOnQuery(query => {
+        assert(query.lastProgress.numInputRows == 0)
+        assert(query.lastProgress.processedRowsPerSecond == 0.0d)
+        true
+      }),
+      AddData(inputData, 1, 2),
+      AdvanceManualClock(1000),
+      waitUntilBatchProcessed,
+      AssertOnQuery(query => {
+        assert(query.lastProgress.numInputRows == 2)
+        assert(query.lastProgress.processedRowsPerSecond == 2000d)
+        true
+      }),
+      StopStream
+    )
+  }
+
+  def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>
+    eventually(Timeout(streamingTimeout)) {
+      if (q.exception.isEmpty) {
+        assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+      }
+    }
+    if (q.exception.isDefined) {
+      throw q.exception.get
     }
   }
 

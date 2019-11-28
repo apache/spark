@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -628,6 +629,7 @@ class CodegenContext extends Logging {
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
+    case CalendarIntervalType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -1050,7 +1052,10 @@ class CodegenContext extends Logging {
     }
 
     val codes = if (commonExprVals.map(_.code.length).sum > SQLConf.get.methodSplitThreshold) {
-      if (commonExprs.map(calculateParamLength).forall(isValidParamLength)) {
+      val inputVarsForAllFuncs = commonExprs.map { expr =>
+        getLocalInputVariableValues(this, expr.head).toSeq
+      }
+      if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         commonExprs.zipWithIndex.map { case (exprs, i) =>
           val expr = exprs.head
           val eval = commonExprVals(i)
@@ -1068,7 +1073,7 @@ class CodegenContext extends Logging {
 
           // Generate the code for this expression tree and wrap it in a function.
           val fnName = freshName("subExpr")
-          val inputVars = getLocalInputVariableValues(this, expr).toSeq
+          val inputVars = inputVarsForAllFuncs(i)
           val argList = inputVars.map(v => s"${v.javaType.getName} ${v.variableName}")
           val returnType = javaType(expr.dataType)
           val fn =

@@ -355,6 +355,8 @@ private[spark] class AppStatusListener(
 
     val lastStageInfo = event.stageInfos.sortBy(_.stageId).lastOption
     val jobName = lastStageInfo.map(_.name).getOrElse("")
+    val description = Option(event.properties)
+      .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)) }
     val jobGroup = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
     val sqlExecutionId = Option(event.properties)
@@ -363,6 +365,7 @@ private[spark] class AppStatusListener(
     val job = new LiveJob(
       event.jobId,
       jobName,
+      description,
       if (event.time > 0) Some(new Date(event.time)) else None,
       event.stageIds,
       jobGroup,
@@ -411,7 +414,8 @@ private[spark] class AppStatusListener(
         val e = it.next()
         if (job.stageIds.contains(e.getKey()._1)) {
           val stage = e.getValue()
-          if (v1.StageStatus.PENDING.equals(stage.status)) {
+          // If a stage has no partitions(tasks), the stage should not be marked as skipped.
+          if (v1.StageStatus.PENDING.equals(stage.status) && stage.info.numTasks > 0) {
             stage.status = v1.StageStatus.SKIPPED
             job.skippedStages += stage.info.stageId
             job.skippedTasks += stage.info.numTasks

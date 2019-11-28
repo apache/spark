@@ -46,12 +46,13 @@ private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
     driverUrl: String,
     executorId: String,
+    bindAddress: String,
     hostname: String,
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv,
     resourcesFileOpt: Option[String])
-  extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
+  extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
 
   private implicit val formats = DefaultFormats
 
@@ -126,6 +127,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo("Successfully registered with driver")
       try {
         executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
+        driver.get.send(LaunchedExecutor(executorId))
       } catch {
         case NonFatal(e) =>
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
@@ -227,6 +229,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   case class Arguments(
       driverUrl: String,
       executorId: String,
+      bindAddress: String,
       hostname: String,
       cores: Int,
       appId: String,
@@ -238,7 +241,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     val createFn: (RpcEnv, Arguments, SparkEnv) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.hostname, arguments.cores, arguments.userClassPath, env,
+        arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath, env,
         arguments.resourcesFileOpt)
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
@@ -259,10 +262,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val executorConf = new SparkConf
       val fetcher = RpcEnv.create(
         "driverPropsFetcher",
+        arguments.bindAddress,
         arguments.hostname,
         -1,
         executorConf,
         new SecurityManager(executorConf),
+        numUsableCores = 0,
         clientMode = true)
 
       var driver: RpcEndpointRef = null
@@ -297,8 +302,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       driverConf.set(EXECUTOR_ID, arguments.executorId)
-      val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.hostname,
-        arguments.cores, cfg.ioEncryptionKey, isLocal = false)
+      val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
+        arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
       env.rpcEnv.setupEndpoint("Executor", backendCreateFn(env.rpcEnv, arguments, env))
       arguments.workerUrl.foreach { url =>
@@ -311,6 +316,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   def parseArguments(args: Array[String], classNameForEntry: String): Arguments = {
     var driverUrl: String = null
     var executorId: String = null
+    var bindAddress: String = null
     var hostname: String = null
     var cores: Int = 0
     var resourcesFileOpt: Option[String] = None
@@ -326,6 +332,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           argv = tail
         case ("--executor-id") :: value :: tail =>
           executorId = value
+          argv = tail
+        case ("--bind-address") :: value :: tail =>
+          bindAddress = value
           argv = tail
         case ("--hostname") :: value :: tail =>
           hostname = value
@@ -364,7 +373,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       printUsageAndExit(classNameForEntry)
     }
 
-    Arguments(driverUrl, executorId, hostname, cores, appId, workerUrl,
+    if (bindAddress == null) {
+      bindAddress = hostname
+    }
+
+    Arguments(driverUrl, executorId, bindAddress, hostname, cores, appId, workerUrl,
       userClassPath, resourcesFileOpt)
   }
 
@@ -377,6 +390,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       | Options are:
       |   --driver-url <driverUrl>
       |   --executor-id <executorId>
+      |   --bind-address <bindAddress>
       |   --hostname <hostname>
       |   --cores <cores>
       |   --resourcesFile <fileWithJSONResourceInformation>

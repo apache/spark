@@ -102,8 +102,12 @@ public class ExternalBlockHandler extends RpcHandler {
           FetchShuffleBlocks msg = (FetchShuffleBlocks) msgObj;
           checkAuth(client, msg.appId);
           numBlockIds = 0;
-          for (int[] ids: msg.reduceIds) {
-            numBlockIds += ids.length;
+          if (msg.batchFetchEnabled) {
+            numBlockIds = msg.mapIds.length;
+          } else {
+            for (int[] ids: msg.reduceIds) {
+              numBlockIds += ids.length;
+            }
           }
           streamId = streamManager.registerStream(client.getClientId(),
             new ShuffleManagedBufferIterator(msg), client.getChannel());
@@ -145,6 +149,12 @@ public class ExternalBlockHandler extends RpcHandler {
       checkAuth(client, msg.appId);
       int numRemovedBlocks = blockManager.removeBlocks(msg.appId, msg.execId, msg.blockIds);
       callback.onSuccess(new BlocksRemoved(numRemovedBlocks).toByteBuffer());
+
+    } else if (msgObj instanceof GetLocalDirsForExecutors) {
+      GetLocalDirsForExecutors msg = (GetLocalDirsForExecutors) msgObj;
+      checkAuth(client, msg.appId);
+      Map<String, String[]> localDirs = blockManager.getLocalDirs(msg.appId, msg.execIds);
+      callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
 
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
@@ -323,6 +333,7 @@ public class ExternalBlockHandler extends RpcHandler {
     private final int shuffleId;
     private final long[] mapIds;
     private final int[][] reduceIds;
+    private final boolean batchFetchEnabled;
 
     ShuffleManagedBufferIterator(FetchShuffleBlocks msg) {
       appId = msg.appId;
@@ -330,6 +341,7 @@ public class ExternalBlockHandler extends RpcHandler {
       shuffleId = msg.shuffleId;
       mapIds = msg.mapIds;
       reduceIds = msg.reduceIds;
+      batchFetchEnabled = msg.batchFetchEnabled;
     }
 
     @Override
@@ -343,12 +355,20 @@ public class ExternalBlockHandler extends RpcHandler {
 
     @Override
     public ManagedBuffer next() {
-      final ManagedBuffer block = blockManager.getBlockData(
-        appId, execId, shuffleId, mapIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
-      if (reduceIdx < reduceIds[mapIdx].length - 1) {
-        reduceIdx += 1;
+      ManagedBuffer block;
+      if (!batchFetchEnabled) {
+        block = blockManager.getBlockData(
+          appId, execId, shuffleId, mapIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
+        if (reduceIdx < reduceIds[mapIdx].length - 1) {
+          reduceIdx += 1;
+        } else {
+          reduceIdx = 0;
+          mapIdx += 1;
+        }
       } else {
-        reduceIdx = 0;
+        assert(reduceIds[mapIdx].length == 2);
+        block = blockManager.getContinuousBlocksData(appId, execId, shuffleId, mapIds[mapIdx],
+          reduceIds[mapIdx][0], reduceIds[mapIdx][1]);
         mapIdx += 1;
       }
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);

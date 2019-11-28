@@ -144,6 +144,7 @@ class QueryExecution(
         ExplainUtils.processPlan(executedPlan, concat.append)
       } catch {
         case e: AnalysisException => concat.append(e.toString)
+        case e: IllegalArgumentException => concat.append(e.toString)
       }
     } else {
       QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)

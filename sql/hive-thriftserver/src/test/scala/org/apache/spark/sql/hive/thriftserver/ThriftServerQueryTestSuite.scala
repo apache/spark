@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.sql.{DriverManager, Statement, Timestamp}
+import java.sql.{DriverManager, SQLException, Statement, Timestamp}
 import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.{Random, Try}
@@ -27,18 +27,26 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
- * Note that this TestSuite does not support maven.
+ *
+ * To run the entire test suite:
+ * {{{
+ *   build/sbt "hive-thriftserver/test-only *ThriftServerQueryTestSuite" -Phive-thriftserver
+ * }}}
+ *
+ * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ * }}}
  *
  * TODO:
  *   1. Support UDF testing.
@@ -75,16 +83,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  override def sparkConf: SparkConf = super.sparkConf
-    // Hive Thrift server should not executes SQL queries in an asynchronous way
-    // because we may set session configuration.
-    .set(HiveUtils.HIVE_THRIFT_SERVER_ASYNC, false)
-
-  override val isTestWithConfigSets = false
-
   /** List of test cases to ignore, in lower cases. */
-  override def blackList: Set[String] = Set(
-    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+  override def blackList: Set[String] = super.blackList ++ Set(
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",
@@ -106,19 +106,25 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   override def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Option[Seq[(String, String)]]): Unit = {
+      configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
     withJdbcStatement { statement =>
 
       loadTestData(statement)
 
+      configSet.foreach { case (k, v) =>
+        statement.execute(s"SET $k = $v")
+      }
+
       testCase match {
         case _: PgSQLTest =>
-          // PostgreSQL enabled cartesian product by default.
-          statement.execute(s"SET ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
+        case _: AnsiTest =>
+          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
+          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
         case _ =>
+          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
+          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = false")
       }
 
       // Run the SQL queries preparing them for comparison.
@@ -209,6 +215,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
               s"Exception did not match for query #$i\n${expected.sql}, " +
                 s"expected: ${expected.output}, but got: ${output.output}")
 
+          // SQLException should not exactly match. We only assert the result contains Exception.
+          case _ if output.output.startsWith(classOf[SQLException].getName) =>
+            assert(expected.output.contains("Exception"),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
           case _ =>
             assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
               output.output
@@ -231,7 +243,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  override def listTestCases(): Seq[TestCase] = {
+  override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
@@ -241,6 +253,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
         Seq.empty
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
+        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }

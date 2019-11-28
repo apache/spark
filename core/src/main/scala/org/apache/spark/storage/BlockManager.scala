@@ -22,17 +22,18 @@ import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
+import com.google.common.cache.CacheBuilder
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
@@ -111,6 +112,47 @@ private[spark] class ByteBufferBlockData(
     }
   }
 
+}
+
+private[spark] class HostLocalDirManager(
+    futureExecutionContext: ExecutionContext,
+    cacheSize: Int,
+    externalBlockStoreClient: ExternalBlockStoreClient,
+    host: String,
+    externalShuffleServicePort: Int) extends Logging {
+
+  private val executorIdToLocalDirsCache =
+    CacheBuilder
+      .newBuilder()
+      .maximumSize(cacheSize)
+      .build[String, Array[String]]()
+
+  private[spark] def getCachedHostLocalDirs()
+      : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
+    import scala.collection.JavaConverters._
+    return executorIdToLocalDirsCache.asMap().asScala
+  }
+
+  private[spark] def getHostLocalDirs(
+      executorIds: Array[String])(
+      callback: Try[java.util.Map[String, Array[String]]] => Unit): Unit = {
+    val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
+    externalBlockStoreClient.getHostLocalDirs(
+      host,
+      externalShuffleServicePort,
+      executorIds,
+      hostLocalDirsCompletable)
+    hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
+      if (hostLocalDirs != null) {
+        callback(Success(hostLocalDirs))
+        executorIdToLocalDirsCache.synchronized {
+          executorIdToLocalDirsCache.putAll(hostLocalDirs)
+        }
+      } else {
+        callback(Failure(throwable))
+      }
+    }
+  }
 }
 
 /**
@@ -205,6 +247,8 @@ private[spark] class BlockManager(
   private[storage] val remoteBlockTempFileManager =
     new BlockManager.RemoteBlockDownloadFileManager(this)
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
+
+  var hostLocalDirManager: Option[HostLocalDirManager] = None
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -433,6 +477,20 @@ private[spark] class BlockManager(
       registerWithExternalShuffleServer()
     }
 
+    hostLocalDirManager =
+      if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED)) {
+        externalBlockStoreClient.map { blockStoreClient =>
+          new HostLocalDirManager(
+            futureExecutionContext,
+            conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
+            blockStoreClient,
+            blockManagerId.host,
+            externalShuffleServicePort)
+        }
+      } else {
+        None
+      }
+
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
 
@@ -542,13 +600,19 @@ private[spark] class BlockManager(
     }
   }
 
+  override def getHostLocalShuffleData(
+      blockId: BlockId,
+      dirs: Array[String]): ManagedBuffer = {
+    shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
+  }
+
   /**
    * Interface to get local block data. Throws an exception if the block cannot be found or
    * cannot be read successfully.
    */
-  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+  override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+      shuffleManager.shuffleBlockResolver.getBlockData(blockId)
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>

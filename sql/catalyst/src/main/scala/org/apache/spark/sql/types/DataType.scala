@@ -464,6 +464,8 @@ object DataType {
           true
         }
 
+      case (_: NullType, _) if storeAssignmentPolicy == ANSI => true
+
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
         if (!Cast.canANSIStoreAssign(w, r)) {
           addError(s"Cannot safely cast '$context': $w to $r")
