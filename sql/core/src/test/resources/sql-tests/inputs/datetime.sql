@@ -39,3 +39,18 @@ select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
 
 select date '2019-01-01\t';
 select timestamp '2019-01-01\t';
+
+create or replace temporary view tmp_dates as select * from values
+ ('2011-11-11', '2011-11-11', '2011-11-11', '2011-11-11', 1),
+ ('2011-11-10', '2011-11-11', '2011-11-11', '2011-11-12', 2),
+ ('2011-11-11', '2011-11-10', '2011-11-11', '2011-11-12', 3),
+ ('2011-11-11', '2011-11-10', '2011-11-12', '2011-11-11', 4),
+ ('2011-11-10', '2011-11-11', '2011-11-12', '2011-11-13', 5),
+ ('2011-11-10', '2011-11-20', '2011-11-11', '2011-11-19', 6),
+ ('2011-11-11', '2011-11-19', '2011-11-10', '2011-11-20', 7),
+ ('2011-11-11', '2011-11-19', '2011-11-10', null, 8) t(a, b, c, d, e);
+
+select (cast(a as date), cast(b as date)) overlaps (cast(c as date), cast(d as date)), e from tmp_dates order by e;
+select (cast(a as timestamp), cast(b as timestamp)) overlaps (cast(c as timestamp), cast(d as timestamp)), e from tmp_dates order by e;
+select (cast(a as timestamp), cast(b as date)) overlaps (cast(c as date), cast(d as timestamp)), e from tmp_dates order by e;
+select e from tmp_dates where (cast(a as timestamp), cast(b as date)) overlaps (cast(c as date), cast(d as timestamp)) order by e;

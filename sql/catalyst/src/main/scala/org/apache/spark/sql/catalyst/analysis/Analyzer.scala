@@ -26,6 +26,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
@@ -193,7 +194,8 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      new SubstituteUnresolvedOrdinals(conf)),
+      new SubstituteUnresolvedOrdinals(conf),
+      DateTimeOverlapsSubstitution),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       new ResolveCatalogs(catalogManager) ::
@@ -245,6 +247,23 @@ class Analyzer(
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
+
+  /**
+   * Substitute child plan with DateTimeOverlaps.
+   */
+  object DateTimeOverlapsSubstitution extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case p: LogicalPlan => p.transformAllExpressions {
+        case u @ UnresolvedDateTimeOverlaps(leftStart, leftEnd, rightStart, rightEnd) =>
+          withPosition(u) {
+            u.checkInputDataTypes() match {
+              case TypeCheckFailure(message) => failAnalysis(message)
+              case _ => new DateTimeOverlaps(leftStart, leftEnd, rightStart, rightEnd)
+            }
+          }
+      }
+    }
+  }
 
   /**
    * Substitute child plan with WindowSpecDefinitions.

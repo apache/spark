@@ -2165,3 +2165,75 @@ case class SubtractDates(left: Expression, right: Expression)
   }
 }
 
+/**
+ * The operator `OVERLAPS` determines whether or not two chronological periods overlap in time. A
+ * chronological period is specified by a pair of datetimes (starting and ending).
+ *
+ * If the length of the period is greater than 0, then the period consists of all points of time
+ * greater than or equal to the lower endpoint, and less than the upper endpoint,
+ * a.k.a [lower, upper).
+ *
+ * If the length of the period is equal to 0, then the period consists of a single point in time,
+ * the lower endpoint, a.k.a [lower, lower].
+ *
+ * Two periods overlap if they have at least one point in common.
+ *
+ * TODO: support define period with a tarting datetime and an interval
+ */
+case class DateTimeOverlaps private (
+    leftStart: Expression,
+    leftEnd: Expression,
+    rightStart: Expression,
+    rightEnd: Expression,
+    child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(leftStart: Expression,
+      leftEnd: Expression,
+      rightStart: Expression,
+      rightEnd: Expression) =
+    this(leftStart, leftEnd, rightStart, rightEnd, {
+      val left = Seq(leftStart, leftEnd)
+      val right = Seq(rightStart, rightEnd)
+      If(And(EqualTo(leftStart, leftEnd), EqualTo(rightStart, rightEnd)), /** both periods are 0 */
+        EqualTo(leftStart, rightStart),
+        If(EqualTo(leftStart, leftEnd), /** left period is 0, ll ∈ [rl, ru) */
+          And(GreaterThanOrEqual(leftStart, Least(right)), LessThan(leftStart, Greatest(right))),
+          If(EqualTo(rightStart, rightEnd), /** right period is 0, rl ∈ [ll, lu) */
+            And(GreaterThanOrEqual(rightStart, Least(left)), LessThan(rightStart, Greatest(left))),
+            {
+              val timePoints = Seq(leftStart, leftEnd, rightStart, rightEnd)
+              val leftPeriod = If(GreaterThan(leftStart, leftEnd),
+                Subtract(leftStart, leftEnd), Subtract(leftEnd, leftStart))
+              val rightPeriod = If(GreaterThan(rightStart, rightEnd),
+                Subtract(rightStart, rightEnd), Subtract(rightEnd, rightStart))
+              LessThan(Subtract(Greatest(timePoints), Least(timePoints)),
+                Add(leftPeriod, rightPeriod))
+            }
+          )
+        )
+      )
+    })
+
+  override def flatArguments: Iterator[Any] = Iterator(leftStart, leftEnd, rightStart, rightEnd)
+
+  override def sql: String =
+    s"(${leftStart.sql}, ${leftEnd.sql}) OVERLAPS (${rightStart.sql}, ${rightEnd.sql})"
+}
+
+case class UnresolvedDateTimeOverlaps(
+    leftStart: Expression,
+    leftEnd: Expression,
+    rightStart: Expression,
+    rightEnd: Expression) extends Unevaluable with ExpectsInputTypes {
+  override lazy val resolved = false
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq.fill(4)(TypeCollection(DateType, TimestampType))
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = BooleanType
+
+  override def children: Seq[Expression] = leftStart :: leftEnd :: rightStart :: rightEnd :: Nil
+}

@@ -1577,6 +1577,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  override def visitDatetimeOverlaps(ctx: DatetimeOverlapsContext): Expression = withOrigin(ctx) {
+    val leftStart = expression(ctx.leftStart)
+    val leftEnd = expression(ctx.leftEnd)
+    val rightStart = expression(ctx.rightStart)
+    val rightEnd = expression(ctx.rightEnd)
+    UnresolvedDateTimeOverlaps(leftStart, leftEnd, rightStart, rightEnd)
+  }
+
   /**
    * Create a (windowed) Function expression.
    */

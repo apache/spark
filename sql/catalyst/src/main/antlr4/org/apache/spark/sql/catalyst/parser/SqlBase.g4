@@ -759,6 +759,8 @@ primaryExpression
        FROM srcStr=valueExpression ')'                                                         #trim
     | OVERLAY '(' input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? ')'                          #overlay
+    | '(' leftStart=valueExpression ',' leftEnd=valueExpression ')' OVERLAPS
+      '(' rightStart=valueExpression ',' rightEnd=valueExpression ')'                          #datetimeOverlaps
     ;
 
 constant
