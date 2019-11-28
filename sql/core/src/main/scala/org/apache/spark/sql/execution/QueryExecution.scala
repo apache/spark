@@ -83,7 +83,6 @@ class QueryExecution(
   lazy val sparkPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
     // Clone the logical plan here, in case the planner rules change the states of the logical plan.
     QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
-    planner.plan(ReturnAnswer(optimizedPlan.clone())).next()
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
