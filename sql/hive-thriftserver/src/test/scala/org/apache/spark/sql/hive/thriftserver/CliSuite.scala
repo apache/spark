@@ -180,7 +180,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Single command with -e") {
-    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "")
+    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "default")
   }
 
   test("Single command with --database") {
@@ -195,8 +195,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "hive_test"
     )
 
-    runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
-      "" -> "hive_test"
+    runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "INSERT INTO hive_test VALUES (1, 'test');"))(
+      "SELECT * FROM hive_test;" -> "1"
     )
   }
 
@@ -339,7 +339,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       Seq("--jars", s"$jarFile"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
         " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
-      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840"
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar|28840"
     )
   }
 
@@ -352,7 +352,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
         " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
-      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar|28840",
       "CREATE TEMPORARY FUNCTION example_max AS " +
         "'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax';" -> "",
       "SELECT concat_ws(',', 'First', example_max(1234321), 'Third');" -> "First,1234321,Third"
@@ -387,9 +387,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("SPARK-26321 Should not split semicolon within quoted string literals") {
     runCliWithin(3.minute)(
-      """select 'Test1', "^;^";""" -> "Test1\t^;^",
-      """select 'Test2', "\";";""" -> "Test2\t\";",
-      """select 'Test3', "\';";""" -> "Test3\t';",
+      """select 'Test1', "^;^";""" -> "Test1|^;^",
+      """select 'Test2', "\";";""" -> "Test2| \";",
+      """select 'Test3', "\';";""" -> "Test3| ';",
       "select concat('Test4', ';');" -> "Test4;"
     )
   }
