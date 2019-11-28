@@ -31,7 +31,7 @@ SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData;
 SELECT COUNT(a) FILTER (WHERE a = 1), COUNT(b) FILTER (WHERE a > 1) FROM testData;
 SELECT COUNT(id) FILTER (WHERE hiredate = date "2001-01-01") FROM emp;
 SELECT COUNT(id) FILTER (WHERE hiredate = to_date('2001-01-01 00:00:00')) FROM emp;
-SELECT COUNT(id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00") FROM emp;
+SELECT COUNT(id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")) FROM emp;
 
 -- Aggregate with filter and non-empty GroupBy expressions.
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData GROUP BY a;
