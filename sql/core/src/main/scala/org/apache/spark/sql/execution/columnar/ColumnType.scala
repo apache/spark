@@ -705,7 +705,8 @@ private[columnar] case class MAP(dataType: MapType)
   override def clone(v: UnsafeMapData): UnsafeMapData = v.copy()
 }
 
-private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] {
+private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval]
+  with DirectCopyColumnType[CalendarInterval]{
 
   override def dataType: DataType = CalendarIntervalType
 
@@ -715,7 +716,7 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] 
 
   override def setField(row: InternalRow, ordinal: Int, value: CalendarInterval): Unit = {
     // TODO: use set interval after SPARK-30047 merged
-    // row.setInterval(ordinal, value)
+//    row.setInterval(ordinal, value)
     row.update(ordinal, value)
   }
 

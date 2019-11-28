@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, UnsafeRowWriter}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * An Iterator to walk through the InternalRows from a CachedBatch
@@ -51,6 +52,11 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
   // the writer will be used directly to avoid creating wrapper objects
   override def setDecimal(i: Int, v: Decimal, precision: Int): Unit =
     throw new UnsupportedOperationException
+
+  // TODO
+//  override def setInterval(i: Int, value: CalendarInterval): Unit =
+//    throw new UnsupportedOperationException
+
   override def update(i: Int, v: Any): Unit = throw new UnsupportedOperationException
 
   // all other methods inherited from GenericMutableRow are not need

@@ -264,3 +264,10 @@ select interval 'interval \t 1\tday';
 select interval 'interval\t1\tday';
 select interval '1\t' day;
 select interval '1 ' day;
+
+cache table interval_columnar as select i, cast(v as interval) from VALUES(1, '1 seconds'), (1, '2 seconds'), (2, NULL), (2, NULL) t(i,v);
+select * from interval_columnar;
+explain extended select * from interval_columnar;
+explain codegen select * from interval_columnar;
+select * from interval_columnar;
+
