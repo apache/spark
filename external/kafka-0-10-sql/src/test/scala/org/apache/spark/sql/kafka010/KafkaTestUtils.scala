@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.io.{File, IOException}
+import java.io.{File, IOException, PrintWriter}
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
 import java.util.{Collections, Properties, UUID}
@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 import javax.security.auth.login.Configuration
 
 import scala.collection.JavaConverters._
+import scala.io.Source
 import scala.util.Random
 
 import com.google.common.io.Files
@@ -136,7 +137,31 @@ class KafkaTestUtils(
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
     kdc = new MiniKdc(kdcConf, kdcDir)
     kdc.start()
+    rewriteKrb5Conf()
     kdcReady = true
+  }
+
+  private def rewriteKrb5Conf(): Unit = {
+    val krb5Conf = Source.fromFile(kdc.getKrb5conf, "UTF-8").getLines()
+    val rewriteKrb5Conf = krb5Conf.map(s =>
+      if (s.contains("libdefaults")) {
+        val addedConfig =
+          addedKrb5Config("default_tkt_enctypes", "aes128-cts-hmac-sha1-96") +
+            addedKrb5Config("default_tgs_enctypes", "aes128-cts-hmac-sha1-96")
+        s + addedConfig
+      } else {
+        s
+      })
+    kdc.getKrb5conf.delete()
+    val writer = new PrintWriter(kdc.getKrb5conf)
+    // scalastyle:off
+    rewriteKrb5Conf.foreach(writer.println)
+    // scalastyle:on
+    writer.close()
+  }
+
+  private def addedKrb5Config(key: String, value: String): String = {
+    System.lineSeparator() + s"    $key=$value"
   }
 
   private def createKeytabsAndJaasConfigFile(): String = {
@@ -181,6 +206,7 @@ class KafkaTestUtils(
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
+      |  refreshKrb5Config=true
       |  keyTab="${zkClientKeytabFile.getAbsolutePath()}"
       |  principal="$zkClientUser@$realm";
       |};
