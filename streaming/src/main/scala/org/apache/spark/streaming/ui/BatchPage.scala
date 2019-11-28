@@ -38,8 +38,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     <th>Output Op Id</th>
       <th>Description</th>
       <th>Output Op Duration {SparkUIUtils.tooltip("Time taken for all the jobs of this batch to" +
-        " finish processing from the time they were submitted.  Essentially, it is" +
-        " processingDelay + schedulingDelay.",
+        " finish processing from the time they were submitted.",
         "top")}</th>
       <th>Status</th>
       <th>Job Id</th>
