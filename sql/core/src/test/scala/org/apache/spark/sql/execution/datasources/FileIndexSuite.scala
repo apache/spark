@@ -360,6 +360,7 @@ class FileIndexSuite extends SharedSparkSession {
       stringToFile(file, "text")
       val path = new Path(dir.getCanonicalPath)
       val wrongBasePath = new File(dir, "unknown")
+      // basePath must be a directory
       wrongBasePath.mkdir()
       val parameters = Map("basePath" -> wrongBasePath.getCanonicalPath)
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
