@@ -54,4 +54,4 @@ WHERE  b = 3.0 -- Only matches (2, 3.0)
 -- !query 4 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 4 output
-2	3.0
+2	3

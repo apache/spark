@@ -59,6 +59,14 @@ object HiveResult {
       result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
   }
 
+  private def formatDecimal(d: java.math.BigDecimal): String = {
+    if (d.compareTo(java.math.BigDecimal.ZERO) == 0) {
+      java.math.BigDecimal.ZERO.toPlainString
+    } else {
+      d.stripTrailingZeros().toPlainString // Hive strips trailing zeros
+    }
+  }
+
   private val primitiveTypes = Seq(
     StringType,
     IntegerType,
@@ -119,7 +127,7 @@ object HiveResult {
     case (t: Timestamp, TimestampType) =>
       DateTimeUtils.timestampToString(timestampFormatter, DateTimeUtils.fromJavaTimestamp(t))
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-    case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
+    case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
     case (interval: CalendarInterval, CalendarIntervalType) =>
       SQLConf.get.intervalOutputStyle match {
         case SQL_STANDARD => toSqlStandardString(interval)

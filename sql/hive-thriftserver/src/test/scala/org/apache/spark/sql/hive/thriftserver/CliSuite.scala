@@ -393,11 +393,4 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "select concat('Test4', ';');" -> "Test4;"
     )
   }
-
-  test("Pad Decimal numbers with trailing zeros to the scale of the column") {
-    runCliWithin(1.minute)(
-      "SELECT CAST(1 AS DECIMAL(38, 18));"
-        -> "1.000000000000000000"
-    )
-  }
 }
