@@ -56,7 +56,7 @@ private[spark] object Status {
     .createWithDefault(Int.MaxValue)
 
   val APP_STATUS_METRICS_ENABLED =
-    ConfigBuilder("spark.app.status.metrics.enabled")
+    ConfigBuilder("spark.metrics.appStatusSource.enabled")
       .doc("Whether Dropwizard/Codahale metrics " +
         "will be reported for the status of the running spark app.")
       .booleanConf
