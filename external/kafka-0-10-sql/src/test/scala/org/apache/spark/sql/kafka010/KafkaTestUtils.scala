@@ -154,9 +154,9 @@ class KafkaTestUtils(
       })
     kdc.getKrb5conf.delete()
     val writer = new PrintWriter(kdc.getKrb5conf)
-    // scalastyle:off
+    // scalastyle:off println
     rewriteKrb5Conf.foreach(writer.println)
-    // scalastyle:on
+    // scalastyle:on println
     writer.close()
   }
 
