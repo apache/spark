@@ -353,23 +353,23 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +
+        "the number of post-shuffle partitions based on map output statistics.")
+      .booleanConf
+      .createWithDefault(true)
+
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED =
     buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch.enabled")
       .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
         "one by one, fetching continuous shuffle blocks for the same map task in batch can " +
         "reduce IO and improve performance. Note, multiple continuous blocks exist in single " +
-        s"fetch request only happen when '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, " +
-        "this feature also depends on a relocatable serializer and the concatenation support " +
-        "codec in use.")
+        s"fetch request only happen when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+        s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled, this feature also depends " +
+        "on a relocatable serializer and the concatenation support codec in use.")
       .booleanConf
       .createWithDefault(true)
-
-  val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
-    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
-    .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled, this enables reducing " +
-      "the number of post-shuffle partitions based on map output statistics.")
-    .booleanConf
-    .createWithDefault(true)
 
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.shuffle.minNumPostShufflePartitions")
@@ -394,7 +394,8 @@ object SQLConf {
       .doc("The advisory maximum number of post-shuffle partitions used in adaptive execution. " +
         "This is used as the initial number of pre-shuffle partitions. By default it equals to " +
         "spark.sql.shuffle.partitions. This configuration only has an effect when " +
-        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' is enabled.")
+        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+        s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled.")
       .intConf
       .checkValue(_ > 0, "The maximum shuffle partition number " +
         "must be a positive integer.")
