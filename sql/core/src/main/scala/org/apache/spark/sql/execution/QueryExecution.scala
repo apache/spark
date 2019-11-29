@@ -235,9 +235,7 @@ object QueryExecution {
    * are correct, insert whole stage code gen, and try to reduce the work done by reusing exchanges
    * and subqueries.
    */
-  private[execution] def preparations(sparkSession: SparkSession): Seq[Rule[SparkPlan]] = {
-
-    /** A sequence of rules that will be applied in order to the physical plan before execution. */
+  private[execution] def preparations(sparkSession: SparkSession): Seq[Rule[SparkPlan]] =
     Seq(
       // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
       // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
@@ -251,7 +249,6 @@ object QueryExecution {
       ReuseExchange(sparkSession.sessionState.conf),
       ReuseSubquery(sparkSession.sessionState.conf)
     )
-  }
 
   /**
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal

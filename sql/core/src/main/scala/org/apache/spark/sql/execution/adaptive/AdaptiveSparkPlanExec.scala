@@ -128,9 +128,8 @@ case class AdaptiveSparkPlanExec(
 
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (!isFinalPlan) {
-      // Make sure we only update Spark UI if this plan's `QueryExecution` object matches the one
-      // retrieved by the `sparkContext`'s current execution ID. Note that sub-queries do not have
-      // their own execution IDs and therefore rely on the main query to update UI.
+      // Subqueries do not have their own execution IDs and therefore rely on the main query to
+      // update UI.
       val executionId = if (isSubquery) {
         None
       } else {

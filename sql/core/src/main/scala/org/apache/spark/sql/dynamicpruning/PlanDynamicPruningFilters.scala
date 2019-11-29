@@ -68,9 +68,9 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
             case _ => false
           }.isDefined
 
-        val executedPlan = QueryExecution.planSubquery(sparkSession, sparkPlan)
         if (canReuseExchange) {
           val mode = broadcastMode(buildKeys, buildPlan)
+          val executedPlan = QueryExecution.planSubquery(sparkSession, sparkPlan)
           // plan a broadcast exchange of the build side of the join
           val exchange = BroadcastExchangeExec(mode, executedPlan)
           val name = s"dynamicpruning#${exprId.id}"
