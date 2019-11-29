@@ -1,3 +1,2 @@
 -- test string behaviour with postgresql dialect
---SET spark.sql.dialect=postgresql
 --IMPORT strings.sql
