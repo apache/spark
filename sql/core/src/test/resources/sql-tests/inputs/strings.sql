@@ -48,3 +48,16 @@ SELECT ltrim('xyxXxyLAST WORD', 'xy'), trim(LEADING 'xy' FROM 'xyxXxyLAST WORD')
 SELECT rtrim('testxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'testxxzx');
 SELECT rtrim('xyztestxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'xyztestxxzx');
 SELECT rtrim('TURNERyxXxy', 'xy'), trim(TRAILING 'xy' FROM 'TURNERyxXxy');
+
+SELECT E'\\xDeAdBeEf';
+SELECT E'\\x De Ad Be Ef ';
+SELECT E'DeAdBeEf';
+SELECT E'De\\000dBeEf';
+SELECT E'De\\123dBeEf';
+SELECT E'De\\678dBeEf';
+SELECT '\\xDeAdBeEf';
+SELECT '\\x De Ad Be Ef ';
+SELECT 'DeAdBeEf';
+SELECT 'De\\000dBeEf';
+SELECT 'De\\123dBeEf';
+SELECT 'De\\678dBeEf';

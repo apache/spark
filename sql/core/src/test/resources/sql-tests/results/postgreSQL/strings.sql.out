@@ -25,7 +25,7 @@ first line - next line - third line
 
 
 -- !query 2
-SELECT binary('\\xDeAdBeEf')
+SELECT binary(E'\\xDeAdBeEf')
 -- !query 2 schema
 struct<CAST(\xDeAdBeEf AS BINARY):binary>
 -- !query 2 output
@@ -33,7 +33,7 @@ struct<CAST(\xDeAdBeEf AS BINARY):binary>
 
 
 -- !query 3
-SELECT binary('\\x De Ad Be Ef ')
+SELECT binary(E'\\x De Ad Be Ef ')
 -- !query 3 schema
 struct<CAST(\x De Ad Be Ef  AS BINARY):binary>
 -- !query 3 output
@@ -41,7 +41,7 @@ struct<CAST(\x De Ad Be Ef  AS BINARY):binary>
 
 
 -- !query 4
-SELECT binary('\\xDe00BeEf')
+SELECT binary(E'\\xDe00BeEf')
 -- !query 4 schema
 struct<CAST(\xDe00BeEf AS BINARY):binary>
 -- !query 4 output
@@ -49,7 +49,7 @@ struct<CAST(\xDe00BeEf AS BINARY):binary>
 
 
 -- !query 5
-SELECT binary('DeAdBeEf')
+SELECT binary(E'DeAdBeEf')
 -- !query 5 schema
 struct<CAST(DeAdBeEf AS BINARY):binary>
 -- !query 5 output
@@ -57,7 +57,7 @@ DeAdBeEf
 
 
 -- !query 6
-SELECT binary('De\\000dBeEf')
+SELECT binary(E'De\\000dBeEf')
 -- !query 6 schema
 struct<CAST(De\000dBeEf AS BINARY):binary>
 -- !query 6 output
@@ -65,7 +65,7 @@ De\000dBeEf
 
 
 -- !query 7
-SELECT binary('De\\123dBeEf')
+SELECT binary(E'De\\123dBeEf')
 -- !query 7 schema
 struct<CAST(De\123dBeEf AS BINARY):binary>
 -- !query 7 output
@@ -735,7 +735,7 @@ struct<repeat(Pg, -4):string>
 
 
 -- !query 90
-SELECT trim(binary('\\000') from binary('\\000Tom\\000'))
+SELECT trim(binary(E'\\000') from binary(E'\\000Tom\\000'))
 -- !query 90 schema
 struct<trim(CAST(CAST(\000Tom\000 AS BINARY) AS STRING), CAST(CAST(\000 AS BINARY) AS STRING)):string>
 -- !query 90 output

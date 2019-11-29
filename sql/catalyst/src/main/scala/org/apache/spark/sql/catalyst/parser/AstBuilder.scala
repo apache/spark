@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import java.nio.charset.Charset
 import java.util.Locale
 import javax.xml.bind.DatatypeConverter
 
@@ -51,7 +52,7 @@ import org.apache.spark.util.random.RandomSampler
  * TableIdentifier.
  */
 class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging {
-  import ParserUtils._
+  import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
   def this() = this(new SQLConf())
 
@@ -1899,6 +1900,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               throw ex
           }
           Literal(i, IntegerType)
+        case "E" if conf.usePostgreSQLDialect =>
+          Literal(value)
         case other =>
           throw new ParseException(s"Literals of type '$other' are currently not" +
             " supported.", ctx)
@@ -2023,7 +2026,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Special characters can be escaped by using Hive/C-style escaping.
    */
   private def createString(ctx: StringLiteralContext): String = {
-    if (conf.escapedStringLiterals) {
+    if (conf.escapedStringLiterals || conf.usePostgreSQLDialect) {
       ctx.STRING().asScala.map(stringWithoutUnescape).mkString
     } else {
       ctx.STRING().asScala.map(string).mkString

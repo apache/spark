@@ -63,12 +63,12 @@ SELECT 'first line'
 -- SELECT E'De\\678dBeEf'::bytea;
 
 -- SET bytea_output TO escape;
-SELECT binary('\\xDeAdBeEf');
-SELECT binary('\\x De Ad Be Ef ');
-SELECT binary('\\xDe00BeEf');
-SELECT binary('DeAdBeEf');
-SELECT binary('De\\000dBeEf');
-SELECT binary('De\\123dBeEf');
+SELECT binary(E'\\xDeAdBeEf');
+SELECT binary(E'\\x De Ad Be Ef ');
+SELECT binary(E'\\xDe00BeEf');
+SELECT binary(E'DeAdBeEf');
+SELECT binary(E'De\\000dBeEf');
+SELECT binary(E'De\\123dBeEf');
 
 -- Skip these tests because we do not have char/varchar type
 --
@@ -646,7 +646,7 @@ SELECT chr(0);
 SELECT repeat('Pg', 4);
 SELECT repeat('Pg', -4);
 
-SELECT trim(binary('\\000') from binary('\\000Tom\\000'));
+SELECT trim(binary(E'\\000') from binary(E'\\000Tom\\000'));
 -- [SPARK-28123] Add support btrim
 -- SELECT btrim(E'\\000trim\\000'::bytea, E'\\000'::bytea);
 -- SELECT btrim(''::bytea, E'\\000'::bytea);
