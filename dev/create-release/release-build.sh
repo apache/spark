@@ -282,7 +282,6 @@ if [[ "$1" == "package" ]]; then
     if [[ $SPARK_VERSION < "3.0." ]]; then
       BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
     else
-      BINARY_PKGS_ARGS["hadoop2.7-hive1.2"]="-Phadoop-2.7 -Phive-1.2 $HIVE_PROFILES"
       BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
     fi
   fi
