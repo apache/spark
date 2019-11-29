@@ -108,6 +108,8 @@ case class AggregateExpression(
     UnresolvedAttribute(aggregateFunction.toString)
   }
 
+  lazy val filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
+
   // We compute the same thing regardless of our final result.
   override lazy val canonicalized: Expression = {
     val normalizedAggFunc = mode match {
