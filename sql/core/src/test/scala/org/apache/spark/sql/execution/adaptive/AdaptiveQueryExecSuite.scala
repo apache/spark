@@ -552,4 +552,19 @@ class AdaptiveQueryExecSuite
       spark.sparkContext.removeSparkListener(listener)
     }
   }
+
+  test("SPARK-30088: Change merge join to broadcast join when subquery generates empty result") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData left join" +
+          " (select * from testData2 where b = 0) temp ON key = a where value = '1'")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 2)
+    }
+  }
 }

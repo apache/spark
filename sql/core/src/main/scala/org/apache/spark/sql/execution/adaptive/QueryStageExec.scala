@@ -79,7 +79,9 @@ abstract class QueryStageExec extends LeafExecNode {
    */
   def computeStats(): Option[Statistics] = resultOption.map { _ =>
     // Metrics `dataSize` are available in both `ShuffleExchangeExec` and `BroadcastExchangeExec`.
-    Statistics(sizeInBytes = plan.metrics("dataSize").value)
+    // The `dataSize` metric may be a negative number when this spark plan generates empty result,
+    // since SQLMetric use -1 as initial value.
+    Statistics(sizeInBytes = Math.max(plan.metrics("dataSize").value, 0))
   }
 
   @transient
