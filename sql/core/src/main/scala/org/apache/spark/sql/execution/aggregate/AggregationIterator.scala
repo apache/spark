@@ -171,7 +171,7 @@ abstract class AggregationIterator(
             case PartialMerge =>
               if (filter.isDefined) {
                 ae.mergeExpressions.zip(ae.aggBufferAttributes).map {
-                  case (newVal, attr) => If(filter, newVal, attr)
+                  case (newVal, attr) => If(filter.get, newVal, attr)
                 }
               } else {
                 ae.mergeExpressions
