@@ -1461,7 +1461,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val value = expression(ctx.valueExpression)
     ctx.operator.getType match {
       case SqlBaseParser.PLUS =>
-        value
+        UnaryPositive(value)
       case SqlBaseParser.MINUS =>
         UnaryMinus(value)
       case SqlBaseParser.TILDE =>
