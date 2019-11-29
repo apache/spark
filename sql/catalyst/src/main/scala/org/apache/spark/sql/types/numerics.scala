@@ -21,7 +21,7 @@ import scala.math.Numeric._
 import scala.math.Ordering
 
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
-
+import org.apache.spark.util.OrderingUtil
 
 object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
   private def checkOverflow(res: Int, x: Byte, y: Byte, op: String): Unit = {
@@ -118,7 +118,7 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
     }
 }
 
-object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
+object FloatExactNumeric extends FloatIsFractional {
   private def overflowException(x: Float, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
@@ -148,9 +148,11 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
       overflowException(x, "int")
     }
   }
+
+  override def compare(x: Float, y: Float): Int = OrderingUtil.compareFloat(x, y)
 }
 
-object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrdering {
+object DoubleExactNumeric extends DoubleIsFractional {
   private def overflowException(x: Double, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
@@ -174,6 +176,8 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
       overflowException(x, "long")
     }
   }
+
+  override def compare(x: Double, y: Double): Int = OrderingUtil.compareDouble(x, y)
 }
 
 object DecimalExactNumeric extends DecimalIsConflicted {

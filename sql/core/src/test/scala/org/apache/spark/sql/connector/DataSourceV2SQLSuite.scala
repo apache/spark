@@ -24,7 +24,6 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -113,7 +112,10 @@ class DataSourceV2SQLSuite
     val description = descriptionDf.collect()
     assert(description === Seq(
       Row("id", "bigint", ""),
-      Row("data", "string", "")))
+      Row("data", "string", ""),
+      Row("", "", ""),
+      Row("# Partitioning", "", ""),
+      Row("Part 0", "id", "")))
   }
 
   test("DescribeTable with v2 catalog when table does not exist.") {
@@ -126,7 +128,9 @@ class DataSourceV2SQLSuite
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
       " USING foo" +
       " PARTITIONED BY (id)" +
-      " TBLPROPERTIES ('bar'='baz')")
+      " TBLPROPERTIES ('bar'='baz')" +
+      " COMMENT 'this is a test table'" +
+      " LOCATION '/tmp/testcat/table_name'")
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
     assert(descriptionDf.schema.map(field => (field.name, field.dataType))
       === Seq(
@@ -139,14 +143,15 @@ class DataSourceV2SQLSuite
       Array("id", "bigint", ""),
       Array("data", "string", ""),
       Array("", "", ""),
-      Array("Partitioning", "", ""),
-      Array("--------------", "", ""),
+      Array("# Partitioning", "", ""),
       Array("Part 0", "id", ""),
       Array("", "", ""),
-      Array("Table Property", "Value", ""),
-      Array("----------------", "-------", ""),
-      Array("bar", "baz", ""),
-      Array("provider", "foo", "")))
+      Array("# Detailed Table Information", "", ""),
+      Array("Name", "testcat.table_name", ""),
+      Array("Comment", "this is a test table", ""),
+      Array("Location", "/tmp/testcat/table_name", ""),
+      Array("Provider", "foo", ""),
+      Array("Table Properties", "[bar=baz]", "")))
 
   }
 
@@ -830,7 +835,7 @@ class DataSourceV2SQLSuite
         sql(s"CREATE NAMESPACE testcat.test LOCATION '$path'")
         val metadata =
           catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("test")).asScala
-        val catalogPath = metadata(V2SessionCatalog.LOCATION_TABLE_PROP)
+        val catalogPath = metadata(SupportsNamespaces.PROP_LOCATION)
         assert(catalogPath.equals(catalogPath))
       }
     }
@@ -1727,6 +1732,14 @@ class DataSourceV2SQLSuite
       sql(s"ALTER VIEW $v AS SELECT 1")
     }
     assert(e.message.contains("ALTER VIEW QUERY is only supported with v1 tables"))
+  }
+
+  test("CREATE VIEW") {
+    val v = "testcat.ns1.ns2.v"
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
+    }
+    assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
   }
 
   test("SHOW TBLPROPERTIES: v2 table") {

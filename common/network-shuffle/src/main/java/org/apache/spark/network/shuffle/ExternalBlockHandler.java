@@ -150,6 +150,12 @@ public class ExternalBlockHandler extends RpcHandler {
       int numRemovedBlocks = blockManager.removeBlocks(msg.appId, msg.execId, msg.blockIds);
       callback.onSuccess(new BlocksRemoved(numRemovedBlocks).toByteBuffer());
 
+    } else if (msgObj instanceof GetLocalDirsForExecutors) {
+      GetLocalDirsForExecutors msg = (GetLocalDirsForExecutors) msgObj;
+      checkAuth(client, msg.appId);
+      Map<String, String[]> localDirs = blockManager.getLocalDirs(msg.appId, msg.execIds);
+      callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
+
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
