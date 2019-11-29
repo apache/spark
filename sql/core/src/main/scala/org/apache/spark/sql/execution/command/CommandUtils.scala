@@ -152,7 +152,7 @@ object CommandUtils extends Logging {
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
     val hadoopConf = sessionState.newHadoopConf()
 
-    val calcDeserFactEnabled = sessionState.conf.deserFactorStatCalcEnabled
+    val deserFactCalcEnabled = sessionState.conf.deserFactorStatCalcEnabled
     def getSumSizeInBytesWithDeserFactor(fs: FileSystem, path: Path): SizeInBytesWithDeserFactor = {
       val fileStatus = fs.getFileStatus(path)
       if (fileStatus.isDirectory) {
@@ -165,7 +165,7 @@ object CommandUtils extends Logging {
         }
         sumSizeWithMaxDeserializationFactor(fileSizesWithDeserFactor)
       } else {
-        sizeInBytesWithDeserFactor(calcDeserFactEnabled, hadoopConf, fileStatus, serde)
+        sizeInBytesWithDeserFactor(deserFactCalcEnabled, hadoopConf, fileStatus, serde)
       }
     }
 
