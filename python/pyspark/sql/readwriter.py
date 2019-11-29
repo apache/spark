@@ -521,7 +521,7 @@ class DataFrameReader(OptionUtils):
 
     @since(1.5)
     def orc(self, path, recursiveFileLookup=None):
-        """Loads ORC files, returning the result as a :class:`DataFrame`. TEST
+        """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
