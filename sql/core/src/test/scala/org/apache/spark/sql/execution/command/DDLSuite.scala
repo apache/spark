@@ -1004,7 +1004,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withTempView("tab1") {
       sql(
         """
-          |CREATE TEMPORARY TABLE tab1
+          |CREATE TEMPORARY VIEW tab1
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
@@ -1067,7 +1067,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withTempView("tab1", "tab2") {
       sql(
         """
-          |CREATE TEMPORARY TABLE tab1
+          |CREATE TEMPORARY VIEW tab1
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
@@ -1078,7 +1078,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       sql(
         """
-          |CREATE TEMPORARY TABLE tab2
+          |CREATE TEMPORARY VIEW tab2
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
@@ -1993,7 +1993,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withTempView("t_temp") {
       sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
       val e = intercept[TempTableAlreadyExistsException] {
-        sql("CREATE TEMPORARY TABLE t_temp (c3 int, c4 string) USING JSON")
+        sql("CREATE TEMPORARY VIEW t_temp (c3 int, c4 string) USING JSON")
       }.getMessage
       assert(e.contains("Temporary view 't_temp' already exists"))
     }
