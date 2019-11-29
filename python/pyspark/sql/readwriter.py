@@ -250,7 +250,7 @@ class DataFrameReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
-        .. _partition discovery: https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
+        .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -304,8 +304,11 @@ class DataFrameReader(OptionUtils):
         return self._df(self._jreader.table(tableName))
 
     @since(1.4)
-    def parquet(self, *paths, recursiveFileLookup=None):
+    def parquet(self, *paths, **options):
         """Loads Parquet files, returning the result as a :class:`DataFrame`.
+
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         You can set the following Parquet-specific option(s) for reading Parquet files:
             * ``mergeSchema``: sets whether we should merge schemas collected from all \
@@ -316,6 +319,7 @@ class DataFrameReader(OptionUtils):
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
+        recursiveFileLookup = options.get('recursiveFileLookup', None)
         self._set_opts(recursiveFileLookup=recursiveFileLookup)
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
@@ -334,6 +338,8 @@ class DataFrameReader(OptionUtils):
         :param wholetext: if true, read each file from input path(s) as a single row.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
@@ -464,6 +470,8 @@ class DataFrameReader(OptionUtils):
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
                         Maximum length is 1 character.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -513,7 +521,10 @@ class DataFrameReader(OptionUtils):
 
     @since(1.5)
     def orc(self, path, recursiveFileLookup=None):
-        """Loads ORC files, returning the result as a :class:`DataFrame`.
+        """Loads ORC files, returning the result as a :class:`DataFrame`. TEST
+
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
