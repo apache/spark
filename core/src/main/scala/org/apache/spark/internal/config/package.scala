@@ -616,7 +616,7 @@ package object config {
     .createOptional
 
   private[spark] val METRICS_EXECUTORMETRICS_SOURCE_ENABLED =
-    ConfigBuilder("spark.metrics.executormetrics.source.enabled")
+    ConfigBuilder("spark.metrics.executorMetricsSource.enabled")
       .doc("Whether to register the ExecutorMetrics source with the metrics system.")
       .booleanConf
       .createWithDefault(true)

@@ -997,7 +997,7 @@ This is the component with the largest amount of instrumented metrics
 
 - namespace=ExecutorMetrics
   - **note:** these metrics are conditional to a configuration parameter:
-    `spark.metrics.executormetrics.source.enabled` (default is true) 
+    `spark.metrics.executorMetricsSource.enabled` (default is true) 
   - This source contains memory-related metrics. A full list of available metrics in this 
     namespace can be found in the corresponding entry for the Executor component instance.
  
@@ -1055,7 +1055,7 @@ when running in local mode.
 - namespace=ExecutorMetrics
   - **notes:** 
     - These metrics are conditional to a configuration parameter:
-    `spark.metrics.executormetrics.source.enabled` (default value is true) 
+    `spark.metrics.executorMetricsSource.enabled` (default value is true) 
     - ExecutorMetrics are updated as part of heartbeat processes scheduled
    for the executors and for the driver at regular intervals: `spark.executor.heartbeatInterval` (default value is 10 seconds)
     - An optional faster polling mechanism is available for executor memory metrics, 
