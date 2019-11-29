@@ -171,7 +171,7 @@ class DataFrameReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
-             dropFieldIfAllNull=None, encoding=None, locale=None):
+             dropFieldIfAllNull=None, encoding=None, locale=None, recursiveFileLookup=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -247,6 +247,10 @@ class DataFrameReader(OptionUtils):
         :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
                        it uses the default value, ``en-US``. For instance, ``locale`` is used while
                        parsing dates and timestamps.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
+
+        .. _partition discovery: https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -266,7 +270,7 @@ class DataFrameReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
             samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            locale=locale)
+            locale=locale, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -300,7 +304,7 @@ class DataFrameReader(OptionUtils):
         return self._df(self._jreader.table(tableName))
 
     @since(1.4)
-    def parquet(self, *paths):
+    def parquet(self, *paths, recursiveFileLookup=None):
         """Loads Parquet files, returning the result as a :class:`DataFrame`.
 
         You can set the following Parquet-specific option(s) for reading Parquet files:
@@ -312,11 +316,12 @@ class DataFrameReader(OptionUtils):
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
+        self._set_opts(recursiveFileLookup=recursiveFileLookup)
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, paths, wholetext=False, lineSep=None):
+    def text(self, paths, wholetext=False, lineSep=None, recursiveFileLookup=None):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -337,7 +342,8 @@ class DataFrameReader(OptionUtils):
         >>> df.collect()
         [Row(value=u'hello\\nthis')]
         """
-        self._set_opts(wholetext=wholetext, lineSep=lineSep)
+        self._set_opts(wholetext=wholetext, lineSep=lineSep,
+                       recursiveFileLookup=recursiveFileLookup)
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
@@ -349,7 +355,8 @@ class DataFrameReader(OptionUtils):
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            samplingRatio=None, enforceSchema=None, emptyValue=None, locale=None, lineSep=None):
+            samplingRatio=None, enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
+            recursiveFileLookup=None):
         r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -476,7 +483,8 @@ class DataFrameReader(OptionUtils):
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
-            enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep)
+            enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
+            recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -504,13 +512,14 @@ class DataFrameReader(OptionUtils):
             raise TypeError("path can be only string, list or RDD")
 
     @since(1.5)
-    def orc(self, path):
+    def orc(self, path, recursiveFileLookup=None):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
+        self._set_opts(recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
