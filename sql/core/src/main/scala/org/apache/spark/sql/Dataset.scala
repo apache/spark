@@ -2342,6 +2342,116 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new DataFrame that contains the differences
+   * between this and the other Dataset of the same type `T`.
+   *
+   * Optional id columns are used to uniquely identify rows that relate.
+   * If values in any non-id column are differing between this and the other Dataset,
+   * then that row is marked as `"C"`hange and `"N"`o-change otherwise.
+   * Rows of the other Dataset, that do not exist in this Dataset
+   * (w.r.t. the values in the id columns) are marked as `"I"`nsert.
+   * And rows of this Dataset, that do not exist in the other Dataset
+   * are marked as `"D"`elete.
+   *
+   * If no id columns are given, all columns are considered id columns. Then,
+   * no `"C"`hange rows will appear, as all changes will exists as respective
+   * `"D"`elete and `"I"`nsert.
+   *
+   * The returned DataFrame has the `diff` column as the first column.
+   * This holds the `"N"`, `"C"`, `"I"` or `"D"` strings. The id columns follow.
+   * For all non-id columns
+   *
+   * The id columns are in order as given to the method.
+   * If none are given, in the order of this Dataset.
+   * The non-id columns are in the order of this Dataset.
+   *
+   * @group untypedrel
+   * @since 3.0.0
+   */
+  def diff(other: Dataset[T], idColumns: String*): DataFrame = {
+    Diff.of(this, other, idColumns: _*)
+  }
+
+  /**
+   * Returns a new DataFrame that contains the differences
+   * between this and the other Dataset of the same type `T`.
+   *
+   * See `diff(Dataset[T], String*`.
+   *
+   * The schema of the returned DataFrame can be configured by the given `DiffOptions`.
+   *
+   * @group untypedrel
+   * @since 3.0.0
+   */
+  def diff(other: Dataset[T], options: DiffOptions, idColumns: String*): DataFrame = {
+    new Diff(options).of(this, other, idColumns: _*)
+  }
+
+  /**
+   * Returns a new Dataset that contains the differences
+   * between this and the other Dataset of the same type `T`.
+   *
+   * See `diff(Dataset[T], String*`.
+   *
+   * @group typedrel
+   * @since 3.0.0
+   */
+  def diffAs[U](other: Dataset[T], idColumns: String*)
+               (implicit diffEncoder: Encoder[U]): Dataset[U] = {
+    Diff.ofAs(this, other, idColumns: _*)
+  }
+
+  /**
+   * Returns a new Dataset that contains the differences
+   * between this and the other Dataset of the same type `T`.
+   *
+   * See `diff(Dataset[T], String*)`.
+   *
+   * This requires an additional implicit `Encoder[U]` for the return type `Dataset[U]`.
+   *
+   * @group typedrel
+   * @since 3.0.0
+   */
+  def diffAs[U](other: Dataset[T], options: DiffOptions, idColumns: String*)
+               (implicit diffEncoder: Encoder[U]): Dataset[U] = {
+    new Diff(options).ofAs(this, other, idColumns: _*)
+  }
+
+  /**
+   * Returns a new Dataset that contains the differences
+   * between this and the other Dataset of the same type `T`.
+   *
+   * See `diff(Dataset[T], String*`.
+   *
+   * This requires an additional explicit `Encoder[U]` for the return type `Dataset[U]`.
+   *
+   * @group typedrel
+   * @since 3.0.0
+   */
+  def diffAs[U](other: Dataset[T], diffEncoder: Encoder[U], idColumns: String*): Dataset[U] = {
+    Diff.ofAs(this, other, diffEncoder, idColumns: _*)
+  }
+
+  /**
+   * Returns a new Dataset that contains the differences
+   * between this and the other Dataset of the same type `T`.
+   *
+   * See `diff(Dataset[T], DiffOptions, String*`.
+   *
+   * This requires an additional explicit `Encoder[U]` for the return type `Dataset[U]`.
+   * The schema of the returned Dataset can be configured by the given `DiffOptions`.
+   *
+   * @group typedrel
+   * @since 3.0.0
+   */
+  def diffAs[U](other: Dataset[T],
+                options: DiffOptions,
+                diffEncoder: Encoder[U],
+                idColumns: String*): Dataset[U] = {
+    new Diff(options).ofAs(this, other, diffEncoder, idColumns: _*)
+  }
+
+  /**
    * Returns a new Dataset with a column dropped. This is a no-op if schema doesn't contain
    * column name.
    *
