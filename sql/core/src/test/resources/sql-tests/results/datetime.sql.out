@@ -240,7 +240,7 @@ select (cast(a as date), b) overlaps (c, d) from tmp_dates
 struct<>
 -- !query 24 output
 org.apache.spark.sql.AnalysisException
-argument 2 requires (date or timestamp) type, however, 'tmp_dates.`b`' is of string type. argument 3 requires (date or timestamp) type, however, 'tmp_dates.`c`' is of string type. argument 4 requires (date or timestamp) type, however, 'tmp_dates.`d`' is of string type.; line 1 pos 7
+argument 2 requires (date or timestamp or interval) type, however, 'tmp_dates.`b`' is of string type. argument 3 requires (date or timestamp) type, however, 'tmp_dates.`c`' is of string type. argument 4 requires (date or timestamp or interval) type, however, 'tmp_dates.`d`' is of string type.; line 1 pos 7
 
 
 -- !query 25
@@ -262,7 +262,7 @@ struct<>
 -- !query 26
 select (cast(a as date), cast(b as interval)) overlaps (cast(c as date), cast(d as interval)), e from tmp_dates_with_interval order by e
 -- !query 26 schema
-struct<(CAST(tmp_dates_with_interval.`a` AS DATE), CAST(CAST(tmp_dates_with_interval.`a` AS DATE) + CAST(tmp_dates_with_interval.`b` AS INTERVAL) AS DATE)) OVERLAPS (CAST(tmp_dates_with_interval.`c` AS DATE), CAST(CAST(tmp_dates_with_interval.`c` AS DATE) + CAST(tmp_dates_with_interval.`d` AS INTERVAL) AS DATE)):boolean,e:int>
+struct<(CAST(tmp_dates_with_interval.`a` AS DATE), (CAST(tmp_dates_with_interval.`a` AS DATE) + CAST(tmp_dates_with_interval.`b` AS INTERVAL))) OVERLAPS (CAST(tmp_dates_with_interval.`c` AS DATE), (CAST(tmp_dates_with_interval.`c` AS DATE) + CAST(tmp_dates_with_interval.`d` AS INTERVAL))):boolean,e:int>
 -- !query 26 output
 true	1
 false	2
@@ -277,7 +277,7 @@ NULL	8
 -- !query 27
 select (cast(a as timestamp), cast(b as interval)) overlaps (cast(c as timestamp), cast(d as interval)), e from tmp_dates_with_interval order by e
 -- !query 27 schema
-struct<(CAST(tmp_dates_with_interval.`a` AS TIMESTAMP), CAST(CAST(tmp_dates_with_interval.`a` AS TIMESTAMP) + CAST(tmp_dates_with_interval.`b` AS INTERVAL) AS TIMESTAMP)) OVERLAPS (CAST(tmp_dates_with_interval.`c` AS TIMESTAMP), CAST(CAST(tmp_dates_with_interval.`c` AS TIMESTAMP) + CAST(tmp_dates_with_interval.`d` AS INTERVAL) AS TIMESTAMP)):boolean,e:int>
+struct<(CAST(tmp_dates_with_interval.`a` AS TIMESTAMP), (CAST(tmp_dates_with_interval.`a` AS TIMESTAMP) + CAST(tmp_dates_with_interval.`b` AS INTERVAL))) OVERLAPS (CAST(tmp_dates_with_interval.`c` AS TIMESTAMP), (CAST(tmp_dates_with_interval.`c` AS TIMESTAMP) + CAST(tmp_dates_with_interval.`d` AS INTERVAL))):boolean,e:int>
 -- !query 27 output
 true	1
 false	2
@@ -292,7 +292,7 @@ NULL	8
 -- !query 28
 select (cast(a as timestamp), cast(b as interval)) overlaps (cast(c as date), cast(d as interval)), e from tmp_dates_with_interval order by e
 -- !query 28 schema
-struct<(CAST(tmp_dates_with_interval.`a` AS TIMESTAMP), CAST(CAST(tmp_dates_with_interval.`a` AS TIMESTAMP) + CAST(tmp_dates_with_interval.`b` AS INTERVAL) AS TIMESTAMP)) OVERLAPS (CAST(tmp_dates_with_interval.`c` AS DATE), CAST(CAST(tmp_dates_with_interval.`c` AS DATE) + CAST(tmp_dates_with_interval.`d` AS INTERVAL) AS DATE)):boolean,e:int>
+struct<(CAST(tmp_dates_with_interval.`a` AS TIMESTAMP), (CAST(tmp_dates_with_interval.`a` AS TIMESTAMP) + CAST(tmp_dates_with_interval.`b` AS INTERVAL))) OVERLAPS (CAST(tmp_dates_with_interval.`c` AS DATE), (CAST(tmp_dates_with_interval.`c` AS DATE) + CAST(tmp_dates_with_interval.`d` AS INTERVAL))):boolean,e:int>
 -- !query 28 output
 true	1
 false	2
@@ -320,4 +320,4 @@ select (a, b) overlaps (c, d) from tmp_dates_with_interval
 struct<>
 -- !query 30 output
 org.apache.spark.sql.AnalysisException
-argument 1 requires (date or timestamp) type, however, 'tmp_dates_with_interval.`a`' is of string type. argument 2 requires (date or timestamp) type, however, 'tmp_dates_with_interval.`b`' is of string type. argument 3 requires (date or timestamp) type, however, 'tmp_dates_with_interval.`c`' is of string type. argument 4 requires (date or timestamp) type, however, 'tmp_dates_with_interval.`d`' is of string type.; line 1 pos 7
+argument 1 requires (date or timestamp) type, however, 'tmp_dates_with_interval.`a`' is of string type. argument 2 requires (date or timestamp or interval) type, however, 'tmp_dates_with_interval.`b`' is of string type. argument 3 requires (date or timestamp) type, however, 'tmp_dates_with_interval.`c`' is of string type. argument 4 requires (date or timestamp or interval) type, however, 'tmp_dates_with_interval.`d`' is of string type.; line 1 pos 7

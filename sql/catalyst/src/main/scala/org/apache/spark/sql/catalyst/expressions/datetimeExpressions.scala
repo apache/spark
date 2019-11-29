@@ -2229,7 +2229,10 @@ case class UnresolvedDateTimeOverlaps(
   override lazy val resolved = false
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(4)(TypeCollection(DateType, TimestampType))
+    Seq(TypeCollection(DateType, TimestampType),
+      TypeCollection(DateType, TimestampType, CalendarIntervalType),
+      TypeCollection(DateType, TimestampType),
+      TypeCollection(DateType, TimestampType, CalendarIntervalType))
 
   override def nullable: Boolean = true
 

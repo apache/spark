@@ -254,17 +254,20 @@ class Analyzer(
   object ResolveDateTimeOverlaps extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformAllExpressions {
-        case u @ UnresolvedDateTimeOverlaps(leftStart, leftEnd, _, _)
-          if leftEnd.dataType.isInstanceOf[CalendarIntervalType] =>
-          u.copy(leftEnd = Add(leftStart, leftEnd))
-        case u @ UnresolvedDateTimeOverlaps(_, _, rightStart, rightEnd)
-          if rightEnd.dataType.isInstanceOf[CalendarIntervalType] =>
-          u.copy(rightEnd = Add(rightStart, rightEnd))
         case u @ UnresolvedDateTimeOverlaps(leftStart, leftEnd, rightStart, rightEnd) =>
           withPosition(u) {
             u.checkInputDataTypes() match {
               case TypeCheckFailure(message) => failAnalysis(message)
-              case _ => new DateTimeOverlaps(leftStart, leftEnd, rightStart, rightEnd)
+              case _ =>
+                val newLeftEnd = leftEnd.dataType match {
+                  case CalendarIntervalType => Add(leftStart, leftEnd)
+                  case _ => leftEnd
+                }
+                val newRightEnd = rightEnd.dataType match {
+                  case CalendarIntervalType => Add(rightStart, rightEnd)
+                  case _ => rightEnd
+                }
+                new DateTimeOverlaps(leftStart, newLeftEnd, rightStart, newRightEnd)
             }
           }
       }
