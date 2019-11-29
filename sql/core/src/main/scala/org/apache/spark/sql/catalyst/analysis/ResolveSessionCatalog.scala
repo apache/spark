@@ -24,10 +24,10 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
+import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing, DataSource, RefreshTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
@@ -466,6 +466,18 @@ class ResolveSessionCatalog(
         allowExisting,
         replace,
         viewType)
+
+    case CreateTempViewUsingStatement(
+      tableName, userSpecifiedSchema, replace, global, provider, options) =>
+
+      val v1TableName = parseV1Table(tableName, "CREATE TEMP VIEW USING")
+      CreateTempViewUsing(
+        v1TableName.asTableIdentifier,
+        userSpecifiedSchema,
+        replace,
+        global,
+        provider,
+        options)
 
     case ShowTablePropertiesStatement(SessionCatalog(_, tableName), propertyKey) =>
       ShowTablePropertiesCommand(

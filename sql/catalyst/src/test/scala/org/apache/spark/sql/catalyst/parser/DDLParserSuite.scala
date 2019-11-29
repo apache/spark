@@ -1768,6 +1768,20 @@ class DDLParserSuite extends AnalysisTest {
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
 
+  test("create temp view using") {
+    val v = "CREATE TEMPORARY VIEW a.b.c USING JSON"
+    val parsed = parsePlan(v)
+
+    val expected = CreateTempViewUsingStatement(
+      Seq("a", "b", "c"),
+      None,
+      false,
+      false,
+      "JSON",
+      Map.empty[String, String])
+    comparePlans(parsed, expected)
+  }
+
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),

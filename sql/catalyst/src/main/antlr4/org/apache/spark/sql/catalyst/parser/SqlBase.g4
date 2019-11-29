@@ -172,7 +172,7 @@ statement
          (TBLPROPERTIES tablePropertyList))*
         AS query                                                       #createView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
-        tableIdentifier ('(' colTypeList ')')? tableProvider
+        multipartIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
     | ALTER VIEW multipartIdentifier AS? query                         #alterViewQuery
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?

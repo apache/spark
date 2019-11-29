@@ -170,64 +170,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a table, returning a [[CreateTable]] logical plan.
-   *
-   * This is used to produce CreateTempViewUsing from CREATE TEMPORARY TABLE.
-   *
-   * TODO: Remove this. It is used because CreateTempViewUsing is not a Catalyst plan.
-   * Either move CreateTempViewUsing into catalyst as a parsed logical plan, or remove it because
-   * it is deprecated.
-   */
-  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
-    val (ident, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
-
-    if (!temp || ctx.query != null) {
-      super.visitCreateTable(ctx)
-    } else {
-      if (external) {
-        operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
-      }
-
-      checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-      checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
-      checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-      checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
-      checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
-      checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
-
-      if (ifNotExists) {
-        // Unlike CREATE TEMPORARY VIEW USING, CREATE TEMPORARY TABLE USING does not support
-        // IF NOT EXISTS. Users are not allowed to replace the existing temp table.
-        operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
-      }
-
-      val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-      val provider = ctx.tableProvider.multipartIdentifier.getText
-      val schema = Option(ctx.colTypeList()).map(createSchema)
-
-      logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
-          "CREATE TEMPORARY VIEW ... USING ... instead")
-
-      val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
-      CreateTempViewUsing(table, schema, replace = false, global = false, provider, options)
-    }
-  }
-
-  /**
-   * Creates a [[CreateTempViewUsing]] logical plan.
-   */
-  override def visitCreateTempViewUsing(
-      ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
-    CreateTempViewUsing(
-      tableIdent = visitTableIdentifier(ctx.tableIdentifier()),
-      userSpecifiedSchema = Option(ctx.colTypeList()).map(createSchema),
-      replace = ctx.REPLACE != null,
-      global = ctx.GLOBAL != null,
-      provider = ctx.tableProvider.multipartIdentifier.getText,
-      options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
-  }
-
-  /**
    * Create a plan for a DESCRIBE FUNCTION command.
    */
   override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {

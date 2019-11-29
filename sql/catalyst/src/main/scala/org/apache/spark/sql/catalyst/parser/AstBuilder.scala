@@ -3280,6 +3280,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Creates a [[CreateTempViewUsingStatement]].
+   */
+  override def visitCreateTempViewUsing(
+      ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
+    CreateTempViewUsingStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      Option(ctx.colTypeList()).map(createSchema),
+      ctx.REPLACE != null,
+      ctx.GLOBAL != null,
+      ctx.tableProvider.multipartIdentifier.getText,
+      Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+  }
+
+  /**
    * Alter the query of a view. This creates a [[AlterViewAsStatement]]
    *
    * For example:

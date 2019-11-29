@@ -102,6 +102,17 @@ case class CreateViewStatement(
     viewType: ViewType) extends ParsedStatement
 
 /**
+ * A CREATE TEMP VIEW USINGstatement, as parsed from SQL.
+ */
+case class CreateTempViewUsingStatement(
+    viewName: Seq[String],
+    userSpecifiedSchema: Option[StructType],
+    replace: Boolean,
+    global: Boolean,
+    provider: String,
+    options: Map[String, String]) extends ParsedStatement
+
+/**
  * A REPLACE TABLE command, as parsed from SQL.
  *
  * If the table exists prior to running this command, executing this statement
