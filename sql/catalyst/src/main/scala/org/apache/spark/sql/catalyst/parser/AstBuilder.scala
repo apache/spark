@@ -52,7 +52,7 @@ import org.apache.spark.util.random.RandomSampler
  * TableIdentifier.
  */
 class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging {
-  import org.apache.spark.sql.catalyst.parser.ParserUtils._
+  import ParserUtils._
 
   def this() = this(new SQLConf())
 
