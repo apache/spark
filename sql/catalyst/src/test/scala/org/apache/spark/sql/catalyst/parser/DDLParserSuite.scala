@@ -1769,12 +1769,12 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("create temp view using") {
-    val v = "CREATE TEMPORARY VIEW a.b.c USING JSON"
+    val v = "CREATE TEMPORARY VIEW a.b.c (col int) USING JSON"
     val parsed = parsePlan(v)
-
     val expected = CreateTempViewUsingStatement(
       Seq("a", "b", "c"),
-      None,
+      Some(new StructType()
+        .add("col", IntegerType, nullable = true)),
       false,
       false,
       "JSON",

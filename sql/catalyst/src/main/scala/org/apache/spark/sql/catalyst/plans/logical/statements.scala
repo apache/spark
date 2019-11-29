@@ -102,7 +102,7 @@ case class CreateViewStatement(
     viewType: ViewType) extends ParsedStatement
 
 /**
- * A CREATE TEMP VIEW USINGstatement, as parsed from SQL.
+ * A CREATE TEMP VIEW USING statement, as parsed from SQL.
  */
 case class CreateTempViewUsingStatement(
     viewName: Seq[String],

@@ -1745,7 +1745,7 @@ class DataSourceV2SQLSuite
   test("CREATE TEMP VIEW USING") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
-      sql(s"CREATE TEMPORARY VIEW $v USING JSON")
+      sql(s"CREATE TEMPORARY VIEW $v (c1 int) USING JSON")
     }
     assert(e.message.contains("CREATE TEMP VIEW USING is only supported with v1 tables"))
   }
