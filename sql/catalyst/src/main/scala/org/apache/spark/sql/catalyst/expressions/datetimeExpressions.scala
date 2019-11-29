@@ -2167,7 +2167,8 @@ case class SubtractDates(left: Expression, right: Expression)
 
 /**
  * The operator `OVERLAPS` determines whether or not two chronological periods overlap in time. A
- * chronological period is specified by a pair of datetimes (starting and ending).
+ * chronological period is specified by a pair of datetimes (starting and ending) or as a
+ * starting datetime and an interval(resolved by analyzer to datetimes pairs early).
  *
  * If the length of the period is greater than 0, then the period consists of all points of time
  * greater than or equal to the lower endpoint, and less than the upper endpoint,
@@ -2178,7 +2179,6 @@ case class SubtractDates(left: Expression, right: Expression)
  *
  * Two periods overlap if they have at least one point in common.
  *
- * TODO: support define period with a tarting datetime and an interval
  */
 case class DateTimeOverlaps private (
     leftStart: Expression,

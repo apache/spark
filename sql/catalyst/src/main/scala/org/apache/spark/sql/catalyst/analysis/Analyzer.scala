@@ -194,8 +194,7 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      new SubstituteUnresolvedOrdinals(conf),
-      DateTimeOverlapsSubstitution),
+      new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       new ResolveCatalogs(catalogManager) ::
@@ -230,6 +229,7 @@ class Analyzer(
       ResolveLambdaVariables(conf) ::
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
+      ResolveDateTimeOverlaps ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("PostgreSQL Dialect", Once, PostgreSQLDialect.postgreSQLDialectRules: _*),
@@ -249,11 +249,17 @@ class Analyzer(
   )
 
   /**
-   * Substitute child plan with DateTimeOverlaps.
+   * Replace interval with startEnd + interval and substitute child plan with DateTimeOverlaps.
    */
-  object DateTimeOverlapsSubstitution extends Rule[LogicalPlan] {
+  object ResolveDateTimeOverlaps extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformAllExpressions {
+        case u @ UnresolvedDateTimeOverlaps(leftStart, leftEnd, _, _)
+          if leftEnd.dataType.isInstanceOf[CalendarIntervalType] =>
+          u.copy(leftEnd = Add(leftStart, leftEnd))
+        case u @ UnresolvedDateTimeOverlaps(_, _, rightStart, rightEnd)
+          if rightEnd.dataType.isInstanceOf[CalendarIntervalType] =>
+          u.copy(rightEnd = Add(rightStart, rightEnd))
         case u @ UnresolvedDateTimeOverlaps(leftStart, leftEnd, rightStart, rightEnd) =>
           withPosition(u) {
             u.checkInputDataTypes() match {

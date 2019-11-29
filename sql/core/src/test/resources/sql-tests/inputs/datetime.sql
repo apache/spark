@@ -54,3 +54,22 @@ select (cast(a as date), cast(b as date)) overlaps (cast(c as date), cast(d as d
 select (cast(a as timestamp), cast(b as timestamp)) overlaps (cast(c as timestamp), cast(d as timestamp)), e from tmp_dates order by e;
 select (cast(a as timestamp), cast(b as date)) overlaps (cast(c as date), cast(d as timestamp)), e from tmp_dates order by e;
 select e from tmp_dates where (cast(a as timestamp), cast(b as date)) overlaps (cast(c as date), cast(d as timestamp)) order by e;
+
+select (cast(a as date), b) overlaps (c, d) from tmp_dates;
+
+create or replace temporary view tmp_dates_with_interval as select * from values
+ ('2011-11-11', '0 day', '2011-11-11', '0 day', 1),
+ ('2011-11-10', '1 day', '2011-11-11', '1 day', 2),
+ ('2011-11-11', '-1 day', '2011-11-11', '1 day', 3),
+ ('2011-11-11', '-1 day', '2011-11-12', '-1 day', 4),
+ ('2011-11-10', '1 day', '2011-11-12', '1 day', 5),
+ ('2011-11-10', '10 day', '2011-11-11', '8 day', 6),
+ ('2011-11-11', '8 day', '2011-11-10', '10 day', 7),
+ ('2011-11-11', '8 day', '2011-11-10', null, 8) t(a, b, c, d, e);
+
+select (cast(a as date), cast(b as interval)) overlaps (cast(c as date), cast(d as interval)), e from tmp_dates_with_interval order by e;
+select (cast(a as timestamp), cast(b as interval)) overlaps (cast(c as timestamp), cast(d as interval)), e from tmp_dates_with_interval order by e;
+select (cast(a as timestamp), cast(b as interval)) overlaps (cast(c as date), cast(d as interval)), e from tmp_dates_with_interval order by e;
+select e from tmp_dates_with_interval where (cast(a as timestamp), cast(b as interval)) overlaps (cast(c as date), cast(d as interval)) order by e;
+
+select (a, b) overlaps (c, d) from tmp_dates_with_interval;
