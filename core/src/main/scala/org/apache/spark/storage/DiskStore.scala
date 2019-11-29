@@ -96,7 +96,7 @@ private[spark] class DiskStore(
   }
 
   def getBytes(blockId: BlockId): BlockData = {
-    getBytes(diskManager.getFile(blockId.name), getSize(blockId))
+    getBytes(diskManager.getFile(blockId), getSize(blockId))
   }
 
   def getBytes(f: File, blockSize: Long): BlockData = securityManager.getIOEncryptionKey() match {
@@ -111,7 +111,7 @@ private[spark] class DiskStore(
 
   def remove(blockId: BlockId): Boolean = {
     blockSizes.remove(blockId)
-    val file = diskManager.getFile(blockId.name)
+    val file = diskManager.getFile(blockId)
     if (file.exists()) {
       val ret = file.delete()
       if (!ret) {
@@ -129,12 +129,12 @@ private[spark] class DiskStore(
    */
   def moveFileToBlock(sourceFile: File, blockSize: Long, targetBlockId: BlockId): Unit = {
     blockSizes.put(targetBlockId, blockSize)
-    val targetFile = diskManager.getFile(targetBlockId.name)
+    val targetFile = diskManager.getFile(targetBlockId)
     FileUtils.moveFile(sourceFile, targetFile)
   }
 
   def contains(blockId: BlockId): Boolean = {
-    val file = diskManager.getFile(blockId.name)
+    val file = diskManager.getFile(blockId)
     file.exists()
   }
 

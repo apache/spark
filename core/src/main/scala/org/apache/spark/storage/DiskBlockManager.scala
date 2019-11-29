@@ -47,18 +47,36 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
 
+  def containerDirEnabled: Boolean = Utils.isRunningInYarnContainer(conf)
+
+  /* Create container directories on YARN to persist the temporary files.
+   * (temp_local, temp_shuffle)
+   * These files have no opportunity to be cleaned before application end on YARN.
+   * This is a real issue, especially for long-lived Spark application like Spark thrift-server.
+   * So we persist these files in YARN container directories which could be cleaned by YARN when
+   * the container exists. */
+  private[spark] val containerDirs: Array[File] =
+    if (containerDirEnabled) createContainerDirs(conf) else Array.empty[File]
+
   private[spark] val localDirsString: Array[String] = localDirs.map(_.toString)
 
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
+  private val subContainerDirs = if (containerDirEnabled) {
+    Array.fill(containerDirs.length)(new Array[File](subDirsPerLocalDir))
+  } else {
+    Array.empty[Array[File]]
+  }
+
   private val shutdownHook = addShutdownHook()
 
-  /** Looks up a file by hashing it into one of our local subdirectories. */
+  /** Looks up a file by hashing it into one of our local/container subdirectories. */
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFile().
-  def getFile(filename: String): File = {
+  def getFile(localDirs: Array[File], subDirs: Array[Array[File]],
+      subDirsPerLocalDir: Int, filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
     val dirId = hash % localDirs.length
@@ -82,17 +100,29 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     new File(subDir, filename)
   }
 
-  def getFile(blockId: BlockId): File = getFile(blockId.name)
+  /**
+   * Used only for testing.
+   */
+  private[spark] def getFile(filename: String): File =
+    getFile(localDirs, subDirs, subDirsPerLocalDir, filename)
+
+  def getFile(blockId: BlockId): File = {
+    if (containerDirEnabled && blockId.isTemp) {
+      getFile(containerDirs, subContainerDirs, subDirsPerLocalDir, blockId.name)
+    } else {
+      getFile(localDirs, subDirs, subDirsPerLocalDir, blockId.name)
+    }
+  }
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
-    getFile(blockId.name).exists()
+    getFile(blockId).exists()
   }
 
   /** List all the files currently stored on disk by the disk manager. */
   def getAllFiles(): Seq[File] = {
     // Get all the files inside the array of array of directories
-    subDirs.flatMap { dir =>
+    (subDirs ++ subContainerDirs).flatMap { dir =>
       dir.synchronized {
         // Copy the content of dir because it may be modified in other threads
         dir.clone()
@@ -172,6 +202,27 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     }
   }
 
+  /**
+   * Create container directories for storing block data in YARN mode.
+   * These directories are located inside configured local directories and
+   * will be deleted in the processing of container clean of YARN.
+   */
+  private def createContainerDirs(conf: SparkConf): Array[File] = {
+    Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
+      val containerDirPath = s"$rootDir/${conf.getenv("CONTAINER_ID")}"
+      try {
+        val containerDir = Utils.createDirectory(containerDirPath, "blockmgr")
+        logInfo(s"Created YARN container directory at $containerDir")
+        Some(containerDir)
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to create YARN container dir in $containerDirPath." +
+            s" Ignoring this directory.", e)
+          None
+      }
+    }
+  }
+
   private def addShutdownHook(): AnyRef = {
     logDebug("Adding shutdown hook") // force eager creation of logger
     ShutdownHookManager.addShutdownHook(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
@@ -194,15 +245,15 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   private def doStop(): Unit = {
     if (deleteFilesOnStop) {
-      localDirs.foreach { localDir =>
-        if (localDir.isDirectory() && localDir.exists()) {
+      (localDirs ++ containerDirs).foreach { dir =>
+        if (dir.isDirectory() && dir.exists()) {
           try {
-            if (!ShutdownHookManager.hasRootAsShutdownDeleteDir(localDir)) {
-              Utils.deleteRecursively(localDir)
+            if (!ShutdownHookManager.hasRootAsShutdownDeleteDir(dir)) {
+              Utils.deleteRecursively(dir)
             }
           } catch {
             case e: Exception =>
-              logError(s"Exception while deleting local spark dir: $localDir", e)
+              logError(s"Exception while deleting local spark dir: $dir", e)
           }
         }
       }

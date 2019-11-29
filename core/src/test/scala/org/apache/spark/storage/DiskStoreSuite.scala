@@ -150,7 +150,7 @@ class DiskStoreSuite extends SparkFunSuite {
 
     assert(diskStore.getSize(blockId) === testData.length)
 
-    val diskData = Files.toByteArray(diskBlockManager.getFile(blockId.name))
+    val diskData = Files.toByteArray(diskBlockManager.getFile(blockId))
     assert(!Arrays.equals(testData, diskData))
 
     val blockData = diskStore.getBytes(blockId)

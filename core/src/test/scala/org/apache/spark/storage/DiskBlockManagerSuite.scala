@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
 
+import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -129,6 +130,20 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
       rootDir0.setExecutable(true)
       rootDir1.setExecutable(true)
     }
+  }
 
+  test("test write temp file into container dir") {
+    val conf = spy(testConf.clone)
+    val containerId = "container_e1987_1564558112805_31178_01_000131"
+    conf.set("spark.local.dir", rootDirs).set("spark.diskStore.subDirectories", "1")
+    when(conf.getenv("CONTAINER_ID")).thenReturn(containerId)
+    when(conf.getenv("LOCAL_DIRS")).thenReturn(System.getProperty("java.io.tmpdir"))
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val tempShuffleFile1 = diskBlockManager.createTempShuffleBlock()._2
+    val tempLocalFile1 = diskBlockManager.createTempLocalBlock()._2
+    assert(tempShuffleFile1.exists(), "There are no bad disks, so temp shuffle file exists")
+    assert(tempShuffleFile1.getAbsolutePath.contains(containerId))
+    assert(tempLocalFile1.exists(), "There are no bad disks, so temp local file exists")
+    assert(tempLocalFile1.getAbsolutePath.contains(containerId))
   }
 }
