@@ -979,34 +979,8 @@ case class CollectMetrics(
     child: LogicalPlan)
   extends UnaryNode {
 
-  /**
-   * Check if an expression is a valid metric. A metric must meet the following criteria:
-   * - Is not a window function;
-   * - Is not nested aggregate function;
-   * - Is not a distinct aggregate function;
-   * - Has only non-deterministic functions that are nested inside an aggregate function;
-   * - Has only attributes that are nested inside an aggregate function.
-   *
-   * @param e expression to check.
-   * @param seenAggregate `true` iff one of the parents on the expression is an aggregate function.
-   * @return `true` if the metric is valid, `false` otherwise.
-   */
-  private def isValidMetric(e: Expression, seenAggregate: Boolean = false): Boolean = {
-    e match {
-      case _: WindowExpression => false
-      case a: AggregateExpression if seenAggregate || a.isDistinct => false
-      case _: AggregateExpression => e.children.forall(isValidMetric(_, seenAggregate = true))
-      case _: Nondeterministic if !seenAggregate => false
-      case _: Attribute if !seenAggregate => false
-      case _ => e.children.forall(isValidMetric(_, seenAggregate))
-    }
-  }
-
   override lazy val resolved: Boolean = {
-    def metricsResolved: Boolean = metrics.forall { e =>
-      e.resolved && isValidMetric(e)
-    }
-    name.nonEmpty && metrics.nonEmpty && metricsResolved && childrenResolved
+    name.nonEmpty && metrics.nonEmpty && metrics.forall(_.resolved) && childrenResolved
   }
 
   override def output: Seq[Attribute] = child.output

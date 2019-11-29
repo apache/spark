@@ -281,6 +281,41 @@ trait CheckAnalysis extends PredicateHelper {
             groupingExprs.foreach(checkValidGroupingExprs)
             aggregateExprs.foreach(checkValidAggregateExpression)
 
+          case CollectMetrics(name, metrics, _) =>
+            if (name == null || name.isEmpty) {
+              operator.failAnalysis(s"observed metrics should be named: $operator")
+            }
+            // Check if an expression is a valid metric. A metric must meet the following criteria:
+            // - Is not a window function;
+            // - Is not nested aggregate function;
+            // - Is not a distinct aggregate function;
+            // - Has only non-deterministic functions that are nested inside an aggregate function;
+            // - Has only attributes that are nested inside an aggregate function.
+            def checkMetric(s: Expression, e: Expression, seenAggregate: Boolean = false): Unit = {
+              e match {
+                case _: WindowExpression =>
+                  e.failAnalysis(
+                    "window expressions are not allowed in observed metrics, but found: " + s.sql)
+                case _ if !e.deterministic && !seenAggregate =>
+                  e.failAnalysis(s"non-deterministic expression ${s.sql} can only be used " +
+                    "as an argument to an aggregate function.")
+                case a: AggregateExpression if seenAggregate =>
+                  e.failAnalysis(
+                    "nested aggregates are not allowed in observed metrics, but found: " + s.sql)
+                case a: AggregateExpression if a.isDistinct =>
+                  e.failAnalysis(
+                    "distinct aggregates are not allowed in observed metrics, but found: " + s.sql)
+                case _: Attribute if !seenAggregate =>
+                  e.failAnalysis (s"attribute ${s.sql} can only be used as an argument to an " +
+                    "aggregate function.")
+                case _: AggregateExpression =>
+                  e.children.foreach(checkMetric (s, _, seenAggregate = true))
+                case _ =>
+                  e.children.foreach(checkMetric (s, _, seenAggregate))
+              }
+            }
+            metrics.foreach(m => checkMetric(m, m))
+
           case Sort(orders, _, _) =>
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {

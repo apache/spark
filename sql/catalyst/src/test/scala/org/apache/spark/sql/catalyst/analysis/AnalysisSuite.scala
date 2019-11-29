@@ -662,31 +662,44 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Bad name
     assert(!CollectMetrics("", sum :: Nil, testRelation).resolved)
+    assertAnalysisError(CollectMetrics("", sum :: Nil, testRelation),
+      "observed metrics should be named" :: Nil)
 
-    def checkUnresolved(exprs: NamedExpression*): Unit = {
-      assert(!CollectMetrics("event", exprs, testRelation).resolved)
-    }
     // No columns
-    checkUnresolved()
+    assert(!CollectMetrics("evt", Nil, testRelation).resolved)
+
+    def checkAnalysisError(exprs: Seq[NamedExpression], errors: String*): Unit = {
+      assertAnalysisError(CollectMetrics("event", exprs, testRelation), errors)
+    }
 
     // Unwrapped attribute
-    checkUnresolved(a)
+    checkAnalysisError(
+      a :: Nil,
+      "Attribute", "can only be used as an argument to an aggregate function")
 
     // Unwrapped non-deterministic expression
-    checkUnresolved(Rand(10).as("rnd"))
+    checkAnalysisError(
+      Rand(10).as("rnd") :: Nil,
+      "non-deterministic expression", "can only be used as an argument to an aggregate function")
 
     // Distinct aggregate
-    checkUnresolved(Sum(a).toAggregateExpression(isDistinct = true).as("sum"))
+    checkAnalysisError(
+      Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
+    "distinct aggregates are not allowed in observed metrics, but found")
 
     // Nested aggregate
-    checkUnresolved(Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum"))
+    checkAnalysisError(
+      Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
+      "nested aggregates are not allowed in observed metrics, but found")
 
     // Windowed aggregate
     val windowExpr = WindowExpression(
       RowNumber(),
       WindowSpecDefinition(Nil, a.asc :: Nil,
         SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
-    checkUnresolved(windowExpr.as("rn"))
+    checkAnalysisError(
+      windowExpr.as("rn") :: Nil,
+      "window expressions are not allowed in observed metrics, but found")
   }
 
   test("check CollectMetrics duplicates") {

@@ -2432,6 +2432,10 @@ class Analyzer(
           nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
         }.copy(child = newChild)
 
+      // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
+      // and we want to retain them inside the aggregate functions.
+      case m: CollectMetrics => m
+
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output
       // schema with its child.
