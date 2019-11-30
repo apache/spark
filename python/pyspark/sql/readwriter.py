@@ -348,8 +348,8 @@ class DataFrameReader(OptionUtils):
         >>> df.collect()
         [Row(value=u'hello\\nthis')]
         """
-        self._set_opts(wholetext=wholetext, lineSep=lineSep,
-                       recursiveFileLookup=recursiveFileLookup)
+        self._set_opts(
+            wholetext=wholetext, lineSep=lineSep, recursiveFileLookup=recursiveFileLookup)
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
