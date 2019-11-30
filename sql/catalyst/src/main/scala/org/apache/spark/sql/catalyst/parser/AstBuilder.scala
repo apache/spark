@@ -2642,9 +2642,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           ifNotExists = ifNotExists)
 
       case None if temp =>
-        // CREATE TEMPORARY TABLE ... USING ... is not supported by the catalyst parser.
+        // CREATE TEMPORARY TABLE ... USING ... is not supported.
         // Use CREATE TEMPORARY VIEW ... USING ... instead.
-        operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
+        operationNotAllowed("CREATE TEMPORARY TABLE", ctx)
 
       case _ =>
         CreateTableStatement(table, schema.getOrElse(new StructType), partitioning, bucketSpec,
