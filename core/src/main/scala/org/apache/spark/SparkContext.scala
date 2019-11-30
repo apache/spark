@@ -433,14 +433,6 @@ class SparkContext(config: SparkConf) extends Logging {
     _files = _conf.getOption(FILES.key).map(_.split(",")).map(_.filter(_.nonEmpty))
       .toSeq.flatten
 
-    _eventLogDir =
-      if (isEventLogEnabled) {
-        val unresolvedDir = conf.get(EVENT_LOG_DIR).stripSuffix("/")
-        Some(Utils.resolveURI(unresolvedDir))
-      } else {
-        None
-      }
-
     _eventLogCodec = {
       val compress = _conf.get(EVENT_LOG_COMPRESS)
       if (compress && isEventLogEnabled) {
@@ -508,6 +500,17 @@ class SparkContext(config: SparkConf) extends Logging {
     if (files != null) {
       files.foreach(addFile)
     }
+
+    _eventLogDir =
+      if (isEventLogEnabled) {
+        val defaultFSProperty = _hadoopConfiguration.get("fs.defaultFS")
+        val defaultFS = if (defaultFSProperty == null) "" else defaultFSProperty
+
+        val unresolvedDir = s"$defaultFS${conf.get(EVENT_LOG_DIR).stripSuffix("/")}"
+        Some(Utils.resolveURI(unresolvedDir))
+      } else {
+        None
+      }
 
     _executorMemory = _conf.getOption(EXECUTOR_MEMORY.key)
       .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
