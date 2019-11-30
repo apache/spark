@@ -507,7 +507,10 @@ class SparkContext(config: SparkConf) extends Logging {
         val defaultFS = if (defaultFSProperty == null) "" else defaultFSProperty
 
         val unresolvedDir = s"$defaultFS${conf.get(EVENT_LOG_DIR).stripSuffix("/")}"
-        Some(Utils.resolveURI(unresolvedDir))
+
+        val fs = new Path(unresolvedDir).getFileSystem(_hadoopConfiguration)
+        val qualifiedPath = fs.makeQualified(new Path(unresolvedDir))
+        Some(qualifiedPath.toUri)
       } else {
         None
       }

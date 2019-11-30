@@ -26,7 +26,7 @@ import scala.concurrent.duration._
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
@@ -34,6 +34,7 @@ import org.json4s.{DefaultFormats, Extraction}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
+import org.apache.spark.FakeFileSystem._
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
@@ -882,6 +883,39 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
     }
   }
+
+  test("Resolve scheme-less event log directory relative to default filesystem") {
+    withTempDir { temp =>
+      val path = temp.getAbsolutePath
+      val conf = new SparkConf()
+        .setAppName("test")
+        .setMaster("local")
+        .set(s"spark.hadoop.fs.$scheme.impl", classOf[FakeFileSystem].getName)
+        .set("spark.hadoop.fs.defaultFS", s"$scheme:///")
+        .set("spark.eventLog.enabled", "true")
+        .set("spark.eventLog.dir", path)
+      sc = new SparkContext(conf)
+
+      assert(sc.eventLogDir.isDefined)
+      assert(sc.eventLogDir.get.getPath == path)
+      assert(sc.eventLogDir.get.getScheme == s"$scheme")
+    }
+
+  }
+}
+
+/**
+ * Fake FileSystem to test whether the method `fs.exists` is called during
+ * `DataSource.resolveRelation`.
+ */
+class FakeFileSystem extends RawLocalFileSystem {
+  override def getUri: URI = {
+    URI.create(s"$scheme:///")
+  }
+}
+
+object FakeFileSystem {
+  val scheme = "fake"
 }
 
 object SparkContextSuite {
