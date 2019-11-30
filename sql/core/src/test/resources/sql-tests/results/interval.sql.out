@@ -255,7 +255,7 @@ struct<(- INTERVAL '-1 months 1 days -1 seconds'):interval>
 -- !query 31
 select +interval '-1 month 1 day -1 second'
 -- !query 31 schema
-struct<INTERVAL '-1 months 1 days -1 seconds':interval>
+struct<(+ INTERVAL '-1 months 1 days -1 seconds'):interval>
 -- !query 31 output
 -1 months 1 days -1 seconds
 
@@ -263,7 +263,7 @@ struct<INTERVAL '-1 months 1 days -1 seconds':interval>
 -- !query 32
 select +interval -1 month 1 day -1 second
 -- !query 32 schema
-struct<INTERVAL '-1 months 1 days -1 seconds':interval>
+struct<(+ INTERVAL '-1 months 1 days -1 seconds'):interval>
 -- !query 32 output
 -1 months 1 days -1 seconds
 
