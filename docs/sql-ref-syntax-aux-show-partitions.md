@@ -26,8 +26,7 @@ partition spec.
 
 ### Syntax
 {% highlight sql %}
-SHOW PARTITIONS table_name
-    [ PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] ) ]
+SHOW PARTITIONS table_name [ partition_spec ]
 {% endhighlight %}
 
 ### Parameters
@@ -36,9 +35,15 @@ SHOW PARTITIONS table_name
   <dd>The name of an existing table.</dd>
 </dl>
 <dl>
-  <dt><code><em>PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )</em></code></dt>
-  <dd>An optional parameter that specifies a comma separated list of key and value pairs for
-      partitions. When specified, the partitions that match the partition spec are returned.</dd>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions. When specified, additional partition metadata is returned.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )
+      </code>
+  </dd>
 </dl>
 
 ### Examples

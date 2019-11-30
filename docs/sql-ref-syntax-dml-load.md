@@ -24,8 +24,7 @@ license: |
 
 ### Syntax
 {% highlight sql %}
-LOAD DATA [ LOCAL ] INPATH path [ OVERWRITE ] INTO TABLE table_name
-  [ PARTITION ( partition_col_name = partition_col_val [ , ... ] ) ]
+LOAD DATA [ LOCAL ] INPATH path [ OVERWRITE ] INTO TABLE table_name [ partition_spec ]
 {% endhighlight %}
 
 ### Parameters
@@ -40,8 +39,15 @@ LOAD DATA [ LOCAL ] INPATH path [ OVERWRITE ] INTO TABLE table_name
 </dl>
 
 <dl>
-  <dt><code><em>PARTITION ( partition_col_name = partition_col_val [ , ... ] )</em></code></dt>
-  <dd>Specifies one or more partition column and value pairs.</dd>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions. When specified, additional partition metadata is returned.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name = partition_col_val [ , ... ] )
+      </code>
+  </dd>
 </dl>
 
 <dl>

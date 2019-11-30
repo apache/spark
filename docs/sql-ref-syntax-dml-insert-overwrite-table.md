@@ -25,8 +25,7 @@ The `INSERT OVERWRITE` statement overwrites the existing data in the table using
 
 ### Syntax
 {% highlight sql %}
-INSERT OVERWRITE [ TABLE ] table_name
-    [ PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] ) [ IF NOT EXISTS ] ]
+INSERT OVERWRITE [ TABLE ] table_name [ partition_spec [ IF NOT EXISTS ] ]
     { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
 {% endhighlight %}
 
@@ -37,8 +36,15 @@ INSERT OVERWRITE [ TABLE ] table_name
 </dl>
 
 <dl>
-  <dt><code><em>PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )</em></code></dt>
-  <dd>Specifies one or more partition column and value pairs. The partition value is optional.</dd>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions. When specified, additional partition metadata is returned.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )
+      </code>
+  </dd>
 </dl>
 
 <dl>

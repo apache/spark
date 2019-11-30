@@ -31,7 +31,7 @@ cannot be used with a partition specification.
 
 ### Syntax
 {% highlight sql %}
-SHOW TABLE EXTENDED [IN|FROM database_name] LIKE 'identifier_with_wildcards' [PARTITION(partition_spec)];
+SHOW TABLE EXTENDED [IN|FROM database_name] LIKE 'identifier_with_wildcards' [ partition_spec ]
 {% endhighlight %}
 
 ### Parameters
@@ -50,10 +50,14 @@ SHOW TABLE EXTENDED [IN|FROM database_name] LIKE 'identifier_with_wildcards' [PA
        <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
     </ul> 
   </dd>
-  <dt><code><em>PARTITION(partition_spec)</em></code></dt>
+  <dt><code><em>partition_spec</em></code></dt>
   <dd>
-    Specifies partition column and its value which is exists in the table. Note that a table regex 
-    cannot be used with a partition specification..
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions. When specified, additional partition metadata is returned.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )
+      </code>
   </dd>
 </dl>
 ### Examples

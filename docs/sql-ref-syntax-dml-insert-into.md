@@ -25,8 +25,7 @@ The `INSERT INTO` statement inserts new rows into a table. The inserted rows can
 
 ### Syntax
 {% highlight sql %}
-INSERT INTO [ TABLE ] table_name
-    [ PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] ) ]
+INSERT INTO [ TABLE ] table_name [ partition_spec ]
     { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
 {% endhighlight %}
 
@@ -37,8 +36,27 @@ INSERT INTO [ TABLE ] table_name
 </dl>
 
 <dl>
-  <dt><code><em>PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )</em></code></dt>
-  <dd>Specifies one or more partition column and value pairs. The partition value is optional.</dd>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions. When specified, additional partition metadata is returned.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )
+      </code>
+  </dd>
+</dl>
+
+<dl>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions. When specified, additional partition metadata is returned.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION (partition_col_name  = partition_col_val [ , ... ])
+      </code>
+  </dd>
 </dl>
 
 <dl>

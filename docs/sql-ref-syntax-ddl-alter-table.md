@@ -27,9 +27,9 @@ license: |
 
 #### Syntax
 {% highlight sql %}
-ALTER TABLE [db_name.]old_table_name RENAME TO [db_name.]new_table_name
+ALTER TABLE [ db_name. ] old_table_name RENAME TO [ db_name. ] new_table_name
 
-ALTER TABLE table_name PARTITION partition_spec RENAME TO PARTITION partition_spec;
+ALTER TABLE table_name partition_spec RENAME TO partition_spec
 
 {% endhighlight %}
 
@@ -50,7 +50,14 @@ ALTER TABLE table_name PARTITION partition_spec RENAME TO PARTITION partition_sp
 
 <dl>
   <dt><code><em>partition_spec</em></code></dt>
-  <dd>Partition to be renamed.</dd>
+  <dd>
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions. When specified, additional partition metadata is returned.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
+      </code>
+  </dd>
 </dl>
 
 
@@ -59,7 +66,7 @@ ALTER TABLE table_name PARTITION partition_spec RENAME TO PARTITION partition_sp
 
 #### Syntax
 {% highlight sql %}
-ALTER TABLE table_name ADD COLUMNS (col_spec[, col_spec ...])
+ALTER TABLE table_name ADD COLUMNS ( col_spec [ , col_spec ... ] )
 {% endhighlight %}
 
 #### Parameters
@@ -70,7 +77,7 @@ ALTER TABLE table_name ADD COLUMNS (col_spec[, col_spec ...])
 
 
 <dl>
-  <dt><code><em>COLUMNS (col_spec)</em></code></dt>
+  <dt><code><em>COLUMNS ( col_spec )</em></code></dt>
   <dd>Specifies the columns to be added to be renamed.</dd>
 </dl>
 
@@ -87,10 +94,10 @@ this overrides the old value with the new one.
 {% highlight sql %}
 
 --Set Table Properties 
-ALTER TABLE table_name SET TBLPROPERTIES (key1=val1, key2=val2, ...)
+ALTER TABLE table_name SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
 
 --Unset Table Properties
-ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] (key1, key2, ...)
+ALTER TABLE table_name UNSET TBLPROPERTIES [ IF EXISTS ] ( key1, key2, ... )
   
 {% endhighlight %}
 
@@ -102,11 +109,11 @@ this overrides the old value with the new one.
 {% highlight sql %}
 
 --Set SERDE Properties
-ALTER TABLE table_name [PARTITION part_spec]
-    SET SERDEPROPERTIES (key1=val1, key2=val2, ...)
+ALTER TABLE table_name [ partition_spec ]
+    SET SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )
 
-ALTER TABLE table_name [PARTITION part_spec] SET SERDE serde_class_name
-    [WITH SERDEPROPERTIES (key1=val1, key2=val2, ...)]
+ALTER TABLE table_name [ partition_spec ] SET SERDE serde_class_name
+    [ WITH SERDEPROPERTIES ( key1 = val1, key2 = val2, ... ) ]
 
 {% endhighlight %}
 
@@ -118,10 +125,10 @@ exsisting tables.
 {% highlight sql %}
 
 --Changing File Format
-ALTER TABLE table_name [PARTITION partition_spec] SET FILEFORMAT file_format;
+ALTER TABLE table_name [ partition_spec ] SET FILEFORMAT file_format
 
 --Changing File Location
-ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION 'new_location';
+ALTER TABLE table_name [ partition_spec ] SET LOCATION 'new_location'
 
 {% endhighlight %}
 
@@ -132,12 +139,19 @@ ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION 'new_location';
 </dl>
 
 <dl>
-  <dt><code><em>PARTITION (part_spec)</em></code></dt>
-  <dd>Specifies the partition on which the property has to be set.</dd>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions. When specified, additional partition metadata is returned.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
+      </code>
+  </dd>
 </dl>
 
 <dl>
-  <dt><code><em>SERDEPROPERTIES (key1=val1, key2=val2, ...)</em></code></dt>
+  <dt><code><em>SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )</em></code></dt>
   <dd>Specifies the SERDE properties to be set.</dd>
 </dl>
 
