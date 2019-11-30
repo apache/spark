@@ -105,7 +105,7 @@ to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates s
 
 ### Automatically Rebuilding API Docs
 
-`jekyll serve --watch` will only watch what's in `docs/`, and it [won't follow symlinks](https://github.com/jekyll/jekyll/issues/233). That means it won't monitor your API docs.
+`jekyll serve --watch` will only watch what's in `docs/`, and it won't follow symlinks. That means it won't monitor your API docs under `python/docs` or elsewhere.
 
 To work around this limitation for Python, install [`entr`](http://eradman.com/entrproject/) and run the following in a separate shell:
 
