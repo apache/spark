@@ -115,4 +115,4 @@ find .. -type f -name '*.py' \
 | entr -s 'make html && cp -r _build/html/. ../../docs/api/python'
 ```
 
-Whenever there is a change to your Python code, `entr` will automatically rebuild the API docs and copy them to `docs/`, thus triggering a Jekyll update.
+Whenever there is a change to your Python code, `entr` will automatically rebuild the Python API docs and copy them to `docs/`, thus triggering a Jekyll update.
