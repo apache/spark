@@ -1095,8 +1095,7 @@ def _merge_type(a, b, name=None):
     elif isinstance(b, NullType):
         return a
     elif type(a) is not type(b):
-        # TODO: type cast (such as int -> long)
-        raise TypeError(new_msg("Can not merge type %s and %s" % (type(a), type(b))))
+        return _tightest_common_type(a, b)
 
     # same type
     if isinstance(a, StructType):
@@ -1120,6 +1119,25 @@ def _merge_type(a, b, name=None):
                        True)
     else:
         return a
+
+
+def _tightest_common_type(*objects):
+    """Return the type with the most information."""
+    def case(*types):
+        return all(
+            isinstance(obj, types)
+            for obj in objects
+        )
+
+    if case(DecimalType, DoubleType):
+        return DoubleType()
+    if case(LongType, DoubleType):
+        return DoubleType()
+    if case(LongType, DecimalType):
+        return DecimalType()
+    if case(DateType, TimestampType):
+        return TimestampType()
+    return StringType()
 
 
 def _need_converter(dataType):
