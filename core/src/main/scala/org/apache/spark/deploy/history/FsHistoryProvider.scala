@@ -352,10 +352,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val ui = SparkUI.create(None, new HistoryAppStatusStore(conf, kvstore), conf, secManager,
       app.info.name, HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
       attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
-    loadPlugins().foreach(_.setupUI(ui))
+
+    // place the tab in UI based on the display order
+    loadPlugins().toSeq.sortBy(_.displayOrder).foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
-
     synchronized {
       activeUIs((appId, attemptId)) = loadedUI
     }
