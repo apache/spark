@@ -4507,13 +4507,13 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     +----+--------------------+
     |word|              vector|
     +----+--------------------+
-    |   a|[0.09511678665876...|
-    |   b|[-1.2028766870498...|
-    |   c|[0.30153277516365...|
+    |   a|[0.15613564848899...|
+    |   b|[-0.7599201798439...|
+    |   c|[0.51226902008056...|
     +----+--------------------+
     ...
     >>> model.findSynonymsArray("a", 2)
-    [(u'b', 0.015859870240092278), (u'c', -0.5680795907974243)]
+    [(u'b', 0.015859881415963173), (u'c', -0.5680797100067139)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
@@ -4524,7 +4524,7 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     +----+----------+
     ...
     >>> model.transform(doc).head().model
-    DenseVector([-0.4833, 0.1855, -0.273, -0.0509, -0.4769])
+    DenseVector([-0.243, 0.3073, -0.373, -0.0963, -0.3179])
     >>> word2vecPath = temp_path + "/word2vec"
     >>> word2Vec.save(word2vecPath)
     >>> loadedWord2Vec = Word2Vec.load(word2vecPath)
