@@ -226,10 +226,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("unary arithmetic expressions") {
-    assertEqual("+a", 'a)
+    assertEqual("+a", UnaryPositive('a))
     assertEqual("-a", -'a)
     assertEqual("~a", ~'a)
-    assertEqual("-+~~a", -(~(~'a)))
+    assertEqual("-+~~a", -UnaryPositive(~(~'a)))
   }
 
   test("cast expressions") {
