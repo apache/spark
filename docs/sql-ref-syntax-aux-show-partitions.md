@@ -44,7 +44,7 @@ SHOW PARTITIONS table_identifier [ partition_spec ]
   <dt><code><em>partition_spec</em></code></dt>
   <dd>
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. When specified, additional partition metadata is returned.<br><br>
+    for partitions. When specified, the partitions that match the partition spec are returned.<br><br>
     <b>Syntax:</b>
       <code>
         PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )

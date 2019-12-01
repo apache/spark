@@ -33,7 +33,7 @@ REFRESH [TABLE] table_identifier
 <dl>
   <dt><code><em>table_identifier</em></code></dt>
   <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    Specifies a table name, which is either a qualified or unqualified name that designates a table/view. If no database identifier is provided, it refers to a temporary view or a table/view in the current database.<br><br>
     <b>Syntax:</b>
       <code>
         [ database_name. ] table_name

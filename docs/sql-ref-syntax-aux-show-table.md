@@ -54,7 +54,7 @@ SHOW TABLE EXTENDED [ IN | FROM database_name ] LIKE 'identifier_with_wildcards'
   <dt><code><em>partition_spec</em></code></dt>
   <dd>
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. When specified, additional partition metadata is returned.<br><br>
+    for partitions. Note that a table regex cannot be used with a partition specification.<br><br>
     <b>Syntax:</b>
       <code>
         PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )

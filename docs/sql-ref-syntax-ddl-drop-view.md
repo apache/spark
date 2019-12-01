@@ -35,7 +35,7 @@ DROP VIEW [ IF EXISTS ] view_identifier
   </dd>
   <dt><code><em>view_identifier</em></code></dt>
   <dd>
-    Specifies a view name, which may be optionally qualified with a database name.<br><br>
+    Specifies the view name to be dropped. The view name may be optionally qualified with a database name.<br><br>
     <b> Syntax:</b>
       <code>
         [ database_name. ] view_name

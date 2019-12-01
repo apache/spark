@@ -39,7 +39,7 @@ DROP TABLE [ IF EXISTS ] table_identifier
   </dd>
   <dt><code><em>table_identifier</em></code></dt>
   <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    Specifies the table name to be dropped. The table name may be optionally qualified with a database name.<br><br>
     <b>Syntax:</b>
       <code>
         [ database_name. ] table_name

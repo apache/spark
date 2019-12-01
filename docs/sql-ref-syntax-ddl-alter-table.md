@@ -48,8 +48,7 @@ ALTER TABLE table_identifier partition_spec RENAME TO partition_spec
 <dl>
   <dt><code><em>partition_spec</em></code></dt>
   <dd>
-    An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. When specified, additional partition metadata is returned.<br><br>
+    Partition to be renamed. <br><br>
     <b>Syntax:</b>
       <code>
         PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
@@ -149,8 +148,7 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 <dl>
   <dt><code><em>partition_spec</em></code></dt>
   <dd>
-    An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. When specified, additional partition metadata is returned.<br><br>
+    Specifies the partition on which the property has to be set.<br><br>
     <b>Syntax:</b>
       <code>
         PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
