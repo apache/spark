@@ -31,13 +31,16 @@ object AttributeMap {
 class AttributeMap[A](val baseMap: Map[ExprId, (Attribute, A)])
   extends Map[Attribute, A] with Serializable {
 
+  //  Note: this class supports Scala 2.13. A parallel source tree has a 2.12 implementation.
+
   override def get(k: Attribute): Option[A] = baseMap.get(k.exprId).map(_._2)
 
   override def contains(k: Attribute): Boolean = get(k).isDefined
 
-  override def + [B1 >: A](kv: (Attribute, B1)): Map[Attribute, B1] = baseMap.values.toMap + kv
+  override def updated[B1 >: A](key: Attribute, value: B1): Map[Attribute, B1] =
+    baseMap.values.toMap + (key -> value)
 
   override def iterator: Iterator[(Attribute, A)] = baseMap.valuesIterator
 
-  override def -(key: Attribute): Map[Attribute, A] = baseMap.values.toMap - key
+  override def removed(key: Attribute): Map[Attribute, A] = baseMap.values.toMap - key
 }

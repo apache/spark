@@ -31,6 +31,8 @@ import scala.collection.generic.Growable
 private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A])
   extends Iterable[A] with Growable[A] with Serializable {
 
+  //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
+
   private val underlying = new JPriorityQueue[A](maxSize, ord)
 
   override def iterator: Iterator[A] = underlying.iterator.asScala
