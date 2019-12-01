@@ -17,24 +17,64 @@
 
 package org.apache.spark.metrics.sink
 
+import java.lang.management.ManagementFactory
+import java.rmi.registry.LocateRegistry
 import java.util.Properties
 
-import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import com.codahale.metrics.jmx.JmxReporter
+import javax.management.MBeanServer
+import javax.management.remote.{JMXConnectorServer, JMXConnectorServerFactory, JMXServiceURL}
 
 import org.apache.spark.SecurityManager
 
 private[spark] class JmxSink(val property: Properties, val registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink {
+  val JMX_KEY_HOST = "host"
+  val JMX_KEY_PORT = "port"
+  val JMX_KEY_REGEX = "regex"
 
-  val reporter: JmxReporter = JmxReporter.forRegistry(registry).build()
+  def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
+
+  if (propertyToOption(JMX_KEY_HOST).isEmpty) {
+    throw new Exception("Jmx sink requires 'host' property.")
+  }
+
+  if (propertyToOption(JMX_KEY_PORT).isEmpty) {
+    throw new Exception("Jmx sink requires 'port' property.")
+  }
+
+  val host = propertyToOption(JMX_KEY_HOST).get
+  val port = propertyToOption(JMX_KEY_PORT).get.toInt
+
+  val filter = propertyToOption(JMX_KEY_REGEX) match {
+    case Some(pattern) => new MetricFilter() {
+      override def matches(name: String, metric: Metric): Boolean = {
+        pattern.r.findFirstMatchIn(name).isDefined
+      }
+    }
+    case None => MetricFilter.ALL
+  }
+
+  LocateRegistry.createRegistry(port)
+  val serviceUrl: String = s"service:jmx:rmi://${host}:${port}/jndi/rmi://${host}:${port}/jmxrmi"
+  val url = new JMXServiceURL(serviceUrl)
+  val mBeanServer: MBeanServer = ManagementFactory.getPlatformMBeanServer
+  val connector: JMXConnectorServer = JMXConnectorServerFactory
+    .newJMXConnectorServer(url, null, mBeanServer)
+  val reporter: JmxReporter = JmxReporter.forRegistry(registry)
+    .registerWith(mBeanServer)
+    .filter(filter)
+    .build
 
   override def start(): Unit = {
+    connector.start()
     reporter.start()
   }
 
   override def stop(): Unit = {
     reporter.stop()
+    connector.stop()
   }
 
   override def report(): Unit = { }
