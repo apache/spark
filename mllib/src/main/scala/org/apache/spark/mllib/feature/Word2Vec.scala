@@ -440,16 +440,10 @@ class Word2Vec extends Serializable with Logging {
         }.flatten
       }
       val synAgg = partial.reduceByKey { case (v1, v2) =>
-          blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
+          // SPARK-24666: Divide word vector to avoid Inf value.
+          blas.saxpy(vectorSize, 1.0f / numPartitions, v2, 1, v1, 1)
           v1
-      }.collect().map { case (idx, fVector) =>
-        // SPARK-24666: Normalize word vector to avoid Inf value.
-        val vecNorm = blas.snrm2(vectorSize, fVector, 1)
-        if (vecNorm != 0.0f) {
-          blas.sscal(vectorSize, 1 / vecNorm, fVector, 0, 1)
-        }
-        (idx, fVector)
-      }
+      }.collect()
       var i = 0
       while (i < synAgg.length) {
         val index = synAgg(i)._1
