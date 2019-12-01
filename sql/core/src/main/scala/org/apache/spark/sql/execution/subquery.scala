@@ -178,7 +178,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
-        val executedPlan = QueryExecution.planSubquery(sparkSession, subquery.plan)
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
         ScalarSubquery(
           SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
@@ -192,7 +192,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
             }
           )
         }
-        val executedPlan = QueryExecution.planSubquery(sparkSession, query)
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
     }
   }

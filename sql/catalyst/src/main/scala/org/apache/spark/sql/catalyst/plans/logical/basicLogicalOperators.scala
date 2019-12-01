@@ -54,7 +54,8 @@ case class Subquery(child: LogicalPlan, correlated: Boolean) extends OrderPreser
 }
 
 object Subquery {
-  def fromExpression(s: SubqueryExpression): Subquery = Subquery(s.plan, s.children.nonEmpty)
+  def fromExpression(s: SubqueryExpression): Subquery =
+    Subquery(s.plan, SubqueryExpression.hasCorrelatedSubquery(s))
 }
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)

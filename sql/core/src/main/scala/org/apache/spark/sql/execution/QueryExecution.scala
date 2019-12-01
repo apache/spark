@@ -276,18 +276,18 @@ object QueryExecution {
   }
 
   /**
-   * Plan a subquery. Prepare the [[SparkPlan]] for execution.
+   * Prepare the [[SparkPlan]] for execution.
    */
-  def planSubquery(spark: SparkSession, plan: SparkPlan): SparkPlan = {
+  def prepareExecutedPlan(spark: SparkSession, plan: SparkPlan): SparkPlan = {
     prepareForExecution(preparations(spark), plan)
   }
 
   /**
-   * Plan a subquery. Transform the subquery's [[LogicalPlan]] into a [[SparkPlan]] and prepare the
+   * Transform the subquery's [[LogicalPlan]] into a [[SparkPlan]] and prepare the resulting
    * [[SparkPlan]] for execution.
    */
-  def planSubquery(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
+  def prepareExecutedPlan(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
     val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone())
-    planSubquery(spark, sparkPlan)
+    prepareExecutedPlan(spark, sparkPlan)
   }
 }
