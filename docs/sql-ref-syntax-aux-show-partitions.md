@@ -26,13 +26,19 @@ partition spec.
 
 ### Syntax
 {% highlight sql %}
-SHOW PARTITIONS table_name [ partition_spec ]
+SHOW PARTITIONS table_identifier [ partition_spec ]
 {% endhighlight %}
 
 ### Parameters
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>The name of an existing table.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 <dl>
   <dt><code><em>partition_spec</em></code></dt>

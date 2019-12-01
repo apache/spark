@@ -25,15 +25,21 @@ The `ANALYZE TABLE` statement collects statistics about the table to be used by 
 
 ### Syntax
 {% highlight sql %}
-ANALYZE TABLE table_name [ partition_spec ]
+ANALYZE TABLE table_identifier [ partition_spec ]
     COMPUTE STATISTICS [ NOSCAN | FOR COLUMNS col [ , ... ] | FOR ALL COLUMNS ]
 
 {% endhighlight %}
 
 ### Parameters
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>The name of an existing table.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 <dl>

@@ -24,7 +24,7 @@ license: |
 
 ### Syntax
 {% highlight sql %}
-LOAD DATA [ LOCAL ] INPATH path [ OVERWRITE ] INTO TABLE table_name [ partition_spec ]
+LOAD DATA [ LOCAL ] INPATH path [ OVERWRITE ] INTO TABLE table_identifier [ partition_spec ]
 {% endhighlight %}
 
 ### Parameters
@@ -34,8 +34,14 @@ LOAD DATA [ LOCAL ] INPATH path [ OVERWRITE ] INTO TABLE table_name [ partition_
 </dl>
 
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>The name of an existing table.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 <dl>

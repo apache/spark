@@ -31,7 +31,8 @@ cannot be used with a partition specification.
 
 ### Syntax
 {% highlight sql %}
-SHOW TABLE EXTENDED [IN|FROM database_name] LIKE 'identifier_with_wildcards' [ partition_spec ]
+SHOW TABLE EXTENDED [ IN | FROM database_name ] LIKE 'identifier_with_wildcards'
+    [ partition_spec ]
 {% endhighlight %}
 
 ### Parameters
