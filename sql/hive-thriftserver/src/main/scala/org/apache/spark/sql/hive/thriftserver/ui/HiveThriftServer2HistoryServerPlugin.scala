@@ -14,33 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.text
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+package org.apache.spark.sql.hive.thriftserver.ui
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.SparkConf
+import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
+import org.apache.spark.ui.SparkUI
 
-class TextOutputWriter(
-    path: String,
-    dataSchema: StructType,
-    lineSeparator: Array[Byte],
-    context: TaskAttemptContext)
-  extends OutputWriter {
+class HiveThriftServer2HistoryServerPlugin extends AppHistoryServerPlugin {
 
-  private val writer = CodecStreams.createOutputStream(context, new Path(path))
+  override def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener] = {
+    Seq(new HiveThriftServer2Listener(store, conf, None, false))
+  }
 
-  override def write(row: InternalRow): Unit = {
-    if (!row.isNullAt(0)) {
-      val utf8string = row.getUTF8String(0)
-      utf8string.writeTo(writer)
+  override def setupUI(ui: SparkUI): Unit = {
+    val store = new HiveThriftServer2AppStatusStore(ui.store.store)
+    if (store.getSessionCount > 0) {
+      new ThriftServerTab(store, ui)
     }
-    writer.write(lineSeparator)
   }
 
-  override def close(): Unit = {
-    writer.close()
-  }
+  override def displayOrder: Int = 1
 }
+

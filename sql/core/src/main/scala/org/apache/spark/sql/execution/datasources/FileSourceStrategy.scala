@@ -22,7 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.util.collection.BitSet
@@ -137,7 +137,7 @@ object FileSourceStrategy extends Strategy with Logging {
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters,
+    case ScanOperation(projects, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
