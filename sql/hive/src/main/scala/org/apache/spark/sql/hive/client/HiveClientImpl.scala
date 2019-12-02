@@ -445,7 +445,7 @@ private[hive] class HiveClientImpl(
     } catch {
       case ex: SparkException =>
         throw new SparkException(
-          ex.getMessage + s", db: ${h.getDbName}, table: ${h.getTableName}", ex)
+          s"${ex.getMessage}, db: ${h.getDbName}, table: ${h.getTableName}", ex)
     }
     val schema = StructType(cols ++ partCols)
 
