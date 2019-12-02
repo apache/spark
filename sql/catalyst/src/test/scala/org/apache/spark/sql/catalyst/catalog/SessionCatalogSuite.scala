@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -207,9 +210,8 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       // Note: alter properties here because Hive does not support altering other fields
       catalog.alterDatabase(db1.copy(properties = Map("k" -> "v3", "good" -> "true")))
       val newDb1 = catalog.getDatabaseMetadata("db1")
-      val reversedProperties = Seq("ownerName", "ownerType")
-      assert((db1.properties -- reversedProperties).isEmpty)
-      assert((newDb1.properties -- reversedProperties).size == 2)
+      assert((db1.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala).isEmpty)
+      assert((newDb1.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala).size == 2)
       assert(newDb1.properties.get("k") == Some("v3"))
       assert(newDb1.properties.get("good") == Some("true"))
     }

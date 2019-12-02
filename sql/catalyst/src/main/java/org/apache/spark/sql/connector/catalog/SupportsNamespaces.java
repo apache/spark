@@ -54,9 +54,20 @@ public interface SupportsNamespaces extends CatalogPlugin {
   String PROP_COMMENT = "comment";
 
   /**
+   * A property to specify the owner of the namespace.
+   */
+  String PROP_OWNER_NAME = "ownerName";
+
+  /**
+   * A property to specify the type of the namespace's owner.
+   */
+  String PROP_OWNER_TYPE = "ownerType";
+
+  /**
    * The list of reserved namespace properties.
    */
-  List<String> RESERVED_PROPERTIES = Arrays.asList(PROP_COMMENT, PROP_LOCATION);
+  List<String> RESERVED_PROPERTIES =
+    Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_OWNER_NAME, PROP_OWNER_TYPE);
 
   /**
    * Return a default namespace for the catalog.

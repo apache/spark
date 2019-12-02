@@ -53,6 +53,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
@@ -95,8 +96,7 @@ private[hive] class HiveClientImpl(
     extraConfig: Map[String, String],
     initClassLoader: ClassLoader,
     val clientLoader: IsolatedClientLoader)
-  extends HiveClient
-  with Logging {
+  extends HiveClient with Logging {
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
@@ -355,13 +355,13 @@ private[hive] class HiveClientImpl(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
     val props = database.properties
-    val dbOwner = props.getOrElse(DB_OWNER_NAME_PROP, userName)
-    val dbOwnerType = props.getOrElse(DB_OWNER_TYPE_PROP, "USER")
+    val dbOwner = props.getOrElse(PROP_OWNER_NAME, userName)
+    val dbOwnerType = props.getOrElse(PROP_OWNER_TYPE, "USER")
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
       CatalogUtils.URIToString(database.locationUri),
-      (props -- Seq(DB_OWNER_NAME_PROP, DB_OWNER_TYPE_PROP)).asJava)
+      (props -- RESERVED_PROPERTIES.asScala).asJava)
     shim.setDatabaseOwnerName(hiveDb, dbOwner)
     shim.setDatabaseOwnerType(hiveDb, dbOwnerType)
     client.createDatabase(hiveDb, ignoreIfExists)
@@ -383,14 +383,14 @@ private[hive] class HiveClientImpl(
       }
     }
     val props = database.properties
-    val dbOwner = props.get(DB_OWNER_NAME_PROP).filter(_.nonEmpty).getOrElse(userName)
-    val dbOwnerType = props.get(DB_OWNER_TYPE_PROP).filter(_.nonEmpty).getOrElse("USER")
+    val dbOwner = props.get(PROP_OWNER_NAME).filter(_.nonEmpty).getOrElse(userName)
+    val dbOwnerType = props.get(PROP_OWNER_TYPE).filter(_.nonEmpty).getOrElse("USER")
 
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
       CatalogUtils.URIToString(database.locationUri),
-      (props -- Seq(DB_OWNER_NAME_PROP, DB_OWNER_TYPE_PROP)).asJava)
+      (props -- RESERVED_PROPERTIES.asScala).asJava)
     shim.setDatabaseOwnerName(hiveDb, dbOwner)
     shim.setDatabaseOwnerType(hiveDb, dbOwnerType)
     client.alterDatabase(database.name, hiveDb)
@@ -399,8 +399,8 @@ private[hive] class HiveClientImpl(
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
       val paras = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
-        Map(DB_OWNER_NAME_PROP -> shim.getDatabaseOwnerName(d),
-          DB_OWNER_TYPE_PROP -> shim.getDatabaseOwnerType(d))
+        Map(PROP_OWNER_NAME -> shim.getDatabaseOwnerName(d),
+          PROP_OWNER_TYPE -> shim.getDatabaseOwnerType(d))
 
       CatalogDatabase(
         name = d.getName,
@@ -978,9 +978,6 @@ private[hive] class HiveClientImpl(
 }
 
 private[hive] object HiveClientImpl {
-  val DB_OWNER_NAME_PROP: String = "ownerName"
-  val DB_OWNER_TYPE_PROP: String = "ownerType"
-
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
     val typeString = if (c.metadata.contains(HIVE_TYPE_STRING)) {
