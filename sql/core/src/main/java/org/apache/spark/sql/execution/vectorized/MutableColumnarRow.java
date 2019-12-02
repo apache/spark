@@ -212,6 +212,8 @@ public final class MutableColumnarRow extends InternalRow {
         DecimalType t = (DecimalType) dt;
         Decimal d = Decimal.apply((BigDecimal) value, t.precision(), t.scale());
         setDecimal(ordinal, d, t.precision());
+      } else if (dt instanceof CalendarIntervalType) {
+        setInterval(ordinal, (CalendarInterval) value);
       } else {
         throw new UnsupportedOperationException("Datatype not supported " + dt);
       }
@@ -269,5 +271,11 @@ public final class MutableColumnarRow extends InternalRow {
   public void setDecimal(int ordinal, Decimal value, int precision) {
     columns[ordinal].putNotNull(rowId);
     columns[ordinal].putDecimal(rowId, value, precision);
+  }
+
+  @Override
+  public void setInterval(int ordinal, CalendarInterval value) {
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putInterval(rowId, value);
   }
 }
