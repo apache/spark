@@ -22,6 +22,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.SparkConf
 import org.apache.spark.resource.ResourceProfile
 
 class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
@@ -42,6 +43,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
 
   val resource = Resource.newInstance(1024, 1)
   val defaultResourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+  val rp = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
   test("allocate locality preferred containers with enough resource and no matched existed " +
     "containers") {
@@ -52,10 +54,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     handler.updateResourceRequests()
     handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
 
-
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host3" -> 15, "host4" -> 15, "host5" -> 10),
-        handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, resource)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
+      resource, rp)
 
     assert(localities.map(_.nodes) === Array(
       Array("host3", "host4", "host5"),
@@ -78,7 +80,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
 
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
-        handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, resource)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
+      resource, rp)
 
     assert(localities.map(_.nodes) ===
       Array(null, Array("host2", "host3"), Array("host2", "host3")))
@@ -99,7 +102,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
 
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
-        handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, resource)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
+      resource, rp)
 
     assert(localities.map(_.nodes) === Array(Array("host2", "host3")))
   }
@@ -119,7 +123,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
 
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
-        handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, resource)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
+      resource, rp)
 
     assert(localities.map(_.nodes) === Array(null, null, null))
   }
@@ -133,7 +138,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
 
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 0, Map.empty,
-      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty, resource)
+      handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
+      resource, rp)
 
     assert(localities.map(_.nodes) === Array(null))
   }
@@ -154,7 +160,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
       handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId),
-      pendingAllocationRequests, resource)
+      pendingAllocationRequests,
+      resource, rp)
 
     assert(localities.map(_.nodes) === Array(Array("host3")))
   }

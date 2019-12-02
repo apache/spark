@@ -25,6 +25,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.resource.ResourceProfile
 
 class LocalityPlacementStrategySuite extends SparkFunSuite {
 
@@ -75,9 +76,10 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
       containers.drop(count * i).take(i).foreach { c => hostContainers += c }
       hostToContainerMap(host) = hostContainers
     }
+    val rp = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
     strategy.localityOfRequestedContainers(containers.size * 2, totalTasks, hosts,
-      hostToContainerMap, Nil, resource)
+      hostToContainerMap, Nil, resource, rp)
   }
 
 }

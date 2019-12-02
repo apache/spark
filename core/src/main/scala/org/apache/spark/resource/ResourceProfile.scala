@@ -285,4 +285,48 @@ private[spark] object ResourceProfile extends Logging {
     }
     resourceReqs
   }
+
+  /**
+   * Utility function to calculate the number of tasks you can run on a single Executor based
+   * on the task and executor resource requests in the ResourceProfile. This will be based
+   * off the resource that is most restrictive. For instance, if the executor
+   * request is for 4 cpus and 2 gpus and your task request is for 1 cpu and 1 gpu each, the
+   * limiting resource is gpu, and this function will return 2.
+   *
+   * @param coresPerExecutor Number of cores per Executor
+   * @param resourceProf ResourceProfile
+   * @param sparkConf SparkConf
+   * @return number of tasks that could be run on a single Executor
+   */
+  def numTasksPerExecutor(
+      coresPerExecutor: Int,
+      resourceProf: ResourceProfile,
+      sparkConf: SparkConf): Int = {
+    val cpusPerTask = resourceProf.taskResources.get(ResourceProfile.CPUS)
+      .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
+
+    val tasksBasedOnCores = coresPerExecutor / cpusPerTask
+
+    var limitingResource = "CPUS"
+    var taskLimit = tasksBasedOnCores
+    // assumes the task resources are specified
+    resourceProf.executorResources.foreach { case (rName, request) =>
+      val taskReq = resourceProf.taskResources.get(rName).map(_.amount).getOrElse(0.0)
+      if (taskReq > 0.0) {
+        var parts = 1
+        var numPerTask = taskReq
+        if (taskReq < 1.0) {
+          parts = Math.floor(1.0 / taskReq).toInt
+          numPerTask = Math.ceil(taskReq)
+        }
+        val numTasks = (request.amount * parts) / numPerTask.toInt
+        if (numTasks < taskLimit) {
+          limitingResource = rName
+          taskLimit = numTasks
+        }
+      }
+    }
+    logInfo(s"Limiting resource is $limitingResource at $taskLimit tasks per Executor")
+    taskLimit
+  }
 }

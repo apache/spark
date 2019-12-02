@@ -490,7 +490,7 @@ private[yarn] class YarnAllocator(
         val numLocalityAwareTasks = numLocalityAwareTasksPerResourceProfileId.getOrElse(rpId, 0)
         val containerLocalityPreferences = containerPlacementStrategy.localityOfRequestedContainers(
           potentialContainers, numLocalityAwareTasks, hostToLocalTaskCount,
-          allocatedHostToContainer, localRequests, resource)
+          allocatedHostToContainer, localRequests, resource, rpIdToResourceProfile(rpId))
 
         val newLocalityRequests = new mutable.ArrayBuffer[ContainerRequest]
         containerLocalityPreferences.foreach {
