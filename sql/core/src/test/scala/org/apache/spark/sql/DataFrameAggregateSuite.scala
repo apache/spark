@@ -29,7 +29,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -546,6 +547,14 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("collect functions should be able to cast to array type with no null values") {
+    val df = Seq(1, 2).toDF("a")
+    checkAnswer(df.select(collect_list("a") cast ArrayType(IntegerType, false)),
+      Seq(Row(Seq(1, 2))))
+    checkAnswer(df.select(collect_set("a") cast ArrayType(FloatType, false)),
+      Seq(Row(Seq(1.0, 2.0))))
+  }
+
   test("SPARK-14664: Decimal sum/avg over window should work.") {
     checkAnswer(
       spark.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),
@@ -941,5 +950,18 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
       }
       assert(error.message.contains("function count_if requires boolean type"))
     }
+  }
+
+  test("calendar interval agg support hash aggregate") {
+    val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
+    val df2 = df1.select(avg('b cast CalendarIntervalType))
+    checkAnswer(df2, Row(new CalendarInterval(0, 2, 0)) :: Nil)
+    assert(df2.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
+    val df3 = df1.groupBy('a).agg(avg('b cast CalendarIntervalType))
+    checkAnswer(df3,
+      Row(1, new CalendarInterval(0, 1, 0)) ::
+        Row(2, new CalendarInterval(0, 2, 0)) ::
+        Row(3, new CalendarInterval(0, 3, 0)) :: Nil)
+    assert(df3.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
   }
 }

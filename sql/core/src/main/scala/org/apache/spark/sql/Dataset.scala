@@ -229,7 +229,7 @@ class Dataset[T] private[sql](
       case _ =>
         queryExecution.analyzed
     }
-    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN)) {
+    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
       plan.setTagValue(Dataset.DATASET_ID_TAG, id)
     }
     plan
@@ -1337,7 +1337,7 @@ class Dataset[T] private[sql](
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
       case a: AttributeReference
-        if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN) =>
+        if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
         val metadata = new MetadataBuilder()
           .withMetadata(a.metadata)
           .putLong(Dataset.DATASET_ID_KEY, id)
