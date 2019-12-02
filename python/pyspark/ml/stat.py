@@ -244,12 +244,28 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "mean")
 
     @staticmethod
+    @since("3.0.0")
+    def sum(col, weightCol=None):
+        """
+        return a column of sum summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "sum")
+
+    @staticmethod
     @since("2.4.0")
     def variance(col, weightCol=None):
         """
         return a column of variance summary
         """
         return Summarizer._get_single_metric(col, weightCol, "variance")
+
+    @staticmethod
+    @since("3.0.0")
+    def std(col, weightCol=None):
+        """
+        return a column of std summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "std")
 
     @staticmethod
     @since("2.4.0")
@@ -323,7 +339,9 @@ class Summarizer(object):
 
         The following metrics are accepted (case sensitive):
          - mean: a vector that contains the coefficient-wise mean.
+         - sum: a vector that contains the coefficient-wise sum.
          - variance: a vector tha contains the coefficient-wise variance.
+         - std: a vector tha contains the coefficient-wise standard deviation.
          - count: the count of all vectors seen.
          - numNonzeros: a vector with the number of non-zeros for each coefficients
          - max: the maximum for each coefficient.

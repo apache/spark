@@ -53,7 +53,7 @@ install:
 build_script:
   # '-Djna.nosys=true' is required to avoid kernel32.dll load failure.
   # See SPARK-28759.
-  - cmd: mvn -DskipTests -Psparkr -Phive -Phive-1.2 -Djna.nosys=true package
+  - cmd: mvn -DskipTests -Psparkr -Phive -Djna.nosys=true package
 
 environment:
   NOT_CRAN: true

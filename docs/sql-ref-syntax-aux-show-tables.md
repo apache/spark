@@ -27,12 +27,12 @@ current database.
 
 ### Syntax
 {% highlight sql %}
-SHOW TABLES [{FROM|IN} database_name] [LIKE 'regex_pattern']
+SHOW TABLES [ { FROM | IN } database_name ] [ LIKE 'regex_pattern' ]
 {% endhighlight %}
 
 ### Parameters
 <dl>
-  <dt><code><em>{FROM|IN} database_name</em></code></dt>
+  <dt><code><em>{ FROM | IN } database_name</em></code></dt>
   <dd>
      Specifies the database name from which tables are listed.
   </dd>
