@@ -132,7 +132,6 @@ class ResourceProfileSuite extends SparkFunSuite {
   }
 
   test("Test TaskResourceRequest fractional") {
-
     val rprof = new ResourceProfile()
     val taskReq = new TaskResourceRequest("resource.gpu", 0.33)
     rprof.require(taskReq)
@@ -185,5 +184,47 @@ class ResourceProfileSuite extends SparkFunSuite {
       "TaskResourceRequirements should have 1 item")
     assert(taskReq.taskResources.contains("resource.gpu"))
     assert(taskReq.taskResources("resource.gpu").amount === 2)
+  }
+
+  test("numTasksPerExecutor cpus") {
+    val sparkConf = new SparkConf
+    val rprof = new ResourceProfile()
+    val taskReq = new TaskResourceRequest("resource.gpu", 1)
+    val execReq = new ExecutorResourceRequest("resource.gpu", 2, "", "myscript", "nvidia")
+    rprof.require(taskReq).require(execReq)
+    val numTasks = ResourceProfile.numTasksPerExecutor(1, rprof, sparkConf)
+    assert(numTasks == 1)
+  }
+
+  test("numTasksPerExecutor gpus") {
+    val sparkConf = new SparkConf
+    val rprof = new ResourceProfile()
+    val taskReq = new TaskResourceRequest("resource.gpu", 2)
+    val execReq = new ExecutorResourceRequest("resource.gpu", 4, "", "myscript", "nvidia")
+    rprof.require(taskReq).require(execReq)
+    val numTasks = ResourceProfile.numTasksPerExecutor(6, rprof, sparkConf)
+    assert(numTasks == 2)
+  }
+
+  test("numTasksPerExecutor gpus fractional") {
+    val sparkConf = new SparkConf
+    val rprof = new ResourceProfile()
+    val taskReq = new TaskResourceRequest("resource.gpu", 0.5)
+    val execReq = new ExecutorResourceRequest("resource.gpu", 2, "", "myscript", "nvidia")
+    rprof.require(taskReq).require(execReq)
+    val numTasks = ResourceProfile.numTasksPerExecutor(6, rprof, sparkConf)
+    assert(numTasks == 4)
+  }
+
+  test("numTasksPerExecutor multiple resources") {
+    val sparkConf = new SparkConf
+    val rprof = new ResourceProfile()
+    val taskReq = new TaskResourceRequest("resource.gpu", 1)
+    val execReq = new ExecutorResourceRequest("resource.gpu", 6, "", "myscript", "nvidia")
+    val fpgataskReq = new TaskResourceRequest("resource.fpga", 1)
+    val fpgaexecReq = new ExecutorResourceRequest("resource.fpga", 4, "", "myscript", "nvidia")
+    rprof.require(taskReq).require(execReq).require(fpgataskReq).require(fpgaexecReq)
+    val numTasks = ResourceProfile.numTasksPerExecutor(6, rprof, sparkConf)
+    assert(numTasks == 4)
   }
 }

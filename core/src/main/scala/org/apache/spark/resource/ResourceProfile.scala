@@ -304,9 +304,7 @@ private[spark] object ResourceProfile extends Logging {
       sparkConf: SparkConf): Int = {
     val cpusPerTask = resourceProf.taskResources.get(ResourceProfile.CPUS)
       .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
-
     val tasksBasedOnCores = coresPerExecutor / cpusPerTask
-
     var limitingResource = "CPUS"
     var taskLimit = tasksBasedOnCores
     // assumes the task resources are specified
