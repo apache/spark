@@ -248,13 +248,29 @@ class Analyzer(
   )
 
   /**
-   * 1. Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
-   *    to TimeAdd/TimeSub.
-   * 2. Turns Add/Subtract of TimestampType/DateType/IntegerType
-   *    and TimestampType/IntegerType/DateType to DateAdd/DateSub/SubtractDates and
-   *    to SubtractTimestamps.
-   * 3. Turns Multiply/Divide of CalendarIntervalType and NumericType
-   *    to MultiplyInterval/DivideInterval
+   * For [[UnresolvedAdd]]:
+   * 1. If one side is timestamp/date/string and the other side is interval, turns it to
+   * [[TimeAdd]];
+   * 2. else if one side is date, turns it to [[DateAdd]] ;
+   * 3. else turns it to [[Add]].
+   *
+   * For [[UnresolvedSubtract]]:
+   * 1. If the left side is timestamp/date/string and the right side is an interval, turns it to
+   * [[TimeSub]];
+   * 2. else if one side is timestamp and the other side is date/timestamp, turns it to
+   * [[SubtractTimestamps]];
+   * 3. else if both side are dates, turns it to [[DateDiff]]/[[SubtractDates]];
+   * 4. else if the left side is date, turns it to [[DateSub]];
+   * 5. else turns it to [[Subtract]].
+   *
+   * For [[UnresolvedMultiply]]:
+   * 1. If one side is interval and the other side is numeric, turns it to [[MultiplyInterval]];
+   * 2. otherwise, turns it to [[Multiply]].
+   *
+   * For [[UnresolvedDivide]]:
+   * 1. If the left side is interval and the right side is numeric, turns it to
+   * [[DivideInterval]];
+   * 2. otherwise, turns it to [[Divide]].
    */
   case class ResolveBinaryArithmetic(conf: SQLConf) extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -271,15 +287,13 @@ class Analyzer(
         case u @ UnresolvedSubtract(l, r) if u.childrenResolved => (l.dataType, r.dataType) match {
           case (TimestampType | DateType | StringType, CalendarIntervalType) =>
             Cast(TimeSub(l, r), l.dataType)
-          case (CalendarIntervalType, TimestampType | DateType | StringType) =>
-            Cast(TimeSub(r, l), r.dataType)
+          case (TimestampType, TimestampType | DateType | NullType) => SubtractTimestamps(l, r)
+          case (DateType | NullType, TimestampType) => SubtractTimestamps(Cast(l, TimestampType), r)
           case (DateType | NullType, DateType) => if (conf.usePostgreSQLDialect) {
             DateDiff(l, r)
           } else {
             SubtractDates(l, r)
           }
-          case (TimestampType, TimestampType | DateType | NullType) => SubtractTimestamps(l, r)
-          case (DateType | NullType, TimestampType) => SubtractTimestamps(Cast(l, TimestampType), r)
           case (DateType, _) => DateSub(l, r)
           case (_, _) => Subtract(l, r)
         }
