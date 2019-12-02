@@ -441,12 +441,11 @@ private[hive] class HiveClientImpl(
     // Note: Hive separates partition columns and the schema, but for us the
     // partition columns are part of the schema
     val (cols, partCols) = try {
-      (h.getCols.asScala.map(fromHiveColumn),
-        h.getPartCols.asScala.map(fromHiveColumn))
+      (h.getCols.asScala.map(fromHiveColumn), h.getPartCols.asScala.map(fromHiveColumn))
     } catch {
       case ex: SparkException =>
-        throw new SparkException(ex.getMessage
-          + s".db: ${h.getDbName},table: ${h.getTableName},", ex);
+        throw new SparkException(
+          ex.getMessage + s", db: ${h.getDbName}, table: ${h.getTableName}", ex)
     }
     val schema = StructType(cols ++ partCols)
 
@@ -988,8 +987,8 @@ private[hive] object HiveClientImpl {
       CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
-        throw new SparkException(s"Cannot recognize hive type string: ${hc.getType}," +
-          s"column: ${hc.getName}", e)
+        throw new SparkException(
+          s"Cannot recognize hive type string: ${hc.getType}, column: ${hc.getName}", e)
     }
   }
 
