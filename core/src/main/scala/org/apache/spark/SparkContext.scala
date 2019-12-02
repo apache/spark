@@ -632,6 +632,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _executorMetricsSource match {
       case Some(executorMetricsSource: ExecutorMetricsSource) =>
         executorMetricsSource.register(_env.metricsSystem)
+      case None => None
     }
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
@@ -2490,6 +2491,7 @@ class SparkContext(config: SparkConf) extends Logging {
     executorMetricsSource match {
       case Some(executorMetricsSource: ExecutorMetricsSource) =>
         executorMetricsSource.updateMetricsSnapshot(currentMetrics)
+      case None => None
     }
 
     val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]

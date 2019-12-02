@@ -84,6 +84,7 @@ private[spark] class ExecutorMetricsPoller(
     executorMetricsSource match {
       case Some(executorMetricsSource: ExecutorMetricsSource) =>
         executorMetricsSource.updateMetricsSnapshot(latestMetrics)
+      case None => None
     }
 
     def updatePeaks(metrics: AtomicLongArray): Unit = {

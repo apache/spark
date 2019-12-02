@@ -127,6 +127,7 @@ private[spark] class Executor(
     executorMetricsSource match {
       case Some(executorMetricsSource: ExecutorMetricsSource) =>
         executorMetricsSource.register(env.metricsSystem)
+      case None => None
     }
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   }
