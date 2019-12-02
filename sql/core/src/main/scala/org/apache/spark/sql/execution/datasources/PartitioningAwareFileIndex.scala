@@ -221,16 +221,16 @@ abstract class PartitioningAwareFileIndex(
         if (!fs.isDirectory(userDefinedBasePath)) {
           throw new IllegalArgumentException(s"Option '$BASE_PATH_PARAM' must be a directory")
         }
-        def qualifiedPath(path: Path): Path = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        def qualifiedPath(path: Path): String = fs.makeQualified(path).toString
 
         val qualifiedBasePath = qualifiedPath(userDefinedBasePath)
         rootPaths
-          .find(p => !qualifiedPath(p).toString.startsWith(qualifiedBasePath.toString))
+          .find(p => !qualifiedPath(p).startsWith(qualifiedBasePath))
           .foreach { rp =>
             throw new IllegalArgumentException(
               s"Wrong basePath $userDefinedBasePath for the root path: $rp")
           }
-        Set(fs.makeQualified(userDefinedBasePath))
+        Set(new Path(qualifiedBasePath))
 
       case None =>
         rootPaths.map { path =>
