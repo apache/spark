@@ -1437,9 +1437,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.DIV =>
         IntegralDivide(left, right)
       case SqlBaseParser.PLUS =>
-        Add(left, right)
+        UnresolvedAdd(left, right)
       case SqlBaseParser.MINUS =>
-        Subtract(left, right)
+        UnresolvedSubtract(left, right)
       case SqlBaseParser.CONCAT_PIPE =>
         Concat(left :: right :: Nil)
       case SqlBaseParser.AMPERSAND =>

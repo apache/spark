@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedBinaryExpression, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
@@ -208,6 +208,10 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
+
+case class UnresolvedAdd(left: Expression, right: Expression) extends UnresolvedBinaryExpression
+case class UnresolvedSubtract(left: Expression, right: Expression)
+  extends UnresolvedBinaryExpression
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",

@@ -544,3 +544,8 @@ case class UnresolvedOrdinal(ordinal: Int)
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
+
+trait UnresolvedBinaryExpression extends BinaryExpression with Unevaluable {
+  override lazy val resolved: Boolean = false
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+}

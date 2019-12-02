@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.rules.{Rule, _}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
@@ -212,7 +212,9 @@ class Analyzer(
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
-      ResolveAliases ::
+        ResolveBinaryArithmetic(conf) ::
+
+        ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
       ResolveWindowOrder ::
@@ -246,6 +248,36 @@ class Analyzer(
       CleanupAliases)
   )
 
+  case class ResolveBinaryArithmetic(conf: SQLConf) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case p: LogicalPlan => p.transformAllExpressions {
+        case UnresolvedAdd(l, r) => (l.dataType, r.dataType) match {
+          case (TimestampType | DateType | StringType, CalendarIntervalType) =>
+            Cast(TimeAdd(l, r), l.dataType)
+          case (CalendarIntervalType, TimestampType | DateType | StringType) =>
+            Cast(TimeAdd(r, l), r.dataType)
+          case (DateType, _) => DateAdd(l, r)
+          case (_, DateType) => DateAdd(r, l)
+          case (_, _) => Add(l, r)
+        }
+        case UnresolvedSubtract(l, r) => (l.dataType, r.dataType) match {
+          case (TimestampType | DateType | StringType, CalendarIntervalType) =>
+            Cast(TimeSub(l, r), l.dataType)
+          case (CalendarIntervalType, TimestampType | DateType | StringType) =>
+            Cast(TimeSub(r, l), r.dataType)
+          case (DateType | NullType, DateType) => if (conf.usePostgreSQLDialect) {
+            DateDiff(l, r)
+          } else {
+            SubtractDates(l, r)
+          }
+          case (TimestampType, TimestampType | DateType | NullType) => SubtractTimestamps(l, r)
+          case (DateType | NullType, TimestampType) => SubtractTimestamps(Cast(l, TimestampType), r)
+          case (DateType, _) => DateSub(l, r)
+          case (_, _) => Subtract(l, r)
+        }
+      }
+    }
+  }
   /**
    * Substitute child plan with WindowSpecDefinitions.
    */
