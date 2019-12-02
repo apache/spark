@@ -15,29 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.status
+package org.apache.spark.sql.hive.thriftserver.ui
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
 import org.apache.spark.ui.SparkUI
 
-/**
- * An interface for creating history listeners(to replay event logs) defined in other modules like
- * SQL, and setup the UI of the plugin to rebuild the history UI.
- */
-private[spark] trait AppHistoryServerPlugin {
-  /**
-   * Creates listeners to replay the event logs.
-   */
-  def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener]
+class HiveThriftServer2HistoryServerPlugin extends AppHistoryServerPlugin {
 
-  /**
-   * Sets up UI of this plugin to rebuild the history UI.
-   */
-  def setupUI(ui: SparkUI): Unit
+  override def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener] = {
+    Seq(new HiveThriftServer2Listener(store, conf, None, false))
+  }
 
-  /**
-   * The position of a plugin tab relative to the other plugin tabs in the history UI.
-   */
-  def displayOrder: Int = Integer.MAX_VALUE
+  override def setupUI(ui: SparkUI): Unit = {
+    val store = new HiveThriftServer2AppStatusStore(ui.store.store)
+    if (store.getSessionCount > 0) {
+      new ThriftServerTab(store, ui)
+    }
+  }
+
+  override def displayOrder: Int = 1
 }
+
