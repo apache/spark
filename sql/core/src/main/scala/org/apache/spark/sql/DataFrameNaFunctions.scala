@@ -456,10 +456,24 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     val keyExpr = df.col(col.name).expr
     def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType)
     val branches = replacementMap.flatMap { case (source, target) =>
-      Seq(buildExpr(source), buildExpr(target))
+        if (!(checkIfNonFractionalNumeric(col.dataType) &&
+          (isNaN(source) || isNaN(target)))) {
+          Seq(buildExpr(source), buildExpr(target))
+        } else {
+          None
+        }
     }.toSeq
     new Column(CaseKeyWhen(keyExpr, branches :+ keyExpr)).as(col.name)
   }
+
+  // Check if DataType is not Double or Float and is Numeric
+  private[this] def checkIfNonFractionalNumeric(value: DataType): Boolean =
+    value == LongType || value == IntegerType || value == ShortType || value == ByteType
+
+  // Check if NaN
+  private[this] def isNaN(value: Any): Boolean =
+    (value.isInstanceOf[Double] && value.asInstanceOf[Double].isNaN) ||
+      (value.isInstanceOf[Float] && value.asInstanceOf[Float].isNaN)
 
   private def convertToDouble(v: Any): Double = v match {
     case v: Float => v.toDouble
