@@ -434,6 +434,18 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+test("prevent all column partitioning parquet second signature") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      intercept[AnalysisException] {
+        spark.range(10).writeStream
+          .outputMode("append")
+          .partitionBy("id")
+          .parquet(path)
+      }
+    }
+  }
+
   private def testMemorySinkCheckpointRecovery(chkLoc: String, provideInWriter: Boolean): Unit = {
     import testImplicits._
     val ms = new MemoryStream[Int](0, sqlContext)

@@ -132,6 +132,30 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this
   }
 
+  def parquet(path: String): StreamingQuery = {
+    format("parquet")
+      .option("path", path)
+      .start()
+  }
+
+  def json(path: String): StreamingQuery = {
+    format("json")
+      .option("path", path)
+      .start()
+  }
+
+  def csv(path: String): StreamingQuery = {
+    format("csv")
+      .option("path", path)
+      .start()
+  }
+
+  def text(path: String): StreamingQuery = {
+    format("text")
+      .option("path", path)
+      .start()
+  }
+
   /**
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
