@@ -549,3 +549,14 @@ trait UnresolvedBinaryExpression extends BinaryExpression with Unevaluable {
   override lazy val resolved: Boolean = false
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
 }
+
+case class UnresolvedAdd(left: Expression, right: Expression) extends UnresolvedBinaryExpression
+
+case class UnresolvedSubtract(left: Expression, right: Expression)
+  extends UnresolvedBinaryExpression
+
+case class UnresolvedMultiply(left: Expression, right: Expression)
+  extends UnresolvedBinaryExpression
+
+case class UnresolvedDivide(left: Expression, right: Expression)
+  extends UnresolvedBinaryExpression

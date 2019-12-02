@@ -212,9 +212,7 @@ class Analyzer(
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
-        ResolveBinaryArithmetic(conf) ::
-
-        ResolveAliases ::
+      ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
       ResolveWindowOrder ::
@@ -230,6 +228,7 @@ class Analyzer(
       ResolveLambdaVariables(conf) ::
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
+      ResolveBinaryArithmetic(conf) ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("PostgreSQL Dialect", Once, PostgreSQLDialect.postgreSQLDialectRules: _*),
@@ -248,9 +247,18 @@ class Analyzer(
       CleanupAliases)
   )
 
+  /**
+   * 1. Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
+   *    to TimeAdd/TimeSub.
+   * 2. Turns Add/Subtract of TimestampType/DateType/IntegerType
+   *    and TimestampType/IntegerType/DateType to DateAdd/DateSub/SubtractDates and
+   *    to SubtractTimestamps.
+   * 3. Turns Multiply/Divide of CalendarIntervalType and NumericType
+   *    to MultiplyInterval/DivideInterval
+   */
   case class ResolveBinaryArithmetic(conf: SQLConf) extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case p: LogicalPlan => p.transformAllExpressions {
+      case p: LogicalPlan => p.transformExpressionsUp {
         case UnresolvedAdd(l, r) => (l.dataType, r.dataType) match {
           case (TimestampType | DateType | StringType, CalendarIntervalType) =>
             Cast(TimeAdd(l, r), l.dataType)
@@ -274,6 +282,15 @@ class Analyzer(
           case (DateType | NullType, TimestampType) => SubtractTimestamps(Cast(l, TimestampType), r)
           case (DateType, _) => DateSub(l, r)
           case (_, _) => Subtract(l, r)
+        }
+        case UnresolvedMultiply(l, r) => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, _: NumericType | NullType) => MultiplyInterval(l, r)
+          case (_: NumericType | NullType, CalendarIntervalType) => MultiplyInterval(r, l)
+          case (_, _) => Multiply(l, r)
+        }
+        case UnresolvedDivide(l, r) => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, _: NumericType | NullType) => DivideInterval(l, r)
+          case (_, _) => Divide(l, r)
         }
       }
     }

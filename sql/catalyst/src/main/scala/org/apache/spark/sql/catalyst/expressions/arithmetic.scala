@@ -209,10 +209,6 @@ object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
-case class UnresolvedAdd(left: Expression, right: Expression) extends UnresolvedBinaryExpression
-case class UnresolvedSubtract(left: Expression, right: Expression)
-  extends UnresolvedBinaryExpression
-
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",
   examples = """

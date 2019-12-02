@@ -1429,9 +1429,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val right = expression(ctx.right)
     ctx.operator.getType match {
       case SqlBaseParser.ASTERISK =>
-        Multiply(left, right)
+        UnresolvedMultiply(left, right)
       case SqlBaseParser.SLASH =>
-        Divide(left, right)
+        UnresolvedDivide(left, right)
       case SqlBaseParser.PERCENT =>
         Remainder(left, right)
       case SqlBaseParser.DIV =>
