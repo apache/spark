@@ -492,9 +492,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
     case x: NumericType if ansiEnabled =>
-      b => if (checkIfNaN(b)) null else x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
+      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
     case x: NumericType =>
-      b => if (checkIfNaN(b)) null else x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
+      b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
   }
 
   // IntConverter
@@ -511,9 +511,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
-      b => if (checkIfNaN(b)) null else x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
+      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: NumericType =>
-      b => if (checkIfNaN(b)) null else x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
+      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
   }
 
   // ShortConverter
@@ -549,12 +549,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             throw new ArithmeticException(s"Casting $b to short causes overflow")
         }
         if (intValue == intValue.toShort) {
-          if (checkIfNaN(b)) null else intValue.toShort
+          intValue.toShort
         } else {
           throw new ArithmeticException(s"Casting $b to short causes overflow")
         }
     case x: NumericType =>
-      b => if (checkIfNaN(b)) null else x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
+      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
   }
 
   // ByteConverter
@@ -590,12 +590,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             throw new ArithmeticException(s"Casting $b to byte causes overflow")
         }
         if (intValue == intValue.toByte) {
-          if (checkIfNaN(b)) null else intValue.toByte
+          intValue.toByte
         } else {
           throw new ArithmeticException(s"Casting $b to byte causes overflow")
         }
     case x: NumericType =>
-      b => if (checkIfNaN(b)) null else x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
+      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
   }
 
   /**
@@ -779,11 +779,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       }
     }
   }
-
-  // Check if NaN
-  private[this] def checkIfNaN(value: Any): Boolean =
-    (value.isInstanceOf[Double] && value.asInstanceOf[Double].isNaN) ||
-      (value.isInstanceOf[Float] && value.asInstanceOf[Float].isNaN)
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
