@@ -103,6 +103,12 @@ object TypeCoercion {
     case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
       Some(TimestampType)
 
+    case (t: DataType, udt: UserDefinedType[_]) if t == udt.sqlType =>
+      Some(t)
+
+    case (udt: UserDefinedType[_], t: DataType) if t == udt.sqlType =>
+      Some(t)
+
     case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
