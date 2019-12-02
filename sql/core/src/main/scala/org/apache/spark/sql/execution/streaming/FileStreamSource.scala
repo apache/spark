@@ -206,11 +206,15 @@ class FileStreamSource(
       CaseInsensitiveMap(options), None).allFiles()
   }
 
-  private def assertCleanupIsNotSpecified(): Unit = {
-    if (sourceCleaner.isDefined) {
-      throw new UnsupportedOperationException("Clean up source files is not supported when" +
-        " reading from the output directory of FileStreamSink.")
-    }
+  private def setSourceHasMetadata(newValue: Option[Boolean]): Unit = newValue match {
+    case Some(true) =>
+      if (sourceCleaner.isDefined) {
+        throw new UnsupportedOperationException("Clean up source files is not supported when" +
+          " reading from the output directory of FileStreamSink.")
+      }
+      sourceHasMetadata = Some(true)
+    case _ =>
+      sourceHasMetadata = newValue
   }
 
   /**
@@ -223,8 +227,7 @@ class FileStreamSource(
     sourceHasMetadata match {
       case None =>
         if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
-          sourceHasMetadata = Some(true)
-          assertCleanupIsNotSpecified()
+          setSourceHasMetadata(Some(true))
           allFiles = allFilesUsingMetadataLogFileIndex()
         } else {
           allFiles = allFilesUsingInMemoryFileIndex()
@@ -236,11 +239,10 @@ class FileStreamSource(
             // metadata log and data files are only generated after the previous
             // `FileStreamSink.hasMetadata` check
             if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
-              sourceHasMetadata = Some(true)
-              assertCleanupIsNotSpecified()
+              setSourceHasMetadata(Some(true))
               allFiles = allFilesUsingMetadataLogFileIndex()
             } else {
-              sourceHasMetadata = Some(false)
+              setSourceHasMetadata(Some(false))
               // `allFiles` have already been fetched using InMemoryFileIndex in this round
             }
           }
@@ -274,6 +276,7 @@ class FileStreamSource(
    */
   override def commit(end: Offset): Unit = {
     val logOffset = FileStreamSourceOffset(end).logOffset
+
     sourceCleaner.foreach { cleaner =>
       val files = metadataLog.get(Some(logOffset), Some(logOffset)).flatMap(_._2)
       val validFileEntities = files.filter(_.batchId == logOffset)
