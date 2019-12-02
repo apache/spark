@@ -133,7 +133,11 @@ private[sql] trait LookupCatalog extends Logging {
         // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
         // this custom catalog can't be accessed.
         if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
-          Some((catalogManager.v2SessionCatalog, nameParts))
+          if (nameParts.size == 2) {
+            Some((catalogManager.v2SessionCatalog, nameParts))
+          } else {
+            Some((currentCatalog, nameParts))
+          }
         } else {
           Some((catalogManager.catalog(nameParts.head), nameParts.tail))
         }

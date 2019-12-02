@@ -1813,6 +1813,17 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("global temp db is used as a table name under v2 catalog") {
+    val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val t = s"testcat.$globalTempDB"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql("USE testcat")
+      // The following should not throw AnalysisException, but resolves to `testcat.$globalTempDB`.
+      sql(s"DESCRIBE TABLE $globalTempDB")
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
