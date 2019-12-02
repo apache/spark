@@ -4654,7 +4654,7 @@ struct<id:bigint>
 -- !query 550
 select ln(1.2345678e-28)
 -- !query 550 schema
-struct<LOG(CAST(1.2345678E-28 AS DOUBLE)):double>
+struct<LOG(1.2345678E-28):double>
 -- !query 550 output
 -64.26166165451762
 
@@ -4694,7 +4694,7 @@ struct<LOG(CAST(1234.567890123456789 AS DOUBLE)):double>
 -- !query 555
 select ln(5.80397490724e5)
 -- !query 555 schema
-struct<LOG(CAST(580397.490724 AS DOUBLE)):double>
+struct<LOG(580397.490724):double>
 -- !query 555 output
 13.271468476626518
 
@@ -4702,7 +4702,7 @@ struct<LOG(CAST(580397.490724 AS DOUBLE)):double>
 -- !query 556
 select ln(9.342536355e34)
 -- !query 556 schema
-struct<LOG(CAST(9.342536355E+34 AS DOUBLE)):double>
+struct<LOG(9.342536355E34):double>
 -- !query 556 output
 80.52247093552418
 
@@ -4750,7 +4750,7 @@ struct<LOG(E(), CAST(590489.45235237 AS DOUBLE)):double>
 -- !query 562
 select log(0.99923, 4.58934e34)
 -- !query 562 schema
-struct<LOG(CAST(0.99923 AS DOUBLE), CAST(4.58934E+34 AS DOUBLE)):double>
+struct<LOG(CAST(0.99923 AS DOUBLE), 4.58934E34):double>
 -- !query 562 output
 -103611.55579543479
 
@@ -4758,7 +4758,7 @@ struct<LOG(CAST(0.99923 AS DOUBLE), CAST(4.58934E+34 AS DOUBLE)):double>
 -- !query 563
 select log(1.000016, 8.452010e18)
 -- !query 563 schema
-struct<LOG(CAST(1.000016 AS DOUBLE), CAST(8.452010E+18 AS DOUBLE)):double>
+struct<LOG(CAST(1.000016 AS DOUBLE), 8.45201E18):double>
 -- !query 563 output
 2723830.287707013
 
