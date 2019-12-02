@@ -2569,7 +2569,7 @@ class HiveDDLSuite
     "use default data source under non-legacy mode") {
     val catalog = spark.sessionState.catalog
     withSQLConf(
-      SQLConf.LEGACY_RESPECT_HIVE_DEFAULT_PROVIDER_ENABLED.key -> "false") {
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "false") {
       withTable("s") {
         val defaultProvider = conf.defaultDataSourceName
         sql("CREATE TABLE s(a INT, b INT)")
@@ -2583,7 +2583,7 @@ class HiveDDLSuite
     "use hive under legacy mode") {
     val catalog = spark.sessionState.catalog
     withSQLConf(
-      SQLConf.LEGACY_RESPECT_HIVE_DEFAULT_PROVIDER_ENABLED.key -> "true") {
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
       withTable("s") {
         sql("CREATE TABLE s(a INT, b INT)")
         val table = catalog.getTableMetadata(TableIdentifier("s"))

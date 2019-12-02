@@ -51,7 +51,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("SPARK-30098: create table without provider should " +
     "use default data source under non-legacy mode") {
-    withSQLConf(SQLConf.LEGACY_RESPECT_HIVE_DEFAULT_PROVIDER_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "false") {
       val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)"
       val defaultProvider = conf.defaultDataSourceName
       val expectedPlan = CreateTableStatement(

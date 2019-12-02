@@ -1960,8 +1960,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_RESPECT_HIVE_DEFAULT_PROVIDER_ENABLED =
-    buildConf("spark.sql.legacy.respectHiveDefaultProvider.enabled")
+  val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED =
+    buildConf("spark.sql.legacy.createHiveTableByDefault.enabled")
       .internal()
       .doc("When set to true, CREATE TABLE syntax without a provider will use hive " +
         "instead of the value of spark.sql.sources.default.")
@@ -2586,8 +2586,8 @@ class SQLConf extends Serializable with Logging {
   def exponentLiteralAsDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
 
-  def respectHiveDefaultProviderEnabled: Boolean =
-    getConf(SQLConf.LEGACY_RESPECT_HIVE_DEFAULT_PROVIDER_ENABLED)
+  def createHiveTableByDefaultEnabled: Boolean =
+    getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
 

@@ -33,7 +33,7 @@ grammar SqlBase;
    * When false, CREATE TABLE syntax without a provider will use
    * the value of spark.sql.sources.default as its provider.
    */
-  public boolean legacy_respect_hive_default_provider_enabled = false;
+  public boolean legacy_create_hive_table_by_default_enabled = false;
 
   /**
    * Verify whether current token is a valid decimal token (which contains dot).
@@ -107,11 +107,11 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
-    | {!legacy_respect_hive_default_provider_enabled}?
+    | {!legacy_create_hive_table_by_default_enabled}?
         createTableHeader ('(' colTypeList ')')? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
-    | {legacy_respect_hive_default_provider_enabled}?
+    | {legacy_create_hive_table_by_default_enabled}?
         createTableHeader ('(' colTypeList ')')? tableProvider
         createTableClauses
         (AS? query)?                                                   #createTable
