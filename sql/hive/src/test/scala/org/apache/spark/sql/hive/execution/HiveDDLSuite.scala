@@ -399,17 +399,14 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
       sql(s"CREATE DATABASE $db1")
       checkOwner(db1, Utils.getCurrentUserName(), location1)
+      sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a')")
+      checkOwner(db1, Utils.getCurrentUserName(), location1, true)
 
       // TODO: Specify ownership should be forbidden after we implement `SET OWNER` syntax
       sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('ownerName'='$owner')")
       checkOwner(db2, owner, location2)
-
-      sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a')")
-      checkOwner(db1, Utils.getCurrentUserName(), location1, true)
-
       sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('a'='a')")
       checkOwner(db2, owner, location2, true)
-
       // TODO: Changing ownership should be forbidden after we implement `SET OWNER` syntax
       sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('ownerName'='a')")
       checkOwner(db2, "a", location2, true)
