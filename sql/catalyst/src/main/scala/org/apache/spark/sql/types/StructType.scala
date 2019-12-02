@@ -19,12 +19,12 @@ package org.apache.spark.sql.types
 
 import scala.collection.{mutable, Map}
 import scala.util.Try
-import scala.util.control.NonFatal
 
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString}
@@ -527,74 +527,8 @@ object StructType extends AbstractDataType {
     }
 
   private[sql] def merge(left: DataType, right: DataType): DataType =
-    (left, right) match {
-      case (ArrayType(leftElementType, leftContainsNull),
-      ArrayType(rightElementType, rightContainsNull)) =>
-        ArrayType(
-          merge(leftElementType, rightElementType),
-          leftContainsNull || rightContainsNull)
-
-      case (MapType(leftKeyType, leftValueType, leftContainsNull),
-      MapType(rightKeyType, rightValueType, rightContainsNull)) =>
-        MapType(
-          merge(leftKeyType, rightKeyType),
-          merge(leftValueType, rightValueType),
-          leftContainsNull || rightContainsNull)
-
-      case (StructType(leftFields), StructType(rightFields)) =>
-        val newFields = mutable.ArrayBuffer.empty[StructField]
-
-        val rightMapped = fieldsMap(rightFields)
-        leftFields.foreach {
-          case leftField @ StructField(leftName, leftType, leftNullable, _) =>
-            rightMapped.get(leftName)
-              .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
-                try {
-                  leftField.copy(
-                    dataType = merge(leftType, rightType),
-                    nullable = leftNullable || rightNullable)
-                } catch {
-                  case NonFatal(e) =>
-                    throw new SparkException(s"Failed to merge fields '$leftName' and " +
-                      s"'$rightName'. " + e.getMessage)
-                }
-              }
-              .orElse {
-                Some(leftField)
-              }
-              .foreach(newFields += _)
-        }
-
-        val leftMapped = fieldsMap(leftFields)
-        rightFields
-          .filterNot(f => leftMapped.get(f.name).nonEmpty)
-          .foreach { f =>
-            newFields += f
-          }
-
-        StructType(newFields)
-
-      case (DecimalType.Fixed(leftPrecision, leftScale),
-        DecimalType.Fixed(rightPrecision, rightScale)) =>
-        if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
-          DecimalType(leftPrecision, leftScale)
-        } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
-          throw new SparkException("Failed to merge decimal types with incompatible " +
-            s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
-        } else if (leftPrecision != rightPrecision) {
-          throw new SparkException("Failed to merge decimal types with incompatible " +
-            s"precision $leftPrecision and $rightPrecision")
-        } else {
-          throw new SparkException("Failed to merge decimal types with incompatible " +
-            s"scala $leftScale and $rightScale")
-        }
-
-      case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
-        if leftUdt.userClass == rightUdt.userClass => leftUdt
-
-      case (leftType, rightType) if leftType == rightType =>
-        leftType
-
+    TypeCoercion.findTightestCommonType(left, right) match {
+      case Some(dataType: DataType) => dataType
       case _ =>
         throw new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
           s" and ${right.catalogString}")
