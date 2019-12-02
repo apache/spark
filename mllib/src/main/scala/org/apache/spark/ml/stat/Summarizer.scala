@@ -89,7 +89,9 @@ object Summarizer extends Logging {
    *
    * The following metrics are accepted (case sensitive):
    *  - mean: a vector that contains the coefficient-wise mean.
+   *  - sum: a vector that contains the coefficient-wise sum.
    *  - variance: a vector tha contains the coefficient-wise variance.
+   *  - std: a vector tha contains the coefficient-wise standard deviation.
    *  - count: the count of all vectors seen.
    *  - numNonzeros: a vector with the number of non-zeros for each coefficients
    *  - max: the maximum for each coefficient.
@@ -106,7 +108,7 @@ object Summarizer extends Logging {
   @Since("2.3.0")
   @scala.annotation.varargs
   def metrics(metrics: String*): SummaryBuilder = {
-    require(metrics.size >= 1, "Should include at least one metric")
+    require(metrics.nonEmpty, "Should include at least one metric")
     val (typedMetrics, computeMetrics) = getRelevantMetrics(metrics)
     new SummaryBuilderImpl(typedMetrics, computeMetrics)
   }
@@ -119,6 +121,14 @@ object Summarizer extends Logging {
   @Since("2.3.0")
   def mean(col: Column): Column = mean(col, lit(1.0))
 
+  @Since("3.0.0")
+  def sum(col: Column, weightCol: Column): Column = {
+    getSingleMetric(col, weightCol, "sum")
+  }
+
+  @Since("3.0.0")
+  def sum(col: Column): Column = sum(col, lit(1.0))
+
   @Since("2.3.0")
   def variance(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "variance")
@@ -126,6 +136,14 @@ object Summarizer extends Logging {
 
   @Since("2.3.0")
   def variance(col: Column): Column = variance(col, lit(1.0))
+
+  @Since("3.0.0")
+  def std(col: Column, weightCol: Column): Column = {
+    getSingleMetric(col, weightCol, "std")
+  }
+
+  @Since("3.0.0")
+  def std(col: Column): Column = std(col, lit(1.0))
 
   @Since("2.3.0")
   def count(col: Column, weightCol: Column): Column = {
@@ -245,7 +263,9 @@ private[ml] object SummaryBuilderImpl extends Logging {
    */
   private val allMetrics: Seq[(String, Metric, DataType, Seq[ComputeMetric])] = Seq(
     ("mean", Mean, vectorUDT, Seq(ComputeMean, ComputeWeightSum)),
+    ("sum", Sum, vectorUDT, Seq(ComputeMean, ComputeWeightSum)),
     ("variance", Variance, vectorUDT, Seq(ComputeWeightSum, ComputeMean, ComputeM2n)),
+    ("std", Std, vectorUDT, Seq(ComputeWeightSum, ComputeMean, ComputeM2n)),
     ("count", Count, LongType, Seq()),
     ("numNonZeros", NumNonZeros, vectorUDT, Seq(ComputeNNZ)),
     ("max", Max, vectorUDT, Seq(ComputeMax, ComputeNNZ)),
@@ -259,7 +279,9 @@ private[ml] object SummaryBuilderImpl extends Logging {
    */
   sealed trait Metric extends Serializable
   private[stat] case object Mean extends Metric
+  private[stat] case object Sum extends Metric
   private[stat] case object Variance extends Metric
+  private[stat] case object Std extends Metric
   private[stat] case object Count extends Metric
   private[stat] case object NumNonZeros extends Metric
   private[stat] case object Max extends Metric
@@ -295,14 +317,15 @@ private[ml] object SummaryBuilderImpl extends Logging {
     private var totalCnt: Long = 0
     private var totalWeightSum: Double = 0.0
     private var weightSquareSum: Double = 0.0
-    private var weightSum: Array[Double] = null
+    private var currWeightSum: Array[Double] = null
     private var nnz: Array[Long] = null
     private var currMax: Array[Double] = null
     private var currMin: Array[Double] = null
 
     def this() {
       this(
-        Seq(Mean, Variance, Count, NumNonZeros, Max, Min, NormL2, NormL1),
+        Seq(Mean, Sum, Variance, Std, Count, NumNonZeros,
+          Max, Min, NormL2, NormL1),
         Seq(ComputeMean, ComputeM2n, ComputeM2, ComputeL1,
           ComputeWeightSum, ComputeNNZ, ComputeMax, ComputeMin)
       )
@@ -323,7 +346,9 @@ private[ml] object SummaryBuilderImpl extends Logging {
         if (requestedCompMetrics.contains(ComputeM2n)) { currM2n = Array.ofDim[Double](n) }
         if (requestedCompMetrics.contains(ComputeM2)) { currM2 = Array.ofDim[Double](n) }
         if (requestedCompMetrics.contains(ComputeL1)) { currL1 = Array.ofDim[Double](n) }
-        if (requestedCompMetrics.contains(ComputeWeightSum)) { weightSum = Array.ofDim[Double](n) }
+        if (requestedCompMetrics.contains(ComputeWeightSum)) {
+          currWeightSum = Array.ofDim[Double](n)
+        }
         if (requestedCompMetrics.contains(ComputeNNZ)) { nnz = Array.ofDim[Long](n) }
         if (requestedCompMetrics.contains(ComputeMax)) {
           currMax = Array.fill[Double](n)(Double.MinValue)
@@ -340,7 +365,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
       val localCurrM2n = currM2n
       val localCurrM2 = currM2
       val localCurrL1 = currL1
-      val localWeightSum = weightSum
+      val localCurrWeightSum = currWeightSum
       val localNumNonzeros = nnz
       val localCurrMax = currMax
       val localCurrMin = currMin
@@ -353,17 +378,18 @@ private[ml] object SummaryBuilderImpl extends Logging {
             localCurrMin(index) = value
           }
 
-          if (localWeightSum != null) {
+          if (localCurrWeightSum != null) {
             if (localCurrMean != null) {
               val prevMean = localCurrMean(index)
               val diff = value - prevMean
-              localCurrMean(index) = prevMean + weight * diff / (localWeightSum(index) + weight)
+              localCurrMean(index) = prevMean +
+                weight * diff / (localCurrWeightSum(index) + weight)
 
               if (localCurrM2n != null) {
                 localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
               }
             }
-            localWeightSum(index) += weight
+            localCurrWeightSum(index) += weight
           }
 
           if (localCurrM2 != null) {
@@ -402,9 +428,9 @@ private[ml] object SummaryBuilderImpl extends Logging {
         weightSquareSum += other.weightSquareSum
         var i = 0
         while (i < n) {
-          if (weightSum != null) {
-            val thisWeightSum = weightSum(i)
-            val otherWeightSum = other.weightSum(i)
+          if (currWeightSum != null) {
+            val thisWeightSum = currWeightSum(i)
+            val otherWeightSum = other.currWeightSum(i)
             val totalWeightSum = thisWeightSum + otherWeightSum
 
             if (totalWeightSum != 0.0) {
@@ -420,7 +446,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
                 }
               }
             }
-            weightSum(i) = totalWeightSum
+            currWeightSum(i) = totalWeightSum
           }
 
           // merge m2 together
@@ -442,7 +468,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
         this.totalCnt = other.totalCnt
         this.totalWeightSum = other.totalWeightSum
         this.weightSquareSum = other.weightSquareSum
-        if (other.weightSum != null) { this.weightSum = other.weightSum.clone() }
+        if (other.currWeightSum != null) { this.currWeightSum = other.currWeightSum.clone() }
         if (other.nnz != null) { this.nnz = other.nnz.clone() }
         if (other.currMax != null) { this.currMax = other.currMax.clone() }
         if (other.currMin != null) { this.currMin = other.currMin.clone() }
@@ -460,10 +486,26 @@ private[ml] object SummaryBuilderImpl extends Logging {
       val realMean = Array.ofDim[Double](n)
       var i = 0
       while (i < n) {
-        realMean(i) = currMean(i) * (weightSum(i) / totalWeightSum)
+        realMean(i) = currMean(i) * (currWeightSum(i) / totalWeightSum)
         i += 1
       }
       Vectors.dense(realMean)
+    }
+
+    /**
+     * Sum of each dimension.
+     */
+    def sum: Vector = {
+      require(requestedMetrics.contains(Sum))
+      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+
+      val realSum = Array.ofDim[Double](n)
+      var i = 0
+      while (i < n) {
+        realSum(i) = currMean(i) * currWeightSum(i)
+        i += 1
+      }
+      Vectors.dense(realSum)
     }
 
     /**
@@ -473,8 +515,23 @@ private[ml] object SummaryBuilderImpl extends Logging {
       require(requestedMetrics.contains(Variance))
       require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
-      val realVariance = Array.ofDim[Double](n)
+      val realVariance = computeVariance
+      Vectors.dense(realVariance)
+    }
 
+    /**
+     * Unbiased estimate of standard deviation of each dimension.
+     */
+    def std: Vector = {
+      require(requestedMetrics.contains(Std))
+      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+
+      val realVariance = computeVariance
+      Vectors.dense(realVariance.map(math.sqrt))
+    }
+
+    private def computeVariance: Array[Double] = {
+      val realVariance = Array.ofDim[Double](n)
       val denominator = totalWeightSum - (weightSquareSum / totalWeightSum)
 
       // Sample variance is computed, if the denominator is less than 0, the variance is just 0.
@@ -484,12 +541,12 @@ private[ml] object SummaryBuilderImpl extends Logging {
         val len = currM2n.length
         while (i < len) {
           // We prevent variance from negative value caused by numerical error.
-          realVariance(i) = math.max((currM2n(i) + deltaMean(i) * deltaMean(i) * weightSum(i) *
-            (totalWeightSum - weightSum(i)) / totalWeightSum) / denominator, 0.0)
+          realVariance(i) = math.max((currM2n(i) + deltaMean(i) * deltaMean(i) * currWeightSum(i) *
+            (totalWeightSum - currWeightSum(i)) / totalWeightSum) / denominator, 0.0)
           i += 1
         }
       }
-      Vectors.dense(realVariance)
+      realVariance
     }
 
     /**
@@ -579,7 +636,9 @@ private[ml] object SummaryBuilderImpl extends Logging {
     override def eval(state: SummarizerBuffer): Any = {
       val metrics = requestedMetrics.map {
         case Mean => vectorUDT.serialize(state.mean)
+        case Sum => vectorUDT.serialize(state.sum)
         case Variance => vectorUDT.serialize(state.variance)
+        case Std => vectorUDT.serialize(state.std)
         case Count => state.count
         case NumNonZeros => vectorUDT.serialize(state.numNonzeros)
         case Max => vectorUDT.serialize(state.max)

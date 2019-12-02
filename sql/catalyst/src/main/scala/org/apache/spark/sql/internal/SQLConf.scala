@@ -367,7 +367,8 @@ object SQLConf {
         "reduce IO and improve performance. Note, multiple continuous blocks exist in single " +
         s"fetch request only happen when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled, this feature also depends " +
-        "on a relocatable serializer and the concatenation support codec in use.")
+        "on a relocatable serializer, the concatenation support codec in use and the new version" +
+        "shuffle fetch protocol.")
       .booleanConf
       .createWithDefault(true)
 
@@ -874,8 +875,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val FAIL_AMBIGUOUS_SELF_JOIN =
-    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin")
+  val FAIL_AMBIGUOUS_SELF_JOIN_ENABLED =
+    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin.enabled")
       .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
       .internal()
       .booleanConf
