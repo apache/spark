@@ -35,7 +35,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceRequest}
 import org.apache.spark.resource.ResourceUtils.{AMOUNT, GPU}
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
@@ -129,11 +129,12 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   def createContainer(
       host: String,
       containerNumber: Int = containerNum,
-      resource: Resource = containerResource): Container = {
+      resource: Resource = containerResource,
+      priority: Priority = RM_REQUEST_PRIORITY): Container = {
     val  containerId: ContainerId = ContainerId.newContainerId(appAttemptId, containerNum)
     containerNum += 1
     val nodeId = NodeId.newInstance(host, 1000)
-    Container.newInstance(containerId, nodeId, "", resource, RM_REQUEST_PRIORITY, null)
+    Container.newInstance(containerId, nodeId, "", resource, priority, null)
   }
 
   def createContainers(hosts: Seq[String], containerIds: Seq[Int]): Seq[Container] = {
@@ -157,6 +158,31 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumContainersPendingAllocate should be (1)
 
     val container = createContainer("host1")
+    handler.handleAllocatedContainers(Array(container))
+
+    handler.getNumExecutorsRunning should be (1)
+    handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
+    val hostTocontainer = handler.allocatedHostToContainersMapPerRPId(defaultRPId)
+    hostTocontainer.get("host1").get should contain(container.getId)
+
+    val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
+    size should be (0)
+  }
+
+  test("single container allocated ResourceProfile") {
+    val rprof = new ResourceProfile
+    val execReq = new ExecutorResourceRequest("resource.gpu", 6)
+    val taskReq = new TaskResourceRequest("resource.gpu", 1)
+
+    // TODO -need to finish updating this test, but need upmerge first
+
+    // request a single container and receive it
+    val handler = createAllocator(1)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getNumContainersPendingAllocate should be (1)
+
+    val container = createContainer("host1", priority = Priority.newInstance(1))
     handler.handleAllocatedContainers(Array(container))
 
     handler.getNumExecutorsRunning should be (1)

@@ -89,7 +89,6 @@ private[yarn] class YarnAllocator(
   private val releasedContainers = Collections.newSetFromMap[ContainerId](
     new ConcurrentHashMap[ContainerId, java.lang.Boolean])
 
-  // can be done separately though
   private val runningExecutorsPerResourceProfileId =
     new ConcurrentHashMap[Int, java.util.Set[String]]()
   runningExecutorsPerResourceProfileId.put(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
@@ -200,7 +199,6 @@ private[yarn] class YarnAllocator(
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resolver)
 
   def getNumExecutorsRunning: Int = {
-    // TODO - how efficient is this?
     runningExecutorsPerResourceProfileId.values.asScala.map(_.size).sum
   }
 
