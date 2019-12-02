@@ -137,15 +137,14 @@ public abstract class UnsafeWriter {
 
     if (input == null) {
       BitSetMethods.set(getBuffer(), startingOffset, ordinal);
-      setOffsetAndSize(ordinal, 16);
     } else {
-      // Write the months, days and microseconds fields of Interval to the variable length portion.
+      // Write the months, days and microseconds fields of interval to the variable length portion.
       Platform.putInt(getBuffer(), cursor(), input.months);
       Platform.putInt(getBuffer(), cursor() + 4, input.days);
       Platform.putLong(getBuffer(), cursor() + 8, input.microseconds);
-
-      setOffsetAndSize(ordinal, 16);
     }
+    // we need to reserve the space so that we can update it later.
+    setOffsetAndSize(ordinal, 16);
     // move the cursor forward.
     increaseCursor(16);
   }
