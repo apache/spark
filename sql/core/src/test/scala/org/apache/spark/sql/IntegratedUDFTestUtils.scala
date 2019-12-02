@@ -22,6 +22,8 @@ import java.nio.file.{Files, Paths}
 import scala.collection.JavaConverters._
 import scala.util.Try
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.TestUtils
 import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction, PythonUtils}
 import org.apache.spark.broadcast.Broadcast
@@ -122,13 +124,31 @@ object IntegratedUDFTestUtils extends SQLHelper {
     true
   }.getOrElse(false)
 
-  private lazy val pythonVer = if (isPythonAvailable) {
+  lazy val pythonVer: String = if (isPythonAvailable) {
     Process(
       Seq(pythonExec, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"),
       None,
       "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!.trim()
   } else {
     throw new RuntimeException(s"Python executable [$pythonExec] is unavailable.")
+  }
+
+  lazy val pandasVer: String = if (isPandasAvailable) {
+    Process(
+      Seq(pythonExec, "-c", "import pandas; print(pandas.__version__)"),
+      None,
+      "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!.trim()
+  } else {
+    throw new RuntimeException("Pandas is unavailable.")
+  }
+
+  lazy val pyarrowVer: String = if (isPyArrowAvailable) {
+    Process(
+      Seq(pythonExec, "-c", "import pyarrow; print(pyarrow.__version__)"),
+      None,
+      "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!.trim()
+  } else {
+    throw new RuntimeException("PyArrow is unavailable.")
   }
 
   // Dynamically pickles and reads the Python instance into JVM side in order to mimic

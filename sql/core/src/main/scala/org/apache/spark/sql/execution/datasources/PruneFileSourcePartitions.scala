@@ -48,7 +48,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
           partitionSchema, sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters = ExpressionSet(normalizedFilters.filter { f =>
-        f.references.subsetOf(partitionSet) && f.find(_.isInstanceOf[SubqueryExpression]).isEmpty
+        f.references.subsetOf(partitionSet)
       })
 
       if (partitionKeyFilters.nonEmpty) {

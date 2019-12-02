@@ -267,7 +267,7 @@ private[spark] class DAGScheduler(
       executorUpdates: mutable.Map[(Int, Int), ExecutorMetrics]): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
       executorUpdates))
-    blockManagerMaster.driverEndpoint.askSync[Boolean](
+    blockManagerMaster.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(blockManagerId), new RpcTimeout(10.minutes, "BlockManagerHeartbeat"))
   }
 

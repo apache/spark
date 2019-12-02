@@ -42,7 +42,7 @@ import org.apache.spark.internal.config._
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
   with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
-  with DepsTestsSuite with Logging with Eventually with Matchers {
+  with DepsTestsSuite with RTestsSuite with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 

@@ -73,7 +73,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     map.put("failed.sort", Array("duration"))
     when(request.getParameterMap()).thenReturn(map)
     val html = renderSQLPage(request, tab, statusStore).toString().toLowerCase(Locale.ROOT)
-    assert(!html.contains("IllegalArgumentException"))
+    assert(!html.contains("illegalargumentexception"))
     assert(html.contains("duration"))
   }
 

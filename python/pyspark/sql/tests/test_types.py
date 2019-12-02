@@ -536,6 +536,22 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
 
+    @unittest.skipIf(sys.version < "3", "only Python 3 infers bytes as binary type")
+    def test_infer_binary_type(self):
+        binaryrow = [Row(f1='a', f2=b"abcd")]
+        df = self.sc.parallelize(binaryrow).toDF()
+        self.assertEqual(df.schema.fields[1].dataType, BinaryType())
+
+        # this saving as Parquet caused issues as well.
+        output_dir = os.path.join(self.tempdir.name, "infer_binary_type")
+        df.write.parquet(output_dir)
+        df1 = self.spark.read.parquet(output_dir)
+        self.assertEqual('a', df1.first().f1)
+        self.assertEqual(b"abcd", df1.first().f2)
+
+        self.assertEqual(_infer_type(b""), BinaryType())
+        self.assertEqual(_infer_type(b"1234"), BinaryType())
+
     def test_merge_type(self):
         self.assertEqual(_merge_type(LongType(), NullType()), LongType())
         self.assertEqual(_merge_type(NullType(), LongType()), LongType())

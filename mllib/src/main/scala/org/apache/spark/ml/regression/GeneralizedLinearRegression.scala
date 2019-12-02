@@ -45,7 +45,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  */
 private[regression] trait GeneralizedLinearRegressionBase extends PredictorParams
   with HasFitIntercept with HasMaxIter with HasTol with HasRegParam with HasWeightCol
-  with HasSolver with Logging {
+  with HasSolver with HasAggregationDepth with Logging {
 
   import GeneralizedLinearRegression._
 
@@ -371,6 +371,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   @Since("2.0.0")
   def setLinkPredictionCol(value: String): this.type = set(linkPredictionCol, value)
 
+  /** @group expertSetParam */
+  @Since("3.0.0")
+  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
+
   override protected def train(
       dataset: Dataset[_]): GeneralizedLinearRegressionModel = instrumented { instr =>
     val familyAndLink = FamilyAndLink(this)
@@ -379,7 +383,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, weightCol, offsetCol, predictionCol,
-      linkPredictionCol, family, solver, fitIntercept, link, maxIter, regParam, tol)
+      linkPredictionCol, family, solver, fitIntercept, link, maxIter, regParam, tol,
+      aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {
@@ -404,7 +409,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
-      val wlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
+      val wlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr),
+        depth = $(aggregationDepth))
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
@@ -419,7 +425,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         }
       // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
       val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam),
-        instr = OptionalInstrumentation.create(instr))
+        instr = OptionalInstrumentation.create(instr), $(aggregationDepth))
       val optimizer = new IterativelyReweightedLeastSquares(initialModel,
         familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
       val irlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
@@ -494,7 +500,8 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         fitIntercept: Boolean,
         regParam: Double,
         instr: OptionalInstrumentation = OptionalInstrumentation.create(
-          classOf[GeneralizedLinearRegression])
+          classOf[GeneralizedLinearRegression]),
+        depth: Int = 2
       ): WeightedLeastSquaresModel = {
       val newInstances = instances.map { instance =>
         val mu = family.initialize(instance.label, instance.weight)
@@ -504,7 +511,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val initialModel = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
-        .fit(newInstances, instr)
+        .fit(newInstances, instr, depth)
       initialModel
     }
 
@@ -1099,6 +1106,12 @@ class GeneralizedLinearRegressionModel private[ml] (
     new GeneralizedLinearRegressionModel.GeneralizedLinearRegressionModelWriter(this)
 
   override val numFeatures: Int = coefficients.size
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"GeneralizedLinearRegressionModel: uid=$uid, family=${$(family)}, link=${$(link)}, " +
+      s"numFeatures=$numFeatures"
+  }
 }
 
 @Since("2.0.0")

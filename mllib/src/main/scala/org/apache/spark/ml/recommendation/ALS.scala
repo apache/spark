@@ -338,6 +338,11 @@ class ALSModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new ALSModel.ALSModelWriter(this)
 
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ALSModel: uid=$uid, rank=$rank"
+  }
+
   /**
    * Returns top `numItems` items recommended for each user, for all users.
    * @param numItems max number of recommendations for each user
@@ -1041,13 +1046,13 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .persist(finalRDDStorageLevel)
     if (finalRDDStorageLevel != StorageLevel.NONE) {
       userIdAndFactors.count()
-      itemIdAndFactors.count()
-      itemFactors.unpersist()
       userInBlocks.unpersist()
       userOutBlocks.unpersist()
-      itemInBlocks.unpersist()
       itemOutBlocks.unpersist()
       blockRatings.unpersist()
+      itemIdAndFactors.count()
+      itemFactors.unpersist()
+      itemInBlocks.unpersist()
     }
     (userIdAndFactors, itemIdAndFactors)
   }

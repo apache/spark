@@ -21,7 +21,6 @@ import java.util.{Map => JMap}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.HashMap
 import scala.collection.mutable
 
 import org.apache.spark.SparkConf
@@ -35,22 +34,6 @@ import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
  * specify executor and task requirements for an RDD that will get applied during a
  * stage. This allows the user to change the resource requirements between stages.
  *
- * Only support a subset of the resources for now. The config names supported correspond to the
- * regular Spark configs with the prefix removed. For instance overhead memory in this api
- * is memoryOverhead, which is spark.executor.memoryOverhead with spark.executor removed.
- * Resources like GPUs are resource.gpu (spark configs spark.executor.resource.gpu.*)
- *
- * Executor:
- *   memory - heap
- *   memoryOverhead
- *   pyspark.memory
- *   cores
- *   resource.[resourceName] - GPU, FPGA, etc
- *
- * Task requirements:
- *   cpus
- *   resource.[resourceName] - GPU, FPGA, etc
- *
  * This class is private now for initial development, once we have the feature in place
  * this will become public.
  */
@@ -61,19 +44,8 @@ class ResourceProfile() extends Serializable {
   private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
   private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
 
-  private val allowedExecutorResources = HashMap[String, Boolean](
-    (ResourceProfile.MEMORY -> true),
-    (ResourceProfile.OVERHEAD_MEM -> true),
-    (ResourceProfile.PYSPARK_MEM -> true),
-    (ResourceProfile.CORES -> true))
-
-  private val allowedTaskResources = HashMap[String, Boolean]((
-    ResourceProfile.CPUS -> true))
-
   def id: Int = _id
-
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.toMap
-
   def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.toMap
 
   /**
@@ -86,29 +58,18 @@ class ResourceProfile() extends Serializable {
    */
   def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = _executorResources.asJava
 
-
   def reset(): Unit = {
     _taskResources.clear()
     _executorResources.clear()
   }
 
-  def require(request: TaskResourceRequest): this.type = {
-    if (allowedTaskResources.contains(request.resourceName) ||
-      request.resourceName.startsWith(RESOURCE_DOT)) {
-      _taskResources(request.resourceName) = request
-    } else {
-      throw new IllegalArgumentException(s"Task resource not allowed: ${request.resourceName}")
-    }
+  def require(requests: ExecutorResourceRequests): this.type = {
+    _executorResources ++= requests.requests
     this
   }
 
-  def require(request: ExecutorResourceRequest): this.type = {
-    if (allowedExecutorResources.contains(request.resourceName) ||
-        request.resourceName.startsWith(RESOURCE_DOT)) {
-      _executorResources(request.resourceName) = request
-    } else {
-      throw new IllegalArgumentException(s"Executor resource not allowed: ${request.resourceName}")
-    }
+  def require(requests: TaskResourceRequests): this.type = {
+    _taskResources ++= requests.requests
     this
   }
 
@@ -134,24 +95,33 @@ private[spark] object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
-  val SPARK_RP_TASK_PREFIX = "spark.resourceProfile.task"
-  val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
-
-  // Helper class for constructing the resource profile internal configs used to pass to
-  // executors
-  case class ResourceProfileInternalConf(componentName: String,
-      id: Int, resourceName: String) {
-    def confPrefix: String = s"$componentName.$id.$resourceName."
-    def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
-    def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
-    def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
-  }
-
   val CPUS = "cpus"
   val CORES = "cores"
   val MEMORY = "memory"
   val OVERHEAD_MEM = "memoryOverhead"
   val PYSPARK_MEM = "pyspark.memory"
+
+  val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
+
+  private def resourceProfileIntConfPrefix(rpId: Int): String = {
+    s"$SPARK_RP_EXEC_PREFIX.$rpId."
+  }
+
+  // Helper class for constructing the resource profile internal configs used to pass to
+  // executors. The configs look like:
+  // spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
+  // Note custom resources have name like resource.gpu.
+  case class ResourceProfileInternalConf(id: Int, resourceName: String) {
+    def resourceNameConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceName"
+    def resourceNameAndAmount: String = s"$resourceName.${ResourceUtils.AMOUNT}"
+    def resourceNameAndDiscovery: String = s"$resourceName.${ResourceUtils.DISCOVERY_SCRIPT}"
+    def resourceNameAndVendor: String = s"$resourceName.${ResourceUtils.VENDOR}"
+
+    def amountConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceNameAndAmount"
+    def discoveryScriptConf: String =
+      s"${resourceProfileIntConfPrefix(id)}$resourceNameAndDiscovery"
+    def vendorConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceNameAndVendor"
+  }
 
   private lazy val nextProfileId = new AtomicInteger(0)
 
@@ -184,27 +154,26 @@ private[spark] object ResourceProfile extends Logging {
 
   private def addDefaultTaskResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
     val cpusPerTask = conf.get(CPUS_PER_TASK)
-    rprof.require(new TaskResourceRequest(CPUS, cpusPerTask))
+    val treqs = new TaskResourceRequests().cpus(cpusPerTask)
     val taskReq = ResourceUtils.parseResourceRequirements(conf, SPARK_TASK_PREFIX)
-
     taskReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.resourceName}"
-      rprof.require(new TaskResourceRequest(name, req.amount))
+      treqs.resource(name, req.amount)
     }
+    rprof.require(treqs)
   }
 
   private def addDefaultExecutorResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
-    rprof.require(new ExecutorResourceRequest(CORES, conf.get(EXECUTOR_CORES)))
-    rprof.require(
-      new ExecutorResourceRequest(MEMORY, conf.get(EXECUTOR_MEMORY).toInt, "b"))
+    val ereqs = new ExecutorResourceRequests()
+    ereqs.cores(conf.get(EXECUTOR_CORES))
+    ereqs.memory(conf.get(EXECUTOR_MEMORY).toString)
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
-
     execReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.id.resourceName}"
-      val execReq = new ExecutorResourceRequest(name, req.amount, "",
-        req.discoveryScript.getOrElse(""), req.vendor.getOrElse(""))
-      rprof.require(execReq)
+      ereqs.resource(name, req.amount, req.discoveryScript.getOrElse(""),
+        req.vendor.getOrElse(""))
     }
+    rprof.require(ereqs)
   }
 
   // for testing purposes
@@ -215,33 +184,26 @@ private[spark] object ResourceProfile extends Logging {
    * It pulls any "resource." resources from the ResourceProfile and returns a Map of key
    * to value where the keys get formatted as:
    *
-   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
-   * spark.resourceProfile.task.[rpId].resource.[resourceName].amount
+   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
    *
    * Keep this here as utility a function rather then in public ResourceProfile interface because
-   * end users shouldn't need this.
+   * end users doesn't need this.
    */
   def createResourceProfileInternalConfs(rp: ResourceProfile): Map[String, String] = {
-    val res = new mutable.HashMap[String, String]()
-    // task resources
-    rp.taskResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val taskIntConf = ResourceProfileInternalConf(SPARK_RP_TASK_PREFIX, rp.id, name)
-      res(s"${taskIntConf.amountConf}") = req.amount.toString
-    }
-    // executor resources
+    val ret = new mutable.HashMap[String, String]()
     rp.executorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val execIntConf = ResourceProfileInternalConf(SPARK_RP_EXEC_PREFIX, rp.id, name)
-      res(execIntConf.amountConf) = req.amount.toString
-      if (req.vendor.nonEmpty) res(execIntConf.vendorConf) = req.vendor
-      if (req.discoveryScript.nonEmpty) res(execIntConf.discoveryScriptConf) = req.discoveryScript
+      val execIntConf = ResourceProfileInternalConf(rp.id, name)
+      ret(execIntConf.amountConf) = req.amount.toString
+      if (req.vendor.nonEmpty) ret(execIntConf.vendorConf) = req.vendor
+      if (req.discoveryScript.nonEmpty) ret(execIntConf.discoveryScriptConf) = req.discoveryScript
     }
-    res.toMap
+    ret.toMap
   }
 
   /**
    * Parse out just the resourceName given the map of confs. It only looks for confs that
    * end with .amount because we should always have one of those for every resource.
-   * Format is expected to be: [resourcesname].amount, where resourceName could have multiple
+   * Format is expected to be: [resourcename].amount, where resourceName could have multiple
    * .'s like resource.gpu.foo.amount
    */
   private def listResourceNames(confs: Map[String, String]): Seq[String] = {
@@ -250,38 +212,28 @@ private[spark] object ResourceProfile extends Logging {
   }
 
   /**
-   * Get a ResourceProfile with the task requirements from the internal resource confs.
-   * The configs looks like:
-   * spark.resourceProfile.task.[rpId].resource.[resourceName].amount
-   */
-  def getTaskRequirementsFromInternalConfs(sparkConf: SparkConf, rpId: Int): ResourceProfile = {
-    val rp = new ResourceProfile()
-    val taskRpIdConfPrefix = s"${SPARK_RP_TASK_PREFIX}.${rpId}."
-    val taskConfs = sparkConf.getAllWithPrefix(taskRpIdConfPrefix).toMap
-    val taskResourceNames = listResourceNames(taskConfs)
-    taskResourceNames.foreach { resource =>
-      val amount = taskConfs.get(s"${resource}.amount").get.toDouble
-      rp.require(new TaskResourceRequest(resource, amount))
-    }
-    rp
-  }
-
-  /**
    * Get the executor ResourceRequests from the internal resource confs
    * The configs looks like:
-   * spark.resourceProfile.executor.[rpId].resource.gpu.[amount, vendor, discoveryScript]
+   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
+   * Note that custom resources have names prefixed with resource., ie resource.gpu
    */
   def getResourceRequestsFromInternalConfs(
       sparkConf: SparkConf,
       rpId: Int): Seq[ResourceRequest] = {
-    val execRpIdConfPrefix = s"${SPARK_RP_EXEC_PREFIX}.${rpId}.${RESOURCE_DOT}"
+    val execRpIdConfPrefix = resourceProfileIntConfPrefix(rpId)
     val execConfs = sparkConf.getAllWithPrefix(execRpIdConfPrefix).toMap
     val execResourceNames = listResourceNames(execConfs)
-    val resourceReqs = execResourceNames.map { resource =>
-      val amount = execConfs.get(s"${resource}.amount").get.toInt
-      val vendor = execConfs.get(s"${resource}.vendor")
-      val discoveryScript = execConfs.get(s"${resource}.discoveryScript")
-      ResourceRequest(ResourceID(SPARK_EXECUTOR_PREFIX, resource), amount, discoveryScript, vendor)
+    val resourceReqs = execResourceNames.map { rName =>
+      val intConf = ResourceProfileInternalConf(rpId, rName)
+      val amount = execConfs.get(intConf.resourceNameAndAmount).get.toInt
+      val vendor = execConfs.get(intConf.resourceNameAndVendor)
+      val discoveryScript = execConfs.get(intConf.resourceNameAndDiscovery)
+      // note resourceName at this point is resource.[something] because with ResourceProfiles
+      // the name matches the spark conf. Strip off the resource. part here to match how global
+      // custom resource confs are parsed and how any resource files are handled.
+      val shortResourceName = rName.substring(RESOURCE_DOT.length)
+      val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, shortResourceName)
+      ResourceRequest(resourceId, amount, discoveryScript, vendor)
     }
     resourceReqs
   }

@@ -19,7 +19,6 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
-import scala.collection.TraversableLike
 import scala.collection.generic.CanBuildFrom
 import scala.language.higherKinds
 
@@ -275,13 +274,7 @@ private[spark] object ThreadUtils {
    * @return new collection in which each element was given from the input collection `in` by
    *         applying the lambda function `f`.
    */
-  def parmap[I, O, Col[X] <: TraversableLike[X, Col[X]]]
-      (in: Col[I], prefix: String, maxThreads: Int)
-      (f: I => O)
-      (implicit
-        cbf: CanBuildFrom[Col[I], Future[O], Col[Future[O]]], // For in.map
-        cbf2: CanBuildFrom[Col[Future[O]], O, Col[O]] // for Future.sequence
-      ): Col[O] = {
+  def parmap[I, O](in: Seq[I], prefix: String, maxThreads: Int)(f: I => O): Seq[O] = {
     val pool = newForkJoinPool(prefix, maxThreads)
     try {
       implicit val ec = ExecutionContext.fromExecutor(pool)

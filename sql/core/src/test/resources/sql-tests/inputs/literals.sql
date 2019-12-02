@@ -82,12 +82,6 @@ select tImEstAmp '2016-03-11 20:54:00.000';
 -- invalid timestamp
 select timestamp '2016-33-11 20:54:00.000';
 
--- interval
-select interval 13.123456789 seconds, interval -13.123456789 second;
-select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond, 9 microsecond;
--- ns is not supported
-select interval 10 nanoseconds;
-
 -- unsupported data type
 select GEO '(10,-6)';
 
@@ -106,9 +100,17 @@ select X'XuZ';
 -- Hive literal_double test.
 SELECT 3.14, -3.14, 3.14e8, 3.14e-8, -3.14e8, -3.14e-8, 3.14e+8, 3.14E8, 3.14E-8;
 
--- map + interval test
-select map(1, interval 1 day, 2, interval 3 week);
+-- typed integer expression
+select integer '7';
+select integer'7';
+select integer '2147483648';
 
--- typed interval expression
-select interval 'interval 3 year 1 hour';
-select interval '3 year 1 hour';
+-- awareness of the negative/positive sign before type
+select -integer '7';
+select +integer '7';
+select +date '1999-01-01';
+select +timestamp '1999-01-01';
+-- can't negate date/timestamp/binary
+select -date '1999-01-01';
+select -timestamp '1999-01-01';
+select -x'2379ACFe';

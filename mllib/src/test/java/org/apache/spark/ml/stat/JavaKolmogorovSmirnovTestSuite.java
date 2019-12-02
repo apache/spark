@@ -23,6 +23,7 @@ import java.util.List;
 
 import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.spark.sql.Encoders;
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
@@ -60,7 +61,7 @@ public class JavaKolmogorovSmirnovTestSuite extends SharedSparkSession {
       .test(dataset, "sample", stdNormalCDF).head();
     double pValue1 = results.getDouble(0);
     // Cannot reject null hypothesis
-    assert(pValue1 > pThreshold);
+    Assert.assertTrue(pValue1 > pThreshold);
   }
 
   @Test
@@ -72,6 +73,6 @@ public class JavaKolmogorovSmirnovTestSuite extends SharedSparkSession {
             .test(dataset, "sample", "norm", 0.0, 1.0).head();
     double pValue1 = results.getDouble(0);
     // Cannot reject null hypothesis
-    assert(pValue1 > pThreshold);
+    Assert.assertTrue(pValue1 > pThreshold);
   }
 }

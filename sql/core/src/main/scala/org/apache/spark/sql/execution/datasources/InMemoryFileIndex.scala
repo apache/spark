@@ -121,7 +121,7 @@ class InMemoryFileIndex(
         case None =>
           pathsToFetch += path
       }
-      Unit // for some reasons scalac 2.12 needs this; return type doesn't matter
+      () // for some reasons scalac 2.12 needs this; return type doesn't matter
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(

@@ -596,8 +596,8 @@ class DataStreamReader(OptionUtils):
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets a single character as a separator for each field and value.
-                    If None is set, it uses the default value, ``,``.
+        :param sep: sets a separator (one or more characters) for each field and value. If None is
+                    set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
         :param quote: sets a single character used for escaping quoted values where the
@@ -839,10 +839,13 @@ class DataStreamWriter(object):
         .. note:: Evolving.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
-                               Set a trigger that runs a query periodically based on the processing
-                               time. Only one trigger can be set.
+                               Set a trigger that runs a microbatch query periodically based on the
+                               processing time. Only one trigger can be set.
         :param once: if set to True, set a trigger that processes only one batch of data in a
                      streaming query then terminates the query. Only one trigger can be set.
+        :param continuous: a time interval as a string, e.g. '5 seconds', '1 minute'.
+                           Set a trigger that runs a continuous query with a given checkpoint
+                           interval. Only one trigger can be set.
 
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
@@ -1062,7 +1065,7 @@ class DataStreamWriter(object):
         >>> def func(batch_df, batch_id):
         ...     batch_df.collect()
         ...
-        >>> writer = sdf.writeStream.foreach(func)
+        >>> writer = sdf.writeStream.foreachBatch(func)
         """
 
         from pyspark.java_gateway import ensure_callback_server_started

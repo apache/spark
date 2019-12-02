@@ -139,6 +139,25 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
       }
   }
 
+  test("tree params") {
+    val rf = new RandomForestRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(10)
+      .setNumTrees(3)
+      .setSeed(123)
+
+    val df = orderedLabeledPoints50_1000.toDF()
+    val model = rf.fit(df)
+
+    model.trees.foreach (i => {
+      assert(i.getMaxDepth === model.getMaxDepth)
+      assert(i.getSeed === model.getSeed)
+      assert(i.getImpurity === model.getImpurity)
+      assert(i.getMaxBins === model.getMaxBins)
+    })
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////

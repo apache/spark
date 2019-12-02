@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,7 +17,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
 import itertools
 from argparse import ArgumentParser
 import os
@@ -44,15 +43,20 @@ def determine_modules_for_files(filenames):
     """
     Given a list of filenames, return the set of modules that contain those files.
     If a file is not associated with a more specific submodule, then this method will consider that
-    file to belong to the 'root' module.
+    file to belong to the 'root' module. GitHub Action and Appveyor files are ignored.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
     ['pyspark-core', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
+    >>> [x.name for x in determine_modules_for_files( \
+            [".github/workflows/master.yml", "appveyor.yml"])]
+    []
     """
     changed_modules = set()
     for filename in filenames:
+        if filename in (".github/workflows/master.yml", "appveyor.yml"):
+            continue
         matched_at_least_one_module = False
         for module in modules.all_modules:
             if module.contains_file(filename):
@@ -265,7 +269,7 @@ def exec_sbt(sbt_args=()):
     echo_proc.wait()
     for line in iter(sbt_proc.stdout.readline, b''):
         if not sbt_output_filter.match(line):
-            print(line, end='')
+            print(line.decode('utf-8'), end='')
     retcode = sbt_proc.wait()
 
     if retcode != 0:
@@ -279,8 +283,8 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.7": ["-Phadoop-2.7"],
-        "hadoop3.2": ["-Phadoop-3.2"],
+        "hadoop2.7": ["-Phadoop-2.7", "-Phive-1.2"],
+        "hadoop3.2": ["-Phadoop-3.2", "-Phive-2.3"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:

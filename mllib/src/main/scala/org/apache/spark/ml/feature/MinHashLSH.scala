@@ -96,6 +96,11 @@ class MinHashLSHModel private[ml](
 
   @Since("2.1.0")
   override def write: MLWriter = new MinHashLSHModel.MinHashLSHModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"MinHashLSHModel: uid=$uid, numHashTables=${$(numHashTables)}"
+  }
 }
 
 /**

@@ -22,6 +22,8 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, Transform}
@@ -122,7 +124,7 @@ class InMemoryTable(
   }
 
   private abstract class TestBatchWrite extends BatchWrite {
-    override def createBatchWriterFactory(): DataWriterFactory = {
+    override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory
     }
 

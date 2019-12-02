@@ -80,13 +80,13 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
       assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
-      assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
+      assert(gpuValue.get.addresses.sameElements(Array("0", "1")), "should have 0,1 entries")
 
       val fpgaValue = resources.get(FPGA)
       assert(fpgaValue.nonEmpty, "Should have a gpu entry")
       assert(fpgaValue.get.name == "fpga", "name should be fpga")
       assert(fpgaValue.get.addresses.size == 3, "Should have 3 indexes")
-      assert(fpgaValue.get.addresses.deep == Array("f1", "f2", "f3").deep,
+      assert(fpgaValue.get.addresses.sameElements(Array("f1", "f2", "f3")),
         "should have f1,f2,f3 entries")
     }
   }
@@ -127,9 +127,6 @@ class ResourceUtilsSuite extends SparkFunSuite
       val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
       val resourcesFile = createTempJsonFile(
         dir, "resources", Extraction.decompose(Seq(fpgaAllocation)))
-      val fpgaInternalConf = ResourceProfile.ResourceProfileInternalConf(
-        ResourceProfile.SPARK_RP_TASK_PREFIX, 1, s"${RESOURCE_DOT}${FPGA}")
-      conf.set(fpgaInternalConf.amountConf, "3")
       val resourcesFromFileOnly = getOrDiscoverAllResourcesForResourceProfile(1,
         conf,
         Some(resourcesFile),
@@ -137,8 +134,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       val expectedFpgaInfo = new ResourceInformation(FPGA, fpgaAddrs.toArray)
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
-      val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(
-        ResourceProfile.SPARK_RP_EXEC_PREFIX, 1, s"${RESOURCE_DOT}${GPU}")
+      val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(1, s"$RESOURCE_DOT$GPU")
       val gpuDiscovery = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript", """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(gpuInternalConf.amountConf, "2")
@@ -150,7 +146,6 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(resourcesFromBoth(GPU) === expectedGpuInfo)
     }
   }
-
 
   test("list resource ids") {
     val conf = new SparkConf
@@ -209,7 +204,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
       assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
-      assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
+      assert(gpuValue.get.addresses.sameElements(Array("0", "1")), "should have 0,1 entries")
     }
   }
 

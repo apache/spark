@@ -1080,9 +1080,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
            |                    HAVING max(c2) > 0
            |                    ORDER  BY c1)
         """.stripMargin
-      // The rule to remove redundant sorts is not able to remove the inner sort under
-      // an Aggregate operator. We only remove the top level sort.
-      assert(getNumSortsInQuery(query6) == 1)
+
+      assert(getNumSortsInQuery(query6) == 0)
 
       // Cases when sort is not removed from the plan
       // Limit on top of sort
@@ -1269,6 +1268,23 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
           |             LIMIT 1)
         """.stripMargin
       assert(getNumSortsInQuery(query5) == 1)
+    }
+  }
+
+  test("Cannot remove sort for floating-point order-sensitive aggregates from subquery") {
+    Seq("float", "double").foreach { typeName =>
+      Seq("SUM", "AVG", "KURTOSIS", "SKEWNESS", "STDDEV_POP", "STDDEV_SAMP",
+          "VAR_POP", "VAR_SAMP").foreach { aggName =>
+        val query =
+          s"""
+            |SELECT k, $aggName(v) FROM (
+            |  SELECT k, v
+            |  FROM VALUES (1, $typeName(2.0)), (2, $typeName(1.0)) t(k, v)
+            |  ORDER BY v)
+            |GROUP BY k
+          """.stripMargin
+        assert(getNumSortsInQuery(query) == 1)
+      }
     }
   }
 

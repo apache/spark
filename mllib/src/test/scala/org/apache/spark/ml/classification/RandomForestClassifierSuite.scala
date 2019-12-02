@@ -230,6 +230,26 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
       }
   }
 
+  test("tree params") {
+    val rdd = orderedLabeledPoints5_20
+    val rf = new RandomForestClassifier()
+      .setImpurity("entropy")
+      .setMaxDepth(3)
+      .setNumTrees(3)
+      .setSeed(123)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val numClasses = 2
+
+    val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val model = rf.fit(df)
+
+    model.trees.foreach (i => {
+      assert(i.getMaxDepth === model.getMaxDepth)
+      assert(i.getSeed === model.getSeed)
+      assert(i.getImpurity === model.getImpurity)
+    })
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////

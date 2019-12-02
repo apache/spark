@@ -19,6 +19,7 @@ import os
 import struct
 import sys
 import unittest
+from time import time, sleep
 
 from pyspark import SparkContext, SparkConf
 
@@ -48,6 +49,45 @@ def read_int(b):
 
 def write_int(i):
     return struct.pack("!i", i)
+
+
+def eventually(condition, timeout=30.0, catch_assertions=False):
+    """
+    Wait a given amount of time for a condition to pass, else fail with an error.
+    This is a helper utility for PySpark tests.
+
+    :param condition: Function that checks for termination conditions.
+                      condition() can return:
+                       - True: Conditions met. Return without error.
+                       - other value: Conditions not met yet. Continue. Upon timeout,
+                                      include last such value in error message.
+                      Note that this method may be called at any time during
+                      streaming execution (e.g., even before any results
+                      have been created).
+    :param timeout: Number of seconds to wait.  Default 30 seconds.
+    :param catch_assertions: If False (default), do not catch AssertionErrors.
+                             If True, catch AssertionErrors; continue, but save
+                             error to throw upon timeout.
+    """
+    start_time = time()
+    lastValue = None
+    while time() - start_time < timeout:
+        if catch_assertions:
+            try:
+                lastValue = condition()
+            except AssertionError as e:
+                lastValue = e
+        else:
+            lastValue = condition()
+        if lastValue is True:
+            return
+        sleep(0.01)
+    if isinstance(lastValue, AssertionError):
+        raise lastValue
+    else:
+        raise AssertionError(
+            "Test failed due to timeout after %g sec, with last condition returning: %s"
+            % (timeout, lastValue))
 
 
 class QuietTest(object):
