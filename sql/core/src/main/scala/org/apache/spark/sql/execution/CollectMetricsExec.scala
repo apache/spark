@@ -45,6 +45,7 @@ case class CollectMetricsExec(
     StructType.fromAttributes(metricExpressions.map(_.toAttribute))
   }
 
+  // This is not used very frequently (once a query); it is not useful to use code generation here.
   private lazy val toRowConverter: InternalRow => Row = {
     CatalystTypeConverters.createToScalaConverter(metricsSchema)
       .asInstanceOf[InternalRow => Row]

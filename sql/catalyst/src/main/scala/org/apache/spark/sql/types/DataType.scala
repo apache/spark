@@ -490,9 +490,9 @@ object DataType {
 class DataTypeJsonSerializer extends JsonSerializer[DataType] {
   private val delegate = new JValueSerializer
   override def serialize(
-    value: DataType,
-    gen: JsonGenerator,
-    provider: SerializerProvider): Unit = {
+      value: DataType,
+      gen: JsonGenerator,
+      provider: SerializerProvider): Unit = {
     delegate.serialize(value.jsonValue, gen, provider)
   }
 }
@@ -504,8 +504,8 @@ class DataTypeJsonDeserializer extends JsonDeserializer[DataType] {
   private val delegate = new JValueDeserializer(classOf[Any])
 
   override def deserialize(
-    jsonParser: JsonParser,
-    deserializationContext: DeserializationContext): DataType = {
+      jsonParser: JsonParser,
+      deserializationContext: DeserializationContext): DataType = {
     val json = delegate.deserialize(jsonParser, deserializationContext)
     DataType.parseDataType(json.asInstanceOf[JValue])
   }
