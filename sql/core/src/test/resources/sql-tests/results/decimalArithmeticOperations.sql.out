@@ -54,7 +54,7 @@ struct<>
 -- !query 6
 select id, a+b, a-b, a*b, a/b from decimals_test order by id
 -- !query 6 schema
-struct<id:int,(a + b):decimal(38,17),(a - b):decimal(38,17),(a * b):decimal(38,6),(a / b):decimal(38,6)>
+struct<id:int,(CAST(a AS DECIMAL(38,17)) + CAST(b AS DECIMAL(38,17))):decimal(38,17),(CAST(a AS DECIMAL(38,17)) - CAST(b AS DECIMAL(38,17))):decimal(38,17),(CAST(a AS DECIMAL(38,18)) * CAST(b AS DECIMAL(38,18))):decimal(38,6),(CAST(a AS DECIMAL(38,18)) / CAST(b AS DECIMAL(38,18))):decimal(38,6)>
 -- !query 6 output
 1	1099.00000000000000000	-899.00000000000000000	99900.000000	0.100100
 2	24690.24600000000000000	0.00000000000000000	152402061.885129	1.000000
@@ -140,7 +140,7 @@ NULL
 -- !query 16
 select 12345678901234567890.0 * 12345678901234567890.0
 -- !query 16 schema
-struct<(12345678901234567890.0 * 12345678901234567890.0):decimal(38,2)>
+struct<(CAST(12345678901234567890.0 AS DECIMAL(21,1)) * CAST(12345678901234567890.0 AS DECIMAL(21,1))):decimal(38,2)>
 -- !query 16 output
 NULL
 
@@ -196,7 +196,7 @@ spark.sql.decimalOperations.allowPrecisionLoss	false
 -- !query 23
 select id, a+b, a-b, a*b, a/b from decimals_test order by id
 -- !query 23 schema
-struct<id:int,(a + b):decimal(38,18),(a - b):decimal(38,18),(a * b):decimal(38,36),(a / b):decimal(38,18)>
+struct<id:int,(CAST(a AS DECIMAL(38,18)) + CAST(b AS DECIMAL(38,18))):decimal(38,18),(CAST(a AS DECIMAL(38,18)) - CAST(b AS DECIMAL(38,18))):decimal(38,18),(CAST(a AS DECIMAL(38,18)) * CAST(b AS DECIMAL(38,18))):decimal(38,36),(CAST(a AS DECIMAL(38,18)) / CAST(b AS DECIMAL(38,18))):decimal(38,18)>
 -- !query 23 output
 1	1099.000000000000000000	-899.000000000000000000	NULL	0.100100100100100100
 2	24690.246000000000000000	0.000000000000000000	NULL	1.000000000000000000
@@ -282,7 +282,7 @@ NULL
 -- !query 33
 select 12345678901234567890.0 * 12345678901234567890.0
 -- !query 33 schema
-struct<(12345678901234567890.0 * 12345678901234567890.0):decimal(38,2)>
+struct<(CAST(12345678901234567890.0 AS DECIMAL(21,1)) * CAST(12345678901234567890.0 AS DECIMAL(21,1))):decimal(38,2)>
 -- !query 33 output
 NULL
 

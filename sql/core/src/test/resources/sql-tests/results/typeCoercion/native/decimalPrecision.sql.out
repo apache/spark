@@ -221,7 +221,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) + CAST(CAST(1 AS DECIMAL
 -- !query 27
 SELECT cast(1 as decimal(10, 0)) + cast(1 as decimal(10, 0)) FROM t
 -- !query 27 schema
-struct<(CAST(1 AS DECIMAL(10,0)) + CAST(1 AS DECIMAL(10,0))):decimal(11,0)>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) + CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0))):decimal(11,0)>
 -- !query 27 output
 2
 
@@ -309,37 +309,33 @@ cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) + CAST(1 AS DECIMAL(
 -- !query 37
 SELECT cast('2017-12-11 09:30:00' as date) + cast(1 as decimal(3, 0)) FROM t
 -- !query 37 schema
-struct<>
+struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(3,0)) AS INT)):date>
 -- !query 37 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) + CAST(1 AS DECIMAL(3,0)))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) + CAST(1 AS DECIMAL(3,0)))' (date and decimal(3,0)).; line 1 pos 7
+2017-12-12
 
 
 -- !query 38
 SELECT cast('2017-12-11 09:30:00' as date) + cast(1 as decimal(5, 0)) FROM t
 -- !query 38 schema
-struct<>
+struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(5,0)) AS INT)):date>
 -- !query 38 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) + CAST(1 AS DECIMAL(5,0)))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) + CAST(1 AS DECIMAL(5,0)))' (date and decimal(5,0)).; line 1 pos 7
+2017-12-12
 
 
 -- !query 39
 SELECT cast('2017-12-11 09:30:00' as date) + cast(1 as decimal(10, 0)) FROM t
 -- !query 39 schema
-struct<>
+struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(10,0)) AS INT)):date>
 -- !query 39 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) + CAST(1 AS DECIMAL(10,0)))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) + CAST(1 AS DECIMAL(10,0)))' (date and decimal(10,0)).; line 1 pos 7
+2017-12-12
 
 
 -- !query 40
 SELECT cast('2017-12-11 09:30:00' as date) + cast(1 as decimal(20, 0)) FROM t
 -- !query 40 schema
-struct<>
+struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(20,0)) AS INT)):date>
 -- !query 40 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) + CAST(1 AS DECIMAL(20,0)))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) + CAST(1 AS DECIMAL(20,0)))' (date and decimal(20,0)).; line 1 pos 7
+2017-12-12
 
 
 -- !query 41
@@ -553,7 +549,7 @@ struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(11,0)) + CAST(CAST(1 AS DECIMAL(
 -- !query 67
 SELECT cast(1 as decimal(10, 0)) + cast(1 as decimal(10, 0)) FROM t
 -- !query 67 schema
-struct<(CAST(1 AS DECIMAL(10,0)) + CAST(1 AS DECIMAL(10,0))):decimal(11,0)>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) + CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0))):decimal(11,0)>
 -- !query 67 output
 2
 
@@ -709,37 +705,33 @@ cannot resolve '(CAST(1 AS DECIMAL(20,0)) + CAST('2017-12-11 09:30:00.0' AS TIME
 -- !query 85
 SELECT cast(1 as decimal(3, 0))  + cast('2017-12-11 09:30:00' as date) FROM t
 -- !query 85 schema
-struct<>
+struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(3,0)) AS INT)):date>
 -- !query 85 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(3,0)) + CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST(1 AS DECIMAL(3,0)) + CAST('2017-12-11 09:30:00' AS DATE))' (decimal(3,0) and date).; line 1 pos 7
+2017-12-12
 
 
 -- !query 86
 SELECT cast(1 as decimal(5, 0))  + cast('2017-12-11 09:30:00' as date) FROM t
 -- !query 86 schema
-struct<>
+struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(5,0)) AS INT)):date>
 -- !query 86 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(5,0)) + CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST(1 AS DECIMAL(5,0)) + CAST('2017-12-11 09:30:00' AS DATE))' (decimal(5,0) and date).; line 1 pos 7
+2017-12-12
 
 
 -- !query 87
 SELECT cast(1 as decimal(10, 0)) + cast('2017-12-11 09:30:00' as date) FROM t
 -- !query 87 schema
-struct<>
+struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(10,0)) AS INT)):date>
 -- !query 87 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) + CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST(1 AS DECIMAL(10,0)) + CAST('2017-12-11 09:30:00' AS DATE))' (decimal(10,0) and date).; line 1 pos 7
+2017-12-12
 
 
 -- !query 88
 SELECT cast(1 as decimal(20, 0)) + cast('2017-12-11 09:30:00' as date) FROM t
 -- !query 88 schema
-struct<>
+struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(20,0)) AS INT)):date>
 -- !query 88 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(20,0)) + CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST(1 AS DECIMAL(20,0)) + CAST('2017-12-11 09:30:00' AS DATE))' (decimal(20,0) and date).; line 1 pos 7
+2017-12-12
 
 
 -- !query 89
@@ -953,7 +945,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) - CAST(CAST(1 AS DECIMAL
 -- !query 115
 SELECT cast(1 as decimal(10, 0)) - cast(1 as decimal(10, 0)) FROM t
 -- !query 115 schema
-struct<(CAST(1 AS DECIMAL(10,0)) - CAST(1 AS DECIMAL(10,0))):decimal(11,0)>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) - CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0))):decimal(11,0)>
 -- !query 115 output
 0
 
@@ -1041,37 +1033,33 @@ cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) - CAST(1 AS DECIMAL(
 -- !query 125
 SELECT cast('2017-12-11 09:30:00' as date) - cast(1 as decimal(3, 0)) FROM t
 -- !query 125 schema
-struct<>
+struct<date_sub(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(3,0)) AS INT)):date>
 -- !query 125 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) - CAST(1 AS DECIMAL(3,0)))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) - CAST(1 AS DECIMAL(3,0)))' (date and decimal(3,0)).; line 1 pos 7
+2017-12-10
 
 
 -- !query 126
 SELECT cast('2017-12-11 09:30:00' as date) - cast(1 as decimal(5, 0)) FROM t
 -- !query 126 schema
-struct<>
+struct<date_sub(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(5,0)) AS INT)):date>
 -- !query 126 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) - CAST(1 AS DECIMAL(5,0)))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) - CAST(1 AS DECIMAL(5,0)))' (date and decimal(5,0)).; line 1 pos 7
+2017-12-10
 
 
 -- !query 127
 SELECT cast('2017-12-11 09:30:00' as date) - cast(1 as decimal(10, 0)) FROM t
 -- !query 127 schema
-struct<>
+struct<date_sub(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(10,0)) AS INT)):date>
 -- !query 127 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) - CAST(1 AS DECIMAL(10,0)))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) - CAST(1 AS DECIMAL(10,0)))' (date and decimal(10,0)).; line 1 pos 7
+2017-12-10
 
 
 -- !query 128
 SELECT cast('2017-12-11 09:30:00' as date) - cast(1 as decimal(20, 0)) FROM t
 -- !query 128 schema
-struct<>
+struct<date_sub(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(20,0)) AS INT)):date>
 -- !query 128 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) - CAST(1 AS DECIMAL(20,0)))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) - CAST(1 AS DECIMAL(20,0)))' (date and decimal(20,0)).; line 1 pos 7
+2017-12-10
 
 
 -- !query 129
@@ -1285,7 +1273,7 @@ struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(11,0)) - CAST(CAST(1 AS DECIMAL(
 -- !query 155
 SELECT cast(1 as decimal(10, 0)) - cast(1 as decimal(10, 0)) FROM t
 -- !query 155 schema
-struct<(CAST(1 AS DECIMAL(10,0)) - CAST(1 AS DECIMAL(10,0))):decimal(11,0)>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) - CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0))):decimal(11,0)>
 -- !query 155 output
 0
 
@@ -1685,7 +1673,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) * CAST(CAST(1 AS DECIMAL
 -- !query 203
 SELECT cast(1 as decimal(10, 0)) * cast(1 as decimal(10, 0)) FROM t
 -- !query 203 schema
-struct<(CAST(1 AS DECIMAL(10,0)) * CAST(1 AS DECIMAL(10,0))):decimal(21,0)>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) * CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(21,0)>
 -- !query 203 output
 1
 
@@ -2017,7 +2005,7 @@ struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(10,0)) * CAST(CAST(1 AS DECIMAL(
 -- !query 243
 SELECT cast(1 as decimal(10, 0)) * cast(1 as decimal(10, 0)) FROM t
 -- !query 243 schema
-struct<(CAST(1 AS DECIMAL(10,0)) * CAST(1 AS DECIMAL(10,0))):decimal(21,0)>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) * CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(21,0)>
 -- !query 243 output
 1
 
@@ -2417,7 +2405,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL
 -- !query 291
 SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(10, 0)) FROM t
 -- !query 291 schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 291 output
 1.00000000000
 
@@ -2749,7 +2737,7 @@ struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(
 -- !query 331
 SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(10, 0)) FROM t
 -- !query 331 schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 331 output
 1.00000000000
 
