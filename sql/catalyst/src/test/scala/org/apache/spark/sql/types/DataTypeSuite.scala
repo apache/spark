@@ -491,18 +491,6 @@ class DataTypeSuite extends SparkFunSuite {
 
     // We expect the DataType to be returned instead of the UserDefinedType
     assert(left.merge(right) === left)
-  }
-
-  test("Disallow DataType to be merged into UserDefinedType") {
-    val right = StructType(StructField("a", TimestampType) :: Nil)
-
-    val left = StructType(StructField("a", new MyXMLGregorianCalendarUDT) :: Nil)
-
-    // We don't allow DataTypes being mapped into a UserDefinedType.
-    // Main reason is we don't see any application in this for now.
-    val error = intercept[SparkException] {
-      left.merge(right) === left
-    }.getMessage()
-    assert(error.contains("Failed to merge fields 'a' and 'a'."))
+    assert(right.merge(left) === left)
   }
 }

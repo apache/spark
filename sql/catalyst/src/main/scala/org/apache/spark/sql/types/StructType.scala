@@ -600,6 +600,9 @@ object StructType extends AbstractDataType {
       case (leftType, rightUdt: UserDefinedType[_])
         if leftType == rightUdt.sqlType => leftType
 
+      case (leftUdt: UserDefinedType[_], rightType)
+        if leftUdt.sqlType == rightType => rightType
+
       case (leftType, rightType) if leftType == rightType =>
         leftType
 
