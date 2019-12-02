@@ -343,13 +343,10 @@ class Summarizer(object):
          - variance: a vector tha contains the coefficient-wise variance.
          - std: a vector tha contains the coefficient-wise standard deviation.
          - count: the count of all vectors seen.
-         - weightSum: the sum of all weights seen.
-         - numFeatures: the size of vectors.
          - numNonzeros: a vector with the number of non-zeros for each coefficients
          - max: the maximum for each coefficient.
          - min: the minimum for each coefficient.
          - normL2: the Euclidean norm for each coefficient.
-         - sumL2: a vector that contains the coefficient-wise squared sum.
          - normL1: the L1 norm of each coefficient (sum of the absolute values).
 
         :param metrics:
