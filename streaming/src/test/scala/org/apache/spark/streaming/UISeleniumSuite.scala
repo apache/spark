@@ -163,7 +163,7 @@ class UISeleniumSuite
         outputOpIds.map(_.text) should be (List("0", "1"))
 
         // Check job ids
-        val jobIdCells = findAll(cssSelector( """#jobId""")).toSeq
+        val jobIdCells = findAll(cssSelector( ".jobId")).toSeq
         jobIdCells.map(_.text) should be (List("0", "1", "2", "3"))
 
         val jobLinks = jobIdCells.flatMap(_.attribute("href"))
