@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 
 abstract class UnevaluableBooleanAggBase(arg: Expression)
@@ -40,6 +41,9 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
   }
 }
 
+trait MultiNamedExpression {
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if all values of `expr` are true.",
   examples = """
@@ -52,8 +56,9 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
        false
   """,
   since = "3.0.0")
-case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = "bool_and"
+case class BoolAnd(funcName: String, arg: Expression)
+  extends UnevaluableBooleanAggBase(arg) with MultiNamedExpression {
+  override def nodeName: String = funcName
 }
 
 @ExpressionDescription(
@@ -68,6 +73,7 @@ case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
        false
   """,
   since = "3.0.0")
-case class BoolOr(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = "bool_or"
+case class BoolOr(funcName: String, arg: Expression)
+  extends UnevaluableBooleanAggBase(arg) with MultiNamedExpression {
+  override def nodeName: String = funcName
 }

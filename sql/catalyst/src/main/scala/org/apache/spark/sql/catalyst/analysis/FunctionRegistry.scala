@@ -600,7 +600,8 @@ object FunctionRegistry {
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
+        val f = constructors.find(e => e.getParameterTypes.toSeq == params
+            || e.getParameterTypes.head == classOf[String]).getOrElse {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
@@ -618,7 +619,13 @@ object FunctionRegistry {
           }
           throw new AnalysisException(invalidArgumentsMsg)
         }
-        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
+        Try{
+          if (classOf[MultiNamedExpression].isAssignableFrom(f.getDeclaringClass)) {
+            f.newInstance(name.toString, expressions.head).asInstanceOf[Expression]
+          } else {
+            f.newInstance(expressions : _*).asInstanceOf[Expression]
+          }
+        } match {
           case Success(e) => e
           case Failure(e) =>
             // the exception is an invocation exception. To get a meaningful message, we need the
