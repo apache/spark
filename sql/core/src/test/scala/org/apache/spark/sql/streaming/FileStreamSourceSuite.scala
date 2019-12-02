@@ -1743,7 +1743,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   Seq("delete", "archive").foreach { cleanOption =>
-    test(s"skip $cleanOption when source path refers the output dir of FileStreamSink") {
+    test(s"Throw UnsupportedOperationException on configuring $cleanOption when source path" +
+      " refers the output dir of FileStreamSink") {
       withThreeTempDirs { case (src, tmp, archiveDir) =>
         withSQLConf(
           SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
@@ -1770,24 +1771,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             AddFilesToFileStreamSinkLog(fileSystem, srcPath, sinkLog, 0) { path =>
               path.getName.startsWith("keep1")
             },
-            CheckAnswer("keep1"),
-            AssertOnQuery("input file removed") { _: StreamExecution =>
-              // it doesn't remove any files for recent batch yet
-              assertFileIsNotRemoved(src, "keep1")
-              true
-            },
-            AddTextFileData("keep2", src, tmp, tmpFilePrefix = "ke ep2 %"),
-            AddFilesToFileStreamSinkLog(fileSystem, srcPath, sinkLog, 1) { path =>
-              path.getName.startsWith("ke ep2 %")
-            },
-            CheckAnswer("keep1", "keep2"),
-            AssertOnQuery("input file removed") { _: StreamExecution =>
-              // it doesn't remove any file in src since it's the output dir of FileStreamSink
-              assertFileIsNotRemoved(src, "keep1")
-              // it doesn't remove any files for recent batch yet
-              assertFileIsNotRemoved(src, "ke ep2 %")
-              true
-            }
+            ExpectFailure[UnsupportedOperationException](
+              t => assert(t.getMessage.startsWith("Clean up source files is not supported")),
+              isFatalError = false)
           )
         }
       }

@@ -206,6 +206,13 @@ class FileStreamSource(
       CaseInsensitiveMap(options), None).allFiles()
   }
 
+  private def assertCleanupIsNotSpecified(): Unit = {
+    if (sourceCleaner.isDefined) {
+      throw new UnsupportedOperationException("Clean up source files is not supported when" +
+        " reading from the output directory of FileStreamSink.")
+    }
+  }
+
   /**
    * Returns a list of files found, sorted by their timestamp.
    */
@@ -217,6 +224,7 @@ class FileStreamSource(
       case None =>
         if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
           sourceHasMetadata = Some(true)
+          assertCleanupIsNotSpecified()
           allFiles = allFilesUsingMetadataLogFileIndex()
         } else {
           allFiles = allFilesUsingInMemoryFileIndex()
@@ -229,6 +237,7 @@ class FileStreamSource(
             // `FileStreamSink.hasMetadata` check
             if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
               sourceHasMetadata = Some(true)
+              assertCleanupIsNotSpecified()
               allFiles = allFilesUsingMetadataLogFileIndex()
             } else {
               sourceHasMetadata = Some(false)
@@ -259,34 +268,17 @@ class FileStreamSource(
 
   override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
 
-  private var warnedIgnoringCleanSourceOption: Boolean = false
-
   /**
    * Informs the source that Spark has completed processing all data for offsets less than or
    * equal to `end` and will only request offsets greater than `end` in the future.
    */
   override def commit(end: Offset): Unit = {
     val logOffset = FileStreamSourceOffset(end).logOffset
-
     sourceCleaner.foreach { cleaner =>
-      sourceHasMetadata match {
-        case Some(true) =>
-          if (!warnedIgnoringCleanSourceOption) {
-            logWarning("Ignoring 'cleanSource' option since source path refers to the output" +
-              " directory of FileStreamSink.")
-            warnedIgnoringCleanSourceOption = true
-          }
-
-        case Some(false) =>
-          val files = metadataLog.get(Some(logOffset), Some(logOffset)).flatMap(_._2)
-          val validFileEntities = files.filter(_.batchId == logOffset)
-          logDebug(s"completed file entries: ${validFileEntities.mkString(",")}")
-          validFileEntities.foreach(cleaner.clean)
-
-        case _ =>
-          logWarning("Ignoring 'cleanSource' option since Spark hasn't figured out whether " +
-            "source path refers to the output directory of FileStreamSink or not.")
-      }
+      val files = metadataLog.get(Some(logOffset), Some(logOffset)).flatMap(_._2)
+      val validFileEntities = files.filter(_.batchId == logOffset)
+      logDebug(s"completed file entries: ${validFileEntities.mkString(",")}")
+      validFileEntities.foreach(cleaner.clean)
     }
   }
 
