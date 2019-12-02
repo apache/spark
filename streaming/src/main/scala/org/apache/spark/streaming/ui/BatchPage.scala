@@ -133,7 +133,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     <tr>
       {prefixCells}
       <td sorttable_customkey={sparkJob.jobId.toString}>
-        <a href={detailUrl}>
+        <a href={detailUrl} id="jobId">
           {sparkJob.jobId}{sparkJob.jobGroup.map(id => s"($id)").getOrElse("")}
         </a>
       </td>
