@@ -21,8 +21,6 @@ import java.io.{File, PrintWriter}
 import java.net.URI
 import java.util.Locale
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.config
@@ -32,7 +30,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces.RESERVED_PROPERTIES
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -187,6 +185,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
+  protected val reversedProperties = Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
+
   protected def isUsingHiveMetastore: Boolean = {
     spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
   }
@@ -330,8 +330,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     try {
       sql(s"CREATE DATABASE $dbName")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      assert(db1.copy(properties = db1.properties -- RESERVED_PROPERTIES.asScala) ==
-        CatalogDatabase(
+      assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
         dbName,
         "",
         getDBPath(dbName),
@@ -354,8 +353,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
           val expPath = makeQualifiedPath(tmpDir.toString)
-          assert(db1.copy(properties = db1.properties -- RESERVED_PROPERTIES.asScala) ==
-            CatalogDatabase(
+          assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
             expPath,
@@ -378,8 +376,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        assert(db1.copy(properties = db1.properties -- RESERVED_PROPERTIES.asScala) ==
-          CatalogDatabase(
+        assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
           getDBPath(dbNameWithoutBackTicks),

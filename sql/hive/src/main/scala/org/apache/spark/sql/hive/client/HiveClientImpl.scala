@@ -96,7 +96,8 @@ private[hive] class HiveClientImpl(
     extraConfig: Map[String, String],
     initClassLoader: ClassLoader,
     val clientLoader: IsolatedClientLoader)
-  extends HiveClient with Logging {
+  extends HiveClient
+  with Logging {
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
@@ -361,7 +362,7 @@ private[hive] class HiveClientImpl(
       database.name,
       database.description,
       CatalogUtils.URIToString(database.locationUri),
-      (props -- RESERVED_PROPERTIES.asScala).asJava)
+      (props -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)).asJava)
     shim.setDatabaseOwnerName(hiveDb, dbOwner)
     shim.setDatabaseOwnerType(hiveDb, dbOwnerType)
     client.createDatabase(hiveDb, ignoreIfExists)
@@ -390,7 +391,7 @@ private[hive] class HiveClientImpl(
       database.name,
       database.description,
       CatalogUtils.URIToString(database.locationUri),
-      (props -- RESERVED_PROPERTIES.asScala).asJava)
+      (props -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)).asJava)
     shim.setDatabaseOwnerName(hiveDb, dbOwner)
     shim.setDatabaseOwnerType(hiveDb, dbOwnerType)
     client.alterDatabase(database.name, hiveDb)

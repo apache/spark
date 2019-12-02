@@ -20,8 +20,6 @@ package org.apache.spark.sql.catalyst.catalog
 import java.net.URI
 import java.util.TimeZone
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -33,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, N
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -146,8 +144,9 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     // Note: alter properties here because Hive does not support altering other fields
     catalog.alterDatabase(db1.copy(properties = Map("k" -> "v3", "good" -> "true")))
     val newDb1 = catalog.getDatabase("db1")
-    assert((db1.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala).isEmpty)
-    assert((newDb1.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala).size == 2)
+    val reversedProperties = Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
+    assert((db1.properties -- reversedProperties).isEmpty)
+    assert((newDb1.properties -- reversedProperties).size == 2)
     assert(newDb1.properties.get("k") == Some("v3"))
     assert(newDb1.properties.get("good") == Some("true"))
   }
