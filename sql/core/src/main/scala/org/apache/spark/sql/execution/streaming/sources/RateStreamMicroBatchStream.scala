@@ -62,7 +62,6 @@ class RateStreamMicroBatchStream(
 
     val metadataLog =
       new HDFSMetadataLog[LongOffset](session.get, checkpointLocation) {
-        // Writer should not close the given stream when overriding methods.
         override def serialize(metadata: LongOffset, out: OutputStream): Unit = {
           val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
           writer.write("v" + VERSION + "\n")

@@ -90,6 +90,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
+  // Writer should not close the given stream when overriding methods.
   protected def serialize(metadata: T, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
     Serialization.write(metadata, out)
