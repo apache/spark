@@ -199,6 +199,7 @@ class Analyzer(
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::
+      ResolveTables ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -771,7 +772,7 @@ class Analyzer(
       case _ => plan
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = ResolveTables(plan).resolveOperatorsUp {
+    def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case i @ InsertIntoStatement(
           u @ UnresolvedRelation(CatalogObjectIdentifier(catalog, ident)), _, _, _, _)
             if i.query.resolved && CatalogV2Util.isSessionCatalog(catalog) =>
@@ -810,10 +811,8 @@ class Analyzer(
       CatalogV2Util.loadTable(catalog, newIdent) match {
         case Some(v1Table: V1Table) =>
           val tableIdent = TableIdentifier(newIdent.name, newIdent.namespace.headOption)
-          if (isV2Provider(v1Table.v1Table.provider)) {
-            Some(DataSourceV2Relation.create(v1Table))
-          } else if (!isRunningDirectlyOnFiles(tableIdent)) {
-            val relation = v1SessionCatalog.lookupRelation(tableIdent, v1Table.v1Table)
+          if (!isRunningDirectlyOnFiles(tableIdent)) {
+            val relation = v1SessionCatalog.getRelation(v1Table.v1Table)
             if (recurse) {
               Some(resolveRelation(relation))
             } else {
@@ -844,10 +843,6 @@ class Analyzer(
         }
         Identifier.of(defaultNamespace, ident.name)
       }
-    }
-
-    private def isV2Provider(provider: Option[String]): Boolean = {
-      return false
     }
 
     // If the database part is specified, and we support running SQL directly on files, and
