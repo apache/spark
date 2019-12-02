@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -46,6 +47,28 @@ class DDLParserSuite extends AnalysisTest {
 
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
+  }
+
+  test("SPARK-30098: create table without provider should " +
+    "use default data source under non-legacy mode") {
+    withSQLConf(SQLConf.LEGACY_RESPECT_HIVE_DEFAULT_PROVIDER_ENABLED.key -> "false") {
+      val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)"
+      val defaultProvider = conf.defaultDataSourceName
+      val expectedPlan = CreateTableStatement(
+        Seq("my_tab"),
+        new StructType()
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType),
+        Seq.empty[Transform],
+        None,
+        Map.empty[String, String],
+        defaultProvider,
+        Map.empty[String, String],
+        None,
+        None,
+        false)
+      parseCompare(createSql, expectedPlan)
+    }
   }
 
   test("create/replace table using - schema") {

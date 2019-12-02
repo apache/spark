@@ -2564,4 +2564,31 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("SPARK-30098: create table without provider should " +
+    "use default data source under non-legacy mode") {
+    val catalog = spark.sessionState.catalog
+    withSQLConf(
+      SQLConf.LEGACY_RESPECT_HIVE_DEFAULT_PROVIDER_ENABLED.key -> "false") {
+      withTable("s") {
+        val defaultProvider = conf.defaultDataSourceName
+        sql("CREATE TABLE s(a INT, b INT)")
+        val table = catalog.getTableMetadata(TableIdentifier("s"))
+        assert(table.provider === Some(defaultProvider))
+      }
+    }
+  }
+
+  test("SPARK-30098: create table without provider should " +
+    "use hive under legacy mode") {
+    val catalog = spark.sessionState.catalog
+    withSQLConf(
+      SQLConf.LEGACY_RESPECT_HIVE_DEFAULT_PROVIDER_ENABLED.key -> "true") {
+      withTable("s") {
+        sql("CREATE TABLE s(a INT, b INT)")
+        val table = catalog.getTableMetadata(TableIdentifier("s"))
+        assert(table.provider === Some("hive"))
+      }
+    }
+  }
 }
