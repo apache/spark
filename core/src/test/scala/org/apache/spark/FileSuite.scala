@@ -705,11 +705,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-25100: Using KryoSerializer and" +
       "setting registrationRequired true can lead job failed") {
     val tempDir = Utils.createTempDir()
-    val inputDir = tempDir.getAbsolutePath + "/input"
+    val inputFile = tempDir.getAbsolutePath + "/input"
     val textFileOutputDir = tempDir.getAbsolutePath + "/out1"
-    val datasetDir = tempDir.getAbsolutePath + "/out2"
+    val dataSetDir = tempDir.getAbsolutePath + "/out2"
 
-    val writer = new PrintWriter(new File(inputDir))
+    val writer = new PrintWriter(new File(inputFile))
 
     for(i <- 1 to 100) {
       writer.print(i)
@@ -725,10 +725,10 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val jobConf = new JobConf()
     jobConf.setOutputKeyClass(classOf[IntWritable])
     jobConf.setOutputValueClass(classOf[IntWritable])
-    jobConf.set("mapred.output.dir", datasetDir)
+    jobConf.set("mapred.output.dir", dataSetDir)
 
     val sc = new SparkContext(conf)
-    val rdd = sc.textFile(inputDir)
+    val rdd = sc.textFile(inputFile)
     val pair = rdd.map(x => (x, 1))
 
     pair.saveAsTextFile(textFileOutputDir)
