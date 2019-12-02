@@ -58,7 +58,7 @@ CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_nam
 </dl>
 <dl>
   <dt><code><em>query</em></code></dt>
-  <dd>A <a href="sql-ref-syntax-qry-select.md">SELECT</a> statement that constructs the view from base tables or other views.</dd>
+  <dd>A <a href="sql-ref-syntax-qry-select.html">SELECT</a> statement that constructs the view from base tables or other views.</dd>
 </dl>
 
 ### Examples

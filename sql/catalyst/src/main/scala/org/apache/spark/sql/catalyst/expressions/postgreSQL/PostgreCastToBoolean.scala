@@ -42,7 +42,7 @@ case class PostgreCastToBoolean(child: Expression, timeZoneId: Option[String])
   override def castToBoolean(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, str => {
-        val s = str.trim().toLowerCase()
+        val s = str.trimAll().toLowerCase()
         if (StringUtils.isTrueString(s)) {
           true
         } else if (StringUtils.isFalseString(s)) {

@@ -337,6 +337,8 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
     >>> model = brp.fit(df)
     >>> model.getBucketLength()
     1.0
+    >>> model.setOutputCol("hashes")
+    BucketedRandomProjectionLSHModel...
     >>> model.transform(df).head()
     Row(id=0, features=DenseVector([-1.0, -1.0]), hashes=[DenseVector([-1.0])])
     >>> data2 = [(4, Vectors.dense([2.0, 2.0 ]),),
@@ -733,6 +735,8 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     >>> cv.setOutputCol("vectors")
     CountVectorizer...
     >>> model = cv.fit(df)
+    >>> model.setInputCol("raw")
+    CountVectorizerModel...
     >>> model.transform(df).show(truncate=False)
     +-----+---------------+-------------------------+
     |label|raw            |vectors                  |
@@ -1345,6 +1349,8 @@ class IDF(JavaEstimator, _IDFParams, JavaMLReadable, JavaMLWritable):
     >>> idf.setOutputCol("idf")
     IDF...
     >>> model = idf.fit(df)
+    >>> model.setOutputCol("idf")
+    IDFModel...
     >>> model.getMinDocFreq()
     3
     >>> model.idf
@@ -1519,6 +1525,8 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     >>> imputer.getRelativeError()
     0.001
     >>> model = imputer.fit(df)
+    >>> model.setInputCols(["a", "b"])
+    ImputerModel...
     >>> model.getStrategy()
     'mean'
     >>> model.surrogateDF.show()
@@ -1810,7 +1818,7 @@ class MaxAbsScaler(JavaEstimator, _MaxAbsScalerParams, JavaMLReadable, JavaMLWri
     MaxAbsScaler...
     >>> model = maScaler.fit(df)
     >>> model.setOutputCol("scaledOutput")
-    MaxAbsScaler...
+    MaxAbsScalerModel...
     >>> model.transform(df).show()
     +-----+------------+
     |    a|scaledOutput|
@@ -1928,6 +1936,8 @@ class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaM
     >>> mh.setSeed(12345)
     MinHashLSH...
     >>> model = mh.fit(df)
+    >>> model.setInputCol("features")
+    MinHashLSHModel...
     >>> model.transform(df).head()
     Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([6179668...
     >>> data2 = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
@@ -2056,7 +2066,7 @@ class MinMaxScaler(JavaEstimator, _MinMaxScalerParams, JavaMLReadable, JavaMLWri
     MinMaxScaler...
     >>> model = mmScaler.fit(df)
     >>> model.setOutputCol("scaledOutput")
-    MinMaxScaler...
+    MinMaxScalerModel...
     >>> model.originalMin
     DenseVector([0.0])
     >>> model.originalMax
@@ -2421,6 +2431,8 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
     >>> ohe.setOutputCols(["output"])
     OneHotEncoder...
     >>> model = ohe.fit(df)
+    >>> model.setOutputCols(["output"])
+    OneHotEncoderModel...
     >>> model.getHandleInvalid()
     'error'
     >>> model.transform(df).head().output
@@ -2935,7 +2947,7 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
     RobustScaler...
     >>> model = scaler.fit(df)
     >>> model.setOutputCol("output")
-    RobustScaler...
+    RobustScalerModel...
     >>> model.median
     DenseVector([2.0, -2.0])
     >>> model.range
@@ -3330,7 +3342,7 @@ class StandardScaler(JavaEstimator, _StandardScalerParams, JavaMLReadable, JavaM
     >>> model.getInputCol()
     'a'
     >>> model.setOutputCol("output")
-    StandardScaler...
+    StandardScalerModel...
     >>> model.mean
     DenseVector([1.0])
     >>> model.std
@@ -3490,6 +3502,8 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     >>> stringIndexer.setHandleInvalid("error")
     StringIndexer...
     >>> model = stringIndexer.fit(stringIndDf)
+    >>> model.setHandleInvalid("error")
+    StringIndexerModel...
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
@@ -4166,7 +4180,7 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
     >>> indexer.getHandleInvalid()
     'error'
     >>> model.setOutputCol("output")
-    VectorIndexer...
+    VectorIndexerModel...
     >>> model.transform(df).head().output
     DenseVector([1.0, 0.0])
     >>> model.numFeatures
@@ -4487,6 +4501,8 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     >>> model = word2Vec.fit(doc)
     >>> model.getMinCount()
     5
+    >>> model.setInputCol("sentence")
+    Word2VecModel...
     >>> model.getVectors().show()
     +----+--------------------+
     |word|              vector|
@@ -4714,7 +4730,7 @@ class PCA(JavaEstimator, _PCAParams, JavaMLReadable, JavaMLWritable):
     >>> model.getK()
     2
     >>> model.setOutputCol("output")
-    PCA...
+    PCAModel...
     >>> model.transform(df).collect()[0].output
     DenseVector([1.648..., -4.013...])
     >>> model.explainedVariance
@@ -5139,6 +5155,8 @@ class ChiSqSelector(JavaEstimator, _ChiSqSelectorParams, JavaMLReadable, JavaMLW
     >>> model = selector.fit(df)
     >>> model.getFeaturesCol()
     'features'
+    >>> model.setFeaturesCol("features")
+    ChiSqSelectorModel...
     >>> model.transform(df).head().selectedFeatures
     DenseVector([18.0])
     >>> model.selectedFeatures

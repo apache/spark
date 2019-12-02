@@ -1090,17 +1090,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SubtractTimestamps(Literal(end), Literal(end)),
       new CalendarInterval(0, 0, 0))
     checkEvaluation(SubtractTimestamps(Literal(end), Literal(Instant.EPOCH)),
-      IntervalUtils.fromString("interval " +
-        "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+        "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds")))
     checkEvaluation(SubtractTimestamps(Literal(Instant.EPOCH), Literal(end)),
-      IntervalUtils.fromString("interval " +
-        "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+        "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds")))
     checkEvaluation(
       SubtractTimestamps(
         Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
         Literal(Instant.parse("0001-01-01T00:00:00Z"))),
-      IntervalUtils.fromString("interval " +
-        "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+        "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
   }
 
   test("subtract dates") {
@@ -1108,18 +1108,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SubtractDates(Literal(end), Literal(end)),
       new CalendarInterval(0, 0, 0))
     checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
-      IntervalUtils.fromString("interval 1 days"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 days")))
     checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
-      IntervalUtils.fromString("interval -1 days"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval -1 days")))
     val epochDate = Literal(LocalDate.ofEpochDay(0))
     checkEvaluation(SubtractDates(Literal(end), epochDate),
-      IntervalUtils.fromString("interval 49 years 9 months 4 days"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval 49 years 9 months 4 days")))
     checkEvaluation(SubtractDates(epochDate, Literal(end)),
-      IntervalUtils.fromString("interval -49 years -9 months -4 days"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval -49 years -9 months -4 days")))
     checkEvaluation(
       SubtractDates(
         Literal(LocalDate.of(10000, 1, 1)),
         Literal(LocalDate.of(1, 1, 1))),
-      IntervalUtils.fromString("interval 9999 years"))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
   }
 }

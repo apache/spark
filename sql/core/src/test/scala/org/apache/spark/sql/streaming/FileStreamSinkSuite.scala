@@ -525,6 +525,54 @@ abstract class FileStreamSinkSuite extends StreamTest {
       }
     }
   }
+
+  test("Handle FileStreamSink metadata correctly for empty partition") {
+    Seq("parquet", "orc", "text", "json").foreach { format =>
+      val inputData = MemoryStream[String]
+      val df = inputData.toDF()
+
+      withTempDir { outputDir =>
+        withTempDir { checkpointDir =>
+          var query: StreamingQuery = null
+          try {
+            // repartition to more than the input to leave empty partitions
+            query =
+              df.repartition(10)
+                .writeStream
+                .option("checkpointLocation", checkpointDir.getCanonicalPath)
+                .format(format)
+                .start(outputDir.getCanonicalPath)
+
+            inputData.addData("1", "2", "3")
+            inputData.addData("4", "5")
+
+            failAfter(streamingTimeout) {
+              query.processAllAvailable()
+            }
+          } finally {
+            if (query != null) {
+              query.stop()
+            }
+          }
+
+          val fs = new Path(outputDir.getCanonicalPath).getFileSystem(
+            spark.sessionState.newHadoopConf())
+          val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
+            outputDir.getCanonicalPath)
+
+          val allFiles = sinkLog.allFiles()
+          // only files from non-empty partition should be logged
+          assert(allFiles.length < 10)
+          assert(allFiles.forall(file => fs.exists(new Path(file.path))))
+
+          // the query should be able to read all rows correctly with metadata log
+          val outputDf = spark.read.format(format).load(outputDir.getCanonicalPath)
+            .selectExpr("CAST(value AS INT)").as[Int]
+          checkDatasetUnorderly(outputDf, 1, 2, 3, 4, 5)
+        }
+      }
+    }
+  }
 }
 
 object PendingCommitFilesTrackingManifestFileCommitProtocol {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -78,7 +78,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         throw new AnalysisException(
           "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
       }
-      val changes = Seq(TableChange.setProperty("location", newLoc))
+      val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
       createAlterTable(nameParts, catalog, tableName, changes)
 
     case AlterViewSetPropertiesStatement(
@@ -92,6 +92,19 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       throw new AnalysisException(
         s"Can not specify catalog `${catalog.name}` for view ${tableName.quoted} " +
           s"because view support in catalog has not been implemented yet")
+
+    case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
+      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, properties)
+
+    case AlterNamespaceSetLocationStatement(NonSessionCatalog(catalog, nameParts), location) =>
+      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts,
+        Map(SupportsNamespaces.PROP_LOCATION -> location))
+
+    case RenameTableStatement(NonSessionCatalog(catalog, oldName), newNameParts, isView) =>
+      if (isView) {
+        throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
+      }
+      RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
 
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
@@ -171,6 +184,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case DropNamespaceStatement(NonSessionCatalog(catalog, nameParts), ifExists, cascade) =>
       DropNamespace(catalog, nameParts, ifExists, cascade)
+
+    case DescribeNamespaceStatement(NonSessionCatalog(catalog, nameParts), extended) =>
+      DescribeNamespace(catalog.asNamespaceCatalog, nameParts, extended)
 
     case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, namespace)), pattern) =>
       ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)

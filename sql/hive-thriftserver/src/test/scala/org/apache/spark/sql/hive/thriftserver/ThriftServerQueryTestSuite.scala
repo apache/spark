@@ -37,7 +37,16 @@ import org.apache.spark.sql.types._
 
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
- * Note that this TestSuite does not support maven.
+ *
+ * To run the entire test suite:
+ * {{{
+ *   build/sbt "hive-thriftserver/test-only *ThriftServerQueryTestSuite" -Phive-thriftserver
+ * }}}
+ *
+ * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ * }}}
  *
  * TODO:
  *   1. Support UDF testing.
@@ -74,8 +83,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  override val isTestWithConfigSets = false
-
   /** List of test cases to ignore, in lower cases. */
   override def blackList: Set[String] = super.blackList ++ Set(
     // Missing UDF
@@ -99,19 +106,25 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   override def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Option[Seq[(String, String)]]): Unit = {
+      configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
     withJdbcStatement { statement =>
 
       loadTestData(statement)
 
+      configSet.foreach { case (k, v) =>
+        statement.execute(s"SET $k = $v")
+      }
+
       testCase match {
         case _: PgSQLTest =>
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
         case _: AnsiTest =>
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
+          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
+          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
         case _ =>
+          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
+          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = false")
       }
 
       // Run the SQL queries preparing them for comparison.

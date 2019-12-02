@@ -74,6 +74,6 @@ SHOW SCHEMAS;
   +------------+
 {% endhighlight %}
 ### Related Statements
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-databases.html)
+- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
 - [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
 - [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)

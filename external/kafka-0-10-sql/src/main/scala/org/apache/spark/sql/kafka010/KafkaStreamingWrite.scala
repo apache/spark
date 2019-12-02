@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{DataWriter, PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
 import org.apache.spark.sql.types.StructType
@@ -41,7 +41,8 @@ private[kafka010] class KafkaStreamingWrite(
 
   validateQuery(schema.toAttributes, producerParams, topic)
 
-  override def createStreamingWriterFactory(): KafkaStreamWriterFactory =
+  override def createStreamingWriterFactory(
+      info: PhysicalWriteInfo): KafkaStreamWriterFactory =
     KafkaStreamWriterFactory(topic, producerParams, schema)
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}

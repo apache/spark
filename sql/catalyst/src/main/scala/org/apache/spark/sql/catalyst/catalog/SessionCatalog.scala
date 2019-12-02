@@ -327,8 +327,7 @@ class SessionCatalog(
 
   def validateTableLocation(table: CatalogTable): Unit = {
     // SPARK-19724: the default location of a managed table should be non-existent or empty.
-    if (table.tableType == CatalogTableType.MANAGED &&
-      !conf.allowCreatingManagedTableUsingNonemptyLocation) {
+    if (table.tableType == CatalogTableType.MANAGED) {
       val tableLocation =
         new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
       val fs = tableLocation.getFileSystem(hadoopConf)
@@ -576,6 +575,10 @@ class SessionCatalog(
     tempViews.get(formatTableName(name))
   }
 
+  def getTempViewNames(): Seq[String] = synchronized {
+    tempViews.keySet.toSeq
+  }
+
   /**
    * Return a global temporary view exactly as it was stored.
    */
@@ -761,6 +764,25 @@ class SessionCatalog(
       } else {
         SubqueryAlias(table, tempViews(table))
       }
+    }
+  }
+
+  def lookupTempView(table: String): Option[SubqueryAlias] = {
+    val formattedTable = formatTableName(table)
+    getTempView(formattedTable).map { view =>
+      SubqueryAlias(formattedTable, view)
+    }
+  }
+
+  def lookupGlobalTempView(db: String, table: String): Option[SubqueryAlias] = {
+    val formattedDB = formatDatabaseName(db)
+    if (formattedDB == globalTempViewManager.database) {
+      val formattedTable = formatTableName(table)
+      getGlobalTempView(formattedTable).map { view =>
+        SubqueryAlias(formattedTable, formattedDB, view)
+      }
+    } else {
+      None
     }
   }
 

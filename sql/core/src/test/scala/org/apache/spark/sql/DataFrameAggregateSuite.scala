@@ -29,7 +29,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, IntegerType}
+
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -544,6 +545,14 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
       df.select(collect_set($"a"), collect_set($"b")),
       Seq(Row(Seq("1"), Seq(2, 4)))
     )
+  }
+
+  test("collect functions should be able to cast to array type with no null values") {
+    val df = Seq(1, 2).toDF("a")
+    checkAnswer(df.select(collect_list("a") cast ArrayType(IntegerType, false)),
+      Seq(Row(Seq(1, 2))))
+    checkAnswer(df.select(collect_set("a") cast ArrayType(FloatType, false)),
+      Seq(Row(Seq(1.0, 2.0))))
   }
 
   test("SPARK-14664: Decimal sum/avg over window should work.") {

@@ -89,7 +89,12 @@ private[ui] class ExecutorThreadDumpPage(
           <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
           <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
           <th onClick="collapseAllThreadStackTrace(false)">Thread State</th>
-          <th onClick="collapseAllThreadStackTrace(false)">Thread Locks</th>
+          <th onClick="collapseAllThreadStackTrace(false)">
+            <span data-toggle="tooltip" data-placement="top"
+                  title="Objects whose lock the thread currently holds">
+              Thread Locks
+            </span>
+          </th>
         </thead>
         <tbody>{dumpRows}</tbody>
       </table>

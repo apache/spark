@@ -21,6 +21,8 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._

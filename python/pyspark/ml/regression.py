@@ -105,9 +105,9 @@ class LinearRegression(JavaPredictor, _LinearRegressionParams, JavaMLWritable, J
     LinearRegression...
     >>> model = lr.fit(df)
     >>> model.setFeaturesCol("features")
-    LinearRegression...
+    LinearRegressionModel...
     >>> model.setPredictionCol("newPrediction")
-    LinearRegression...
+    LinearRegressionModel...
     >>> model.getMaxIter()
     5
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
@@ -591,7 +591,7 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
     >>> model.setFeaturesCol("features")
-    IsotonicRegression...
+    IsotonicRegressionModel...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -1546,7 +1546,7 @@ class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
     >>> aftsr.clear(aftsr.maxIter)
     >>> model = aftsr.fit(df)
     >>> model.setFeaturesCol("features")
-    AFTSurvivalRegression...
+    AFTSurvivalRegressionModel...
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
@@ -1881,7 +1881,7 @@ class GeneralizedLinearRegression(JavaPredictor, _GeneralizedLinearRegressionPar
     >>> glr.clear(glr.maxIter)
     >>> model = glr.fit(df)
     >>> model.setFeaturesCol("features")
-    GeneralizedLinearRegression...
+    GeneralizedLinearRegressionModel...
     >>> model.getMaxIter()
     25
     >>> model.getAggregationDepth()

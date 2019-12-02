@@ -3335,7 +3335,7 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
+  def array_sort(e: Column): Column = withExpr { new ArraySort(e.expr) }
 
   /**
    * Remove all elements that equal to element from the given array.

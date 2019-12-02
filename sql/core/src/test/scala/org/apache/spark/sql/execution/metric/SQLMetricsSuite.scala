@@ -83,7 +83,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     // TODO: update metrics in generated operators
     val ds = spark.range(10).filter('id < 5)
     testSparkPlanMetricsWithPredicates(ds.toDF(), 1, Map(
-      0L -> (("WholeStageCodegen", Map(
+      0L -> (("WholeStageCodegen (1)", Map(
         "duration total (min, med, max)" -> {_.toString.matches(timingMetricPattern)})))
     ), true)
   }

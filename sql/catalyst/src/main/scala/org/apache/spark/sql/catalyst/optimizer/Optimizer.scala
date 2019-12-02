@@ -1002,12 +1002,11 @@ object EliminateSorts extends Rule[LogicalPlan] {
 
   private def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
     def isOrderIrrelevantAggFunction(func: AggregateFunction): Boolean = func match {
-      case _: Sum => true
-      case _: Min => true
-      case _: Max => true
-      case _: Count => true
-      case _: Average => true
-      case _: CentralMomentAgg => true
+      case _: Min | _: Max | _: Count => true
+      // Arithmetic operations for floating-point values are order-sensitive
+      // (they are not associative).
+      case _: Sum | _: Average | _: CentralMomentAgg =>
+        !Seq(FloatType, DoubleType).exists(_.sameType(func.children.head.dataType))
       case _ => false
     }
 
@@ -1507,7 +1506,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Filter(condition, LocalRelation(output, data, isStreaming))
         if !hasUnevaluableExpr(condition) =>
-      val predicate = InterpretedPredicate.create(condition, output)
+      val predicate = Predicate.create(condition, output)
       predicate.initialize(0)
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming)
   }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
  * A trait to encapsulate catalog lookup function and helpful extractors.
@@ -120,10 +121,22 @@ private[sql] trait LookupCatalog extends Logging {
    * Extract catalog and the rest name parts from a multi-part identifier.
    */
   object CatalogAndIdentifierParts {
-    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
+    private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+
+    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = {
       assert(nameParts.nonEmpty)
       try {
-        Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+        // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
+        // API does not support view yet, and we have to use v1 commands to deal with global temp
+        // views. To simplify the implementation, we put global temp views in a special namespace
+        // in the session catalog. The special namespace has higher priority during name resolution.
+        // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
+        // this custom catalog can't be accessed.
+        if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
+          Some((catalogManager.v2SessionCatalog, nameParts))
+        } else {
+          Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+        }
       } catch {
         case _: CatalogNotFoundException =>
           Some((currentCatalog, nameParts))

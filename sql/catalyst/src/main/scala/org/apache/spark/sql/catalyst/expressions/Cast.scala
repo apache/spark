@@ -30,7 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.IntervalStyle._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -281,6 +283,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
+    case CalendarIntervalType => SQLConf.get.intervalOutputStyle match {
+      case SQL_STANDARD =>
+        buildCast[CalendarInterval](_, i => UTF8String.fromString(toSqlStandardString(i)))
+      case ISO_8601 =>
+        buildCast[CalendarInterval](_, i => UTF8String.fromString(toIso8601String(i)))
+      case MULTI_UNITS =>
+        buildCast[CalendarInterval](_, i => UTF8String.fromString(toMultiUnitsString(i)))
+    }
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
     case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType => buildCast[Long](_,
@@ -437,7 +447,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
-    (d.toBigDecimal * MICROS_PER_SECOND).longValue()
+    (d.toBigDecimal * MICROS_PER_SECOND).longValue
   }
   private[this] def doubleToTimestamp(d: Double): Any = {
     if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
@@ -467,7 +477,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // IntervalConverter
   private[this] def castToInterval(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => IntervalUtils.stringToInterval(s))
+      buildCast[UTF8String](_, s => IntervalUtils.safeStringToInterval(s))
   }
 
   // LongConverter
@@ -592,7 +602,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
    * Change the precision / scale in a given decimal to those set in `decimalType` (if any),
    * modifying `value` in-place and returning it if successful. If an overflow occurs, it
    * either returns null or throws an exception according to the value set for
-   * `spark.sql.ansi.enabled`.
+   * `spark.sql.dialect.spark.ansi.enabled`.
    *
    * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
@@ -611,7 +621,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   /**
    * Create new `Decimal` with precision and scale given in `decimalType` (if any).
-   * If overflow occurs, if `spark.sql.ansi.enabled` is false, null is returned;
+   * If overflow occurs, if `spark.sql.dialect.spark.ansi.enabled` is false, null is returned;
    * otherwise, an `ArithmeticException` is thrown.
    */
   private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =
@@ -622,7 +632,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
-        changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
+        // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
+        // Please refer to https://github.com/apache/spark/pull/26640
+        changePrecision(Decimal(new JavaBigDecimal(s.toString.trim)), target)
       } catch {
         case _: NumberFormatException => null
       })
@@ -985,6 +997,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           timestampFormatter.getClass)
         (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($tf, $c));"""
+      case CalendarIntervalType =>
+        val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+        val funcName = SQLConf.get.intervalOutputStyle match {
+          case SQL_STANDARD => "toSqlStandardString"
+          case ISO_8601 => "toIso8601String"
+          case MULTI_UNITS => "toMultiUnitsString"
+        }
+        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.$funcName($c));"""
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
@@ -1110,7 +1130,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) =>
           code"""
             try {
-              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString()));
+              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString().trim()));
               ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
@@ -1216,7 +1236,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, evNull) =>
-        code"""$evPrim = $util.stringToInterval($c);
+        code"""$evPrim = $util.safeStringToInterval($c);
            if(${evPrim} == null) {
              ${evNull} = true;
            }

@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetProperties, AlterTable, AppendData, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, RenameTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
 import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
@@ -192,6 +192,9 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         Nil
       }
 
+    case desc @ DescribeNamespace(catalog, namespace, extended) =>
+      DescribeNamespaceExec(desc.output, catalog, namespace, extended) :: Nil
+
     case desc @ DescribeTable(DataSourceV2Relation(table, _, _), isExtended) =>
       DescribeTableExec(desc.output, table, isExtended) :: Nil
 
@@ -200,6 +203,12 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
+
+    case RenameTable(catalog, oldIdent, newIdent) =>
+      RenameTableExec(catalog, oldIdent, newIdent) :: Nil
+
+    case AlterNamespaceSetProperties(catalog, namespace, properties) =>
+      AlterNamespaceSetPropertiesExec(catalog, namespace, properties) :: Nil
 
     case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
       CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil

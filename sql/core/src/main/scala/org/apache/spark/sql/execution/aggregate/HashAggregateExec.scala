@@ -126,7 +126,7 @@ case class HashAggregateExec(
             initialInputBufferOffset,
             resultExpressions,
             (expressions, inputSchema) =>
-              newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
+              MutableProjection.create(expressions, inputSchema),
             child.output,
             iter,
             testFallbackStartsAt,
@@ -486,10 +486,9 @@ case class HashAggregateExec(
 
       // Create a MutableProjection to merge the rows of same key together
       val mergeExpr = declFunctions.flatMap(_.mergeExpressions)
-      val mergeProjection = newMutableProjection(
+      val mergeProjection = MutableProjection.create(
         mergeExpr,
-        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes),
-        subexpressionEliminationEnabled)
+        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes))
       val joinedRow = new JoinedRow()
 
       var currentKey: UnsafeRow = null

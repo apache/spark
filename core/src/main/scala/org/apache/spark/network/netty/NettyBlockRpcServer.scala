@@ -57,7 +57,7 @@ class NettyBlockRpcServer(
       case openBlocks: OpenBlocks =>
         val blocksNum = openBlocks.blockIds.length
         val blocks = for (i <- (0 until blocksNum).view)
-          yield blockManager.getBlockData(BlockId.apply(openBlocks.blockIds(i)))
+          yield blockManager.getLocalBlockData(BlockId.apply(openBlocks.blockIds(i)))
         val streamId = streamManager.registerStream(appId, blocks.iterator.asJava,
           client.getChannel)
         logTrace(s"Registered streamId $streamId with $blocksNum buffers")
@@ -67,7 +67,7 @@ class NettyBlockRpcServer(
         val blocks = fetchShuffleBlocks.mapIds.zipWithIndex.flatMap { case (mapId, index) =>
           if (!fetchShuffleBlocks.batchFetchEnabled) {
             fetchShuffleBlocks.reduceIds(index).map { reduceId =>
-              blockManager.getBlockData(
+              blockManager.getLocalBlockData(
                 ShuffleBlockId(fetchShuffleBlocks.shuffleId, mapId, reduceId))
             }
           } else {
@@ -76,7 +76,7 @@ class NettyBlockRpcServer(
               throw new IllegalStateException(s"Invalid shuffle fetch request when batch mode " +
                 s"is enabled: $fetchShuffleBlocks")
             }
-            Array(blockManager.getBlockData(
+            Array(blockManager.getLocalBlockData(
               ShuffleBlockBatchId(
                 fetchShuffleBlocks.shuffleId, mapId, startAndEndId(0), startAndEndId(1))))
           }
