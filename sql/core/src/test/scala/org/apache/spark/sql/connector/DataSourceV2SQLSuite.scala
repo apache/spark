@@ -1819,7 +1819,7 @@ class DataSourceV2SQLSuite
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
       sql("USE testcat")
-      // The following should not throw AnalysisException, but resolves to `testcat.$globalTempDB`.
+      // The following should not throw AnalysisException, but should use `testcat.$globalTempDB`.
       sql(s"DESCRIBE TABLE $globalTempDB")
     }
   }
