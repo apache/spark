@@ -116,8 +116,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],
-    specifiedPartitionStartIndices: Option[Array[Int]] = None,
-    specifiedPartitionEndIndices: Option[Array[Int]] = None)
+    specifiedPartitionIndices: Option[Array[(Int, Int)]] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   if (SQLConf.get.fetchShuffleBlocksInBatchEnabled) {
@@ -127,8 +126,8 @@ class ShuffledRowRDD(
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
 
-  private[this] val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
-    case Some(indices) => indices
+  private[this] val partitionStartIndices: Array[Int] = specifiedPartitionIndices match {
+    case Some(indices) => indices.unzip._1
     case None =>
       // When specifiedPartitionStartIndices is not defined, every post-shuffle partition
       // corresponds to a pre-shuffle partition.
@@ -137,7 +136,7 @@ class ShuffledRowRDD(
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
-  override val partitioner: Option[Partitioner] = specifiedPartitionEndIndices match {
+  override val partitioner: Option[Partitioner] = specifiedPartitionIndices match {
     case Some(indices) => None
     case None => Some(new CoalescedPartitioner(dependency.partitioner, partitionStartIndices))
   }
@@ -145,8 +144,8 @@ class ShuffledRowRDD(
   override def getPartitions: Array[Partition] = {
     Array.tabulate[Partition](partitionStartIndices.length) { i =>
       val startIndex = partitionStartIndices(i)
-      val endIndex = specifiedPartitionEndIndices match {
-        case Some(indices) => indices(i)
+      val endIndex = specifiedPartitionIndices match {
+        case Some(indices) => indices(i)._2
         case None => if (i < partitionStartIndices.length - 1) {
           partitionStartIndices(i + 1)
         } else {

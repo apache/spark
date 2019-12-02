@@ -91,9 +91,8 @@ case class ShuffleExchangeExec(
   }
 
   def createShuffledRDD(
-      partitionStartIndices: Option[Array[Int]],
-      partitionEndIndices: Option[Array[Int]]): ShuffledRowRDD = {
-    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndices, partitionEndIndices)
+      partitionIndices: Option[Array[(Int, Int)]]): ShuffledRowRDD = {
+    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionIndices)
   }
 
   def createLocalShuffleRDD(
@@ -116,7 +115,7 @@ case class ShuffleExchangeExec(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = createShuffledRDD(None, None)
+      cachedShuffleRDD = createShuffledRDD(None)
     }
     cachedShuffleRDD
   }
