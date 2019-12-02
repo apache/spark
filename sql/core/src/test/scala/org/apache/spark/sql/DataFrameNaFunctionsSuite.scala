@@ -37,6 +37,16 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       ).toDF("name", "age", "height")
   }
 
+  def createNaNDF(): DataFrame = {
+    Seq[(java.lang.Integer, java.lang.Long, java.lang.Short,
+      java.lang.Byte, java.lang.Float, java.lang.Double)](
+      (1, new java.lang.Long(1), new java.lang.Short("1"),
+        new java.lang.Byte("1"), new java.lang.Float(1.0), 1.0),
+      (0, new java.lang.Long(0), new java.lang.Short("0"),
+        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN)
+    ).toDF("int", "long", "short", "byte", "float", "double")
+  }
+
   test("drop") {
     val input = createDF()
     val rows = input.collect()
@@ -406,35 +416,19 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("replace nan with float") {
-    val input = Seq[(java.lang.Integer, java.lang.Long, java.lang.Short,
-      java.lang.Byte, java.lang.Float, java.lang.Double)](
-      (1, new java.lang.Long(1), new java.lang.Short("1"),
-        new java.lang.Byte("1"), new java.lang.Float(1.0), 1.0),
-      (0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN)
-    ).toDF("int", "long", "short", "byte", "float", "double")
-
     checkAnswer(
-      input.na.replace("*", Map(
+      createNaNDF().na.replace("*", Map(
         Float.NaN -> 10f
       )),
       Row(1, new java.lang.Long(1), new java.lang.Short("1"),
         new java.lang.Byte("1"), new java.lang.Float(1.0), 1.0) ::
-        Row(0, new java.lang.Long(0), new java.lang.Short("0"),
-          new java.lang.Byte("0"), new java.lang.Float(10), new java.lang.Double(10)) :: Nil)
+      Row(0, new java.lang.Long(0), new java.lang.Short("0"),
+        new java.lang.Byte("0"), new java.lang.Float(10), new java.lang.Double(10)) :: Nil)
   }
 
   test("replace nan with double") {
-    val input = Seq[(java.lang.Integer, java.lang.Long, java.lang.Short,
-      java.lang.Byte, java.lang.Float, java.lang.Double)](
-      (1, new java.lang.Long(1), new java.lang.Short("1"),
-        new java.lang.Byte("1"), new java.lang.Float(1.0), 1.0),
-      (0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN)
-    ).toDF("int", "long", "short", "byte", "float", "double")
-
     checkAnswer(
-      input.na.replace("*", Map(
+      createNaNDF().na.replace("*", Map(
         Double.NaN -> 10.toDouble
       )),
       Row(1, new java.lang.Long(1), new java.lang.Short("1"),
@@ -444,16 +438,8 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("replace float with nan") {
-    val input = Seq[(java.lang.Integer, java.lang.Long, java.lang.Short,
-      java.lang.Byte, java.lang.Float, java.lang.Double)](
-      (1, new java.lang.Long(1), new java.lang.Short("1"),
-        new java.lang.Byte("1"), new java.lang.Float(1.0), 1.0),
-      (0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN)
-    ).toDF("int", "long", "short", "byte", "float", "double")
-
     checkAnswer(
-      input.na.replace("*", Map(
+      createNaNDF().na.replace("*", Map(
         1.0f -> Float.NaN
       )),
       Row(1, new java.lang.Long(1), new java.lang.Short("1"),
@@ -463,22 +449,13 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("replace double with nan") {
-    val input = Seq[(java.lang.Integer, java.lang.Long, java.lang.Short,
-      java.lang.Byte, java.lang.Float, java.lang.Double)](
-      (1, new java.lang.Long(1), new java.lang.Short("1"),
-        new java.lang.Byte("1"), new java.lang.Float(1.0), 1.0),
-      (0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN)
-    ).toDF("int", "long", "short", "byte", "float", "double")
-
     checkAnswer(
-      input.na.replace("*", Map(
+      createNaNDF().na.replace("*", Map(
         1.toDouble -> Double.NaN
       )),
       Row(1, new java.lang.Long(1), new java.lang.Short("1"),
         new java.lang.Byte("1"), java.lang.Float.NaN, java.lang.Double.NaN) ::
       Row(0, new java.lang.Long(0), new java.lang.Short("0"),
         new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN) :: Nil)
-
   }
 }
