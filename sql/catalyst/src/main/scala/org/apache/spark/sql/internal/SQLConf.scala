@@ -367,7 +367,8 @@ object SQLConf {
         "reduce IO and improve performance. Note, multiple continuous blocks exist in single " +
         s"fetch request only happen when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key}' is enabled, this feature also depends " +
-        "on a relocatable serializer and the concatenation support codec in use.")
+        "on a relocatable serializer, the concatenation support codec in use and the new version" +
+        "shuffle fetch protocol.")
       .booleanConf
       .createWithDefault(true)
 
