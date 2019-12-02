@@ -162,7 +162,7 @@ case class CreateViewCommand(
             if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
             // temporary views are only stored in the session catalog
             throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-              s"referencing a temporary view $ident")
+              s"referencing a temporary view $ident (use TEMPORARY keyword)")
           case other if !other.resolved => other.expressions.flatMap(_.collect {
             // Traverse subquery plan for any unresolved relations.
             case e: SubqueryExpression => verify(e.plan)
