@@ -259,7 +259,7 @@ class Analyzer(
   case class ResolveBinaryArithmetic(conf: SQLConf) extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformExpressionsUp {
-        case UnresolvedAdd(l, r) => (l.dataType, r.dataType) match {
+        case u @ UnresolvedAdd(l, r) if u.childrenResolved => (l.dataType, r.dataType) match {
           case (TimestampType | DateType | StringType, CalendarIntervalType) =>
             Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, TimestampType | DateType | StringType) =>
@@ -268,7 +268,7 @@ class Analyzer(
           case (_, DateType) => DateAdd(r, l)
           case (_, _) => Add(l, r)
         }
-        case UnresolvedSubtract(l, r) => (l.dataType, r.dataType) match {
+        case u @ UnresolvedSubtract(l, r) if u.childrenResolved => (l.dataType, r.dataType) match {
           case (TimestampType | DateType | StringType, CalendarIntervalType) =>
             Cast(TimeSub(l, r), l.dataType)
           case (CalendarIntervalType, TimestampType | DateType | StringType) =>
@@ -283,12 +283,12 @@ class Analyzer(
           case (DateType, _) => DateSub(l, r)
           case (_, _) => Subtract(l, r)
         }
-        case UnresolvedMultiply(l, r) => (l.dataType, r.dataType) match {
+        case u @ UnresolvedMultiply(l, r) if u.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _: NumericType | NullType) => MultiplyInterval(l, r)
           case (_: NumericType | NullType, CalendarIntervalType) => MultiplyInterval(r, l)
           case (_, _) => Multiply(l, r)
         }
-        case UnresolvedDivide(l, r) => (l.dataType, r.dataType) match {
+        case u @ UnresolvedDivide(l, r) if u.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _: NumericType | NullType) => DivideInterval(l, r)
           case (_, _) => Divide(l, r)
         }
