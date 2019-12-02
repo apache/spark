@@ -29,6 +29,8 @@ class StreamProgress(
         new immutable.HashMap[SparkDataStream, OffsetV2])
   extends scala.collection.immutable.Map[SparkDataStream, OffsetV2] {
 
+  //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
+
   def toOffsetSeq(source: Seq[SparkDataStream], metadata: OffsetSeqMetadata): OffsetSeq = {
     OffsetSeq(source.map(get), Some(metadata))
   }

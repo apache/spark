@@ -25,9 +25,11 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkD
  * A helper class that looks like a Map[Source, Offset].
  */
 class StreamProgress(
-                      val baseMap: immutable.Map[SparkDataStream, OffsetV2] =
-                      new immutable.HashMap[SparkDataStream, OffsetV2])
+     val baseMap: immutable.Map[SparkDataStream, OffsetV2] =
+         new immutable.HashMap[SparkDataStream, OffsetV2])                   
   extends scala.collection.immutable.Map[SparkDataStream, OffsetV2] {
+
+  //  Note: this class supports Scala 2.13. A parallel source tree has a 2.12 implementation.
 
   def toOffsetSeq(source: Seq[SparkDataStream], metadata: OffsetSeqMetadata): OffsetSeq = {
     OffsetSeq(source.map(get), Some(metadata))
