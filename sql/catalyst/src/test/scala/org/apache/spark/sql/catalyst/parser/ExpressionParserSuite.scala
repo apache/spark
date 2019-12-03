@@ -209,12 +209,12 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("binary arithmetic expressions") {
     // Simple operations
-    assertEqual("a * b", 'a * 'b)
-    assertEqual("a / b", 'a / 'b)
+    assertEqual("a * b", UnresolvedMultiply('a, 'b))
+    assertEqual("a / b", UnresolvedDivide('a, 'b))
     assertEqual("a DIV b", 'a div 'b)
     assertEqual("a % b", 'a % 'b)
-    assertEqual("a + b", 'a + 'b)
-    assertEqual("a - b", 'a - 'b)
+    assertEqual("a + b", UnresolvedAdd('a, 'b))
+    assertEqual("a - b", UnresolvedSubtract('a, 'b))
     assertEqual("a & b", 'a & 'b)
     assertEqual("a ^ b", 'a ^ 'b)
     assertEqual("a | b", 'a | 'b)
@@ -222,7 +222,9 @@ class ExpressionParserSuite extends AnalysisTest {
     // Check precedences
     assertEqual(
       "a * t | b ^ c & d - e + f % g DIV h / i * k",
-      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g div 'h) / 'i * 'k)))))
+      UnresolvedMultiply('a, 't) |
+        ('b ^ ('c & UnresolvedAdd(UnresolvedSubtract('d, 'e),
+          UnresolvedMultiply(UnresolvedDivide(('f % 'g) div 'h, 'i), 'k)))))
   }
 
   test("unary arithmetic expressions") {
@@ -257,8 +259,9 @@ class ExpressionParserSuite extends AnalysisTest {
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
 
   test("lambda functions") {
-    assertEqual("x -> x + 1", LambdaFunction(lv('x) + 1, Seq(lv('x))))
-    assertEqual("(x, y) -> x + y", LambdaFunction(lv('x) + lv('y), Seq(lv('x), lv('y))))
+    assertEqual("x -> x + 1", LambdaFunction(UnresolvedAdd(lv('x), 1), Seq(lv('x))))
+    assertEqual("(x, y) -> x + y",
+      LambdaFunction(UnresolvedAdd(lv('x), lv('y)), Seq(lv('x), lv('y))))
   }
 
   test("window function expressions") {
@@ -284,12 +287,14 @@ class ExpressionParserSuite extends AnalysisTest {
     // Test use of expressions in window functions.
     assertEqual(
       "sum(product + 1) over (partition by ((product) + (1)) order by 2)",
-      WindowExpression('sum.function('product + 1),
-        WindowSpecDefinition(Seq('product + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+      WindowExpression('sum.function(UnresolvedAdd('product, 1)),
+        WindowSpecDefinition(
+          Seq(UnresolvedAdd('product, 1)), Seq(Literal(2).asc), UnspecifiedFrame)))
     assertEqual(
       "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
-      WindowExpression('sum.function('product + 1),
-        WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+      WindowExpression('sum.function(UnresolvedAdd('product, 1)),
+        WindowSpecDefinition(Seq(UnresolvedAdd(UnresolvedDivide('product, 2), 1)),
+          Seq(Literal(2).asc), UnspecifiedFrame)))
   }
 
   test("range/rows window function expressions") {
@@ -390,13 +395,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
       CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
     assertEqual("case when (1) + case when a > b then c else d end then f else g end",
-      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(('a > 'b, 'c.expr)), 'd.expr), 'f.expr)), 'g))
+      CaseWhen(
+        Seq((UnresolvedAdd(Literal(1), CaseWhen(Seq(('a > 'b, 'c.expr)), 'd.expr)), 'f.expr)), 'g))
   }
 
   test("dereference") {
     assertEqual("a.b", UnresolvedAttribute("a.b"))
     assertEqual("`select`.b", UnresolvedAttribute("select.b"))
-    assertEqual("(a + b).b", ('a + 'b).getField("b")) // This will fail analysis.
+    assertEqual("(a + b).b", UnresolvedAdd('a, 'b).getField("b")) // This will fail analysis.
     assertEqual(
       "struct(a, b).b",
       namedStruct(NamePlaceholder, 'a, NamePlaceholder, 'b).getField("b"))
@@ -418,13 +424,13 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("subscript") {
     assertEqual("a[b]", 'a.getItem('b))
-    assertEqual("a[1 + 1]", 'a.getItem(Literal(1) + 1))
+    assertEqual("a[1 + 1]", 'a.getItem(UnresolvedAdd(Literal(1), 1)))
     assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem('b))
   }
 
   test("parenthesis") {
     assertEqual("(a)", 'a)
-    assertEqual("r * (a + b)", 'r * ('a + 'b))
+    assertEqual("r * (a + b)", UnresolvedMultiply('r, UnresolvedAdd('a, 'b)))
   }
 
   test("type constructors") {
@@ -749,8 +755,9 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("composed expressions") {
-    assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
-    assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
+    assertEqual("1 + r.r As q", UnresolvedAdd(Literal(1), UnresolvedAttribute("r.r")).as("q"))
+    assertEqual("1 - f('o', o(bar))",
+      UnresolvedSubtract(Literal(1), 'f.function("o", 'o.function('bar))))
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
   }
 

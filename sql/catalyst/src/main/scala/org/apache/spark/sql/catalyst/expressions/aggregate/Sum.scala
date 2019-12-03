@@ -73,12 +73,12 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     if (child.nullable) {
       Seq(
         /* sum = */
-        coalesce(Add(coalesce(sum, zero), child.cast(sumDataType)), sum)
+        coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
       )
     } else {
       Seq(
         /* sum = */
-        Add(coalesce(sum, zero), child.cast(sumDataType))
+        coalesce(sum, zero) + child.cast(sumDataType)
       )
     }
   }
@@ -86,7 +86,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   override lazy val mergeExpressions: Seq[Expression] = {
     Seq(
       /* sum = */
-      coalesce(Add(coalesce(sum.left, zero), sum.right), sum.left)
+      coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
     )
   }
 

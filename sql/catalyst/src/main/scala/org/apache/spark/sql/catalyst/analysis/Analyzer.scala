@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.{Rule, _}
+import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
@@ -285,7 +285,7 @@ class Analyzer(
           case (CalendarIntervalType, CalendarIntervalType) => Subtract(l, r)
           case (_, CalendarIntervalType) => Cast(TimeSub(l, r), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
-          case (_, TimestampType) => SubtractTimestamps(Cast(l, TimestampType), r)
+          case (_, TimestampType) => SubtractTimestamps(l, r)
           case (_, DateType) => if (conf.usePostgreSQLDialect) {
             DateDiff(l, r)
           } else {
