@@ -429,7 +429,7 @@ class HiveDDLSuite
           "create the table `default`.`tab1`"))
 
         e = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tab2 location '${tempDir.getCanonicalPath}'")
+          sql(s"CREATE TABLE tab2 USING hive location '${tempDir.getCanonicalPath}'")
         }.getMessage
         assert(e.contains("Unable to infer the schema. The schema specification is required to " +
           "create the table `default`.`tab2`"))
@@ -1590,7 +1590,7 @@ class HiveDDLSuite
         assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
 
         intercept[TableAlreadyExistsException] {
-          sql(s"CREATE TABLE $indexTabName(b int)")
+          sql(s"CREATE TABLE $indexTabName(b int) USING hive")
         }
         intercept[TableAlreadyExistsException] {
           sql(s"ALTER TABLE $tabName RENAME TO $indexTabName")
@@ -2447,7 +2447,7 @@ class HiveDDLSuite
 
   test("load command for non local invalid path validation") {
     withTable("tbl") {
-      sql("CREATE TABLE tbl(i INT, j STRING)")
+      sql("CREATE TABLE tbl(i INT, j STRING) USING hive")
       val e = intercept[AnalysisException](
         sql("load data inpath '/doesnotexist.csv' into table tbl"))
       assert(e.message.contains("LOAD DATA input path does not exist"))
