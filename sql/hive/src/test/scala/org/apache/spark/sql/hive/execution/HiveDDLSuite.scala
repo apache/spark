@@ -387,8 +387,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       val db1 = "spark_29425_1"
       val db2 = "spark_29425_2"
       val owner = "spark_29425"
-      val location1 = getDBPath(db1)
-      val location2 = getDBPath(db2)
 
       sql(s"CREATE DATABASE $db1")
       checkOwner(db1, Utils.getCurrentUserName())

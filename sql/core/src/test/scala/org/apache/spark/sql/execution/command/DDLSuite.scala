@@ -219,7 +219,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   /**
    * Strip backticks, if any, from the string.
    */
-  protected def cleanIdentifier(ident: String): String = {
+  private def cleanIdentifier(ident: String): String = {
     ident match {
       case escapedIdentifier(i) => i
       case plainIdent => plainIdent
@@ -262,7 +262,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
-  protected def getDBPath(dbName: String): URI = {
+  private def getDBPath(dbName: String): URI = {
     val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
     new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
   }

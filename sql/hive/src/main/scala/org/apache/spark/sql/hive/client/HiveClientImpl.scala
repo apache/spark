@@ -355,7 +355,7 @@ private[hive] class HiveClientImpl(
   override def createDatabase(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
-    val hiveDb = toHiveDatabase(database)
+    val hiveDb = toHiveDatabase(database, true)
     client.createDatabase(hiveDb, ignoreIfExists)
   }
 
@@ -374,14 +374,14 @@ private[hive] class HiveClientImpl(
           s"Hive ${version.fullVersion} does not support altering database location")
       }
     }
-    val hiveDb = toHiveDatabase(database)
+    val hiveDb = toHiveDatabase(database, false)
     client.alterDatabase(database.name, hiveDb)
   }
 
-  private def toHiveDatabase(database: CatalogDatabase): HiveDatabase = {
+  private def toHiveDatabase(database: CatalogDatabase, isCreate: Boolean): HiveDatabase = {
     val props = database.properties
-    val dbOwner = props.get(PROP_OWNER_NAME).filter(_.nonEmpty).getOrElse(userName)
-    val dbOwnerType = props.get(PROP_OWNER_TYPE).filter(_.nonEmpty).getOrElse("USER")
+    val dbOwner = props.getOrElse(PROP_OWNER_NAME, if (isCreate) userName else null)
+    val dbOwnerType = props.getOrElse(PROP_OWNER_TYPE, "USER")
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
