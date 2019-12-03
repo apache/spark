@@ -40,9 +40,6 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
   }
 }
 
-trait MultiNamedExpression {
-}
-
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if all values of `expr` are true.",
   examples = """
@@ -55,8 +52,7 @@ trait MultiNamedExpression {
        false
   """,
   since = "3.0.0")
-case class BoolAnd(funcName: String, arg: Expression)
-  extends UnevaluableBooleanAggBase(arg) with MultiNamedExpression {
+case class BoolAnd(funcName: String, arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   override def nodeName: String = funcName
 }
 
@@ -72,7 +68,6 @@ case class BoolAnd(funcName: String, arg: Expression)
        false
   """,
   since = "3.0.0")
-case class BoolOr(funcName: String, arg: Expression)
-  extends UnevaluableBooleanAggBase(arg) with MultiNamedExpression {
+case class BoolOr(funcName: String, arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   override def nodeName: String = funcName
 }

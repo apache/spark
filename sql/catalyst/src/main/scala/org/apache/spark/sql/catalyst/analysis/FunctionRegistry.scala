@@ -313,11 +313,11 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expression[BoolAnd]("every"),
-    expression[BoolAnd]("bool_and"),
-    expression[BoolOr]("any"),
-    expression[BoolOr]("some"),
-    expression[BoolOr]("bool_or"),
+    expressionWithAlias[BoolAnd]("every"),
+    expressionWithAlias[BoolAnd]("bool_and"),
+    expressionWithAlias[BoolOr]("any"),
+    expressionWithAlias[BoolOr]("some"),
+    expressionWithAlias[BoolOr]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -600,8 +600,7 @@ object FunctionRegistry {
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = constructors.find(e => e.getParameterTypes.toSeq == params
-            || e.getParameterTypes.head == classOf[String]).getOrElse {
+        val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
@@ -619,13 +618,7 @@ object FunctionRegistry {
           }
           throw new AnalysisException(invalidArgumentsMsg)
         }
-        Try{
-          if (classOf[MultiNamedExpression].isAssignableFrom(f.getDeclaringClass)) {
-            f.newInstance(name.toString, expressions.head).asInstanceOf[Expression]
-          } else {
-            f.newInstance(expressions : _*).asInstanceOf[Expression]
-          }
-        } match {
+        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
           case Failure(e) =>
             // the exception is an invocation exception. To get a meaningful message, we need the
@@ -635,6 +628,24 @@ object FunctionRegistry {
       }
     }
 
+    (name, (expressionInfo[T](name), builder))
+  }
+
+  private def expressionWithAlias[T <: Expression](name: String)
+      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val constructors = tag.runtimeClass.getConstructors
+      .filter(_.getParameterTypes.head == classOf[String])
+    assert(constructors.length == 1)
+    val builder = (expressions: Seq[Expression]) => {
+      Try(constructors.head.newInstance(name.toString, expressions.head).asInstanceOf[Expression])
+      match {
+        case Success(e) => e
+        case Failure(e) =>
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          throw new AnalysisException(e.getCause.getMessage)
+      }
+    }
     (name, (expressionInfo[T](name), builder))
   }
 
