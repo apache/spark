@@ -147,8 +147,8 @@ class PCAModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    val transformer = udf { vector: Vector => pc.transpose.multiply(vector) }
-
+    val transposed = pc.transpose
+    val transformer = udf { vector: Vector => transposed.multiply(vector) }
     dataset.withColumn($(outputCol), transformer(col($(inputCol))))
   }
 
