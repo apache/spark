@@ -42,7 +42,7 @@ struct<>
 
 
 -- !query 4
-CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20))
+CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20)) STORED AS parquet
 -- !query 4 schema
 struct<>
 -- !query 4 output
