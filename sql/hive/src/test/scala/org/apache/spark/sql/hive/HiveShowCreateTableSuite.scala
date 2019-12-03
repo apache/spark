@@ -18,7 +18,8 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{AnalysisException, ShowCreateTableSuite}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.internal.SQLConf
 
 class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
 
@@ -177,17 +178,24 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   }
 
   test("SPARK-24911: keep quotes for nested fields in hive") {
-    withTable("t1") {
-      val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>)"
-      sql(createTable)
-      val shownDDL = sql(s"SHOW CREATE TABLE t1")
-        .head()
-        .getString(0)
-        .split("\n")
-        .head
-      assert(shownDDL == createTable)
+    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
+    try {
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+      withTable("t1") {
+        val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>)"
+        sql(createTable)
+        val shownDDL = sql(s"SHOW CREATE TABLE t1")
+          .head()
+          .getString(0)
+          .split("\n")
+          .head
+        assert(shownDDL == createTable)
 
-      checkCreateTable("t1")
+        checkCreateTable("t1")
+      }
+    } finally {
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+        originalCreateHiveTable)
     }
   }
 
