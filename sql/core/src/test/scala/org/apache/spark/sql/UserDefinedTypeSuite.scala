@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.nio.file.Files
 import java.sql.Timestamp
 import java.util.{Arrays, GregorianCalendar}
 
@@ -300,22 +299,32 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
       classOf[XMLGregorianCalendar].getName,
       classOf[MyXMLGregorianCalendarUDT].getName)
 
-    val gregorianCalendar = new GregorianCalendar(1925, 5, 20, 19, 25)
-    // Equivalent of above (the year minus 1900)
-    val timestamp = new Timestamp(25, 5, 20, 19, 25, 0, 0)
+    withTempDir { dir =>
+      val gregorianCalendar = new GregorianCalendar(1925, 5, 20, 19, 25)
+      // Equivalent of above (the year minus 1900)
+      val timestamp = new Timestamp(25, 5, 20, 19, 25, 0, 0)
 
-    val calandarData = Seq(Row(new XMLGregorianCalendarImpl(gregorianCalendar)))
-    val calendarRdd = spark.sparkContext.parallelize(calandarData)
-    val calendarSchema = StructType(StructField("dt", new MyXMLGregorianCalendarUDT) :: Nil)
-    val calendarDf = spark.sqlContext.createDataFrame(calendarRdd, calendarSchema)
+      // First we write the MyXMLGregorianCalendarUDT, with the jsonValue==Timestamp,
+      // so after reading it, it should be a native Spark timestamp
+      val calandarData = Seq(Row(new XMLGregorianCalendarImpl(gregorianCalendar)))
+      val calendarRdd = spark.sparkContext.parallelize(calandarData)
+      val calendarSchema = StructType(StructField("dt", new MyXMLGregorianCalendarUDT) :: Nil)
+      val calendarDf = spark.sqlContext.createDataFrame(calendarRdd, calendarSchema)
 
-    val timestampData = Seq(Row(timestamp))
-    val timestampRdd = spark.sparkContext.parallelize(timestampData)
-    val timestampSchema = StructType(StructField("dt", TimestampType) :: Nil)
-    val timestampDf = spark.sqlContext.createDataFrame(timestampRdd, timestampSchema)
+      // Write it to Parquet
+      calendarDf.write.mode(SaveMode.Overwrite).parquet(dir.getCanonicalPath)
 
-    val df = timestampDf.union(calendarDf)
+      // Read it again
+      val timestampDf = spark.read.parquet(dir.getCanonicalPath)
 
-    checkAnswer(df, Row(timestamp) :: Row(timestamp) :: Nil)
+      // Make sure that the schema's get resolved,
+      // that we can merge the UDT into the Timestamp
+      // This mimics the checking of the schema when writing as with Delta
+      assert(timestampDf.schema.merge(calendarDf.schema) === timestampDf.schema)
+      assert(calendarDf.schema.merge(timestampDf.schema) === timestampDf.schema)
+
+      // Make sure that we can read the data as a timestamp
+      checkAnswer(timestampDf, Row(timestamp) :: Nil)
+    }
   }
 }
