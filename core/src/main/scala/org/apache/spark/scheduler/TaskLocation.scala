@@ -54,8 +54,11 @@ private [spark] case class HDFSCacheTaskLocation(override val host: String) exte
  * [[org.apache.spark.rdd.RDD.getPreferredLocations]] to indicate that the task can be assigned to
  * any host if none of the other desired locations can be satisfied immediately.
  *
- * Note that this location is only used to skip delayed scheduling in DAGScheduler, and
- * [[DAGScheduler.getPreferredLocs]] does not contain this location.
+ * This location is only used internally by DAGScheduler to skip delayed scheduling for individual
+ * RDDs. [[DAGScheduler.getPreferredLocs]] does not contain this location.
+ *
+ * @note This class is experimental and may be replaced by a more complete solution for delayed
+ *       scheduling.
  */
 private [spark] case object WildcardLocation extends TaskLocation {
   override val host: String = "*"
