@@ -119,7 +119,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
       testCase match {
         case _: PgSQLTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
-          statement.execute(s"SET ${SQLConf.PREFER_INTEGRAL_DIVISION.key} = true")
         case _ =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
       }
