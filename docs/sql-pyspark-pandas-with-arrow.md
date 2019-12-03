@@ -178,6 +178,41 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 [`pyspark.sql.DataFrame.mapsInPandas`](api/python/pyspark.sql.html#pyspark.sql.DataFrame.mapInPandas).
 
 
+### Cogrouped Map
+
+Cogrouped map Pandas UDFs allow two DataFrames to be cogrouped by a common key and then a python function applied to
+each cogroup.  They are used with `groupBy().cogroup().apply()` which consists of the following steps:
+
+* Shuffle the data such that the groups of each dataframe which share a key are cogrouped together.
+* Apply a function to each cogroup.  The input of the function is two `pandas.DataFrame` (with an optional Tuple
+representing the key).  The output of the function is a `pandas.DataFrame`.
+* Combine the pandas.DataFrames from all groups into a new `DataFrame`. 
+
+To use `groupBy().cogroup().apply()`, the user needs to define the following:
+* A Python function that defines the computation for each cogroup.
+* A `StructType` object or a string that defines the schema of the output `DataFrame`.
+
+The column labels of the returned `pandas.DataFrame` must either match the field names in the
+defined output schema if specified as strings, or match the field data types by position if not
+strings, e.g. integer indices. See [pandas.DataFrame](https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.html#pandas.DataFrame)
+on how to label columns when constructing a `pandas.DataFrame`.
+
+Note that all data for a cogroup will be loaded into memory before the function is applied. This can lead to out of
+memory exceptions, especially if the group sizes are skewed. The configuration for [maxRecordsPerBatch](#setting-arrow-batch-size)
+is not applied and it is up to the user to ensure that the cogrouped data will fit into the available memory.
+
+The following example shows how to use `groupby().cogroup().apply()` to perform an asof join between two datasets.
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example cogrouped_map_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
+For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf) and
+[`pyspark.sql.CoGroupedData.apply`](api/python/pyspark.sql.html#pyspark.sql.CoGroupedData.apply).
+
+
 ## Usage Notes
 
 ### Supported SQL Types
@@ -219,3 +254,20 @@ Note that a standard UDF (non-Pandas) will load timestamp data as Python datetim
 different than a Pandas timestamp. It is recommended to use Pandas time series functionality when
 working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
+
+### Compatibiliy Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
+
+Since Arrow 0.15.0, a change in the binary IPC format requires an environment variable to be
+compatible with previous versions of Arrow <= 0.14.1. This is only necessary to do for PySpark
+users with versions 2.3.x and 2.4.x that have manually upgraded PyArrow to 0.15.0. The following
+can be added to `conf/spark-env.sh` to use the legacy Arrow IPC format:
+
+```
+ARROW_PRE_0_15_IPC_FORMAT=1
+```
+
+This will instruct PyArrow >= 0.15.0 to use the legacy IPC format with the older Arrow Java that
+is in Spark 2.3.x and 2.4.x. Not setting this environment variable will lead to a similar error as
+described in [SPARK-29367](https://issues.apache.org/jira/browse/SPARK-29367) when running
+`pandas_udf`s or `toPandas()` with Arrow enabled. More information about the Arrow IPC change can
+be read on the Arrow 0.15.0 release [blog](http://arrow.apache.org/blog/2019/10/06/0.15.0-release/#columnar-streaming-protocol-change-since-0140).

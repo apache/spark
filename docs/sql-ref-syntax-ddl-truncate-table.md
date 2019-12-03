@@ -56,7 +56,7 @@ SELECT * from Student;
 | XYZ   | 3       | 12   |
 +-------+---------+------+--+
 
--- Removes all rows from the table in the partion specified
+-- Removes all rows from the table in the partition specified
 TRUNCATE TABLE Student partition(age=10);
 
 --After truncate execution, records belonging to partition age=10 are removed
@@ -82,5 +82,5 @@ No rows selected
 
 ### Related Statements
 - [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
-- [ALTER TABLE](sql-ref-syntax-ddl-alter-tabley.html)
+- [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
 

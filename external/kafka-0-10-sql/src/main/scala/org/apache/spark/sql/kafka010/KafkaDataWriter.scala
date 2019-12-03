@@ -44,7 +44,7 @@ private[kafka010] class KafkaDataWriter(
     inputSchema: Seq[Attribute])
   extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
 
-  private lazy val producer = CachedKafkaProducer.getOrCreate(producerParams)
+  private var producer = CachedKafkaProducer.acquire(producerParams)
 
   def write(row: InternalRow): Unit = {
     checkForErrors()
@@ -55,20 +55,36 @@ private[kafka010] class KafkaDataWriter(
     // Send is asynchronous, but we can't commit until all rows are actually in Kafka.
     // This requires flushing and then checking that no callbacks produced errors.
     // We also check for errors before to fail as soon as possible - the check is cheap.
-    checkForErrors()
-    producer.flush()
-    checkForErrors()
+    try {
+      checkForErrors()
+      producer.flush()
+      checkForErrors()
+    } finally {
+      releaseProducer()
+    }
     KafkaDataWriterCommitMessage
   }
 
-  def abort(): Unit = {}
+  def abort(): Unit = {
+    close()
+  }
 
   def close(): Unit = {
-    checkForErrors()
-    if (producer != null) {
-      producer.flush()
+    try {
       checkForErrors()
-      CachedKafkaProducer.close(producerParams)
+      if (producer != null) {
+        producer.flush()
+        checkForErrors()
+      }
+    } finally {
+      releaseProducer()
+    }
+  }
+
+  private def releaseProducer(): Unit = {
+    if (producer != null) {
+      CachedKafkaProducer.release(producer)
+      producer = null
     }
   }
 }

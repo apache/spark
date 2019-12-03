@@ -232,7 +232,8 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
         val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
         assert(expectedNodeName === actualNodeName)
         for ((metricName, metricPredicate) <- expectedMetricsPredicatesMap) {
-          assert(metricPredicate(actualMetricsMap(metricName)))
+          assert(metricPredicate(actualMetricsMap(metricName)),
+            s"$nodeId / '$metricName' (= ${actualMetricsMap(metricName)}) did not match predicate.")
         }
       }
     }

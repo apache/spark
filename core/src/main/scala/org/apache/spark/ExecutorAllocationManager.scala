@@ -303,7 +303,7 @@ private[spark] class ExecutorAllocationManager(
     }
 
     // Update executor target number only after initializing flag is unset
-    updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
+    updateAndSyncNumExecutorsTarget(clock.nanoTime())
     if (executorIdsToBeRemoved.nonEmpty) {
       removeExecutors(executorIdsToBeRemoved)
     }
@@ -424,7 +424,7 @@ private[spark] class ExecutorAllocationManager(
             logDebug(s"Starting timer to add more executors (to " +
               s"expire in $sustainedSchedulerBacklogTimeoutS seconds)")
             // TODO - make sure merges with [SPARK-10614][CORE] Add monotonic time to Clock
-            addTime = now + (sustainedSchedulerBacklogTimeoutS * 1000)
+            addTime = now + TimeUnit.SECONDS.toNanos(sustainedSchedulerBacklogTimeoutS)
           } else {
             logDebug(s"Lowering target number of executors to" +
               s" ${numExecutorsTargetPerResourceProfile(rp)} (previously " +
@@ -588,8 +588,7 @@ private[spark] class ExecutorAllocationManager(
     if (addTime == NOT_SET) {
       logDebug(s"Starting timer to add executors because pending tasks " +
         s"are building up (to expire in $schedulerBacklogTimeoutS seconds)")
-      // TODO - make sure merges with [SPARK-10614][CORE] Add monotonic time to Clock interface
-      addTime = clock.getTimeMillis + schedulerBacklogTimeoutS * 1000
+      addTime = clock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeoutS)
     }
   }
 

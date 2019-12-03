@@ -131,13 +131,13 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
 
     withClue(s"""Expected message part "${expectedMessagePart}" is not found in DF test.""") {
       val exceptionOnDf = intercept[Throwable] {
-        testTransformerOnDF(dataframe, transformer, firstResultCol)(_ => Unit)
+        testTransformerOnDF(dataframe, transformer, firstResultCol)(_ => ())
       }
       TestUtils.assertExceptionMsg(exceptionOnDf, expectedMessagePart)
     }
     withClue(s"""Expected message part "${expectedMessagePart}" is not found in stream test.""") {
       val exceptionOnStreamData = intercept[Throwable] {
-        testTransformerOnStreamData(dataframe, transformer, firstResultCol)(_ => Unit)
+        testTransformerOnStreamData(dataframe, transformer, firstResultCol)(_ => ())
       }
       TestUtils.assertExceptionMsg(exceptionOnStreamData, expectedMessagePart)
     }

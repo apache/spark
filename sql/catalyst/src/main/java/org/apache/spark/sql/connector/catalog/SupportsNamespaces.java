@@ -21,6 +21,8 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,6 +40,23 @@ import java.util.Map;
  */
 @Experimental
 public interface SupportsNamespaces extends CatalogPlugin {
+
+  /**
+   * A property to specify the location of the namespace. If the namespace
+   * needs to store files, it should be under this location.
+   */
+  String PROP_LOCATION = "location";
+
+  /**
+   * A property to specify the description of the namespace. The description
+   * will be returned in the result of "DESCRIBE NAMESPACE" command.
+   */
+  String PROP_COMMENT = "comment";
+
+  /**
+   * The list of reserved namespace properties.
+   */
+  List<String> RESERVED_PROPERTIES = Arrays.asList(PROP_COMMENT, PROP_LOCATION);
 
   /**
    * Return a default namespace for the catalog.
@@ -131,16 +150,14 @@ public interface SupportsNamespaces extends CatalogPlugin {
       NamespaceChange... changes) throws NoSuchNamespaceException;
 
   /**
-   * Drop a namespace from the catalog.
+   * Drop a namespace from the catalog, recursively dropping all objects within the namespace.
    * <p>
-   * This operation may be rejected by the catalog implementation if the namespace is not empty by
-   * throwing {@link IllegalStateException}. If the catalog implementation does not support this
-   * operation, it may throw {@link UnsupportedOperationException}.
+   * If the catalog implementation does not support this operation, it may throw
+   * {@link UnsupportedOperationException}.
    *
    * @param namespace a multi-part namespace
    * @return true if the namespace was dropped
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
-   * @throws IllegalStateException If the namespace is not empty
    * @throws UnsupportedOperationException If drop is not a supported operation
    */
   boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException;

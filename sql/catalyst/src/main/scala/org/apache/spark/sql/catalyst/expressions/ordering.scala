@@ -19,18 +19,28 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.types._
 
 
 /**
+ * A base class for generated/interpreted row ordering.
+ */
+class BaseOrdering extends Ordering[InternalRow] {
+  def compare(a: InternalRow, b: InternalRow): Int = {
+    throw new UnsupportedOperationException
+  }
+}
+
+/**
  * An interpreted row ordering comparator.
  */
-class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
+class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(bindReferences(ordering, inputSchema))
 
-  def compare(a: InternalRow, b: InternalRow): Int = {
+  override def compare(a: InternalRow, b: InternalRow): Int = {
     var i = 0
     val size = ordering.size
     while (i < size) {
@@ -67,7 +77,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
       }
       i += 1
     }
-    return 0
+    0
   }
 }
 
@@ -83,7 +93,7 @@ object InterpretedOrdering {
   }
 }
 
-object RowOrdering {
+object RowOrdering extends CodeGeneratorWithInterpretedFallback[Seq[SortOrder], BaseOrdering] {
 
   /**
    * Returns true iff the data type can be ordered (i.e. can be sorted).
@@ -91,6 +101,7 @@ object RowOrdering {
   def isOrderable(dataType: DataType): Boolean = dataType match {
     case NullType => true
     case dt: AtomicType => true
+    case CalendarIntervalType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)
     case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
@@ -101,4 +112,26 @@ object RowOrdering {
    * Returns true iff outputs from the expressions can be ordered.
    */
   def isOrderable(exprs: Seq[Expression]): Boolean = exprs.forall(e => isOrderable(e.dataType))
+
+  override protected def createCodeGeneratedObject(in: Seq[SortOrder]): BaseOrdering = {
+    GenerateOrdering.generate(in)
+  }
+
+  override protected def createInterpretedObject(in: Seq[SortOrder]): BaseOrdering = {
+    new InterpretedOrdering(in)
+  }
+
+  def create(order: Seq[SortOrder], inputSchema: Seq[Attribute]): BaseOrdering = {
+    createObject(bindReferences(order, inputSchema))
+  }
+
+  /**
+   * Creates a row ordering for the given schema, in natural ascending order.
+   */
+  def createNaturalAscendingOrdering(dataTypes: Seq[DataType]): BaseOrdering = {
+    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
+      case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    }
+    create(order, Seq.empty)
+  }
 }

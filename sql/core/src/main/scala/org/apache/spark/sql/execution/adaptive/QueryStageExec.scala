@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.spark.{FutureAction, MapOutputStatistics}
@@ -25,7 +24,6 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
@@ -219,9 +217,13 @@ case class ReusedQueryStageExec(
     }
   }
 
-  override def outputPartitioning: Partitioning = plan.outputPartitioning match {
+  private[sql] def updatePartitioning(p: Partitioning): Partitioning = p match {
     case e: Expression => updateAttr(e).asInstanceOf[Partitioning]
     case other => other
+  }
+
+  override def outputPartitioning: Partitioning = {
+    updatePartitioning(plan.outputPartitioning)
   }
 
   override def outputOrdering: Seq[SortOrder] = {

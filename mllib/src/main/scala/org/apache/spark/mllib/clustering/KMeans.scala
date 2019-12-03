@@ -223,12 +223,12 @@ class KMeans private (
 
     // Compute squared norms and cache them.
     val norms = data.map(Vectors.norm(_, 2.0))
-    norms.persist()
     val zippedData = data.zip(norms).map { case (v, norm) =>
       new VectorWithNorm(v, norm)
     }
+    zippedData.persist()
     val model = runAlgorithm(zippedData, instr)
-    norms.unpersist()
+    zippedData.unpersist()
 
     // Warn at the end of the run as well, for increased visibility.
     if (data.getStorageLevel == StorageLevel.NONE) {

@@ -291,6 +291,19 @@ class VersionsSuite extends SparkFunSuite with Logging {
       assert(client.getTable("default", "src").properties.contains("changed"))
     }
 
+    test(s"$version: alterTable - should respect the original catalog table's owner name") {
+      val ownerName = "SPARK-29405"
+      val originalTable = client.getTable("default", "src")
+      // mocking the owner is what we declared
+      val newTable = originalTable.copy(owner = ownerName)
+      client.alterTable(newTable)
+      assert(client.getTable("default", "src").owner === ownerName)
+      // mocking the owner is empty
+      val newTable2 = originalTable.copy(owner = "")
+      client.alterTable(newTable2)
+      assert(client.getTable("default", "src").owner === client.userName)
+    }
+
     test(s"$version: alterTable(dbName: String, tableName: String, table: CatalogTable)") {
       val newTable = client.getTable("default", "src").copy(properties = Map("changedAgain" -> ""))
       client.alterTable("default", "src", newTable)
@@ -908,7 +921,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
            """.stripMargin
           )
 
-          val errorMsg = "data type mismatch: cannot cast decimal(2,1) to binary"
+          val errorMsg = "Cannot safely cast 'f0': DecimalType(2,1) to BinaryType"
 
           if (isPartitioned) {
             val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"

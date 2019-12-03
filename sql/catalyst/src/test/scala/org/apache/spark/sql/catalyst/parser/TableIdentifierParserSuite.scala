@@ -658,7 +658,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("table identifier - reserved/non-reserved keywords if ANSI mode enabled") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
       reservedKeywordsInAnsiMode.foreach { keyword =>
         val errMsg = intercept[ParseException] {
           parseTableIdentifier(keyword)

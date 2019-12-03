@@ -98,7 +98,7 @@ abstract class MaxMinBy extends DeclarativeAggregate {
       > SELECT _FUNC_(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y);
        b
   """,
-  since = "3.0")
+  since = "3.0.0")
 case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMinBy {
   override protected def funcName: String = "max_by"
 
@@ -116,7 +116,7 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
       > SELECT _FUNC_(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y);
        a
   """,
-  since = "3.0")
+  since = "3.0.0")
 case class MinBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMinBy {
   override protected def funcName: String = "min_by"
 

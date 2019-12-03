@@ -736,10 +736,11 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
       this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());
     } else if (type instanceof CalendarIntervalType) {
-      // Two columns. Months as int. Microseconds as Long.
-      this.childColumns = new WritableColumnVector[2];
+      // Three columns. Months as int. Days as Int. Microseconds as Long.
+      this.childColumns = new WritableColumnVector[3];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
+      this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
     } else {
       this.childColumns = null;
     }

@@ -21,6 +21,8 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
@@ -1425,8 +1427,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("multinomial logistic regression with zero variance (SPARK-21681)") {
-    val sqlContext = multinomialDatasetWithZeroVar.sqlContext
-    import sqlContext.implicits._
     val mlr = new LogisticRegression().setFamily("multinomial").setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(true).setWeightCol("weight")
 
@@ -2769,7 +2769,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
   test("toString") {
     val model = new LogisticRegressionModel("logReg", Vectors.dense(0.1, 0.2, 0.3), 0.0)
-    val expected = "LogisticRegressionModel: uid = logReg, numClasses = 2, numFeatures = 3"
+    val expected = "LogisticRegressionModel: uid=logReg, numClasses=2, numFeatures=3"
     assert(model.toString === expected)
   }
 }

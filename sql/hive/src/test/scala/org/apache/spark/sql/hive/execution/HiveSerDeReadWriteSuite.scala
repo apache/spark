@@ -65,7 +65,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
       hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 TIMESTAMP) STORED AS $fileFormat")
       hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values('2019-04-11 15:50:00')")
       checkAnswer(spark.table("hive_serde"), Row(Timestamp.valueOf("2019-04-11 15:50:00")))
-      spark.sql("INSERT INTO TABLE hive_serde values('2019-04-12 15:50:00')")
+      spark.sql("INSERT INTO TABLE hive_serde values(TIMESTAMP('2019-04-12 15:50:00'))")
       checkAnswer(
         spark.table("hive_serde"),
         Seq(Row(Timestamp.valueOf("2019-04-11 15:50:00")),
@@ -77,7 +77,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
       hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 DATE) STORED AS $fileFormat")
       hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values('2019-04-11')")
       checkAnswer(spark.table("hive_serde"), Row(Date.valueOf("2019-04-11")))
-      spark.sql("INSERT INTO TABLE hive_serde values('2019-04-12')")
+      spark.sql("INSERT INTO TABLE hive_serde values(TIMESTAMP('2019-04-12'))")
       checkAnswer(
         spark.table("hive_serde"),
         Seq(Row(Date.valueOf("2019-04-11")), Row(Date.valueOf("2019-04-12"))))
@@ -119,7 +119,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
       hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 BINARY) STORED AS $fileFormat")
       hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values('1')")
       checkAnswer(spark.table("hive_serde"), Row("1".getBytes))
-      spark.sql("INSERT INTO TABLE hive_serde values('2')")
+      spark.sql("INSERT INTO TABLE hive_serde values(BINARY('2'))")
       checkAnswer(spark.table("hive_serde"), Seq(Row("1".getBytes), Row("2".getBytes)))
     }
   }
@@ -168,6 +168,8 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
       checkNumericTypes(fileFormat, "DECIMAL(38, 2)", 2.1D)
 
       // Date/Time Types
+      // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
+      // ANSI store assignment policy.
       checkDateTimeTypes(fileFormat)
 
       // String Types

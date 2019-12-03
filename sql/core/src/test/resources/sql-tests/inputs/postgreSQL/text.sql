@@ -44,11 +44,7 @@ select concat_ws(',',10,20,null,30);
 select concat_ws('',10,20,null,30);
 select concat_ws(NULL,10,20,null,30) is null;
 select reverse('abcde');
--- [SPARK-28036] Built-in udf left/right has inconsistent behavior
--- [SPARK-28479][SPARK-28989] Parser error when enabling ANSI mode
-set spark.sql.ansi.enabled=false;
 select i, left('ahoj', i), right('ahoj', i) from range(-5, 6) t(i) order by i;
-set spark.sql.ansi.enabled=true;
 -- [SPARK-28037] Add built-in String Functions: quote_literal
 -- select quote_literal('');
 -- select quote_literal('abc''');

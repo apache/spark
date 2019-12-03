@@ -106,7 +106,7 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
                        (4L, ("peter", "student"))))
       // Create an RDD for edges
       val relationships: RDD[Edge[String]] =
-        sc.parallelize(Array(Edge(3L, 7L, "collab"), Edge(5L, 3L, "advisor"),
+        sc.parallelize(Seq(Edge(3L, 7L, "collab"), Edge(5L, 3L, "advisor"),
                        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi"),
                        Edge(4L, 0L, "student"), Edge(5L, 0L, "colleague")))
       // Edges are:

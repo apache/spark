@@ -187,7 +187,7 @@ val users: RDD[(VertexId, (String, String))] =
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof"))))
 // Create an RDD for edges
 val relationships: RDD[Edge[String]] =
-  sc.parallelize(Array(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
+  sc.parallelize(Seq(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
                        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi")))
 // Define a default user in case there are relationship with missing user
 val defaultUser = ("John Doe", "Missing")
@@ -425,7 +425,7 @@ val users: RDD[(VertexId, (String, String))] =
                        (4L, ("peter", "student"))))
 // Create an RDD for edges
 val relationships: RDD[Edge[String]] =
-  sc.parallelize(Array(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
+  sc.parallelize(Seq(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
                        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi"),
                        Edge(4L, 0L, "student"),   Edge(5L, 0L, "colleague")))
 // Define a default user in case there are relationship with missing user
