@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types._
@@ -44,9 +44,16 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   }
 
   test("duplicated metastore relations") {
-    val df = spark.sql("SELECT * FROM src")
-    logInfo(df.queryExecution.toString)
-    df.as('a).join(df.as('b), $"a.key" === $"b.key")
+    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
+    try {
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+      val df = spark.sql("SELECT * FROM src")
+      logInfo(df.queryExecution.toString)
+      df.as('a).join(df.as('b), $"a.key" === $"b.key")
+    } finally {
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+        originalCreateHiveTable)
+    }
   }
 
   test("should not truncate struct type catalog string") {
