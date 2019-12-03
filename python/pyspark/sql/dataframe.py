@@ -2305,20 +2305,15 @@ def _to_corrected_pandas_type(dt):
     uncorrectly.
     """
     import numpy as np
-    if type(dt) == ByteType:
-        return np.int8
-    elif type(dt) == ShortType:
-        return np.int16
-    elif type(dt) == IntegerType:
-        return np.int32
-    elif type(dt) == LongType:
-        return np.int64
-    elif type(dt) == FloatType:
-        return np.float32
-    elif type(dt) == DoubleType:
-        return np.float64
-    else:
-        return None
+    mappings = {
+        ByteType: np.int8,
+        ShortType: np.int16,
+        IntegerType: np.int32,
+        LongType: np.int64,
+        FloatType: np.float32,
+        DoubleType: np.float64
+    }
+    return mappings.get(type(dt), None)
 
 
 class DataFrameNaFunctions(object):
