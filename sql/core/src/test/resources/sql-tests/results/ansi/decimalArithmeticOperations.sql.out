@@ -71,7 +71,7 @@ struct<(CAST(10.300000000000000000 AS DECIMAL(21,19)) * CAST(3.00000000000000000
 
 
 -- !query 8
-select (5e36 + 0.1) + 5e36
+select (5e36BD + 0.1) + 5e36BD
 -- !query 8 schema
 struct<>
 -- !query 8 output
@@ -80,7 +80,7 @@ Decimal(expanded,10000000000000000000000000000000000000.1,39,1}) cannot be repre
 
 
 -- !query 9
-select (-4e36 - 0.1) - 7e36
+select (-4e36BD - 0.1) - 7e36BD
 -- !query 9 schema
 struct<>
 -- !query 9 output
@@ -98,7 +98,7 @@ Decimal(expanded,1.5241578753238836750190519987501905210E+38,38,-1}) cannot be r
 
 
 -- !query 11
-select 1e35 / 0.1
+select 1e35BD / 0.1
 -- !query 11 schema
 struct<>
 -- !query 11 output
