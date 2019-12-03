@@ -704,19 +704,16 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test("SPARK-25100: Using KryoSerializer and" +
       "setting registrationRequired true can lead job failed") {
-    val tempDir = Utils.createTempDir()
-    val inputFile = tempDir.getAbsolutePath + "/input"
-    val textFileOutputDir = tempDir.getAbsolutePath + "/out1"
-    val dataSetDir = tempDir.getAbsolutePath + "/out2"
+    val inputFile = new File(tempDir, "/input").getAbsolutePath
+    val textFileOutputDir = new File(tempDir, "/out1").getAbsolutePath
+    val dataSetDir = new File(tempDir, "/out2").getAbsolutePath
 
-    val writer = new PrintWriter(new File(inputFile))
-
-    for(i <- 1 to 100) {
-      writer.print(i)
-      writer.write('\n')
+    Utils.tryWithResource(new PrintWriter(new File(inputFile))) { writer =>
+      for (i <- 1 to 100) {
+        writer.print(i)
+        writer.write('\n')
+      }
     }
-
-    writer.close()
 
     val conf = new SparkConf(false).setMaster("local").
       set("spark.kryo.registrationRequired", "true").setAppName("test")
@@ -727,12 +724,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     jobConf.setOutputValueClass(classOf[IntWritable])
     jobConf.set("mapred.output.dir", dataSetDir)
 
-    val sc = new SparkContext(conf)
+    sc = new SparkContext(conf)
     val rdd = sc.textFile(inputFile)
     val pair = rdd.map(x => (x, 1))
 
     pair.saveAsTextFile(textFileOutputDir)
     pair.saveAsNewAPIHadoopDataset(jobConf)
-    Utils.deleteRecursively(tempDir)
   }
 }
