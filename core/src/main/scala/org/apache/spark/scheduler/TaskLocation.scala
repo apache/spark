@@ -50,9 +50,12 @@ private [spark] case class HDFSCacheTaskLocation(override val host: String) exte
 }
 
 /**
- * A location that can match any host. This can be used as the last location in the list of
- * preferred locations to indicate that the task can be assigned to any host if it cannot get any
- * desired location immediately.
+ * A location that can match any host. This can be used as one of the locations in
+ * [[org.apache.spark.rdd.RDD.getPreferredLocations]] to indicate that the task can be assigned to
+ * any host if none of the other desired locations can be satisfied immediately.
+ *
+ * Note that this location is only used to skip delayed scheduling in DAGScheduler, and
+ * [[DAGScheduler.getPreferredLocs]] does not contain this location.
  */
 private [spark] case object WildcardLocation extends TaskLocation {
   override val host: String = "*"
@@ -80,9 +83,7 @@ private[spark] object TaskLocation {
   def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
     if (hstr.equals(str)) {
-      if (str == "*") {
-        WildcardLocation
-      } else if (str.startsWith(executorLocationTag)) {
+      if (str.startsWith(executorLocationTag)) {
         val hostAndExecutorId = str.stripPrefix(executorLocationTag)
         val splits = hostAndExecutorId.split("_", 2)
         require(splits.length == 2, "Illegal executor location format: " + str)

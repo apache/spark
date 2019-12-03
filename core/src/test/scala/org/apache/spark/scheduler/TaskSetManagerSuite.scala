@@ -1801,9 +1801,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
     val taskSet = FakeTask.createTaskSet(3,
-      Seq(TaskLocation("host1"), TaskLocation("*")),
-      Seq(TaskLocation("host1"), TaskLocation("*")),
-      Seq(TaskLocation("host2"), TaskLocation("*"))
+      Seq(TaskLocation("host1"), WildcardLocation),
+      Seq(TaskLocation("host1"), WildcardLocation),
+      Seq(TaskLocation("host2"), WildcardLocation)
     )
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)

@@ -1136,11 +1136,11 @@ private[spark] class DAGScheduler(
     val taskIdToLocations: Map[Int, Seq[TaskLocation]] = try {
       stage match {
         case s: ShuffleMapStage =>
-          partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap
+          partitionsToCompute.map { id => (id, getPreferredLocsInternal(stage.rdd, id))}.toMap
         case s: ResultStage =>
           partitionsToCompute.map { id =>
             val p = s.partitions(id)
-            (id, getPreferredLocs(stage.rdd, p))
+            (id, getPreferredLocsInternal(stage.rdd, p))
           }.toMap
       }
     } catch {
@@ -1152,7 +1152,8 @@ private[spark] class DAGScheduler(
         return
     }
 
-    stage.makeNewStageAttempt(partitionsToCompute.size, taskIdToLocations.values.toSeq)
+    val taskLocalityPrefs = taskIdToLocations.values.map(_.filter(_ != WildcardLocation)).toSeq
+    stage.makeNewStageAttempt(partitionsToCompute.size, taskLocalityPrefs)
 
     // If there are tasks to execute, record the submission time of the stage. Otherwise,
     // post the even without the submission time, which indicates that this stage was
@@ -2054,7 +2055,7 @@ private[spark] class DAGScheduler(
   /**
    * Gets the locality information associated with a partition of a particular RDD.
    *
-   * This method is thread-safe and is called from both DAGScheduler and SparkContext.
+   * This method is thread-safe and is called from SparkContext.
    *
    * @param rdd whose partitions are to be looked at
    * @param partition to lookup locality information for
@@ -2062,6 +2063,20 @@ private[spark] class DAGScheduler(
    */
   private[spark]
   def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = {
+    getPreferredLocsInternal(rdd, partition).filter(_ != WildcardLocation)
+  }
+
+  /**
+   * Gets the locality information associated with a partition of a particular RDD, which may
+   * include a [[WildcardLocation]].
+   *
+   * This method is thread-safe and is called from DAGScheduler only.
+   *
+   * @param rdd whose partitions are to be looked at
+   * @param partition to lookup locality information for
+   * @return list of machines that are preferred by the partition
+   */
+  private def getPreferredLocsInternal(rdd: RDD[_], partition: Int): Seq[TaskLocation] = {
     getPreferredLocsInternal(rdd, partition, new HashSet)
   }
 
@@ -2090,7 +2105,10 @@ private[spark] class DAGScheduler(
     // If the RDD has some placement preferences (as is the case for input RDDs), get those
     val rddPrefs = rdd.preferredLocations(rdd.partitions(partition)).toList
     if (rddPrefs.nonEmpty) {
-      return rddPrefs.map(TaskLocation(_))
+      return rddPrefs.map {
+        case WildcardLocation.host => WildcardLocation
+        case host => TaskLocation(host)
+      }
     }
 
     // If the RDD has narrow dependencies, pick the first partition of the first narrow dependency
