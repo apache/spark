@@ -2555,9 +2555,7 @@ class SQLConf extends Serializable with Logging {
 
   def intervalOutputStyle: IntervalStyle.Value = IntervalStyle.withName(getConf(INTERVAL_STYLE))
 
-  def dialect: Dialect.Value = Dialect.withName(getConf(DIALECT))
-
-  def usePostgreSQLDialect: Boolean = dialect == Dialect.POSTGRESQL
+  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString
 
   def dialectSparkAnsiEnabled: Boolean = getConf(DIALECT_SPARK_ANSI_ENABLED)
 
