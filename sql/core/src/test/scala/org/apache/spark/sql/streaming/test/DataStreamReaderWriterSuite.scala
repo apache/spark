@@ -569,6 +569,84 @@ test("prevent all column partitioning parquet second signature") {
     }
   }
 
+  test("read from memory stream and write in streaming to parquet") {
+    import testImplicits._
+    val expectedDF = Seq(1, 2, 3).toDF
+    withTempDir { src =>
+      val ds = MemoryStream[Int]
+      ds.addData(1 to 3)
+
+      val query =
+        ds.toDF()
+          .writeStream
+          .option("checkpointLocation", newMetadataDir)
+          .parquet(src.toString)
+
+      query.processAllAvailable()
+      val dfr = spark.read.parquet(src.toString)
+      checkAnswer(dfr, expectedDF)
+    }
+  }
+
+  test("read from memory stream and write in streaming to json") {
+    import testImplicits._
+    val expectedDF = Seq(1, 2, 3).toDF
+    withTempDir { src =>
+      val ds = MemoryStream[Int]
+      ds.addData(1 to 3)
+
+      val query =
+        ds.toDF()
+          .writeStream
+          .option("checkpointLocation", newMetadataDir)
+          .json(src.toString)
+
+      query.processAllAvailable()
+      val dfr = spark.read.json(src.toString)
+      checkAnswer(dfr, expectedDF)
+    }
+  }
+
+  test("read from memory stream and write in streaming to csv") {
+    import testImplicits._
+    val expectedDF = Seq(1, 2, 3).toDF
+    withTempDir { src =>
+      val ds = MemoryStream[Int]
+      ds.addData(1 to 3)
+
+      val query =
+        ds.toDF()
+          .writeStream
+          .option("checkpointLocation", newMetadataDir)
+          .csv(src.toString)
+
+      query.processAllAvailable()
+      val dfr = spark.read.schema("value INT").csv(src.toString)
+      checkAnswer(dfr, expectedDF)
+    }
+  }
+
+  test("read from memory stream and write in streaming to text") {
+    import testImplicits._
+    val expectedDF = Seq("a", "b", "c").toDF
+    withTempDir { src =>
+      val ds = MemoryStream[String]
+      ds.addData("a")
+      ds.addData("b")
+      ds.addData("c")
+
+      val query =
+        ds.toDF()
+          .writeStream
+          .option("checkpointLocation", newMetadataDir)
+          .text(src.toString)
+
+      query.processAllAvailable()
+      val dfr = spark.read.text(src.toString)
+      checkAnswer(dfr, expectedDF)
+    }
+  }
+
   test("user specified checkpointLocation precedes SQLConf") {
     import testImplicits._
     withTempDir { checkpointPath =>
