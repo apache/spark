@@ -160,7 +160,12 @@ object SQLConf {
           confGetter.get()()
         }
       } else {
-        confGetter.get()()
+        val conf = existingConf.get()
+        if (conf != null) {
+          conf
+        } else {
+          confGetter.get()()
+        }
       }
     }
   }
