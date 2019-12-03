@@ -18,29 +18,36 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHiveSparkSession}
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton, TestHiveSparkSession}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 
 class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
   test("load test table based on case sensitivity") {
-    val testHiveSparkSession = spark.asInstanceOf[TestHiveSparkSession]
+    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
+    try {
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+      val testHiveSparkSession = spark.asInstanceOf[TestHiveSparkSession]
 
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      sql("SELECT * FROM SRC").queryExecution.analyzed
-      assert(testHiveSparkSession.getLoadedTables.contains("src"))
-      assert(testHiveSparkSession.getLoadedTables.size == 1)
-    }
-    testHiveSparkSession.reset()
-
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val err = intercept[AnalysisException] {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql("SELECT * FROM SRC").queryExecution.analyzed
+        assert(testHiveSparkSession.getLoadedTables.contains("src"))
+        assert(testHiveSparkSession.getLoadedTables.size == 1)
       }
-      assert(err.message.contains("Table or view not found"))
+      testHiveSparkSession.reset()
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val err = intercept[AnalysisException] {
+          sql("SELECT * FROM SRC").queryExecution.analyzed
+        }
+        assert(err.message.contains("Table or view not found"))
+      }
+      testHiveSparkSession.reset()
+    } finally {
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+        originalCreateHiveTable)
     }
-    testHiveSparkSession.reset()
   }
 
   test("SPARK-15887: hive-site.xml should be loaded") {
