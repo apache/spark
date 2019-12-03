@@ -590,12 +590,12 @@ object FunctionRegistry {
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
-          case Success(e) => e
-          case Failure(e) =>
-            // the exception is an invocation exception. To get a meaningful message, we need the
-            // cause.
-            throw new AnalysisException(e.getCause.getMessage)
+        try {
+          varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
@@ -618,12 +618,12 @@ object FunctionRegistry {
           }
           throw new AnalysisException(invalidArgumentsMsg)
         }
-        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
-          case Success(e) => e
-          case Failure(e) =>
-            // the exception is an invocation exception. To get a meaningful message, we need the
-            // cause.
-            throw new AnalysisException(e.getCause.getMessage)
+        try {
+          f.newInstance(expressions : _*).asInstanceOf[Expression]
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       }
     }
@@ -637,13 +637,12 @@ object FunctionRegistry {
       .filter(_.getParameterTypes.head == classOf[String])
     assert(constructors.length == 1)
     val builder = (expressions: Seq[Expression]) => {
-      Try(constructors.head.newInstance(name.toString, expressions.head).asInstanceOf[Expression])
-      match {
-        case Success(e) => e
-        case Failure(e) =>
-          // the exception is an invocation exception. To get a meaningful message, we need the
-          // cause.
-          throw new AnalysisException(e.getCause.getMessage)
+      try {
+        constructors.head.newInstance(name.toString, expressions.head).asInstanceOf[Expression]
+      } catch {
+        // the exception is an invocation exception. To get a meaningful message, we need the
+        // cause.
+        case e: Exception => throw new AnalysisException(e.getCause.getMessage)
       }
     }
     (name, (expressionInfo[T](name), builder))
