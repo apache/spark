@@ -57,6 +57,8 @@ class ExpressionSet protected(
     protected val originals: mutable.Buffer[Expression] = new ArrayBuffer)
   extends Set[Expression] {
 
+  //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
+
   protected def add(e: Expression): Unit = {
     if (!e.deterministic) {
       originals += e

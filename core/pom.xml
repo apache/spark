@@ -32,7 +32,6 @@
 
   <properties>
     <sbt.project.name>core</sbt.project.name>
-    <extra.source.dir>src/main/scala-${scala.binary.version}</extra.source.dir>
   </properties>
   
   <dependencies>
@@ -530,7 +529,7 @@
             </goals>
             <configuration>
               <sources>
-                <source>${extra.source.dir}</source>
+                <source>src/main/scala-${scala.binary.version}</source>
               </sources>
             </configuration>
           </execution>
