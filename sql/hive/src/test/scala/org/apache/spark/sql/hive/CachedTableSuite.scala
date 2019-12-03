@@ -39,7 +39,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    // TODO (wuyi) SPARK-30098
     TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
   }
 
