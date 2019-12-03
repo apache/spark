@@ -1669,21 +1669,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
-    .internal()
-    .doc("When true, will perform integral division with the / operator " +
-      "if both sides are integral types. This is for PostgreSQL test cases only.")
-    .booleanConf
-    .createWithDefault(false)
-
-  val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
-    buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
-    .internal()
-    .doc("When this option is set to true, creating managed tables with nonempty location " +
-      "is allowed. Otherwise, an analysis exception is thrown. ")
-    .booleanConf
-    .createWithDefault(false)
-
   val VALIDATE_PARTITION_COLUMNS =
     buildConf("spark.sql.sources.validatePartitionColumns")
       .internal()
@@ -2536,8 +2521,6 @@ class SQLConf extends Serializable with Logging {
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
-
-  def preferIntegralDivision: Boolean = getConf(PREFER_INTEGRAL_DIVISION)
 
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
 
