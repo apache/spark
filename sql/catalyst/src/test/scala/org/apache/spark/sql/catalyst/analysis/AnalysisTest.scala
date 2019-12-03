@@ -56,8 +56,10 @@ trait AnalysisTest extends PlanTest {
       expectedPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
     val analyzer = getAnalyzer(caseSensitive)
-    val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
-    comparePlans(actualPlan, expectedPlan)
+    val tracker = new QueryPlanningTracker
+    val actualPlan = analyzer.executeAndCheck(inputPlan, tracker)
+    val actualExpectedPlan = analyzer.executeAndCheck(expectedPlan, tracker)
+    comparePlans(actualPlan, actualExpectedPlan)
   }
 
   protected override def comparePlans(

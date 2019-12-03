@@ -72,8 +72,8 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   )
 
   override lazy val mergeExpressions = Seq(
-    /* sum = */ sum.left + sum.right,
-    /* count = */ count.left + count.right
+    /* sum = */ Add(sum.left, sum.right),
+    /* count = */ Add(count.left, count.right)
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
@@ -83,7 +83,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     case CalendarIntervalType =>
       DivideInterval(sum.cast(resultType), count.cast(DoubleType))
     case _ =>
-      sum.cast(resultType) / count.cast(resultType)
+      Divide(sum.cast(resultType), count.cast(resultType))
   }
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
@@ -91,6 +91,6 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     Add(
       sum,
       coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
-    /* count = */ If(child.isNull, count, count + 1L)
+    /* count = */ If(child.isNull, count, Add(count, 1L))
   )
 }

@@ -386,7 +386,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "generator nested in expressions",
     listRelation.select(Explode('list) + 1),
-    "Generators are not supported when it's nested in expressions, but got: (explode(list) + 1)"
+    "Generators are not supported when it's nested in expressions," +
+      " but got: unresolvedadd(explode(list), 1)"
       :: Nil
   )
 
