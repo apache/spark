@@ -725,10 +725,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     jobConf.set("mapred.output.dir", dataSetDir)
 
     sc = new SparkContext(conf)
-    val rdd = sc.textFile(inputFile)
-    val pair = rdd.map(x => (x, 1))
+    val pairRDD = sc.textFile(inputFile).map(x => (x, 1))
 
-    pair.saveAsTextFile(textFileOutputDir)
-    pair.saveAsNewAPIHadoopDataset(jobConf)
+    pairRDD.saveAsTextFile(textFileOutputDir)
+    pairRDD.saveAsNewAPIHadoopDataset(jobConf)
   }
 }
