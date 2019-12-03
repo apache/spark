@@ -547,6 +547,27 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEquals(types[1], np.object)
         self.assertEquals(types[2], np.float64)
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_to_pandas_from_empty_dataframe(self):
+        # SPARK-29188 test that toPandas() on an empty dataframe had the correct dtypes
+        import numpy as np
+        schema = StructType([
+            StructField('double', DoubleType(), True),
+            StructField('float', FloatType(), True),
+            StructField('byte', ByteType(), True),
+            StructField('integer', IntegerType(), True),
+            StructField('long', LongType(), True),
+            StructField('short', ShortType(), True),
+        ])
+        df = self.spark.createDataFrame([], schema=schema)
+        types = df.toPandas().dtypes
+        self.assertEqual(types[0], np.float64)
+        self.assertEqual(types[1], np.float32)
+        self.assertEqual(types[2], np.int8)
+        self.assertEqual(types[3], np.int32)
+        self.assertEqual(types[4], np.int64)
+        self.assertEqual(types[5], np.int16)
+
     def test_create_dataframe_from_array_of_long(self):
         import array
         data = [Row(longarray=array.array('l', [-9223372036854775808, 0, 9223372036854775807]))]

@@ -2311,8 +2311,12 @@ def _to_corrected_pandas_type(dt):
         return np.int16
     elif type(dt) == IntegerType:
         return np.int32
+    elif type(dt) == LongType:
+        return np.int64
     elif type(dt) == FloatType:
         return np.float32
+    elif type(dt) == DoubleType:
+        return np.float64
     else:
         return None
 
