@@ -40,10 +40,8 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   def createNaNDF(): DataFrame = {
     Seq[(java.lang.Integer, java.lang.Long, java.lang.Short,
       java.lang.Byte, java.lang.Float, java.lang.Double)](
-      (1, new java.lang.Long(1), new java.lang.Short("1"),
-        new java.lang.Byte("1"), new java.lang.Float(1.0), 1.0),
-      (0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN)
+      (1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0),
+      (0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN)
     ).toDF("int", "long", "short", "byte", "float", "double")
   }
 
