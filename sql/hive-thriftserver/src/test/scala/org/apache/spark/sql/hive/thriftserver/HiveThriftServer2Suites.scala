@@ -44,7 +44,8 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.test.HiveTestJars
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -59,6 +60,23 @@ object TestData {
 }
 
 class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
+
+  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      TestHive.conf
+        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
+    } finally {
+      super.afterAll()
+    }
+  }
+
   override def mode: ServerMode.Value = ServerMode.binary
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
