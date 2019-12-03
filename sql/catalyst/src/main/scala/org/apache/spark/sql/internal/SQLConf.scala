@@ -1267,7 +1267,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.fileSource.cleaner.numThreads")
       .doc("Number of threads used in the file source completed file cleaner.")
       .intConf
-      .createWithDefault(2)
+      .createWithDefault(1)
 
   val STREAMING_SCHEMA_INFERENCE =
     buildConf("spark.sql.streaming.schemaInference")

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.net.URI
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
@@ -344,15 +345,34 @@ object FileStreamSource {
     def size: Int = map.size()
   }
 
-  private[sql] abstract class FileStreamSourceCleaner {
-    protected val cleanThreadPool = ThreadUtils.newDaemonCachedThreadPool(
-      "file-source-cleaner-threadpool",
-      SQLConf.get.getConf(SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS)
-    )
+  private[sql] abstract class FileStreamSourceCleaner extends Logging {
+    private val numThreads = SQLConf.get.getConf(SQLConf.FILE_SOURCE_CLEANER_NUM_THREADS)
 
-    def stop(): Unit = ThreadUtils.shutdown(cleanThreadPool)
+    private val cleanThreadPool: Option[ThreadPoolExecutor] = if (numThreads > 0) {
+      logDebug(s"Cleaning file source on $numThreads separate thread(s)")
+      Some(ThreadUtils.newDaemonCachedThreadPool("file-source-cleaner-threadpool", numThreads))
+    } else {
+      logDebug("Cleaning file source on main thread")
+      None
+    }
 
-    def clean(entry: FileEntry): Unit
+    def stop(): Unit = cleanThreadPool.foreach(ThreadUtils.shutdown(_))
+
+    def clean(entry: FileEntry): Unit = {
+      cleanThreadPool match {
+        case Some(p) =>
+          p.submit(new Runnable {
+            override def run(): Unit = {
+              cleanTask(entry)
+            }
+          })
+
+        case None =>
+          cleanTask(entry)
+      }
+    }
+
+    def cleanTask(entry: FileEntry): Unit
   }
 
   private[sql] object FileStreamSourceCleaner {
@@ -403,51 +423,43 @@ object FileStreamSource {
         "subdirectories from root directory. e.g. '/data/archive'")
     }
 
-    override def clean(entry: FileEntry): Unit = {
-      cleanThreadPool.submit(new Runnable {
-        override def run(): Unit = {
-          val curPath = new Path(new URI(entry.path))
-          val newPath = new Path(baseArchivePath.toString.stripSuffix("/") + curPath.toUri.getPath)
+    override def cleanTask(entry: FileEntry): Unit = {
+      val curPath = new Path(new URI(entry.path))
+      val newPath = new Path(baseArchivePath.toString.stripSuffix("/") + curPath.toUri.getPath)
 
-          try {
-            logDebug(s"Creating directory if it doesn't exist ${newPath.getParent}")
-            if (!fileSystem.exists(newPath.getParent)) {
-              fileSystem.mkdirs(newPath.getParent)
-            }
-
-            logDebug(s"Archiving completed file $curPath to $newPath")
-            if (!fileSystem.rename(curPath, newPath)) {
-              logWarning(s"Fail to move $curPath to $newPath / skip moving file.")
-            }
-          } catch {
-            case NonFatal(e) =>
-              logWarning(s"Fail to move $curPath to $newPath / skip moving file.", e)
-          }
+      try {
+        logDebug(s"Creating directory if it doesn't exist ${newPath.getParent}")
+        if (!fileSystem.exists(newPath.getParent)) {
+          fileSystem.mkdirs(newPath.getParent)
         }
-      })
+
+        logDebug(s"Archiving completed file $curPath to $newPath")
+        if (!fileSystem.rename(curPath, newPath)) {
+          logWarning(s"Fail to move $curPath to $newPath / skip moving file.")
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Fail to move $curPath to $newPath / skip moving file.", e)
+      }
     }
   }
 
   private[sql] class SourceFileRemover(fileSystem: FileSystem)
     extends FileStreamSourceCleaner with Logging {
 
-    override def clean(entry: FileEntry): Unit = {
-      cleanThreadPool.submit(new Runnable {
-        override def run(): Unit = {
-          val curPath = new Path(new URI(entry.path))
-          try {
-            logDebug(s"Removing completed file $curPath")
+    override def cleanTask(entry: FileEntry): Unit = {
+      val curPath = new Path(new URI(entry.path))
+      try {
+        logDebug(s"Removing completed file $curPath")
 
-            if (!fileSystem.delete(curPath, false)) {
-              logWarning(s"Failed to remove $curPath / skip removing file.")
-            }
-          } catch {
-            case NonFatal(e) =>
-              // Log to error but swallow exception to avoid process being stopped
-              logWarning(s"Fail to remove $curPath / skip removing file.", e)
-          }
+        if (!fileSystem.delete(curPath, false)) {
+          logWarning(s"Failed to remove $curPath / skip removing file.")
         }
-      })
+      } catch {
+        case NonFatal(e) =>
+          // Log to error but swallow exception to avoid process being stopped
+          logWarning(s"Fail to remove $curPath / skip removing file.", e)
+      }
     }
   }
 }
