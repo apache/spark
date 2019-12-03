@@ -182,8 +182,9 @@ class ResourceProfileSuite extends SparkFunSuite {
   test("numTasksPerExecutor cpus") {
     val sparkConf = new SparkConf
     val rprof = new ResourceProfile()
-    val taskReq = new TaskResourceRequest("resource.gpu", 1)
-    val execReq = new ExecutorResourceRequest("resource.gpu", 2, "", "myscript", "nvidia")
+    val taskReq = new TaskResourceRequests().resource("resource.gpu", 1)
+    val execReq =
+      new ExecutorResourceRequests().resource("resource.gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
     val numTasks = ResourceProfile.numTasksPerExecutor(1, rprof, sparkConf)
     assert(numTasks == 1)
@@ -192,8 +193,9 @@ class ResourceProfileSuite extends SparkFunSuite {
   test("numTasksPerExecutor gpus") {
     val sparkConf = new SparkConf
     val rprof = new ResourceProfile()
-    val taskReq = new TaskResourceRequest("resource.gpu", 2)
-    val execReq = new ExecutorResourceRequest("resource.gpu", 4, "", "myscript", "nvidia")
+    val taskReq = new TaskResourceRequests().resource("resource.gpu", 2)
+    val execReq =
+      new ExecutorResourceRequests().resource("resource.gpu", 4, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
     val numTasks = ResourceProfile.numTasksPerExecutor(6, rprof, sparkConf)
     assert(numTasks == 2)
@@ -202,8 +204,8 @@ class ResourceProfileSuite extends SparkFunSuite {
   test("numTasksPerExecutor gpus fractional") {
     val sparkConf = new SparkConf
     val rprof = new ResourceProfile()
-    val taskReq = new TaskResourceRequest("resource.gpu", 0.5)
-    val execReq = new ExecutorResourceRequest("resource.gpu", 2, "", "myscript", "nvidia")
+    val taskReq = new TaskResourceRequests().resource("resource.gpu", 0.5)
+    val execReq = new ExecutorResourceRequests().resource("resource.gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
     val numTasks = ResourceProfile.numTasksPerExecutor(6, rprof, sparkConf)
     assert(numTasks == 4)
@@ -212,11 +214,13 @@ class ResourceProfileSuite extends SparkFunSuite {
   test("numTasksPerExecutor multiple resources") {
     val sparkConf = new SparkConf
     val rprof = new ResourceProfile()
-    val taskReq = new TaskResourceRequest("resource.gpu", 1)
-    val execReq = new ExecutorResourceRequest("resource.gpu", 6, "", "myscript", "nvidia")
-    val fpgataskReq = new TaskResourceRequest("resource.fpga", 1)
-    val fpgaexecReq = new ExecutorResourceRequest("resource.fpga", 4, "", "myscript", "nvidia")
-    rprof.require(taskReq).require(execReq).require(fpgataskReq).require(fpgaexecReq)
+    val taskReqs = new TaskResourceRequests()
+    val execReqs = new ExecutorResourceRequests()
+    taskReqs.resource("resource.gpu", 1)
+    execReqs.resource("resource.gpu", 6, "myscript", "nvidia")
+    taskReqs.resource("resource.fpga", 1)
+    execReqs.resource("resource.fpga", 4, "myscript", "nvidia")
+    rprof.require(taskReqs).require(execReqs)
     val numTasks = ResourceProfile.numTasksPerExecutor(6, rprof, sparkConf)
     assert(numTasks == 4)
   }

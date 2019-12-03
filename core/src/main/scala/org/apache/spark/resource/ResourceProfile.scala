@@ -269,7 +269,7 @@ private[spark] object ResourceProfile extends Logging {
           parts = Math.floor(1.0 / taskReq).toInt
           numPerTask = Math.ceil(taskReq)
         }
-        val numTasks = (request.amount * parts) / numPerTask.toInt
+        val numTasks = ((request.amount * parts) / numPerTask).toInt
         if (numTasks < taskLimit) {
           limitingResource = rName
           taskLimit = numTasks
