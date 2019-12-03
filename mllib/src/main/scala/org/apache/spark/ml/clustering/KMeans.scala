@@ -357,7 +357,7 @@ class KMeans @Since("1.5.0") (
       .setSeed($(seed))
       .setEpsilon($(tol))
       .setDistanceMeasure($(distanceMeasure))
-    val parentModel = algo.runWithweight(instances, Option(instr))
+    val parentModel = algo.runWithWeight(instances, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset),

@@ -212,10 +212,10 @@ class KMeans private (
     val instances: RDD[(Vector, Double)] = data.map {
       case (point) => (point, 1.0)
     }
-    runWithweight(instances, None)
+    runWithWeight(instances, None)
   }
 
-  private[spark] def runWithweight(
+  private[spark] def runWithWeight(
       data: RDD[(Vector, Double)],
       instr: Option[Instrumentation]): KMeansModel = {
 
@@ -299,9 +299,8 @@ class KMeans private (
         val clusterWeightSum = Array.fill(thisCenters.length)(0.0)
 
         pointsAndWeights.foreach { case (point, weight) =>
-          var (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
-          cost *= weight
-          costAccum.add(cost)
+          val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
+          costAccum.add(cost * weight)
           distanceMeasureInstance.updateClusterSum(point, sums(bestCenter), weight)
           clusterWeightSum(bestCenter) += weight
         }
@@ -312,6 +311,10 @@ class KMeans private (
         axpy(1.0, sum2, sum1)
         (sum1, clusterWeightSum1 + clusterWeightSum2)
       }.collectAsMap()
+
+      if (iteration == 0) {
+        instr.foreach(_.logNumExamples(collected.values.map(_._2).sum.toLong))
+      }
 
       val newCenters = collected.mapValues { case (sum, count) =>
         distanceMeasureInstance.centroid(sum, count)
