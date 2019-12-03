@@ -1452,15 +1452,15 @@ class TypeCoercionSuite extends AnalysisTest {
 
   test("SPARK-28395 Division operator support integral division") {
     val rules = Seq(FunctionArgumentConversion, Division(conf))
-    Seq(SQLConf.Dialect.SPARK, SQLConf.Dialect.POSTGRESQL).foreach { dialect =>
-      withSQLConf(SQLConf.DIALECT.key -> dialect.toString) {
-        val result1 = if (dialect == SQLConf.Dialect.POSTGRESQL) {
+    Seq(true, false).foreach { preferIntegralDivision =>
+      withSQLConf(SQLConf.PREFER_INTEGRAL_DIVISION.key -> s"$preferIntegralDivision") {
+        val result1 = if (preferIntegralDivision) {
           IntegralDivide(1L, 1L)
         } else {
           Divide(Cast(1L, DoubleType), Cast(1L, DoubleType))
         }
         ruleTest(rules, Divide(1L, 1L), result1)
-        val result2 = if (dialect == SQLConf.Dialect.POSTGRESQL) {
+        val result2 = if (preferIntegralDivision) {
           IntegralDivide(1, Cast(1, ShortType))
         } else {
           Divide(Cast(1, DoubleType), Cast(Cast(1, ShortType), DoubleType))

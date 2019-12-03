@@ -333,8 +333,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         // vol used by boolean.sql and case.sql.
         localSparkSession.udf.register("vol", (s: String) => s)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
-        localSparkSession.conf.set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
-      case _: AnsiTest =>
+        localSparkSession.conf.set(SQLConf.PREFER_INTEGRAL_DIVISION.key, true)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
       case _ =>
     }
