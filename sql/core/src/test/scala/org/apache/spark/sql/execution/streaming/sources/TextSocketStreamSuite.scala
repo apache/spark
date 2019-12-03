@@ -200,10 +200,10 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
     val exception = intercept[UnsupportedOperationException] {
-      provider.getTable(new CaseInsensitiveStringMap(params.asJava), userSpecifiedSchema)
+      provider.getTable(userSpecifiedSchema, params.asJava)
     }
     assert(exception.getMessage.contains(
-      "TextSocketSourceProvider source does not support user-specified schema"))
+      "TextSocketSourceProvider does not support specified table schema"))
   }
 
   test("input row metrics") {

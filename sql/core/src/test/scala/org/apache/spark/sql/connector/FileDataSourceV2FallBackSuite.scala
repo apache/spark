@@ -43,6 +43,10 @@ class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new DummyReadOnlyFileTable
   }
+
+  override protected def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
+    throw new UnsupportedOperationException
+  }
 }
 
 class DummyReadOnlyFileTable extends Table with SupportsRead {
@@ -66,6 +70,10 @@ class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new DummyWriteOnlyFileTable
+  }
+
+  override protected def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
+    throw new UnsupportedOperationException
   }
 }
 

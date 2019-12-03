@@ -25,14 +25,13 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.catalog.TableProvider;
 import org.apache.spark.sql.connector.read.*;
 import org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution;
 import org.apache.spark.sql.connector.read.partitioning.Distribution;
 import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
-public class JavaPartitionAwareDataSource implements TableProvider {
+public class JavaPartitionAwareDataSource extends JavaSimpleDataSourceV2 {
 
   class MyScanBuilder extends JavaSimpleScanBuilder implements SupportsReportPartitioning {
 

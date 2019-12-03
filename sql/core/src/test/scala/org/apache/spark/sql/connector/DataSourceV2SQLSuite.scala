@@ -1830,7 +1830,7 @@ class DataSourceV2SQLSuite
 
 
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
-class FakeV2Provider extends TableProvider {
+class FakeV2Provider extends SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }

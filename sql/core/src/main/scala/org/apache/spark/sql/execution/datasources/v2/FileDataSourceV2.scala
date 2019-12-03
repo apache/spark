@@ -16,13 +16,17 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util
+
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.catalog.TableProvider
+import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -58,5 +62,22 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
     val hdfsPath = new Path(path)
     val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
     hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+  }
+
+  protected def getTable(options: CaseInsensitiveStringMap): Table
+  protected def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table
+
+  // file source treats table properties case-insensitively.
+  override def getTable(properties: util.Map[String, String]): Table = {
+    getTable(new CaseInsensitiveStringMap(properties))
+  }
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    getTable(new CaseInsensitiveStringMap(properties), schema)
+  }
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException("file source v2 does not support partitioning yet.")
   }
 }

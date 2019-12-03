@@ -22,7 +22,7 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SimpleTableProvider, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.write.{SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
@@ -35,7 +35,7 @@ case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
   override def schema: StructType = data.schema
 }
 
-class ConsoleSinkProvider extends TableProvider
+class ConsoleSinkProvider extends SimpleTableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
 

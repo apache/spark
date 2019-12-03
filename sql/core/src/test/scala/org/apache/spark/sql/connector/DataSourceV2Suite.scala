@@ -28,8 +28,9 @@ import test.org.apache.spark.sql.connector._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SimpleTableProvider, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
@@ -436,7 +437,7 @@ abstract class SimpleScanBuilder extends ScanBuilder
   override def createReaderFactory(): PartitionReaderFactory = SimpleReaderFactory
 }
 
-class SimpleSinglePartitionSource extends TableProvider {
+class SimpleSinglePartitionSource extends SimpleTableProvider {
 
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -453,7 +454,7 @@ class SimpleSinglePartitionSource extends TableProvider {
 
 // This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
 // tests still pass.
-class SimpleDataSourceV2 extends TableProvider {
+class SimpleDataSourceV2 extends SimpleTableProvider {
 
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -468,7 +469,7 @@ class SimpleDataSourceV2 extends TableProvider {
   }
 }
 
-class AdvancedDataSourceV2 extends TableProvider {
+class AdvancedDataSourceV2 extends SimpleTableProvider {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -566,11 +567,11 @@ class SchemaRequiredDataSource extends TableProvider {
     override def readSchema(): StructType = schema
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def getTable(properties: util.Map[String, String]): Table = {
     throw new IllegalArgumentException("requires a user-supplied schema")
   }
 
-  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
     val userGivenSchema = schema
     new SimpleBatchTable {
       override def schema(): StructType = userGivenSchema
@@ -580,9 +581,16 @@ class SchemaRequiredDataSource extends TableProvider {
       }
     }
   }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException()
+  }
 }
 
-class ColumnarDataSourceV2 extends TableProvider {
+class ColumnarDataSourceV2 extends SimpleTableProvider {
 
   class MyScanBuilder extends SimpleScanBuilder {
 
@@ -647,7 +655,7 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   }
 }
 
-class PartitionAwareDataSource extends TableProvider {
+class PartitionAwareDataSource extends SimpleTableProvider {
 
   class MyScanBuilder extends SimpleScanBuilder
     with SupportsReportPartitioning{
@@ -715,7 +723,7 @@ class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
   }
 }
 
-class ReportStatisticsDataSource extends TableProvider {
+class ReportStatisticsDataSource extends SimpleTableProvider {
 
   class MyScanBuilder extends SimpleScanBuilder
     with SupportsReportStatistics {
