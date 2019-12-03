@@ -894,20 +894,27 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.http
 
   test("JDBC query execution") {
-    withJdbcStatement("test") { statement =>
-      val queries = Seq(
-        "SET spark.sql.shuffle.partitions=3",
-        "CREATE TABLE test(key INT, val STRING)",
-        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test",
-        "CACHE TABLE test")
+    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
+    try {
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+      withJdbcStatement("test") { statement =>
+        val queries = Seq(
+          "SET spark.sql.shuffle.partitions=3",
+          "CREATE TABLE test(key INT, val STRING)",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test",
+          "CACHE TABLE test")
 
-      queries.foreach(statement.execute)
+        queries.foreach(statement.execute)
 
-      assertResult(5, "Row count mismatch") {
-        val resultSet = statement.executeQuery("SELECT COUNT(*) FROM test")
-        resultSet.next()
-        resultSet.getInt(1)
+        assertResult(5, "Row count mismatch") {
+          val resultSet = statement.executeQuery("SELECT COUNT(*) FROM test")
+          resultSet.next()
+          resultSet.getInt(1)
+        }
       }
+    } finally {
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+        originalCreateHiveTable)
     }
   }
 
