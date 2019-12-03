@@ -1934,8 +1934,8 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     DenseVector([-0.81..., -0.58...])
     >>> model.theta
     DenseMatrix(2, 2, [-0.91..., -0.51..., -0.40..., -1.09...], 1)
-    >>> model.sigma == None
-    True
+    >>> model.sigma
+    DenseMatrix(0, 0, [...], ...)
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> model.predict(test0.head().features)
     1.0
@@ -1978,8 +1978,8 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     'complement'
     >>> model5.theta
     DenseMatrix(2, 2, [...], 1)
-    >>> model5.sigma == None
-    True
+    >>> model5.sigma
+    DenseMatrix(0, 0, [...], ...)
 
     .. versionadded:: 1.5.0
     """
