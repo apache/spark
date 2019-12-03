@@ -455,8 +455,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   private def replaceCol(col: StructField, replacementMap: Map[_, _]): Column = {
     val keyExpr = df.col(col.name).expr
     def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType)
-    val branches = replacementMap.flatMap { case (src, target) =>
-      Seq(Literal(src), buildExpr(target))
+    val branches = replacementMap.flatMap { case (source, target) =>
+      Seq(Literal(source), buildExpr(target))
     }.toSeq
     new Column(CaseKeyWhen(keyExpr, branches :+ keyExpr)).as(col.name)
   }
