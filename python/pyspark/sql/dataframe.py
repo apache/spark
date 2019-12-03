@@ -1601,19 +1601,19 @@ class DataFrame(object):
         ...     Row(name='Alice', age=5, height=80), \\
         ...     Row(name='Alice', age=10, height=80)]).toDF()
         >>> df.dropDuplicates().show()
-        +-----+---+------+
-        | name|age|height|
-        +-----+---+------+
-        |Alice|  5|    80|
-        |Alice| 10|    80|
-        +-----+---+------+
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        | 10|    80|Alice|
+        +---+------+-----+
 
         >>> df.dropDuplicates(['name', 'height']).show()
-        +-----+---+------+
-        | name|age|height|
-        +-----+---+------+
-        |Alice|  5|    80|
-        +-----+---+------+
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        +---+------+-----+
         """
         if subset is None:
             jdf = self._jdf.dropDuplicates()
@@ -1635,11 +1635,11 @@ class DataFrame(object):
         :param subset: optional list of column names to consider.
 
         >>> df4.na.drop().show()
-        +-----+---+------+
-        | name|age|height|
-        +-----+---+------+
-        |Alice| 10|    80|
-        +-----+---+------+
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        +---+------+-----+
         """
         if how is not None and how not in ['any', 'all']:
             raise ValueError("how ('" + how + "') should be 'any' or 'all'")
@@ -1672,33 +1672,33 @@ class DataFrame(object):
             then the non-string column is simply ignored.
 
         >>> df4.na.fill(50).show()
-        +-----+---+------+
-        | name|age|height|
-        +-----+---+------+
-        |Alice| 10|    80|
-        |  Bob|  5|    50|
-        |  Tom| 50|    50|
-        | null| 50|    50|
-        +-----+---+------+
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        |  5|    50|  Bob|
+        | 50|    50|  Tom|
+        | 50|    50| null|
+        +---+------+-----+
 
         >>> df5.na.fill(False).show()
-        +-------+-----+----+
-        |   name|  spy| age|
-        +-------+-----+----+
-        |  Alice|false|  10|
-        |    Bob|false|   5|
-        |Mallory| true|null|
-        +-------+-----+----+
+        +----+-------+-----+
+        | age|   name|  spy|
+        +----+-------+-----+
+        |  10|  Alice|false|
+        |   5|    Bob|false|
+        |null|Mallory| true|
+        +----+-------+-----+
 
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
-        +-------+---+------+
-        |   name|age|height|
-        +-------+---+------+
-        |  Alice| 10|    80|
-        |    Bob|  5|  null|
-        |    Tom| 50|  null|
-        |unknown| 50|  null|
-        +-------+---+------+
+        +---+------+-------+
+        |age|height|   name|
+        +---+------+-------+
+        | 10|    80|  Alice|
+        |  5|  null|    Bob|
+        | 50|  null|    Tom|
+        | 50|  null|unknown|
+        +---+------+-------+
         """
         if not isinstance(value, (float, int, long, basestring, bool, dict)):
             raise ValueError("value should be a float, int, long, string, bool or dict")
@@ -1748,44 +1748,44 @@ class DataFrame(object):
             then the non-string column is simply ignored.
 
         >>> df4.na.replace(10, 20).show()
-        +-----+----+------+
-        | name| age|height|
-        +-----+----+------+
-        |Alice|  20|    80|
-        |  Bob|   5|  null|
-        |  Tom|null|  null|
-        | null|null|  null|
-        +-----+----+------+
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  20|    80|Alice|
+        |   5|  null|  Bob|
+        |null|  null|  Tom|
+        |null|  null| null|
+        +----+------+-----+
 
         >>> df4.na.replace('Alice', None).show()
-        +----+----+------+
-        |name| age|height|
-        +----+----+------+
-        |null|  10|    80|
-        | Bob|   5|  null|
-        | Tom|null|  null|
-        |null|null|  null|
-        +----+----+------+
+        +----+------+----+
+        | age|height|name|
+        +----+------+----+
+        |  10|    80|null|
+        |   5|  null| Bob|
+        |null|  null| Tom|
+        |null|  null|null|
+        +----+------+----+
 
         >>> df4.na.replace({'Alice': None}).show()
-        +----+----+------+
-        |name| age|height|
-        +----+----+------+
-        |null|  10|    80|
-        | Bob|   5|  null|
-        | Tom|null|  null|
-        |null|null|  null|
-        +----+----+------+
+        +----+------+----+
+        | age|height|name|
+        +----+------+----+
+        |  10|    80|null|
+        |   5|  null| Bob|
+        |null|  null| Tom|
+        |null|  null|null|
+        +----+------+----+
 
         >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
-        +----+----+------+
-        |name| age|height|
-        +----+----+------+
-        |   A|  10|    80|
-        |   B|   5|  null|
-        | Tom|null|  null|
-        |null|null|  null|
-        +----+----+------+
+        +----+------+----+
+        | age|height|name|
+        +----+------+----+
+        |  10|    80|   A|
+        |   5|  null|   B|
+        |null|  null| Tom|
+        |null|  null|null|
+        +----+------+----+
         """
         if value is _NoValue:
             if isinstance(to_replace, dict):
@@ -2074,7 +2074,7 @@ class DataFrame(object):
         [Row(name=u'Alice'), Row(name=u'Bob')]
 
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df.name).collect()
-        [Row(age=5, name=u'Bob', height=85)]
+        [Row(age=5, height=85, name=u'Bob')]
 
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
         [Row(age=5, name=u'Bob', height=85)]

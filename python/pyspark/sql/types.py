@@ -1461,7 +1461,7 @@ class Row(tuple):
 
     >>> row = Row(name="Alice", age=11)
     >>> row
-    Row(name='Alice', age=11)
+    Row(age=11, name='Alice')
     >>> row['name'], row['age']
     ('Alice', 11)
     >>> row.name, row.age
@@ -1485,16 +1485,15 @@ class Row(tuple):
     Row(name='Alice', age=11)
 
     This form can also be used to create rows as tuple values, i.e. with unnamed
-    fields. Row objects are evaluated for equality by data values in each
-    position, field names are not compared:
+    fields. Beware that such Row objects have different equality semantics:
 
     >>> row1 = Row("Alice", 11)
     >>> row2 = Row(name="Alice", age=11)
     >>> row1 == row2
-    True
-    >>> row3 = Row(age=11, name="Alice")
-    >>> row2 == row3
     False
+    >>> row3 = Row(a="Alice", b=11)
+    >>> row1 == row3
+    True
     """
 
     def __new__(cls, *args, **kwargs):
@@ -1534,7 +1533,7 @@ class Row(tuple):
         >>> Row(name="Alice", age=11).asDict() == {'name': 'Alice', 'age': 11}
         True
         >>> row = Row(key=1, value=Row(name='a', age=2))
-        >>> row.asDict() == {'key': 1, 'value': Row(name='a', age=2)}
+        >>> row.asDict() == {'key': 1, 'value': Row(age=2, name='a')}
         True
         >>> row.asDict(True) == {'key': 1, 'value': {'name': 'a', 'age': 2}}
         True
