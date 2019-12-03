@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
@@ -33,6 +33,22 @@ import org.apache.spark.util.Utils
  */
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
+
+  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      TestHive.conf
+        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
+    } finally {
+      super.afterAll()
+    }
+  }
 
   test("show cost in explain command") {
     val explainCostCommand = "EXPLAIN COST  SELECT * FROM src"
