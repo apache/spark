@@ -277,9 +277,9 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create hive external table - location must be specified") {
     assertUnsupported(
-      sql = "CREATE EXTERNAL TABLE my_tab",
+      sql = "CREATE EXTERNAL TABLE my_tab STORED AS parquet",
       containsThesePhrases = Seq("create external table", "location"))
-    val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
+    val query = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
     assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
@@ -287,7 +287,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create hive table - property values must be set") {
     assertUnsupported(
-      sql = "CREATE TABLE my_tab TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      sql = "CREATE TABLE my_tab STORED AS parquet " +
+        "TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
     assertUnsupported(
       sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
@@ -296,7 +297,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create hive table - location implies external") {
-    val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
+    val query = "CREATE TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
     assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
@@ -598,7 +599,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("Test CTAS #3") {
-    val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
+    val s3 = """CREATE TABLE page_view STORED AS textfile AS SELECT * FROM src"""
     val (desc, exists) = extractTableDesc(s3)
     assert(exists == false)
     assert(desc.identifier.database == None)
@@ -773,7 +774,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create table - basic") {
-    val query = "CREATE TABLE my_table (id int, name string)"
+    val query = "CREATE TABLE my_table (id int, name string) STORED AS textfile"
     val (desc, allowExisting) = extractTableDesc(query)
     assert(!allowExisting)
     assert(desc.identifier.database.isEmpty)
@@ -797,33 +798,35 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create table - with database name") {
-    val query = "CREATE TABLE dbx.my_table (id int, name string)"
+    val query = "CREATE TABLE dbx.my_table (id int, name string) STORED AS parquet"
     val (desc, _) = extractTableDesc(query)
     assert(desc.identifier.database == Some("dbx"))
     assert(desc.identifier.table == "my_table")
   }
 
   test("create table - temporary") {
-    val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
+    val query = "CREATE TEMPORARY TABLE tab1 (id int, name string) STORED AS parquet"
     val e = intercept[ParseException] { parser.parsePlan(query) }
     assert(e.message.contains("CREATE TEMPORARY TABLE is not supported yet"))
   }
 
   test("create table - external") {
-    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
+    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere' " +
+      "STORED AS parquet "
     val (desc, _) = extractTableDesc(query)
     assert(desc.tableType == CatalogTableType.EXTERNAL)
     assert(desc.storage.locationUri == Some(new URI("/path/to/nowhere")))
   }
 
   test("create table - if not exists") {
-    val query = "CREATE TABLE IF NOT EXISTS tab1 (id int, name string)"
+    val query = "CREATE TABLE IF NOT EXISTS tab1 (id int, name string) STORED AS parquet"
     val (_, allowExisting) = extractTableDesc(query)
     assert(allowExisting)
   }
 
   test("create table - comment") {
-    val query = "CREATE TABLE my_table (id int, name string) COMMENT 'its hot as hell below'"
+    val query = "CREATE TABLE my_table (id int, name string) COMMENT 'its hot as hell below' " +
+      "STORED AS parquet"
     val (desc, _) = extractTableDesc(query)
     assert(desc.comment == Some("its hot as hell below"))
   }
@@ -850,7 +853,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
          CLUSTERED BY($bucketedColumn)
        """
 
-    val query1 = s"$baseQuery INTO $numBuckets BUCKETS"
+    val query1 = s"$baseQuery INTO $numBuckets BUCKETS STORED AS parquet"
     val (desc1, _) = extractTableDesc(query1)
     assert(desc1.bucketSpec.isDefined)
     val bucketSpec1 = desc1.bucketSpec.get
@@ -858,7 +861,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(bucketSpec1.bucketColumnNames.head.equals(bucketedColumn))
     assert(bucketSpec1.sortColumnNames.isEmpty)
 
-    val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS"
+    val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS STORED AS parquet"
     val (desc2, _) = extractTableDesc(query2)
     assert(desc2.bucketSpec.isDefined)
     val bucketSpec2 = desc2.bucketSpec.get
@@ -933,7 +936,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create table - properties") {
-    val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
+    val query = "CREATE TABLE my_table (id int, name string) " +
+      "TBLPROPERTIES ('k1'='v1', 'k2'='v2') STORED AS parquet"
     val (desc, _) = extractTableDesc(query)
     assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
   }
