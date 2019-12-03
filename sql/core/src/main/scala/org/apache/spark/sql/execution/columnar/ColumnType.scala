@@ -715,9 +715,7 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval]
   override def getField(row: InternalRow, ordinal: Int): CalendarInterval = row.getInterval(ordinal)
 
   override def setField(row: InternalRow, ordinal: Int, value: CalendarInterval): Unit = {
-    // TODO: use set interval after SPARK-30047 merged
-//    row.setInterval(ordinal, value)
-    row.update(ordinal, value)
+    row.setInterval(ordinal, value)
   }
 
   override def extract(buffer: ByteBuffer): CalendarInterval = {

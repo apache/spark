@@ -53,9 +53,8 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
   override def setDecimal(i: Int, v: Decimal, precision: Int): Unit =
     throw new UnsupportedOperationException
 
-  // TODO
-//  override def setInterval(i: Int, value: CalendarInterval): Unit =
-//    throw new UnsupportedOperationException
+  override def setInterval(i: Int, value: CalendarInterval): Unit =
+    throw new UnsupportedOperationException
 
   override def update(i: Int, v: Any): Unit = throw new UnsupportedOperationException
 
