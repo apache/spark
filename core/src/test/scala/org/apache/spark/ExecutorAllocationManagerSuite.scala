@@ -29,10 +29,10 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.dynalloc.ExecutorMonitor
 import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 /**
@@ -1051,7 +1051,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
-    assert(numExecutorsTarget(manager) === 2)
+    assert(numExecutorsTargetForDefaultProfile(manager) === 2)
     val taskInfo0 = createTaskInfo(0, 0, "executor-1")
     post(SparkListenerTaskStart(0, 0, taskInfo0))
     post(SparkListenerExecutorAdded(
@@ -1067,7 +1067,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfile(manager) === 2)
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
-    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsTargetForDefaultProfile(manager) === 1)
     verify(client, never).killExecutors(any(), any(), any(), any())
 
     // now we cross the idle timeout for executor-1, so we kill it.  the really important
@@ -1200,7 +1200,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     PrivateMethod[mutable.HashMap[ResourceProfile, Int]](
       Symbol("numExecutorsTargetPerResourceProfile"))
   private val _maxNumExecutorsNeededPerResourceProfile =
-    PrivateMethod[Int](Symbol("maxNumExecutorsNeededPerResourceProfile"))
+    PrivateMethod[Int](Symbol("maxNumExecutorsNeededPerResourceProfileId"))
   private val _addTime = PrivateMethod[Long](Symbol("addTime"))
   private val _schedule = PrivateMethod[Unit](Symbol("schedule"))
   private val _doUpdateRequest = PrivateMethod[Unit](Symbol("doUpdateRequest"))

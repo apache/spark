@@ -79,7 +79,7 @@ private[spark] class ExecutorResourceRequest(
     obj match {
       case that: ExecutorResourceRequest =>
         that.getClass == this.getClass &&
-          that.resourceName == resourceName && that.amount == amount && that.units == units &&
+          that.resourceName == resourceName && that.amount == amount &&
         that.discoveryScript == discoveryScript && that.vendor == vendor
       case _ =>
         false
@@ -87,5 +87,5 @@ private[spark] class ExecutorResourceRequest(
   }
 
   override def hashCode(): Int =
-    Seq(resourceName, amount, units, discoveryScript, vendor).hashCode()
+    Seq(resourceName, amount, discoveryScript, vendor).hashCode()
 }
