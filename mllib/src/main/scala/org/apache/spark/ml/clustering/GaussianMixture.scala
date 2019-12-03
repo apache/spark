@@ -553,8 +553,7 @@ class GaussianMixture @Since("2.0.0") (
         }
         val diagVec = Vectors.fromBreeze(ss)
         BLAS.scal(1.0 / localWeightSum, diagVec)
-        val covVec = new DenseVector(Array.fill[Double](
-          numFeatures * (numFeatures + 1) / 2)(0.0))
+        val covVec = new DenseVector(Array.ofDim[Double](numFeatures * (numFeatures + 1) / 2))
         diagVec.toArray.zipWithIndex.foreach { case (v: Double, i: Int) =>
           covVec.values(i + i * (i + 1) / 2) = v
         }
@@ -659,11 +658,11 @@ private class ExpectationAggregator(
   private var totalCnt: Long = 0L
   private var totalWeightSum: Double = 0.0
   private var newLogLikelihood: Double = 0.0
-  private lazy val newWeights: Array[Double] = new Array[Double](k)
+  private lazy val newWeights: Array[Double] = Array.ofDim[Double](k)
   private lazy val newMeans: Array[DenseVector] = Array.fill(k)(
-    new DenseVector(Array.fill[Double](numFeatures)(0.0)))
+    new DenseVector(Array.ofDim[Double](numFeatures)))
   private lazy val newCovs: Array[DenseVector] = Array.fill(k)(
-    new DenseVector(new Array[Double](numFeatures * (numFeatures + 1) / 2)))
+    new DenseVector(Array.ofDim[Double](numFeatures * (numFeatures + 1) / 2)))
 
   @transient private lazy val oldGaussians = {
     bcGaussians.value.map { case (mean, covVec) =>
