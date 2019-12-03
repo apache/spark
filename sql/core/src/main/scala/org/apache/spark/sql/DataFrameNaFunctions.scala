@@ -455,23 +455,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   private def replaceCol(col: StructField, replacementMap: Map[_, _]): Column = {
     val keyExpr = df.col(col.name).expr
     def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType)
-    val branches = replacementMap.flatMap { case (source, target) =>
-      if (isNaN(source) || isNaN(target)) {
-        col.dataType match {
-          case IntegerType | LongType | ShortType | ByteType => Seq.empty
-          case _ => Seq(buildExpr(source), buildExpr(target))
-        }
-      } else {
-        Seq(buildExpr(source), buildExpr(target))
-      }
+    val branches = replacementMap.flatMap { case (src, target) =>
+        Seq(Literal(src), buildExpr(target))
     }.toSeq
     new Column(CaseKeyWhen(keyExpr, branches :+ keyExpr)).as(col.name)
   }
-
-  // Check if NaN
-  private[this] def isNaN(value: Any): Boolean =
-    (value.isInstanceOf[Double] && value.asInstanceOf[Double].isNaN) ||
-      (value.isInstanceOf[Float] && value.asInstanceOf[Float].isNaN)
 
   private def convertToDouble(v: Any): Double = v match {
     case v: Float => v.toDouble
