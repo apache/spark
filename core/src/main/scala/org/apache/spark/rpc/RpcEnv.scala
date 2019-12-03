@@ -176,6 +176,11 @@ private[spark] trait RpcEnvFileServer {
   def addJar(file: File): String
 
   /**
+   * Removes a jar from the RpcEnv.
+   */
+  def deleteJar(jarName: String): Unit
+
+  /**
    * Adds a local directory to be served via this file server.
    *
    * @param baseUri Leading URI path (files can be retrieved by appending their relative

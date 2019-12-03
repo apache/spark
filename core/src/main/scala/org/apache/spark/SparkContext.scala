@@ -283,6 +283,12 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val addedFiles = new ConcurrentHashMap[String, Long]().asScala
   private[spark] val addedJars = new ConcurrentHashMap[String, Long]().asScala
 
+  // this is used to maintain mapping forName to it's path. If the schema is `file`, then addedJars
+  // will replace schema to  `spark` as shown below, for more details check addLocalJarFile and
+  // checkRemoteJarFile in addJar API
+  // e.g. add jar /opt/somepath/some.jar => spark://11.242.157.133:36723/jars/some.jar
+  private[spark] val jarsToPath = new ConcurrentHashMap[String, String]().asScala
+
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = {
     val map: ConcurrentMap[Int, RDD[_]] = new MapMaker().weakValues().makeMap[Int, RDD[_]]()
@@ -1905,6 +1911,7 @@ class SparkContext(config: SparkConf) extends Logging {
         }
       }
       if (key != null) {
+        jarsToPath.putIfAbsent(new Path(path).getName, path)
         val timestamp = System.currentTimeMillis
         if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
           logInfo(s"Added JAR $path at $key with timestamp $timestamp")
@@ -1918,9 +1925,29 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Removes the jar from the addedJars, so that next batch of the taskSet will get the updated jars
+   */
+  def deleteJar(path: String): Unit = {
+    val uri = new URI(path)
+    val key = uri.getScheme match {
+      // this code is inline with addJar, key is generated based on the file schema,
+      // refer checkRemoteJarFile and addLocalJarFile implementation
+      case null | "file" =>
+        val fName = new File(uri.getRawPath).getName
+        env.rpcEnv.fileServer.deleteJar(fName)
+        s"${env.rpcEnv.address.toSparkURL}/jars/${Utils.encodeFileNameToURIRawPath(fName)}"
+      case _ => uri.toString
+    }
+    addedJars.remove(key)
+    jarsToPath.remove(new Path(path).getName)
+  }
+
+  /**
    * Returns a list of jar files that are added to resources.
    */
   def listJars(): Seq[String] = addedJars.keySet.toSeq
+
+  private[spark] def getPath(jarName: String): Option[String] = jarsToPath.get(jarName)
 
   /**
    * When stopping SparkContext inside Spark components, it's easy to cause dead-lock since Spark

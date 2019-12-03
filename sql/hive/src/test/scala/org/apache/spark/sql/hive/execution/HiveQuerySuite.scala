@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.sql.Timestamp
 import java.util.{Locale, TimeZone}
@@ -39,6 +39,7 @@ import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 case class TestData(a: Int, b: String)
 
@@ -1223,6 +1224,52 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         sql("select radians(143.2394) FROM src tablesample (1 rows)").collect()
       }
     }
+  }
+
+  test("SPARK-30134: test delete jar") {
+    val jarPath = TestHive.getHiveFile("SPARK-21101-1.0.jar").getCanonicalPath
+    sql(s"ADD JAR ${jarPath}")
+    assert(Utils.classIsLoadable("org.apache.spark.sql.hive.execution.UDTFStack"))
+    assert( sql("list jars SPARK-21101-1.0.jar").count() == 1)
+
+    // now create function using this jar
+    withUserDefinedFunction("udtf_stack1" -> true) {
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack1
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
+        """.stripMargin)
+      val cnt =
+        sql("SELECT udtf_stack1(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')").count()
+      assert(cnt === 2)
+
+      // DELETE JAR
+      sql(s"DELETE JAR ${jarPath}")
+      // class should not be in classPath
+      assert(!Utils.classIsLoadable("org.apache.spark.sql.hive.execution.UDTFStack"))
+      assert( sql("list jars SPARK-21101-1.0.jar").count() == 0)
+      val e = intercept[AnalysisException] {
+        sql("SELECT udtf_stack1(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')")
+      }
+      assert(e.getMessage.contains("java.lang.ClassNotFoundException"))
+    }
+  }
+
+  test("SPARK-30134: test delete jar with only jar name") {
+    val jarPath = TestHive.getHiveFile("SPARK-21101-1.0.jar").getCanonicalPath
+    sql(s"ADD JAR ${jarPath}")
+    assert(Utils.classIsLoadable("org.apache.spark.sql.hive.execution.UDTFStack"))
+    assert(sql("list jars SPARK-21101-1.0.jar").count() == 1)
+    sql(s"DELETE JAR SPARK-21101-1.0.jar")
+    assert(!Utils.classIsLoadable("org.apache.spark.sql.hive.execution.UDTFStack"))
+    assert(sql("list jars SPARK-21101-1.0.jar").count() == 0)
+  }
+
+  test("SPARK-30134: test delete with invalid jar") {
+    val e = intercept[FileNotFoundException] {
+      sql(s"DELETE JAR SPARK-21101-1.0.jar")
+    }
+    assert(e.getMessage.contains("SPARK-21101-1.0.jar does not exists"))
   }
 }
 

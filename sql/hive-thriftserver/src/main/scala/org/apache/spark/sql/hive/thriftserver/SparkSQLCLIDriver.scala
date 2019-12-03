@@ -363,7 +363,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         // scalastyle:off println
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
           proc.isInstanceOf[AddResourceProcessor] || proc.isInstanceOf[ListResourceProcessor] ||
-          proc.isInstanceOf[ResetProcessor] ) {
+          proc.isInstanceOf[ResetProcessor] || proc.isInstanceOf[DeleteResourceProcessor]) {
           val driver = new SparkSQLDriver
 
           driver.init()

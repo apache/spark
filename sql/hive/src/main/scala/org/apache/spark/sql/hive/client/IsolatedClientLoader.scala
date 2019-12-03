@@ -214,71 +214,79 @@ private[hive] class IsolatedClientLoader(
    * So, when we add jar, we can add this new jar directly through the addURL method
    * instead of stacking a new URLClassLoader on top of it.
    */
-  private[hive] val classLoader: MutableURLClassLoader = {
-    val isolatedClassLoader =
-      if (isolationOn) {
-        if (allJars.isEmpty) {
-          // See HiveUtils; this is the Java 9+ + builtin mode scenario
-          baseClassLoader
+  private[hive] val parentClassLoader = if (isolationOn) {
+    if (allJars.isEmpty) {
+      // See HiveUtils; this is the Java 9+ + builtin mode scenario
+      baseClassLoader
+    } else {
+      val rootClassLoader: ClassLoader =
+        if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+          // In Java 9, the boot classloader can see few JDK classes. The intended parent
+          // classloader for delegation is now the platform classloader.
+          // See http://java9.wtf/class-loading/
+          val platformCL =
+          classOf[ClassLoader].getMethod("getPlatformClassLoader").
+            invoke(null).asInstanceOf[ClassLoader]
+          // Check to make sure that the root classloader does not know about Hive.
+          assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
+          platformCL
         } else {
-          val rootClassLoader: ClassLoader =
-            if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-              // In Java 9, the boot classloader can see few JDK classes. The intended parent
-              // classloader for delegation is now the platform classloader.
-              // See http://java9.wtf/class-loading/
-              val platformCL =
-              classOf[ClassLoader].getMethod("getPlatformClassLoader").
-                invoke(null).asInstanceOf[ClassLoader]
-              // Check to make sure that the root classloader does not know about Hive.
-              assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
-              platformCL
-            } else {
-              // The boot classloader is represented by null (the instance itself isn't accessible)
-              // and before Java 9 can see all JDK classes
-              null
-            }
-          new URLClassLoader(allJars, rootClassLoader) {
-            override def loadClass(name: String, resolve: Boolean): Class[_] = {
-              val loaded = findLoadedClass(name)
-              if (loaded == null) doLoadClass(name, resolve) else loaded
-            }
-            def doLoadClass(name: String, resolve: Boolean): Class[_] = {
-              val classFileName = name.replaceAll("\\.", "/") + ".class"
-              if (isBarrierClass(name)) {
-                // For barrier classes, we construct a new copy of the class.
-                val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
-                logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
-                defineClass(name, bytes, 0, bytes.length)
-              } else if (!isSharedClass(name)) {
-                logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
+          // The boot classloader is represented by null (the instance itself isn't accessible)
+          // and before Java 9 can see all JDK classes
+          null
+        }
+      new URLClassLoader(allJars, rootClassLoader) {
+        override def loadClass(name: String, resolve: Boolean): Class[_] = {
+          val loaded = findLoadedClass(name)
+          if (loaded == null) doLoadClass(name, resolve) else loaded
+        }
+
+        def doLoadClass(name: String, resolve: Boolean): Class[_] = {
+          val classFileName = name.replaceAll("\\.", "/") + ".class"
+          if (isBarrierClass(name)) {
+            // For barrier classes, we construct a new copy of the class.
+            val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
+            logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
+            defineClass(name, bytes, 0, bytes.length)
+          } else if (!isSharedClass(name)) {
+            logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
+            super.loadClass(name, resolve)
+          } else {
+            // For shared classes, we delegate to baseClassLoader, but fall back in case the
+            // class is not found.
+            logDebug(s"shared class: $name")
+            try {
+              baseClassLoader.loadClass(name)
+            } catch {
+              case _: ClassNotFoundException =>
                 super.loadClass(name, resolve)
-              } else {
-                // For shared classes, we delegate to baseClassLoader, but fall back in case the
-                // class is not found.
-                logDebug(s"shared class: $name")
-                try {
-                  baseClassLoader.loadClass(name)
-                } catch {
-                  case _: ClassNotFoundException =>
-                    super.loadClass(name, resolve)
-                }
-              }
             }
           }
         }
-      } else {
-        baseClassLoader
       }
-    // Right now, we create a URLClassLoader that gives preference to isolatedClassLoader
-    // over its own URLs when it loads classes and resources.
-    // We may want to use ChildFirstURLClassLoader based on
-    // the configuration of spark.executor.userClassPathFirst, which gives preference
-    // to its own URLs over the parent class loader (see Executor's createClassLoader method).
-    new NonClosableMutableURLClassLoader(isolatedClassLoader)
+    }
+  } else {
+    baseClassLoader
   }
+    // Right now, we create a URLClassLoader that gives preference to isolatedClassLoader
+  // over its own URLs when it loads classes and resources.
+  // We may want to use ChildFirstURLClassLoader based on
+  // the configuration of spark.executor.userClassPathFirst, which gives preference
+  // to its own URLs over the parent class loader (see Executor's createClassLoader method).
+  private [hive] var hiveClassLoader = new MutableURLClassLoader(Array.empty, parentClassLoader)
+
+  private[hive] def classLoader: MutableURLClassLoader = hiveClassLoader
 
   private[hive] def addJar(path: URL): Unit = synchronized {
     classLoader.addURL(path)
+  }
+
+  // Deletes a jar from hiveClassLoader
+  private [hive] def deleteJar(jarURL: URL): Unit = synchronized {
+    val newJars = hiveClassLoader.getURLs.filter(!_.equals(jarURL))
+    hiveClassLoader.close()
+    hiveClassLoader = null
+    hiveClassLoader = new MutableURLClassLoader(newJars, parentClassLoader)
   }
 
   /** The isolated client interface to Hive. */

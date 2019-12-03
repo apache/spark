@@ -88,4 +88,8 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
   }
 
+  override def deleteJar(jarName: String): Unit = {
+    jars.remove(jarName)
+  }
+
 }

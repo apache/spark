@@ -307,6 +307,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * {{{
    *   ADD (FILE[S] <filepath ...> | JAR[S] <jarpath ...>)
    *   LIST (FILE[S] [filepath ...] | JAR[S] [jarpath ...])
+   *   DELETE (FILE[S] <filepath ...> | JAR[S] <jarpath ...>)
    * }}}
    *
    * Note that filepath/jarpath can be given as follows;
@@ -338,6 +339,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
               ListJarsCommand()
             }
           case other => operationNotAllowed(s"LIST with resource type '$other'", ctx)
+        }
+      case SqlBaseParser.DELETE =>
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
+          case "jar" => DeleteJarCommand(mayebePaths)
+          case other => operationNotAllowed(s"DELETE with resource type '$other'", ctx)
         }
       case _ => operationNotAllowed(s"Other types of operation on resources", ctx)
     }

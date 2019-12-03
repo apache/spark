@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 
 /**
@@ -183,11 +183,24 @@ private[sql] class SharedState(
     new GlobalTempViewManager(globalTempDB)
   }
 
+  private val parentClassLoader = Utils.getContextOrSparkClassLoader
   /**
    * A classloader used to load all user-added jar.
    */
-  val jarClassLoader = new NonClosableMutableURLClassLoader(
-    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
+  private var closeableJarClassLoader = new MutableURLClassLoader(Array.empty, parentClassLoader)
+
+  def jarClassLoader: MutableURLClassLoader = closeableJarClassLoader
+
+  def addJar(jarURL: URL): Unit = synchronized {
+    jarClassLoader.addURL(jarURL)
+  }
+
+  def deleteJar(jarURL: URL): Unit = synchronized {
+    val newJars = closeableJarClassLoader.getURLs.filter(!_.equals(jarURL))
+    closeableJarClassLoader.close()
+    closeableJarClassLoader = null
+    closeableJarClassLoader = new MutableURLClassLoader(newJars, parentClassLoader)
+  }
 
 }
 

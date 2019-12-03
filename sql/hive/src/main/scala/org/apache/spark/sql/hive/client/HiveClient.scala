@@ -283,6 +283,9 @@ private[hive] trait HiveClient {
   /** Add a jar into class loader */
   def addJar(path: String): Unit
 
+  /** Deletes a jar from class loader */
+  def deleteJar(path: String): Unit
+
   /** Return a [[HiveClient]] as new session, that will share the class loader and Hive client */
   def newSession(): HiveClient
 

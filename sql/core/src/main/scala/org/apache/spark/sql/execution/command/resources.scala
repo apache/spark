@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
@@ -99,3 +99,20 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends Runnab
     }
   }
 }
+
+/**
+ * Deletes a jar from the current session, so it can be removed from the classPath
+ */
+case class DeleteJarCommand(path: String) extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val jarName = new Path(path).getName
+    sparkSession.sparkContext.getPath(jarName) match {
+      case Some(jarPath) =>
+        sparkSession.sessionState.resourceLoader.deleteJar(jarPath)
+        Seq.empty[Row]
+      case None => throw new FileNotFoundException(s"${jarName} does not exists")
+    }
+  }
+}
+
