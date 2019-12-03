@@ -26,7 +26,8 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.types.StructType
 
@@ -34,24 +35,31 @@ class HiveUserDefinedTypeSuite extends QueryTest with TestHiveSingleton {
   private val functionClass = classOf[org.apache.spark.sql.hive.TestUDF].getCanonicalName
 
   test("Support UDT in Hive UDF") {
-    val functionName = "get_point_x"
+    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
     try {
-      val schema = new StructType().add("point", new ExamplePointUDT, nullable = false)
-      val input = Row.fromSeq(Seq(new ExamplePoint(3.141592d, -3.141592d)))
-      val df = spark.createDataFrame(Array(input).toList.asJava, schema)
-      df.createOrReplaceTempView("src")
-      spark.sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+      val functionName = "get_point_x"
+      try {
+        val schema = new StructType().add("point", new ExamplePointUDT, nullable = false)
+        val input = Row.fromSeq(Seq(new ExamplePoint(3.141592d, -3.141592d)))
+        val df = spark.createDataFrame(Array(input).toList.asJava, schema)
+        df.createOrReplaceTempView("src")
+        spark.sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
 
-      checkAnswer(
-        spark.sql(s"SELECT $functionName(point) FROM src"),
-        Row(input.getAs[ExamplePoint](0).x))
+        checkAnswer(
+          spark.sql(s"SELECT $functionName(point) FROM src"),
+          Row(input.getAs[ExamplePoint](0).x))
+      } finally {
+        // If the test failed part way, we don't want to mask the failure by failing to remove
+        // temp tables that never got created.
+        spark.sql(s"DROP FUNCTION IF EXISTS $functionName")
+        assert(
+          !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
+          s"Function $functionName should have been dropped. But, it still exists.")
+      }
     } finally {
-      // If the test failed part way, we don't want to mask the failure by failing to remove
-      // temp tables that never got created.
-      spark.sql(s"DROP FUNCTION IF EXISTS $functionName")
-      assert(
-        !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
-        s"Function $functionName should have been dropped. But, it still exists.")
+      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+        originalCreateHiveTable)
     }
   }
 }
