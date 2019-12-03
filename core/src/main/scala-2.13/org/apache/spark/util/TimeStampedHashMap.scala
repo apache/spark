@@ -40,6 +40,8 @@ private[spark] case class TimeStampedValue[V](value: V, timestamp: Long)
 private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = false)
   extends mutable.Map[A, B]() with Logging {
 
+  //  Note: this class supports Scala 2.13. A parallel source tree has a 2.12 implementation.
+
   private val internalMap = new ConcurrentHashMap[A, TimeStampedValue[B]]()
 
   def get(key: A): Option[B] = {
@@ -64,19 +66,12 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     newMap
   }
 
-  override def - (key: A): mutable.Map[A, B] = {
-    val newMap = new TimeStampedHashMap[A, B]
-    newMap.internalMap.putAll(this.internalMap)
-    newMap.internalMap.remove(key)
-    newMap
-  }
-
-  override def += (kv: (A, B)): this.type = {
+  override def addOne(kv: (A, B)): this.type = {
     kv match { case (a, b) => internalMap.put(a, TimeStampedValue(b, currentTime)) }
     this
   }
 
-  override def -= (key: A): this.type = {
+  override def subtractOne(key: A): this.type = {
     internalMap.remove(key)
     this
   }
