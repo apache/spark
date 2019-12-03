@@ -66,12 +66,8 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
-  // "true", "yes", "1", "false", "no", "0", and unique prefixes of these strings are accepted.
-  private[this] val trueStrings =
-    Set("true", "tru", "tr", "t", "yes", "ye", "y", "on", "1").map(UTF8String.fromString)
-
-  private[this] val falseStrings =
-    Set("false", "fals", "fal", "fa", "f", "no", "n", "off", "of", "0").map(UTF8String.fromString)
+  private[this] val trueStrings = Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
+  private[this] val falseStrings = Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
 
   // scalastyle:off caselocale
   def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.trimAll().toLowerCase)
