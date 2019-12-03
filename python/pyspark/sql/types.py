@@ -26,6 +26,7 @@ import re
 import base64
 from array import array
 import ctypes
+import warnings
 
 if sys.version >= "3":
     long = int
@@ -612,7 +613,7 @@ class StructType(DataType):
         else:
             if isinstance(obj, dict):
                 return tuple(obj.get(n) for n in self.names)
-            elif isinstance(obj, _LegacyRow) and getattr(obj, "__from_dict__", False):
+            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
                 return tuple(obj[n] for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
@@ -1377,7 +1378,7 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             if isinstance(obj, dict):
                 for f, verifier in verifiers:
                     verifier(obj.get(f))
-            elif isinstance(obj, _LegacyRow) and getattr(obj, "__from_dict__", False):
+            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
                 # the order in obj could be different than dataType.fields
                 for f, verifier in verifiers:
                     verifier(obj[f])
@@ -1422,7 +1423,14 @@ def _create_row(fields, values):
     return row
 
 
-_legacy_row_enabled = os.environ.get('PYSPARK_LEGACY_ROW_ENABLED', 'false').lower() == 'true'
+# Remove after Python < 3.6 dropped, see SPARK-29748
+_row_field_sorting_enabled = \
+    os.environ.get('PYSPARK_ROW_FIELD_SORTING_ENABLED', 'false').lower() == 'true'
+
+
+if _row_field_sorting_enabled:
+    warnings.warn("The environment variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' "
+                  "is deprecated and will be removed in future versions of Spark")
 
 
 class Row(tuple):
@@ -1440,13 +1448,16 @@ class Row(tuple):
     It is not allowed to omit a named argument to represent the value is
     None or missing. This should be explicitly set to None in this case.
 
-    NOTE: For Python versions < 3.6, named arguments can no longer be used
-    since the order is not guaranteed to be the same as entered, see
-    https://www.python.org/dev/peps/pep-0468. Instead, an OrderedDict can
-    be passed as the first argument. To create a Row that is compatible
-    with Spark 2.x (with fields sorted alphabetically) set the environment
-    variable "PYSPARK_LEGACY_ROW_ENABLED" to "true". This option is
-    deprecated and will be removed in future versions of Spark.
+    NOTE: As of Spark 3.0.0, the Row field names are no longer sorted
+    alphabetically. To enable field sorting to create Rows compatible with
+    Spark 2.x, set the environment variable "PYSPARK_ROW_FIELD_SORTING_ENABLED"
+    to "true". This option is deprecated and will be removed in future versions
+    of Spark. For Python versions < 3.6, named arguments can no longer be used
+    without enabling field sorting with the environment variable above because
+    order or the arguments is not guaranteed to be the same as entered, see
+    https://www.python.org/dev/peps/pep-0468. If this is detected, a warning
+    will be issued and the Row will fallback to sort the field names
+    automatically.
 
     >>> row = Row(name="Alice", age=11)
     >>> row
@@ -1487,26 +1498,28 @@ class Row(tuple):
     """
 
     def __new__(cls, *args, **kwargs):
-        if _legacy_row_enabled:
-            return _LegacyRow(args, kwargs)
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
-        if sys.version_info[:2] < (3, 6):
-            # Remove after Python < 3.6 dropped
-            from collections import OrderedDict
-            if kwargs:
-                raise ValueError("Named arguments are not allowed for Python version < 3.6, "
-                                 "use a collections.OrderedDict instead. To enable Spark 2.x "
-                                 "compatible Rows, set the environment variable "
-                                 "'PYSPARK_LEGACY_ROW_ENABLED' to 'true'.")
-            elif len(args) == 1 and isinstance(args[0], OrderedDict):
-                kwargs = args[0]
-
         if kwargs:
+            field_sorting_enabled = _row_field_sorting_enabled
+            if not field_sorting_enabled and sys.version_info[:2] < (3, 6):
+                warnings.warn("To use named arguments for Python version < 3.6, Row "
+                              "field sorting must be enabled by setting the environment "
+                              "variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' to 'true'.")
+                field_sorting_enabled = True
+
             # create row objects
-            row = tuple.__new__(cls, list(kwargs.values()))
-            row.__fields__ = list(kwargs.keys())
+            if field_sorting_enabled:
+                # Remove after Python < 3.6 dropped, see SPARK-29748
+                names = sorted(kwargs.keys())
+                row = tuple.__new__(cls, [kwargs[n] for n in names])
+                row.__fields__ = names
+                row.__from_dict__ = True
+            else:
+                row = tuple.__new__(cls, list(kwargs.values()))
+                row.__fields__ = list(kwargs.keys())
+
             return row
         else:
             # create row class or objects
@@ -1584,7 +1597,7 @@ class Row(tuple):
             raise AttributeError(item)
 
     def __setattr__(self, key, value):
-        if key != '__fields__':
+        if key != '__fields__' and key != "__from_dict__":
             raise Exception("Row is read-only")
         self.__dict__[key] = value
 
@@ -1602,36 +1615,6 @@ class Row(tuple):
                                          for k, v in zip(self.__fields__, tuple(self)))
         else:
             return "<Row(%s)>" % ", ".join("%r" % field for field in self)
-
-
-class _LegacyRow(Row):
-    """
-    Creates a Row that is compatible with with Spark 2.x, such that when
-    made with kwargs, the fields are sorted alphabetically.
-
-    .. note:: Deprecated in 3.0.0, will be removed in future versions of Spark.
-    See SPARK-29748
-    """
-
-    def __new__(cls, *args, **kwargs):
-        if args and kwargs:
-            raise ValueError("Can not use both args "
-                             "and kwargs to create Row")
-        if kwargs:
-            # create row objects
-            names = sorted(kwargs.keys())
-            row = tuple.__new__(cls, [kwargs[n] for n in names])
-            row.__fields__ = names
-            row.__from_dict__ = True
-            return row
-        else:
-            # create row class or objects
-            return tuple.__new__(cls, args)
-
-    def __setattr__(self, key, value):
-        if key != '__fields__' and key != "__from_dict__":
-            raise Exception("Row is read-only")
-        self.__dict__[key] = value
 
 
 class DateConverter(object):
