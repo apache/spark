@@ -374,19 +374,11 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     }
   }
 
-  private def checkOwner(db: String, owner: String,
-      location: URI, hasProps: Boolean = false): Unit = {
-    val answer = Seq(Row("Database Name", db),
-      Row("Description", ""),
-      Row("Location", CatalogUtils.URIToString(location)),
-      Row("Owner Name", owner),
-      Row("Owner Type", "USER"))
-    val props = if (hasProps) {
-      Seq(Row("Properties", "((a,a))"))
-    } else {
-      Seq(Row("Properties", ""))
-    }
-    checkAnswer(sql(s"DESCRIBE DATABASE EXTENDED $db"), answer ++ props)
+  private def checkOwner(db: String, expected: String): Unit = {
+    val owner = sql(s"DESCRIBE DATABASE EXTENDED $db")
+      .where("database_description_item='Owner Name'")
+      .collect().head.getString(1)
+    assert(owner === expected)
   }
 
   test("Database Ownership") {
@@ -399,18 +391,18 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       val location2 = getDBPath(db2)
 
       sql(s"CREATE DATABASE $db1")
-      checkOwner(db1, Utils.getCurrentUserName(), location1)
+      checkOwner(db1, Utils.getCurrentUserName())
       sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a')")
-      checkOwner(db1, Utils.getCurrentUserName(), location1, true)
+      checkOwner(db1, Utils.getCurrentUserName())
 
       // TODO: Specify ownership should be forbidden after we implement `SET OWNER` syntax
       sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('ownerName'='$owner')")
-      checkOwner(db2, owner, location2)
+      checkOwner(db2, owner)
       sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('a'='a')")
-      checkOwner(db2, owner, location2, true)
+      checkOwner(db2, owner)
       // TODO: Changing ownership should be forbidden after we implement `SET OWNER` syntax
       sql(s"ALTER DATABASE $db2 SET DBPROPERTIES ('ownerName'='a')")
-      checkOwner(db2, "a", location2, true)
+      checkOwner(db2, "a")
     } finally {
       catalog.reset()
     }
