@@ -442,8 +442,8 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       createNaNDF().na.replace("*", Map(
         1.0f -> Float.NaN
       )),
-      Row(1, new java.lang.Long(1), new java.lang.Short("1"),
-        new java.lang.Byte("1"), java.lang.Float.NaN, java.lang.Double.NaN) ::
+      Row(0, new java.lang.Long(0), new java.lang.Short("0"),
+        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN) ::
       Row(0, new java.lang.Long(0), new java.lang.Short("0"),
         new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN) :: Nil)
   }
@@ -453,8 +453,8 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       createNaNDF().na.replace("*", Map(
         1.toDouble -> Double.NaN
       )),
-      Row(1, new java.lang.Long(1), new java.lang.Short("1"),
-        new java.lang.Byte("1"), java.lang.Float.NaN, java.lang.Double.NaN) ::
+      Row(0, new java.lang.Long(0), new java.lang.Short("0"),
+        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN) ::
       Row(0, new java.lang.Long(0), new java.lang.Short("0"),
         new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN) :: Nil)
   }
