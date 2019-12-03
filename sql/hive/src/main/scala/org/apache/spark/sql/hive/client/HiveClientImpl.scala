@@ -440,8 +440,13 @@ private[hive] class HiveClientImpl(
   private def convertHiveTableToCatalogTable(h: HiveTable): CatalogTable = {
     // Note: Hive separates partition columns and the schema, but for us the
     // partition columns are part of the schema
-    val cols = h.getCols.asScala.map(fromHiveColumn)
-    val partCols = h.getPartCols.asScala.map(fromHiveColumn)
+    val (cols, partCols) = try {
+      (h.getCols.asScala.map(fromHiveColumn), h.getPartCols.asScala.map(fromHiveColumn))
+    } catch {
+      case ex: SparkException =>
+        throw new SparkException(
+          s"${ex.getMessage}, db: ${h.getDbName}, table: ${h.getTableName}", ex)
+    }
     val schema = StructType(cols ++ partCols)
 
     val bucketSpec = if (h.getNumBuckets > 0) {
@@ -982,7 +987,8 @@ private[hive] object HiveClientImpl {
       CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
-        throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
+        throw new SparkException(
+          s"Cannot recognize hive type string: ${hc.getType}, column: ${hc.getName}", e)
     }
   }
 
