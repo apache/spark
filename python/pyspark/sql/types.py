@@ -1423,16 +1423,6 @@ def _create_row(fields, values):
     return row
 
 
-# Remove after Python < 3.6 dropped, see SPARK-29748
-_row_field_sorting_enabled = \
-    os.environ.get('PYSPARK_ROW_FIELD_SORTING_ENABLED', 'false').lower() == 'true'
-
-
-if _row_field_sorting_enabled:
-    warnings.warn("The environment variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' "
-                  "is deprecated and will be removed in future versions of Spark")
-
-
 class Row(tuple):
 
     """
@@ -1496,20 +1486,27 @@ class Row(tuple):
     True
     """
 
+    # Remove after Python < 3.6 dropped, see SPARK-29748
+    _row_field_sorting_enabled = \
+        os.environ.get('PYSPARK_ROW_FIELD_SORTING_ENABLED', 'false').lower() == 'true'
+
+    if _row_field_sorting_enabled:
+        warnings.warn("The environment variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' "
+                      "is deprecated and will be removed in future versions of Spark")
+
     def __new__(cls, *args, **kwargs):
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
         if kwargs:
-            field_sorting_enabled = _row_field_sorting_enabled
-            if not field_sorting_enabled and sys.version_info[:2] < (3, 6):
+            if not Row._row_field_sorting_enabled and sys.version_info[:2] < (3, 6):
                 warnings.warn("To use named arguments for Python version < 3.6, Row "
                               "field sorting must be enabled by setting the environment "
                               "variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' to 'true'.")
-                field_sorting_enabled = True
+                Row._row_field_sorting_enabled = True
 
             # create row objects
-            if field_sorting_enabled:
+            if Row._row_field_sorting_enabled:
                 # Remove after Python < 3.6 dropped, see SPARK-29748
                 names = sorted(kwargs.keys())
                 row = tuple.__new__(cls, [kwargs[n] for n in names])

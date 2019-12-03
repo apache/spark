@@ -968,18 +968,18 @@ class DataTypeVerificationTests(unittest.TestCase):
             with self.assertRaises(exp, msg=msg):
                 _make_type_verifier(data_type, nullable=False)(obj)
 
+    @unittest.skipIf(sys.version_info[:2] < (3, 6), "Create Row without sorting fields")
     def test_Row_without_field_sorting(self):
-        from pyspark.sql import types
-        sorting_enabled_tmp = types._row_field_sorting_enabled
-        types._row_field_sorting_enabled = False
+        sorting_enabled_tmp = Row._row_field_sorting_enabled
+        Row._row_field_sorting_enabled = False
 
-        r = types.Row(b=1, a=2)
-        TestRow = types.Row("b", "a")
+        r = Row(b=1, a=2)
+        TestRow = Row("b", "a")
         expected = TestRow(1, 2)
 
         self.assertEqual(r, expected)
         self.assertEqual(repr(r), "Row(b=1, a=2)")
-        types._row_field_sorting_enabled = sorting_enabled_tmp
+        Row._row_field_sorting_enabled = sorting_enabled_tmp
 
 
 if __name__ == "__main__":
