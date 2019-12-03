@@ -34,7 +34,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.functions.max
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
@@ -54,6 +54,22 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   import spark.udf
   import spark.implicits._
+
+  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      TestHive.conf
+        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
+    } finally {
+      super.afterAll()
+    }
+  }
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
