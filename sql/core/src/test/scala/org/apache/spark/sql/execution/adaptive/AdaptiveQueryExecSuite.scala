@@ -747,7 +747,7 @@ class AdaptiveQueryExecSuite
       //       +- ShuffleQueryStage
 
       val smjAfter = findTopLevelSortMergeJoin(adaptivePlan)
-      assert(smjAfter.size == 6)
+      assert(smjAfter.size == 5)
     }
   }
 
