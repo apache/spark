@@ -451,9 +451,8 @@ class Word2Vec extends Serializable with Logging {
         blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
         (v1, count1 + count2)
       }.map { case (id, (vec, count)) =>
-        val averagedVec = Array.fill[Float](vectorSize)(0.0f)
-        blas.saxpy(vectorSize, 1.0f / count, vec, 1, averagedVec, 1)
-        (id, averagedVec)
+        blas.sscal(vectorSize, 1.0f / count, vec, 1)
+        (id, vec)
       }.collect()
       var i = 0
       while (i < synAgg.length) {
