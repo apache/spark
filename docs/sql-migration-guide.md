@@ -254,7 +254,7 @@ license: |
         </tr>
     </table>
 
-    - Since Spark 3.0, the unary arithmetic operator plus(`+`) only accept string, numeric and interval type values as inputs. Besides, `+` with a integral string representation will be coerced to double value, e.g. `+'1'` results `1.0`. In Spark version 2.4 and earlier,  there is no type checking for it, thus, all type values with a `+` prefix is valid, e.g. `+ array(1, 2)` is valid and results `[1, 2]`. Besides, there is no implicit type coercion for `+` with string, e.g. `+'1'` results `1`.
+    - Since Spark 3.0, the unary arithmetic operator plus(`+`) only accepts string, numeric and interval type values as inputs. Besides, `+` with a integral string representation will be coerced to double value, e.g. `+'1'` results `1.0`. In Spark version 2.4 and earlier,  there is no type checking for it, thus, all type values with a `+` prefix are valid, e.g. `+ array(1, 2)` is valid and results `[1, 2]`. Besides, there is no implicit type coercion for `+` with string, e.g. `+'1'` results `1`.
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
