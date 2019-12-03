@@ -2019,7 +2019,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
   usage = "_FUNC_(bin, charset) - Decodes the first argument using the second argument character set.",
   examples = """
     Examples:
-      > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
+      > SELECT _FUNC_(decode('abc', 'utf-8'), 'utf-8');
        abc
   """,
   since = "1.5.0")
