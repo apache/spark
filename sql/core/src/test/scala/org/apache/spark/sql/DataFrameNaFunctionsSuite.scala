@@ -416,23 +416,19 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   test("replace nan with float") {
     checkAnswer(
       createNaNDF().na.replace("*", Map(
-        Float.NaN -> 10f
+        Float.NaN -> 10.0f
       )),
-      Row(1, new java.lang.Long(1), new java.lang.Short("1"),
-        new java.lang.Byte("1"), new java.lang.Float(1.0), 1.0) ::
-      Row(0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), new java.lang.Float(10), new java.lang.Double(10)) :: Nil)
+      Row(1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0) ::
+      Row(0, 0L, 0.toShort, 0.toByte, 10.0f, 10.0) :: Nil)
   }
 
   test("replace nan with double") {
     checkAnswer(
       createNaNDF().na.replace("*", Map(
-        Double.NaN -> 10.toDouble
+        Double.NaN -> 10.0
       )),
-      Row(1, new java.lang.Long(1), new java.lang.Short("1"),
-        new java.lang.Byte("1"), new java.lang.Float(1.0), 1.0) ::
-      Row(0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), new java.lang.Float(10), new java.lang.Double(10)) :: Nil)
+      Row(1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0) ::
+      Row(0, 0L, 0.toShort, 0.toByte, 10.0f, 10.0) :: Nil)
   }
 
   test("replace float with nan") {
@@ -440,20 +436,16 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       createNaNDF().na.replace("*", Map(
         1.0f -> Float.NaN
       )),
-      Row(0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN) ::
-      Row(0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN) :: Nil)
+      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
+      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
   }
 
   test("replace double with nan") {
     checkAnswer(
       createNaNDF().na.replace("*", Map(
-        1.toDouble -> Double.NaN
+        1.0 -> Double.NaN
       )),
-      Row(0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN) ::
-      Row(0, new java.lang.Long(0), new java.lang.Short("0"),
-        new java.lang.Byte("0"), java.lang.Float.NaN, java.lang.Double.NaN) :: Nil)
+      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
+      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
   }
 }
