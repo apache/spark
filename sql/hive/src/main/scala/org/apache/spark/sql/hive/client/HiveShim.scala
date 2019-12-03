@@ -468,7 +468,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
 
   override def setDatabaseOwnerName(db: Database, owner: String): Unit = {}
 
-  override def getDatabaseOwnerType(db: Database): String = PrincipalType.USER.name()
+  override def getDatabaseOwnerType(db: Database): String = ""
 
   override def setDatabaseOwnerType(db: Database, ownerType: String): Unit = {}
 }
