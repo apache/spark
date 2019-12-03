@@ -1686,19 +1686,13 @@ object SQLConf {
       .checkValues(Dialect.values.map(_.toString))
       .createWithDefault(Dialect.SPARK.toString)
 
-  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+  val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
+    buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
     .internal()
-    .doc("This configuration is deprecated and will be removed in the future releases." +
-      "It is replaced by spark.sql.dialect.spark.ansi.enabled.")
+    .doc("When this option is set to true, creating managed tables with nonempty location " +
+      "is allowed. Otherwise, an analysis exception is thrown. ")
     .booleanConf
     .createWithDefault(false)
-
-  val DIALECT_SPARK_ANSI_ENABLED = buildConf("spark.sql.dialect.spark.ansi.enabled")
-    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
-      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser.")
-    .fallbackConf(ANSI_ENABLED)
 
   val VALIDATE_PARTITION_COLUMNS =
     buildConf("spark.sql.sources.validatePartitionColumns")
@@ -1819,6 +1813,14 @@ object SQLConf {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(IntervalStyle.values.map(_.toString))
     .createWithDefault(IntervalStyle.MULTI_UNITS.toString)
+
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
+      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
+      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser.")
+    .booleanConf
+    .createWithDefault(false)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -2555,11 +2557,9 @@ class SQLConf extends Serializable with Logging {
 
   def intervalOutputStyle: IntervalStyle.Value = IntervalStyle.withName(getConf(INTERVAL_STYLE))
 
-  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString
+  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
-  def dialectSparkAnsiEnabled: Boolean = getConf(DIALECT_SPARK_ANSI_ENABLED)
-
-  def ansiEnabled: Boolean = usePostgreSQLDialect || dialectSparkAnsiEnabled
+  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString()
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 

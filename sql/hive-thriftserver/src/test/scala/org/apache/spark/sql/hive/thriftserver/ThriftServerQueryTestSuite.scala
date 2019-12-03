@@ -118,13 +118,13 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
       testCase match {
         case _: PgSQLTest =>
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
         case _: AnsiTest =>
-          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
-          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
         case _ =>
           statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
-          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = false")
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
       }
 
       // Run the SQL queries preparing them for comparison.
