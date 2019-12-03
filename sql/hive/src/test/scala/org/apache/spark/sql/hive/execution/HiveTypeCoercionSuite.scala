@@ -20,11 +20,29 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A set of tests that validate type promotion and coercion rules.
  */
 class HiveTypeCoercionSuite extends HiveComparisonTest {
+
+  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      TestHive.conf
+        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
+    } finally {
+      super.afterAll()
+    }
+  }
+
   val baseTypes = Seq(
     ("1", "1"),
     ("1.0", "CAST(1.0 AS DOUBLE)"),
