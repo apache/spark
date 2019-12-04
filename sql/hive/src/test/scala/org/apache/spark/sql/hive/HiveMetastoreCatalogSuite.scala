@@ -46,7 +46,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   test("duplicated metastore relations") {
     val df = spark.sql("SELECT * FROM src")
     logInfo(df.queryExecution.toString)
-    df.as('a).join(df.as('b), $"a.key" === $"b.key")
+    df.as("a").join(df.as("b"), $"a.key" === $"b.key")
   }
 
   test("should not truncate struct type catalog string") {
@@ -142,8 +142,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
   import testImplicits._
 
   private val testDF = range(1, 3).select(
-    ('id + 0.1) cast DecimalType(10, 3) as 'd1,
-    'id cast StringType as 'd2
+    ($"id" + 0.1) cast DecimalType(10, 3) as "d1",
+    $"id" cast StringType as "d2"
   ).coalesce(1)
 
   override def beforeAll(): Unit = {

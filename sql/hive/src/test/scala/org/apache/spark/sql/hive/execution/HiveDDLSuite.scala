@@ -1253,7 +1253,7 @@ class HiveDDLSuite
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTempView(sourceViewName) {
       withTable(targetTabName) {
-        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        spark.range(10).select($"id" as "a", $"id" as "b", $"id" as "c", $"id" as "d")
           .createTempView(sourceViewName)
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
@@ -1287,7 +1287,7 @@ class HiveDDLSuite
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTable(sourceTabName, targetTabName) {
-      spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+      spark.range(10).select($"id" as "a", $"id" as "b", $"id" as "c", $"id" as "d")
         .write.format("json").saveAsTable(sourceTabName)
 
       val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
@@ -1327,7 +1327,7 @@ class HiveDDLSuite
     withTable(sourceTabName, targetTabName) {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        spark.range(10).select($"id" as "a", $"id" as "b", $"id" as "c", $"id" as "d")
           .write.format("parquet").save(path)
         sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '${dir.toURI}')")
 
@@ -1456,7 +1456,7 @@ class HiveDDLSuite
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTable(sourceTabName, targetTabName) {
       withView(sourceViewName) {
-        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        spark.range(10).select($"id" as "a", $"id" as "b", $"id" as "c", $"id" as "d")
           .write.format("json").saveAsTable(sourceTabName)
         sql(s"CREATE VIEW $sourceViewName AS SELECT * FROM $sourceTabName")
 
@@ -2456,12 +2456,12 @@ class HiveDDLSuite
 
   test("SPARK-22252: FileFormatWriter should respect the input query schema in HIVE") {
     withTable("t1", "t2", "t3", "t4") {
-      spark.range(1).select('id as 'col1, 'id as 'col2).write.saveAsTable("t1")
+      spark.range(1).select($"id" as "col1", $"id" as "col2").write.saveAsTable("t1")
       spark.sql("select COL1, COL2 from t1").write.format("hive").saveAsTable("t2")
       checkAnswer(spark.table("t2"), Row(0, 0))
 
       // Test picking part of the columns when writing.
-      spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
+      spark.range(1).select($"id", $"id" as "col1", $"id" as "col2").write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.format("hive").saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
     }

@@ -96,7 +96,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
   test("cache temp table") {
     withTempView("tempTable") {
-      testData.select('key).createOrReplaceTempView("tempTable")
+      testData.select("key").createOrReplaceTempView("tempTable")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
       spark.catalog.cacheTable("tempTable")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"))
@@ -127,8 +127,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
   }
 
   test("uncaching temp table") {
-    testData.select('key).createOrReplaceTempView("tempTable1")
-    testData.select('key).createOrReplaceTempView("tempTable2")
+    testData.select("key").createOrReplaceTempView("tempTable1")
+    testData.select("key").createOrReplaceTempView("tempTable2")
     spark.catalog.cacheTable("tempTable1")
 
     assertCached(sql("SELECT COUNT(*) FROM tempTable1"))
@@ -361,15 +361,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
   }
 
   test("Drops temporary table") {
-    testData.select('key).createOrReplaceTempView("t1")
+    testData.select("key").createOrReplaceTempView("t1")
     spark.table("t1")
     spark.catalog.dropTempView("t1")
     intercept[AnalysisException](spark.table("t1"))
   }
 
   test("Drops cached temporary table") {
-    testData.select('key).createOrReplaceTempView("t1")
-    testData.select('key).createOrReplaceTempView("t2")
+    testData.select("key").createOrReplaceTempView("t1")
+    testData.select("key").createOrReplaceTempView("t2")
     spark.catalog.cacheTable("t1")
 
     assert(spark.catalog.isCached("t1"))
@@ -859,7 +859,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
   test("SPARK-23880 table cache should be lazy and don't trigger any jobs") {
     val cachedData = checkIfNoJobTriggered {
-      spark.range(1002).filter('id > 1000).orderBy('id.desc).cache()
+      spark.range(1002).filter($"id" > 1000).orderBy($"id".desc).cache()
     }
     assert(cachedData.collect === Seq(1001))
   }
@@ -891,7 +891,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
   test("SPARK-24596 Non-cascading Cache Invalidation - drop persistent view") {
     withTable("t") {
-      spark.range(1, 10).toDF("key").withColumn("value", 'key * 2)
+      spark.range(1, 10).toDF("key").withColumn("value", $"key" * 2)
         .write.format("json").saveAsTable("t")
       withView("t1") {
         withTempView("t2") {
@@ -911,7 +911,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
   test("SPARK-24596 Non-cascading Cache Invalidation - uncache table") {
     withTable("t") {
-      spark.range(1, 10).toDF("key").withColumn("value", 'key * 2)
+      spark.range(1, 10).toDF("key").withColumn("value", $"key" * 2)
         .write.format("json").saveAsTable("t")
       withTempView("t1", "t2") {
         sql("CACHE TABLE t")
