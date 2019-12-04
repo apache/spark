@@ -19,10 +19,10 @@ select 10.300000000000000000 * 3.000000000000000000;
 select 10.300000000000000000 * 3.0000000000000000000;
 
 -- arithmetic operations causing an overflow throw exception
-select (5e36 + 0.1) + 5e36;
-select (-4e36 - 0.1) - 7e36;
+select (5e36BD + 0.1) + 5e36BD;
+select (-4e36BD - 0.1) - 7e36BD;
 select 12345678901234567890.0 * 12345678901234567890.0;
-select 1e35 / 0.1;
+select 1e35BD / 0.1;
 
 -- arithmetic operations causing a precision loss throw exception
 select 123456789123456789.1234567890 * 1.123456789123456789;

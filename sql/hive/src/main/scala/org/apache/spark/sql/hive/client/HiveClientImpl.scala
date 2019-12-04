@@ -55,7 +55,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl._
@@ -440,8 +440,13 @@ private[hive] class HiveClientImpl(
   private def convertHiveTableToCatalogTable(h: HiveTable): CatalogTable = {
     // Note: Hive separates partition columns and the schema, but for us the
     // partition columns are part of the schema
-    val cols = h.getCols.asScala.map(fromHiveColumn)
-    val partCols = h.getPartCols.asScala.map(fromHiveColumn)
+    val (cols, partCols) = try {
+      (h.getCols.asScala.map(fromHiveColumn), h.getPartCols.asScala.map(fromHiveColumn))
+    } catch {
+      case ex: SparkException =>
+        throw new SparkException(
+          s"${ex.getMessage}, db: ${h.getDbName}, table: ${h.getTableName}", ex)
+    }
     val schema = StructType(cols ++ partCols)
 
     val bucketSpec = if (h.getNumBuckets > 0) {
@@ -982,7 +987,8 @@ private[hive] object HiveClientImpl {
       CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
-        throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
+        throw new SparkException(
+          s"Cannot recognize hive type string: ${hc.getType}, column: ${hc.getName}", e)
     }
   }
 
@@ -1059,7 +1065,7 @@ private[hive] object HiveClientImpl {
     }
 
     table.bucketSpec match {
-      case Some(bucketSpec) if DDLUtils.isHiveTable(table) =>
+      case Some(bucketSpec) if !HiveExternalCatalog.isDatasourceTable(table) =>
         hiveTable.setNumBuckets(bucketSpec.numBuckets)
         hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
 

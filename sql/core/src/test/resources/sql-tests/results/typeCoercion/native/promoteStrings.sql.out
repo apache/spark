@@ -2541,9 +2541,9 @@ struct<(- CAST(1 AS DOUBLE)):double>
 -- !query 311
 SELECT + '1' FROM t
 -- !query 311 schema
-struct<1:string>
+struct<(+ CAST(1 AS DOUBLE)):double>
 -- !query 311 output
-1
+1.0
 
 
 -- !query 312

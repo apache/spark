@@ -24,13 +24,19 @@ license: |
 
 ### Syntax
 {% highlight sql %}
-MSCK REPAIR TABLE table_name
+MSCK REPAIR TABLE table_identifier
 {% endhighlight %}
 
 ### Parameters
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>Specifies the name of the table to be repaired.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies the name of the table to be repaired. The table name may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 ### Examples

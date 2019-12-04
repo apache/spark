@@ -234,6 +234,21 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
   }
 
+  test ("SPARK-29537: throw exception when user defined a wrong base path") {
+    withTempPath { p =>
+      val path = new Path(p.toURI).toString
+      Seq((1, 1), (2, 2)).toDF("c1", "c2")
+        .write.partitionBy("c1").mode(SaveMode.Overwrite).parquet(path)
+      val wrongBasePath = new File(p, "unknown")
+      // basePath must be a directory
+      wrongBasePath.mkdir()
+      val msg = intercept[IllegalArgumentException] {
+        spark.read.option("basePath", wrongBasePath.getCanonicalPath).parquet(path)
+      }.getMessage
+      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+    }
+  }
+
   test("save mode") {
     spark.range(10).write
       .format("org.apache.spark.sql.test")

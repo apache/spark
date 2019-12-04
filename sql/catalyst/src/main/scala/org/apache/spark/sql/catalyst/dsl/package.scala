@@ -64,6 +64,7 @@ package object dsl {
   trait ImplicitOperators {
     def expr: Expression
 
+    def unary_+ : Expression = UnaryPositive(expr)
     def unary_- : Expression = UnaryMinus(expr)
     def unary_! : Predicate = Not(expr)
     def unary_~ : Expression = BitwiseNot(expr)

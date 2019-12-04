@@ -638,7 +638,7 @@ package object config {
     .createOptional
 
   private[spark] val METRICS_STATIC_SOURCES_ENABLED =
-    ConfigBuilder("spark.metrics.static.sources.enabled")
+    ConfigBuilder("spark.metrics.staticSources.enabled")
       .doc("Whether to register static sources with the metrics system.")
       .booleanConf
       .createWithDefault(true)

@@ -24,7 +24,7 @@ license: |
 
 ### Syntax
 {% highlight sql %}
-DROP VIEW [IF EXISTS] [database_name.]view_name
+DROP VIEW [ IF EXISTS ] view_identifier
 {% endhighlight %}
 
 ### Parameter
@@ -33,13 +33,13 @@ DROP VIEW [IF EXISTS] [database_name.]view_name
   <dd>
      If specified, no exception is thrown when the view does not exists.
   </dd>
-  <dt><code><em>database_name</em></code></dt>
+  <dt><code><em>view_identifier</em></code></dt>
   <dd>
-     Specifies the database name where view is present.
-  </dd>
-  <dt><code><em>view_name</em></code></dt>
-  <dd>
-     Specifies the view name to be dropped.
+    Specifies the view name to be dropped. The view name may be optionally qualified with a database name.<br><br>
+    <b> Syntax:</b>
+      <code>
+        [ database_name. ] view_name
+      </code>
   </dd>
 </dl>
 

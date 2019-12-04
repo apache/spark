@@ -226,10 +226,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("unary arithmetic expressions") {
-    assertEqual("+a", 'a)
+    assertEqual("+a", +'a)
     assertEqual("-a", -'a)
     assertEqual("~a", ~'a)
-    assertEqual("-+~~a", -(~(~'a)))
+    assertEqual("-+~~a", -( +(~(~'a))))
   }
 
   test("cast expressions") {
@@ -473,13 +473,15 @@ class ExpressionParserSuite extends AnalysisTest {
     // Decimal
     testDecimal("7873247234798249279371.2334")
 
-    // Scientific Decimal
-    testDecimal("9.0e1")
-    testDecimal(".9e+2")
-    testDecimal("0.9e+2")
-    testDecimal("900e-1")
-    testDecimal("900.0E-1")
-    testDecimal("9.e+1")
+    // SPARK-29956: Scientific Decimal is parsed as Double by default.
+    assertEqual("9.0e1", Literal(90.toDouble))
+    assertEqual(".9e+2", Literal(90.toDouble))
+    assertEqual("0.9e+2", Literal(90.toDouble))
+
+    // Scientific Decimal with suffix BD should still be parsed as Decimal
+    assertEqual("900e-1BD", Literal(BigDecimal("900e-1").underlying()))
+    assertEqual("900.0E-1BD", Literal(BigDecimal("900.0E-1").underlying()))
+    assertEqual("9.e+1BD", Literal(BigDecimal("9.e+1").underlying()))
     intercept(".e3")
 
     // Tiny Int Literal
@@ -506,6 +508,21 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
     intercept("1.20E-38BD", "decimal can only support precision up to 38")
+  }
+
+  test("SPARK-29956: scientific decimal should be parsed as Decimal in legacy mode") {
+    def testDecimal(value: String, parser: ParserInterface): Unit = {
+      assertEqual(value, Literal(BigDecimal(value).underlying), parser)
+    }
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED, true)
+    val parser = new CatalystSqlParser(conf)
+    testDecimal("9e1", parser)
+    testDecimal("9e-1", parser)
+    testDecimal("-9e1", parser)
+    testDecimal("9.0e1", parser)
+    testDecimal(".9e+2", parser)
+    testDecimal("0.9e+2", parser)
   }
 
   test("strings") {
