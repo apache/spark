@@ -20,11 +20,13 @@ package org.apache.spark.streaming.ui
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.util.Utils
 
 /**
  * A helper class to generate JavaScript and HTML for both timeline and histogram graphs.
@@ -153,7 +155,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       basicInfo ++
       listener.synchronized {
         generateStatTable() ++
-          generateBatchListTables()
+          generateBatchListTables(request)
       }
     SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
   }
@@ -482,7 +484,57 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </tr>
   }
 
-  private def generateBatchListTables(): Seq[Node] = {
+  private def completedBatchTable(request: HttpServletRequest,
+                                  batches: Seq[BatchUIData],
+                                  batchInterval: Long): Seq[Node] = {
+
+    val completedBatchTag = "completedBatch"
+    val parameterOtherTable = request.getParameterMap().asScala
+      .filterNot(_._1.startsWith(completedBatchTag))
+      .map { case (name, vals) =>
+        name + "=" + vals(0)
+      }
+
+    val parameterCompletedBatchPage = request.getParameter(completedBatchTag + ".page")
+    val parameterCompletedBatchSortColumn = request.getParameter(completedBatchTag + ".sort")
+    val parameterCompletedBatchSortDesc = request.getParameter(completedBatchTag + ".desc")
+    val parameterCompletedBatchPageSize = request.getParameter(completedBatchTag + ".pageSize")
+
+    val completedBatchPage = Option(parameterCompletedBatchPage).map(_.toInt).getOrElse(1)
+    val completedBatchSortColumn = Option(parameterCompletedBatchSortColumn).map { sortColumn =>
+      UIUtils.decodeURLParameter(sortColumn)
+    }.getOrElse("Batch Time")
+    val completedBatchSortDesc = Option(parameterCompletedBatchSortDesc).map(_.toBoolean).getOrElse(
+      completedBatchSortColumn == "Batch Time"
+    )
+    val completedBatchPageSize = Option(parameterCompletedBatchPageSize).map(_.toInt).getOrElse(100)
+
+    try {
+      new CompletedBatchPagedTable(
+        request,
+        parent,
+        batchInterval,
+        listener.retainedCompletedBatches,
+        completedBatchTag,
+        UIUtils.prependBaseUri(request, parent.basePath),
+        "streaming", // subPath
+        parameterOtherTable,
+        pageSize = completedBatchPageSize,
+        sortColumn = completedBatchSortColumn,
+        desc = completedBatchSortDesc
+      ).table(completedBatchPage)
+    } catch {
+      case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
+        <div class="alert alert-error">
+          <p>Error while rendering job table:</p>
+          <pre>
+            {Utils.exceptionString(e)}
+          </pre>
+        </div>
+    }
+  }
+
+  private def generateBatchListTables(request: HttpServletRequest): Seq[Node] = {
     val runningBatches = listener.runningBatches.sortBy(_.batchTime.milliseconds).reverse
     val waitingBatches = listener.waitingBatches.sortBy(_.batchTime.milliseconds).reverse
     val completedBatches = listener.retainedCompletedBatches.
@@ -519,7 +571,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
             </h4>
           </span>
           <div class="aggregated-completedBatches collapsible-table">
-            {new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq}
+            {completedBatchTable(request, completedBatches, listener.batchDuration)}
           </div>
         </div>
       </div>

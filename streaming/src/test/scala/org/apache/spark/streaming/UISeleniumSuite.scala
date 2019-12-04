@@ -132,13 +132,13 @@ class UISeleniumSuite
           List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
             "Output Ops: Succeeded/Total", "Status")
         }
-        findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
-            "Total Delay (?)", "Output Ops: Succeeded/Total")
-        }
+        findAll(cssSelector("""#completedBatch th""")).map(_.text).toSeq should be {
+          List("Batch Time", "Records", "Scheduling Delay", "Processing Time",
+            "Total Delay", "Output Ops: Succeeded/Total")
+         }
 
         val batchLinks =
-          findAll(cssSelector("""#completed-batches-table a""")).flatMap(_.attribute("href")).toSeq
+          findAll(cssSelector("""#completedBatch a""")).flatMap(_.attribute("href")).toSeq
         batchLinks.size should be >= 1
 
         // Check a normal batch page

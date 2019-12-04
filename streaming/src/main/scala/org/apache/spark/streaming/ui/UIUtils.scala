@@ -17,13 +17,18 @@
 
 package org.apache.spark.streaming.ui
 
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
+import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
 import org.apache.commons.text.StringEscapeUtils
+
+import org.apache.spark.ui.UIUtils.uiRoot
 
 private[streaming] object UIUtils {
 
@@ -185,5 +190,22 @@ private[streaming] object UIUtils {
         {failureReasonSummary}{details}
       </td>
     }
+  }
+
+  def decodeURLParameter(urlParam: String): String = {
+    var param = urlParam
+    var decodedParam = URLDecoder.decode(param, UTF_8.name())
+    while (param != decodedParam) {
+      param = decodedParam
+      decodedParam = URLDecoder.decode(param, UTF_8.name())
+    }
+    param
+  }
+
+  def prependBaseUri(
+                      request: HttpServletRequest,
+                      basePath: String = "",
+                      resource: String = ""): String = {
+    uiRoot(request) + basePath + resource
   }
 }

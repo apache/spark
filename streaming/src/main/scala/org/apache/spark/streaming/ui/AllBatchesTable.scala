@@ -17,9 +17,13 @@
 
 package org.apache.spark.streaming.ui
 
-import scala.xml.Node
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
+import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.ui.{UIUtils => SparkUIUtils}
+import scala.xml.{Node, Unparsed}
+
+import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils => SparkUIUtils}
 
 private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) {
 
@@ -156,40 +160,234 @@ private[ui] class ActiveBatchTable(
   }
 }
 
-private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: Long)
-  extends BatchTableBase("completed-batches-table", batchInterval) {
+private[ui] class CompletedBatchTableRow(val batchData: BatchUIData,
+                                         val batchTime: Long,
+                                         val numRecords: Long,
+                                         val schedulingDelay: Option[Long],
+                                         val processingDelay: Option[Long],
+                                         val totalDelay: Option[Long])
 
-  private val firstFailureReason = getFirstFailureReason(batches)
+private[ui] class CompletedBatchPagedTable(
+                                      request: HttpServletRequest,
+                                      parent: StreamingTab,
+                                      batchInterval: Long,
+                                      data: Seq[BatchUIData],
+                                      completedBatchTag: String,
+                                      basePath: String,
+                                      subPath: String,
+                                      parameterOtherTable: Iterable[String],
+                                      pageSize: Int,
+                                      sortColumn: String,
+                                      desc: Boolean)
+  extends PagedTable[CompletedBatchTableRow] {
 
-  override protected def columns: Seq[Node] = super.columns ++ {
-    <th>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</th>
-      <th>Output Ops: Succeeded/Total</th> ++ {
-      if (firstFailureReason.nonEmpty) {
-        <th>Error</th>
-      } else {
-        Nil
+  override val dataSource = new CompletedBatchTableDataSource(data, pageSize, sortColumn, desc)
+
+  private val parameterPath = s"$basePath/$subPath/?${parameterOtherTable.mkString("&")}"
+
+  private val firstFailureReason = getFirstFailureReason(data)
+
+  override def tableId: String = completedBatchTag
+
+  override def tableCssClass: String =
+    "table table-bordered table-condensed table-striped " +
+      "table-head-clickable table-cell-width-limited"
+
+  override def pageLink(page: Int): String = {
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+    parameterPath +
+      s"&$pageNumberFormField=$page" +
+      s"&$completedBatchTag.sort=$encodedSortColumn" +
+      s"&$completedBatchTag.desc=$desc" +
+      s"&$pageSizeFormField=$pageSize"
+  }
+
+  override def pageSizeFormField: String = s"$completedBatchTag.pageSize"
+
+  override def pageNumberFormField: String = s"$completedBatchTag.page"
+
+  override def goButtonFormPath: String = {
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+    s"$parameterPath&$completedBatchTag.sort=$encodedSortColumn&$completedBatchTag.desc=$desc"
+  }
+
+  override def headers: Seq[Node] = {
+    val completedBatchTableHeaders = Seq("Batch Time", "Records", "Scheduling Delay",
+      "Processing Delay", "Total Delay", "Output Ops: Succeeded/Total")
+
+    val tooltips = Seq(None, None, Some("Time taken by Streaming scheduler to" +
+      " submit jobs of a batch"), Some("Time taken to process all jobs of a batch"),
+      Some("Total time taken to handle a batch"), None)
+
+    assert(completedBatchTableHeaders.length == tooltips.length)
+
+    val headerRow: Seq[Node] = {
+      completedBatchTableHeaders.zip(tooltips).map { case (header, tooltip) =>
+        if (header == sortColumn) {
+          val headerLink = Unparsed(
+            parameterPath +
+              s"&$completedBatchTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
+              s"&$completedBatchTag.desc=${!desc}" +
+              s"&$completedBatchTag.pageSize=$pageSize" +
+              s"#$completedBatchTag")
+          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
+
+          if (tooltip.nonEmpty) {
+            <th>
+              <a href={headerLink}>
+                <span data-toggle="tooltip" title={tooltip.get}>
+                  {header}&nbsp;{Unparsed(arrow)}
+                </span>
+              </a>
+            </th>
+          } else {
+            <th>
+              <a href={headerLink}>
+                {header}&nbsp;{Unparsed(arrow)}
+              </a>
+            </th>
+          }
+        } else {
+          val headerLink = Unparsed(
+            parameterPath +
+              s"&$completedBatchTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
+              s"&$completedBatchTag.pageSize=$pageSize" +
+              s"#$completedBatchTag")
+
+          if(tooltip.nonEmpty) {
+            <th>
+              <a href={headerLink}>
+                <span data-toggle="tooltip" title={tooltip.get}>
+                  {header}
+                </span>
+              </a>
+            </th>
+          } else {
+            <th>
+              <a href={headerLink}>
+                {header}
+              </a>
+            </th>
+          }
+        }
       }
     }
+    <thead>
+      {headerRow}
+    </thead>
   }
 
-  override protected def renderRows: Seq[Node] = {
-    batches.flatMap(batch => <tr>{completedBatchRow(batch)}</tr>)
-  }
-
-  private def completedBatchRow(batch: BatchUIData): Seq[Node] = {
-    val totalDelay = batch.totalDelay
+  override def row(completedBatchRow: CompletedBatchTableRow): Seq[Node] = {
+    val batch = completedBatchRow.batchData
+    val batchTime = completedBatchRow.batchTime
+    val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
+    val numRecords = completedBatchRow.numRecords
+    val schedulingDelay = completedBatchRow.schedulingDelay
+    val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
+    val processingTime = completedBatchRow.processingDelay
+    val formattedProcessingTime = processingTime.map(SparkUIUtils.formatDuration).getOrElse("-")
+    val batchTimeId = s"batch-$batchTime"
+    val totalDelay = completedBatchRow.totalDelay
     val formattedTotalDelay = totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
 
-    baseRow(batch) ++ {
+    <tr>
+      <td id={batchTimeId} sorttable_customkey={batchTime.toString}>
+        <a href={s"batch?id=$batchTime"}>
+          {formattedBatchTime}
+        </a>
+      </td>
+      <td sorttable_customkey={numRecords.toString}>{numRecords.toString} records</td>
+      <td sorttable_customkey={schedulingDelay.getOrElse(Long.MaxValue).toString}>
+        {formattedSchedulingDelay}
+      </td>
+      <td sorttable_customkey={processingTime.getOrElse(Long.MaxValue).toString}>
+        {formattedProcessingTime}
+      </td>
       <td sorttable_customkey={totalDelay.getOrElse(Long.MaxValue).toString}>
         {formattedTotalDelay}
       </td>
-    } ++ createOutputOperationProgressBar(batch)++ {
+      <td class="progress-cell">
+        {SparkUIUtils.makeProgressBar(started = batch.numActiveOutputOp,
+        completed = batch.numCompletedOutputOp, failed = batch.numFailedOutputOp, skipped = 0,
+        reasonToNumKilled = Map.empty, total = batch.outputOperations.size)}
+      </td>
+      {
       if (firstFailureReason.nonEmpty) {
         getFirstFailureTableCell(batch)
       } else {
         Nil
       }
+      }
+    </tr>
+  }
+
+  protected def getFirstFailureReason(batches: Seq[BatchUIData]): Option[String] = {
+    batches.flatMap(_.outputOperations.flatMap(_._2.failureReason)).headOption
+  }
+
+  protected def getFirstFailureTableCell(batch: BatchUIData): Seq[Node] = {
+    val firstFailureReason = batch.outputOperations.flatMap(_._2.failureReason).headOption
+    firstFailureReason.map { failureReason =>
+      val failureReasonForUI = UIUtils.createOutputOperationFailureForUI(failureReason)
+      UIUtils.failureReasonCell(
+        failureReasonForUI, rowspan = 1, includeFirstLineInExpandDetails = false)
+    }.getOrElse(<td>-</td>)
+  }
+
+}
+
+
+private[ui] class CompletedBatchTableDataSource(
+                                           info: Seq[BatchUIData],
+                                           pageSize: Int,
+                                           sortColumn: String,
+                                           desc: Boolean)
+  extends PagedDataSource[CompletedBatchTableRow](pageSize) {
+
+  // Convert BatchUIData to CompletedBatchTableRow which contains the final contents to show in
+  // the table so that we can avoid creating duplicate contents during sorting the data
+  private val data = info.map(completedBatchTableRow).sorted(ordering(sortColumn, desc))
+
+  private var _slicedStartTime: Set[Long] = null
+
+  override def dataSize: Int = data.size
+
+  override def sliceData(from: Int, to: Int): Seq[CompletedBatchTableRow] = {
+    val r = data.slice(from, to)
+    _slicedStartTime = r.map(_.batchTime).toSet
+    r
+  }
+
+  private def completedBatchTableRow(batch: BatchUIData): CompletedBatchTableRow = {
+    val batchTime = batch.batchTime.milliseconds
+    val records = batch.numRecords
+    val schedulingDelay = batch.schedulingDelay
+    val processingDelay = batch.processingDelay
+    val totalDelay = batch.totalDelay
+
+    new CompletedBatchTableRow(batch, batchTime, records, schedulingDelay, processingDelay,
+      totalDelay)
+
+  }
+
+  /**
+   * Return Ordering according to sortColumn and desc.
+   */
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[CompletedBatchTableRow] = {
+    val ordering: Ordering[CompletedBatchTableRow] = sortColumn match {
+      case "Batch Time" => Ordering.by(_.batchTime)
+      case "Records" => Ordering by (_.numRecords)
+      case "Scheduling Delay" => Ordering.by(_.schedulingDelay)
+      case "Processing Delay" => Ordering.by(_.processingDelay)
+      case "Total Delay" => Ordering.by(_.totalDelay)
+      case "Output Ops: Succeeded/Total" => Ordering.by(_.batchTime)
+      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
+    }
+    if (desc) {
+      ordering.reverse
+    } else {
+      ordering
     }
   }
+
 }
