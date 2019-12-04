@@ -97,6 +97,8 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
       }
       doSaslAuth(client, channel);
     }
+
+    client.setClientId(appId);
   }
 
   private void doSparkAuth(TransportClient client, Channel channel)
