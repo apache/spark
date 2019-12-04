@@ -112,8 +112,13 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     assert(lsvc.getFeaturesCol === "features")
     assert(lsvc.getPredictionCol === "prediction")
     assert(lsvc.getRawPredictionCol === "rawPrediction")
+
     val model = lsvc.setMaxIter(5).fit(smallBinaryDataset)
-    model.transform(smallBinaryDataset)
+    val transformed = model.transform(smallBinaryDataset)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+
+    transformed
       .select("label", "prediction", "rawPrediction")
       .collect()
     assert(model.getThreshold === 0.0)
