@@ -157,8 +157,9 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
-      val mergeExpressions = functions.zip(expressions.map(ae => (ae.mode, ae.filter))).flatMap {
-        case (ae: DeclarativeAggregate, (mode, filter)) =>
+      val mergeExpressions =
+        functions.zip(expressions.map(ae => (ae.mode, ae.isDistinct ae.filter))).flatMap {
+        case (ae: DeclarativeAggregate, (mode, isDistinct, filter)) =>
           mode match {
             case Partial | Complete =>
               if (filter.isDefined) {
@@ -169,7 +170,7 @@ abstract class AggregationIterator(
                 ae.updateExpressions
               }
             case PartialMerge =>
-              if (filter.isDefined) {
+              if (isDistinct && filter.isDefined) {
                 ae.mergeExpressions.zip(ae.aggBufferAttributes).map {
                   case (mergeExpr, attr) => If(filter.get, mergeExpr, attr)
                 }

@@ -125,7 +125,7 @@ case class AggregateExpression(
       normalizedAggFunc.canonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
-      filter,
+      filter.map(_.canonicalized),
       ExprId(0))
   }
 
