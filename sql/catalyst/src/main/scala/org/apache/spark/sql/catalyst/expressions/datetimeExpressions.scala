@@ -1074,7 +1074,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
  * Adds an interval to timestamp.
  */
 case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
 
   def this(start: Expression, interval: Expression) = this(start, interval, None)
 
@@ -1189,7 +1189,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
  * Subtracts an interval from timestamp.
  */
 case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
 
   def this(start: Expression, interval: Expression) = this(start, interval, None)
 
