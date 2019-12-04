@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan, Project, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -72,6 +73,12 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     parser.parsePlan(sql).collect {
       case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
     }.head
+  }
+
+  private def withCreateTableStatement(sql: String)(prediction: CreateTableStatement => Unit)
+    : Unit = {
+    val statement = parser.parsePlan(sql).asInstanceOf[CreateTableStatement]
+    prediction(statement)
   }
 
   test("alter database - property values must be set") {
@@ -774,71 +781,61 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create table - basic") {
-    val query = "CREATE TABLE my_table (id int, name string) STORED AS textfile"
-    val (desc, allowExisting) = extractTableDesc(query)
-    assert(!allowExisting)
-    assert(desc.identifier.database.isEmpty)
-    assert(desc.identifier.table == "my_table")
-    assert(desc.tableType == CatalogTableType.MANAGED)
-    assert(desc.schema == new StructType().add("id", "int").add("name", "string"))
-    assert(desc.partitionColumnNames.isEmpty)
-    assert(desc.bucketSpec.isEmpty)
-    assert(desc.viewText.isEmpty)
-    assert(desc.viewDefaultDatabase.isEmpty)
-    assert(desc.viewQueryColumnNames.isEmpty)
-    assert(desc.storage.locationUri.isEmpty)
-    assert(desc.storage.inputFormat ==
-      Some("org.apache.hadoop.mapred.TextInputFormat"))
-    assert(desc.storage.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    assert(desc.storage.properties.isEmpty)
-    assert(desc.properties.isEmpty)
-    assert(desc.comment.isEmpty)
+    val query = "CREATE TABLE my_table (id int, name string)"
+    withCreateTableStatement(query) { state =>
+      assert(state.tableName(0) == "my_table")
+      assert(state.tableSchema == new StructType().add("id", "int").add("name", "string"))
+      assert(state.partitioning.isEmpty)
+      assert(state.bucketSpec.isEmpty)
+      assert(state.properties.isEmpty)
+      assert(state.provider == conf.defaultDataSourceName)
+      assert(state.options.isEmpty)
+      assert(state.location.isEmpty)
+      assert(state.comment.isEmpty)
+      assert(!state.ifNotExists)
+    }
   }
 
   test("create table - with database name") {
-    val query = "CREATE TABLE dbx.my_table (id int, name string) STORED AS parquet"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.identifier.database == Some("dbx"))
-    assert(desc.identifier.table == "my_table")
+    val query = "CREATE TABLE dbx.my_table (id int, name string)"
+    withCreateTableStatement(query) { state =>
+      assert(state.tableName(0) == "dbx")
+      assert(state.tableName(1) == "my_table")
+    }
   }
 
   test("create table - temporary") {
-    val query = "CREATE TEMPORARY TABLE tab1 (id int, name string) STORED AS parquet"
+    val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
     val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("CREATE TEMPORARY TABLE is not supported yet"))
+    assert(e.message.contains("CREATE TEMPORARY TABLE without a provider is not allowed."))
   }
 
   test("create table - external") {
-    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere' " +
-      "STORED AS parquet "
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some(new URI("/path/to/nowhere")))
+    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
+    val e = intercept[ParseException] { parser.parsePlan(query) }
+    assert(e.message.contains("Operation not allowed: CREATE EXTERNAL TABLE ..."))
   }
 
   test("create table - if not exists") {
-    val query = "CREATE TABLE IF NOT EXISTS tab1 (id int, name string) STORED AS parquet"
-    val (_, allowExisting) = extractTableDesc(query)
-    assert(allowExisting)
+    val query = "CREATE TABLE IF NOT EXISTS tab1 (id int, name string)"
+    withCreateTableStatement(query) { state =>
+      assert(state.ifNotExists)
+    }
   }
 
   test("create table - comment") {
-    val query = "CREATE TABLE my_table (id int, name string) COMMENT 'its hot as hell below' " +
-      "STORED AS parquet"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.comment == Some("its hot as hell below"))
+    val query = "CREATE TABLE my_table (id int, name string) COMMENT 'its hot as hell below'"
+    withCreateTableStatement(query) { state =>
+      assert(state.comment == Some("its hot as hell below"))
+    }
   }
 
-  test("create table - partitioned columns") {
-    val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (month int)"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.schema == new StructType()
-      .add("id", "int")
-      .add("name", "string")
-      .add("month", "int"))
-    assert(desc.partitionColumnNames == Seq("month"))
+  test("create table - partitioned by transforms") {
+    val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (id)"
+    withCreateTableStatement(query) { state =>
+      val transform = IdentityTransform(FieldReference(Seq("id")))
+      assert(state.partitioning == Seq(transform))
+    }
   }
 
   test("create table - clustered by") {
@@ -853,24 +850,26 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
          CLUSTERED BY($bucketedColumn)
        """
 
-    val query1 = s"$baseQuery INTO $numBuckets BUCKETS STORED AS parquet"
-    val (desc1, _) = extractTableDesc(query1)
-    assert(desc1.bucketSpec.isDefined)
-    val bucketSpec1 = desc1.bucketSpec.get
-    assert(bucketSpec1.numBuckets == numBuckets)
-    assert(bucketSpec1.bucketColumnNames.head.equals(bucketedColumn))
-    assert(bucketSpec1.sortColumnNames.isEmpty)
+    val query1 = s"$baseQuery INTO $numBuckets BUCKETS"
+    withCreateTableStatement(query1) { state =>
+      assert(state.bucketSpec.isDefined)
+      val bucketSpec = state.bucketSpec.get
+      assert(bucketSpec.numBuckets == numBuckets)
+      assert(bucketSpec.bucketColumnNames.head.equals(bucketedColumn))
+      assert(bucketSpec.sortColumnNames.isEmpty)
+    }
 
-    val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS STORED AS parquet"
-    val (desc2, _) = extractTableDesc(query2)
-    assert(desc2.bucketSpec.isDefined)
-    val bucketSpec2 = desc2.bucketSpec.get
-    assert(bucketSpec2.numBuckets == numBuckets)
-    assert(bucketSpec2.bucketColumnNames.head.equals(bucketedColumn))
-    assert(bucketSpec2.sortColumnNames.head.equals(sortColumn))
+    val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS"
+    withCreateTableStatement(query2) { state =>
+      assert(state.bucketSpec.isDefined)
+      val bucketSpec = state.bucketSpec.get
+      assert(bucketSpec.numBuckets == numBuckets)
+      assert(bucketSpec.bucketColumnNames.head.equals(bucketedColumn))
+      assert(bucketSpec.sortColumnNames.head.equals(sortColumn))
+    }
   }
 
-  test("create table - skewed by") {
+  test("create table(hive) - skewed by") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) SKEWED BY"
     val query1 = s"$baseQuery(id) ON (1, 10, 100)"
     val query2 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z'))"
@@ -883,7 +882,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(e3.getMessage.contains("Operation not allowed"))
   }
 
-  test("create table - row format") {
+  test("create table(hive) - row format") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) ROW FORMAT"
     val query1 = s"$baseQuery SERDE 'org.apache.poof.serde.Baff'"
     val query2 = s"$baseQuery SERDE 'org.apache.poof.serde.Baff' WITH SERDEPROPERTIES ('k1'='v1')"
@@ -911,7 +910,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       "mapkey.delim" -> "b"))
   }
 
-  test("create table - file format") {
+  test("create table(hive) - file format") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) STORED AS"
     val query1 = s"$baseQuery INPUTFORMAT 'winput' OUTPUTFORMAT 'wowput'"
     val query2 = s"$baseQuery ORC"
@@ -925,7 +924,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc2.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
   }
 
-  test("create table - storage handler") {
+  test("create table(hive) - storage handler") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) STORED BY"
     val query1 = s"$baseQuery 'org.papachi.StorageHandler'"
     val query2 = s"$baseQuery 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')"
@@ -936,13 +935,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create table - properties") {
-    val query = "CREATE TABLE my_table (id int, name string) " +
-      "TBLPROPERTIES ('k1'='v1', 'k2'='v2') STORED AS parquet"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
+    val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
+    withCreateTableStatement(query) { state =>
+      assert(state.properties == Map("k1" -> "v1", "k2" -> "v2"))
+    }
   }
 
-  test("create table - everything!") {
+  test("create table(hive) - everything!") {
     val query =
       """
         |CREATE EXTERNAL TABLE IF NOT EXISTS dbx.my_table (id int, name string)
