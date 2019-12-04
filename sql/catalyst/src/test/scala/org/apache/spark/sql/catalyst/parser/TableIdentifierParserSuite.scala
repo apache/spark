@@ -582,7 +582,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "distinct",
     "else",
     "end",
-    "escape",
     "except",
     "false",
     "fetch",
