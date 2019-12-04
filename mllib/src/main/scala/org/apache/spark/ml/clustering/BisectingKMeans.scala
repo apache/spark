@@ -110,15 +110,21 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol),
-      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
+      outputSchema($(predictionCol)).metadata)
   }
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), parentModel.k)
+    }
+    outputSchema
   }
 
   @Since("3.0.0")

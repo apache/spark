@@ -161,13 +161,23 @@ final class OneVsRestModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false,
+      getClassifier.featuresDataType)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), numClasses)
+    }
+    if ($(rawPredictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(rawPredictionCol), numClasses)
+    }
+    outputSchema
   }
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     // Check schema
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     if (getPredictionCol.isEmpty && getRawPredictionCol.isEmpty) {
       logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
@@ -230,6 +240,7 @@ final class OneVsRestModel private[ml] (
 
       predictionColNames :+= getRawPredictionCol
       predictionColumns :+= rawPredictionUDF(col(accColName))
+        .as($(rawPredictionCol), outputSchema($(rawPredictionCol)).metadata)
     }
 
     if (getPredictionCol.nonEmpty) {

@@ -349,7 +349,7 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
@@ -358,12 +358,14 @@ class AFTSurvivalRegressionModel private[ml] (
       val predictUDF = udf { features: Vector => predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
+        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
       val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
       predictionColNames :+= $(quantilesCol)
       predictionColumns :+= predictQuantilesUDF(col($(featuresCol)))
+        .as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
     }
 
     if (predictionColNames.nonEmpty) {
@@ -377,7 +379,15 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+    }
+    if (isDefined(quantilesCol) && $(quantilesCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(quantilesCol), $(quantileProbabilities).length)
+    }
+    outputSchema
   }
 
   @Since("1.6.0")

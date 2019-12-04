@@ -61,6 +61,9 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
       .setSeed(42L)
     val model = w2v.fit(docDF)
 
+    val transformed = model.transform(docDF)
+    checkVectorSizeOnDF(transformed, "result", model.getVectorSize)
+
     MLTestingUtils.checkCopyAndUids(w2v, model)
 
     // These expectations are just magic values, characterizing the current

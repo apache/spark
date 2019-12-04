@@ -227,7 +227,7 @@ class RobustScalerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val shift = if ($(withCentering)) median.toArray else Array.emptyDoubleArray
     val scale = if ($(withScaling)) {
@@ -238,11 +238,17 @@ class RobustScalerModel private[ml] (
       shift, scale, $(withCentering), $(withScaling))
     val transformer = udf(func)
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), median.size)
+    }
+    outputSchema
   }
 
   override def copy(extra: ParamMap): RobustScalerModel = {
