@@ -147,22 +147,8 @@ class PCAModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    val func = { vector: Vector =>
-      vector match {
-        case dv: DenseVector =>
-          pc.transpose.multiply(dv)
-        case SparseVector(size, indices, values) =>
-          /* SparseVector -> single row SparseMatrix */
-          val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
-          val projection = sm.multiply(pc)
-          Vectors.dense(projection.values)
-        case _ =>
-          throw new IllegalArgumentException("Unsupported vector format. Expected " +
-            s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
-      }
-    }
-
-    val transformer = udf(func)
+    val transposed = pc.transpose
+    val transformer = udf { vector: Vector => transposed.multiply(vector) }
     dataset.withColumn($(outputCol), transformer(col($(inputCol))))
   }
 
