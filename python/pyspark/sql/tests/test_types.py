@@ -969,7 +969,7 @@ class DataTypeVerificationTests(unittest.TestCase):
                 _make_type_verifier(data_type, nullable=False)(obj)
 
     @unittest.skipIf(sys.version_info[:2] < (3, 6), "Create Row without sorting fields")
-    def test_Row_without_field_sorting(self):
+    def test_row_without_field_sorting(self):
         sorting_enabled_tmp = Row._row_field_sorting_enabled
         Row._row_field_sorting_enabled = False
 

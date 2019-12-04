@@ -1444,7 +1444,7 @@ class Row(tuple):
     to "true". This option is deprecated and will be removed in future versions
     of Spark. For Python versions < 3.6, named arguments can no longer be used
     without enabling field sorting with the environment variable above because
-    order or the arguments is not guaranteed to be the same as entered, see
+    order of the arguments is not guaranteed to be the same as entered, see
     https://www.python.org/dev/peps/pep-0468. If this is detected, a warning
     will be issued and the Row will fallback to sort the field names
     automatically.
@@ -1500,9 +1500,9 @@ class Row(tuple):
                              "and kwargs to create Row")
         if kwargs:
             if not Row._row_field_sorting_enabled and sys.version_info[:2] < (3, 6):
-                warnings.warn("To use named arguments for Python version < 3.6, Row "
-                              "field sorting must be enabled by setting the environment "
-                              "variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' to 'true'.")
+                warnings.warn("To use named arguments for Python version < 3.6, Row fields will be "
+                              "automatically sorted. This warning can be skipped by setting the "
+                              "environment variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' to 'true'.")
                 Row._row_field_sorting_enabled = True
 
             # create row objects
