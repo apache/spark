@@ -118,7 +118,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("""%SystemDrive%\Users\John""" like _, """\%SystemDrive\%\\Users%""", true)
   }
 
-  Seq('/', '#', '\"', '\\').foreach { escapeChar =>
+  Seq('/', '#', '\"').foreach { escapeChar =>
     val escapeOpt = Some(escapeChar)
     test(s"LIKE Pattern ESCAPE '$escapeChar'") {
       // null handling
