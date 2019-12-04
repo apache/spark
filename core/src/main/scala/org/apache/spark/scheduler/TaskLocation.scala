@@ -51,11 +51,11 @@ private [spark] case class HDFSCacheTaskLocation(override val host: String) exte
 
 /**
  * A location that can match any host. This can be used as one of the locations in
- * [[org.apache.spark.rdd.RDD.getPreferredLocations]] to indicate that the task can be assigned to
- * any host if none of the other desired locations can be satisfied immediately.
+ * `RDD.getPreferredLocations` to indicate that the task can be assigned to any host if none of
+ * the other desired locations can be satisfied immediately.
  *
  * This location is only used internally by DAGScheduler to skip delayed scheduling for individual
- * RDDs. [[DAGScheduler.getPreferredLocs]] does not contain this location.
+ * RDDs. `DAGScheduler.getPreferredLocs` does not contain this location.
  *
  * @note This class is experimental and may be replaced by a more complete solution for delayed
  *       scheduling.
