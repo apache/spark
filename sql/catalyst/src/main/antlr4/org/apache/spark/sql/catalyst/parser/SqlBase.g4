@@ -968,6 +968,7 @@ ansiNonReserved
     | DISTRIBUTE
     | DIV
     | DROP
+    | ESCAPE
     | ESCAPED
     | EXCHANGE
     | EXISTS
