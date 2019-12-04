@@ -23,7 +23,8 @@ import java.net.URI
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.parquet.io.ParquetDecodingException
-import org.apache.spark.{TaskContext, Partition => RDDPartition}
+
+import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
