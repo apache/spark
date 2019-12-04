@@ -3911,6 +3911,14 @@ object functions {
   def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
 
   /**
+   * Returns the median value as double of an array of numeric values.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def array_median(e: Column): Column = withExpr { ArrayMedian(e.expr) }
+
+  /**
    * Returns a random permutation of the given array.
    *
    * @note The function is non-deterministic.
