@@ -46,3 +46,18 @@ select null + date '2001-09-28';
 select null - date '2019-10-06';
 select null - timestamp '2019-10-06 10:11:12.345678';
 select timestamp '2019-10-06 10:11:12.345678' - null;
+
+select date_add('2011-11-11', 1Y);
+select date_add('2011-11-11', 1S);
+select date_add('2011-11-11', 1);
+select date_add('2011-11-11', 1L);
+select date_add('2011-11-11', 1.0);
+select date_add('2011-11-11', 1E1);
+select date_add('2011-11-11', '1');
+select date_add(date'2011-11-11', 1);
+select date_add(timestamp'2011-11-11', 1);
+select date_sub(date'2011-11-11', 1);
+select date_sub(timestamp'2011-11-11', 1);
+select date_sub(null, 1);
+select date_sub(date'2011-11-11', null);
+select date'2011-11-11' + 1E1;

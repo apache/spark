@@ -61,6 +61,7 @@ object TypeCoercion {
       StackCoercion ::
       Division(conf) ::
       ImplicitTypeCasts ::
+      DateTimeOperations ::
       WindowFrameCoercion ::
       Nil
 
@@ -437,6 +438,8 @@ object TypeCoercion {
       case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
       case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
       case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
+      case DateAdd(left @ StringType(), right) => DateAdd(Cast(left, DateType), right)
+      case DateSub(left @ StringType(), right) => DateSub(Cast(left, DateType), right)
     }
   }
 
@@ -818,6 +821,17 @@ object TypeCoercion {
             c.copy(children = newIndex +: newInputs)
         }
       }
+    }
+  }
+
+  object DateTimeOperations extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+      case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
     }
   }
 
