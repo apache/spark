@@ -296,7 +296,7 @@ class KMeans private (
         // clusterWeightSum is needed to calculate cluster center
         // cluster center =
         //     sample1 * weight1/clusterWeightSum + sample2 * weight2/clusterWeightSum + ...
-        val clusterWeightSum = Array.fill(thisCenters.length)(0.0)
+        val clusterWeightSum = Array.ofDim[Double](thisCenters.length)
 
         pointsAndWeights.foreach { case (point, weight) =>
           val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
@@ -316,8 +316,8 @@ class KMeans private (
         instr.foreach(_.logNumExamples(collected.values.map(_._2).sum.toLong))
       }
 
-      val newCenters = collected.mapValues { case (sum, count) =>
-        distanceMeasureInstance.centroid(sum, count)
+      val newCenters = collected.mapValues { case (sum, weightSum) =>
+        distanceMeasureInstance.centroid(sum, weightSum)
       }
 
       bcCenters.destroy()

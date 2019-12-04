@@ -335,9 +335,8 @@ class KMeans @Since("1.5.0") (
       lit(1.0)
     }
 
-    val instances: RDD[(OldVector, Double)] = dataset.select(
-      DatasetUtils.columnToVector(dataset, getFeaturesCol),
-      w).rdd.map {
+    val instances: RDD[(OldVector, Double)] = dataset
+      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd.map {
       case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight)
     }
 
