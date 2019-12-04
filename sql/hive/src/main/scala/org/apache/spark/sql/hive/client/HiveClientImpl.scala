@@ -388,9 +388,10 @@ private[hive] class HiveClientImpl(
     props.get(PROP_OWNER_NAME).orElse(if (isCreate) Some(userName) else None).foreach { ownerName =>
       shim.setDatabaseOwnerName(hiveDb, ownerName)
     }
-    props.get(PROP_OWNER_TYPE).orElse(if (isCreate) Some("USER") else None).foreach { ownerType =>
-      shim.setDatabaseOwnerType(hiveDb, ownerType)
-    }
+    props.get(PROP_OWNER_TYPE).orElse(if (isCreate) Some(PrincipalType.USER.name) else None)
+      .foreach { ownerType =>
+        shim.setDatabaseOwnerType(hiveDb, ownerType)
+      }
     hiveDb
   }
 
