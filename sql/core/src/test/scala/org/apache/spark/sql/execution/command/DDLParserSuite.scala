@@ -606,23 +606,18 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("Test CTAS #3") {
-    val s3 = """CREATE TABLE page_view STORED AS textfile AS SELECT * FROM src"""
-    val (desc, exists) = extractTableDesc(s3)
-    assert(exists == false)
-    assert(desc.identifier.database == None)
-    assert(desc.identifier.table == "page_view")
-    assert(desc.tableType == CatalogTableType.MANAGED)
-    assert(desc.storage.locationUri == None)
-    assert(desc.schema.isEmpty)
-    assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewDefaultDatabase.isEmpty)
-    assert(desc.viewQueryColumnNames.isEmpty)
-    assert(desc.storage.properties == Map())
-    assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
-    assert(desc.storage.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    assert(desc.properties == Map())
+    val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
+    val statement = parser.parsePlan(s3).asInstanceOf[CreateTableAsSelectStatement]
+    assert(statement.tableName(0) == "page_view")
+    assert(statement.asSelect == parser.parsePlan("SELECT * FROM src"))
+    assert(statement.partitioning.isEmpty)
+    assert(statement.bucketSpec.isEmpty)
+    assert(statement.properties.isEmpty)
+    assert(statement.provider == conf.defaultDataSourceName)
+    assert(statement.options.isEmpty)
+    assert(statement.location.isEmpty)
+    assert(statement.comment.isEmpty)
+    assert(!statement.ifNotExists)
   }
 
   test("Test CTAS #4") {
