@@ -228,7 +228,7 @@ class LimitOnlyQuerySuite extends SparkFunSuite with SQLMetricsTestUtils with Sh
   test("Join with limit only scan on partition + bucketed table") {
     withTable("testDataForScan") {
       spark.range(1000).selectExpr("id", "id % 5 as p")
-        .write.partitionBy("p").saveAsTable("testDataForScan")
+        .write.partitionBy("p").bucketBy(3, "id").saveAsTable("testDataForScan")
       // The execution plan has 2 FileScan nodes.
       val df = spark.sql(
         " SELECT * FROM testDataForScan JOIN" +
@@ -249,7 +249,7 @@ class LimitOnlyQuerySuite extends SparkFunSuite with SQLMetricsTestUtils with Sh
       val firstScanRDD = fileScanRDDs.head
       val secondScanRDD = fileScanRDDs.tail.head.asInstanceOf[SinglePartitionFileScanRDD]
 
-      assert(firstScanRDD.partitions.length == 2)
+      assert(firstScanRDD.partitions.length == 3)
       assert(secondScanRDD.partitions.length == 1)
     }
   }
