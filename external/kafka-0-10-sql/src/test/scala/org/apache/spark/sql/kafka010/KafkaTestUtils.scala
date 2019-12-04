@@ -143,15 +143,20 @@ class KafkaTestUtils(
 
   private def rewriteKrb5Conf(): Unit = {
     val krb5Conf = Source.fromFile(kdc.getKrb5conf, "UTF-8").getLines()
-    val rewriteKrb5Conf = krb5Conf.map(s =>
+    var rewritten = false
+    val addedConfig =
+      addedKrb5Config("default_tkt_enctypes", "aes128-cts-hmac-sha1-96") +
+        addedKrb5Config("default_tgs_enctypes", "aes128-cts-hmac-sha1-96")
+    var rewriteKrb5Conf = krb5Conf.map(s =>
       if (s.contains("libdefaults")) {
-        val addedConfig =
-          addedKrb5Config("default_tkt_enctypes", "aes128-cts-hmac-sha1-96") +
-            addedKrb5Config("default_tgs_enctypes", "aes128-cts-hmac-sha1-96")
+        rewritten = true
         s + addedConfig
       } else {
         s
       })
+    if (!rewritten) {
+      rewriteKrb5Conf = rewriteKrb5Conf ++ Array("[libdefaults]" + addedConfig)
+    }
     kdc.getKrb5conf.delete()
     val writer = new PrintWriter(kdc.getKrb5conf)
     // scalastyle:off println
