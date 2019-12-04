@@ -164,7 +164,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
 
     runCliWithin(3.minute)(
-      "CREATE TABLE hive_test(key INT, val STRING);"
+      "CREATE TABLE hive_test(key INT, val STRING) USING hive;"
         -> "",
       "SHOW TABLES;"
         -> "hive_test",
@@ -211,7 +211,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
       """.stripMargin
         -> "",
-      "CREATE TABLE sourceTable (key INT, val STRING);"
+      "CREATE TABLE sourceTable (key INT, val STRING) USING hive;"
         -> "",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
         -> "",
@@ -237,7 +237,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
       """.stripMargin
         -> "",
-      "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING);"
+      "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING) USING hive;"
         -> "",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithHiveAux;"
         -> "",
@@ -370,7 +370,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
       """.stripMargin
         -> "",
-      "CREATE TABLE sourceTableForWithSQL(key INT, val STRING);"
+      "CREATE TABLE sourceTableForWithSQL(key INT, val STRING) USING hive;"
         -> "",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithSQL;"
         -> "",
