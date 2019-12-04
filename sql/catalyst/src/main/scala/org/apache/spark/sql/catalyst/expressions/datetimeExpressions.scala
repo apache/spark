@@ -162,7 +162,7 @@ case class DateAdd(startDate: Expression, days: Expression)
   override def dataType: DataType = DateType
 
   override def nullSafeEval(start: Any, d: Any): Any = {
-    start.asInstanceOf[Int] + d.toString.toInt
+    start.asInstanceOf[Int] + d.asInstanceOf[Number].intValue()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -196,7 +196,7 @@ case class DateSub(startDate: Expression, days: Expression)
   override def dataType: DataType = DateType
 
   override def nullSafeEval(start: Any, d: Any): Any = {
-    start.asInstanceOf[Int] - d.toString.toInt
+    start.asInstanceOf[Int] - d.asInstanceOf[Number].intValue()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
