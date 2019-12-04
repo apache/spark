@@ -380,15 +380,15 @@ private[hive] class HiveClientImpl(
 
   private def toHiveDatabase(database: CatalogDatabase, isCreate: Boolean): HiveDatabase = {
     val props = database.properties
-    val dbOwner = props.getOrElse(PROP_OWNER_NAME, if (isCreate) userName else null)
-    val dbOwnerType = props.getOrElse(PROP_OWNER_TYPE, "USER")
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
       CatalogUtils.URIToString(database.locationUri),
       (props -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)).asJava)
-    shim.setDatabaseOwnerName(hiveDb, dbOwner)
-    shim.setDatabaseOwnerType(hiveDb, dbOwnerType)
+    props.get(PROP_OWNER_NAME).orElse(if (isCreate) Some(userName) else None).foreach { ownerName =>
+      shim.setDatabaseOwnerName(hiveDb, ownerName)
+    }
+    props.get(PROP_OWNER_TYPE).foreach(ownerType => shim.setDatabaseOwnerType(hiveDb, ownerType))
     hiveDb
   }
 

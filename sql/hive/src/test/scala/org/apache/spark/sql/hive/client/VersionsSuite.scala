@@ -186,7 +186,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         assert(getDbWithOwner.properties("ownerName") === ownerName)
         // alter database without owner
         client.alterDatabase(getDbWithOwner.copy(properties = Map()))
-        assert(client.getDatabase(db1).properties("ownerName") === "")
+        assert(client.getDatabase(db1).properties("ownerName") === currentUser)
 
         // create database without owner
         val dbWithoutOwner = CatalogDatabase(db2, "desc", Utils.createTempDir().toURI, Map())
