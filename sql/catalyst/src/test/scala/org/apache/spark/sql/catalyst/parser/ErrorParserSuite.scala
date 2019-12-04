@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAdd, UnresolvedDivide, UnresolvedMultiply, UnresolvedSubtract}
+import org.apache.spark.sql.catalyst.expressions.{Add, Divide, Multiply, Subtract}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -28,7 +29,16 @@ class ErrorParserSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.dsl.plans._
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
-    assert(parsePlan(sqlCommand) == plan)
+    val resolvedPlan = parsePlan(sqlCommand) resolveOperatorsUp {
+      case p: LogicalPlan => p transformAllExpressions {
+        case UnresolvedAdd(l, r) => Add(l, r)
+        case UnresolvedSubtract(l, r) => Subtract(l, r)
+        case UnresolvedMultiply(l, r) => Multiply(l, r)
+        case UnresolvedDivide(l, r) => Divide(l, r)
+        case other => other
+      }
+    }
+    assert(resolvedPlan == plan)
   }
 
   def intercept(sqlCommand: String, messages: String*): Unit =
