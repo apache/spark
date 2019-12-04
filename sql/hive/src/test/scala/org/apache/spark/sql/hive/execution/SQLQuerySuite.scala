@@ -2375,7 +2375,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         })
         spark
           .range(5)
-          .select(badUDF('id).as("a"))
+          .select(badUDF($"id").as("a"))
           .createOrReplaceTempView("test")
         val scriptFilePath = getTestResourcePath("data")
         val e = intercept[SparkException] {

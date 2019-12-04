@@ -59,9 +59,9 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     // Dataset for testing SparseVector
     val toSparse: Vector => SparseVector = _.asInstanceOf[DenseVector].toSparse
     val sparse = udf(toSparse)
-    smallSparseBinaryDataset = smallBinaryDataset.withColumn("features", sparse('features))
-    smallSparseValidationDataset = smallValidationDataset.withColumn("features", sparse('features))
-
+    smallSparseBinaryDataset = smallBinaryDataset.withColumn("features", sparse($"features"))
+    smallSparseValidationDataset =
+      smallValidationDataset.withColumn("features", sparse($"features"))
   }
 
   /**
