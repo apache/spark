@@ -856,7 +856,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
   override def getDatabaseOwnerType(db: Database): String = {
     Option(getDatabaseOwnerTypeMethod.invoke(db))
-      .map(_.asInstanceOf[PrincipalType].name()).getOrElse(PrincipalType.USER.name())
+      .map(_.asInstanceOf[PrincipalType].name()).getOrElse("")
   }
 
   override def setDatabaseOwnerType(db: Database, ownerType: String): Unit = {
