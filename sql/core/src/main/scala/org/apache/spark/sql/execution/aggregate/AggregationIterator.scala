@@ -158,29 +158,29 @@ abstract class AggregationIterator(
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
       val mergeExpressions =
-        functions.zip(expressions.map(ae => (ae.mode, ae.isDistinct ae.filter))).flatMap {
-        case (ae: DeclarativeAggregate, (mode, isDistinct, filter)) =>
-          mode match {
-            case Partial | Complete =>
-              if (filter.isDefined) {
-                ae.updateExpressions.zip(ae.aggBufferAttributes).map {
-                  case (updateExpr, attr) => If(filter.get, updateExpr, attr)
+        functions.zip(expressions.map(ae => (ae.mode, ae.isDistinct, ae.filter))).flatMap {
+          case (ae: DeclarativeAggregate, (mode, isDistinct, filter)) =>
+            mode match {
+              case Partial | Complete =>
+                if (filter.isDefined) {
+                  ae.updateExpressions.zip(ae.aggBufferAttributes).map {
+                    case (updateExpr, attr) => If(filter.get, updateExpr, attr)
+                  }
+                } else {
+                  ae.updateExpressions
                 }
-              } else {
-                ae.updateExpressions
-              }
-            case PartialMerge =>
-              if (isDistinct && filter.isDefined) {
-                ae.mergeExpressions.zip(ae.aggBufferAttributes).map {
-                  case (mergeExpr, attr) => If(filter.get, mergeExpr, attr)
+              case PartialMerge =>
+                if (isDistinct && filter.isDefined) {
+                  ae.mergeExpressions.zip(ae.aggBufferAttributes).map {
+                    case (mergeExpr, attr) => If(filter.get, mergeExpr, attr)
+                  }
+                } else {
+                  ae.mergeExpressions
                 }
-              } else {
-                ae.mergeExpressions
-              }
-            case Final => ae.mergeExpressions
-          }
-        case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
-      }
+              case Final => ae.mergeExpressions
+            }
+          case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+        }
       // Initialize predicates for aggregate functions if necessary
       val predicateOptions = expressions.map {
         case AggregateExpression(_, mode, _, Some(filter), _) =>
