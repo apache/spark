@@ -309,7 +309,7 @@ NULL	NULL	NULL	NULL	NULL
 -- !query 33
 SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE k = 5
 -- !query 33 schema
-struct<bool_and(v):boolean,bool_or(v):boolean,bool_or(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
+struct<every(v):boolean,some(v):boolean,any(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
 -- !query 33 output
 false	true	true	false	true
 
@@ -329,7 +329,7 @@ struct<k:int,every(v):boolean,some(v):boolean,any(v):boolean,bool_and(v):boolean
 -- !query 35
 SELECT k, every(v) FROM test_agg GROUP BY k HAVING every(v) = false
 -- !query 35 schema
-struct<k:int,bool_and(v):boolean>
+struct<k:int,every(v):boolean>
 -- !query 35 output
 1	false
 3	false
@@ -339,7 +339,7 @@ struct<k:int,bool_and(v):boolean>
 -- !query 36
 SELECT k, every(v) FROM test_agg GROUP BY k HAVING every(v) IS NULL
 -- !query 36 schema
-struct<k:int,bool_and(v):boolean>
+struct<k:int,every(v):boolean>
 -- !query 36 output
 4	NULL
 
@@ -380,7 +380,7 @@ SELECT every(1)
 struct<>
 -- !query 39 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_and(1)' due to data type mismatch: Input to function 'bool_and' should have been boolean, but it's [int].; line 1 pos 7
+cannot resolve 'every(1)' due to data type mismatch: Input to function 'every' should have been boolean, but it's [int].; line 1 pos 7
 
 
 -- !query 40
@@ -431,7 +431,7 @@ cannot resolve 'bool_or(1.0D)' due to data type mismatch: Input to function 'boo
 -- !query 45
 SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query 45 schema
-struct<k:int,v:boolean,bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query 45 output
 1	false	false
 1	true	false
