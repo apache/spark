@@ -546,10 +546,10 @@ case class UnresolvedOrdinal(ordinal: Int)
 }
 
 trait UnresolvedBinaryExpression extends BinaryExpression with Unevaluable {
-  val operator: String
+  def operator: String
   override lazy val resolved: Boolean = false
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def sql: String = s"${left.sql} $operator ${right.sql}"
+  override def toString: String = s"$left $operator $right"
 }
 
 case class UnresolvedAdd(left: Expression, right: Expression) extends UnresolvedBinaryExpression {
