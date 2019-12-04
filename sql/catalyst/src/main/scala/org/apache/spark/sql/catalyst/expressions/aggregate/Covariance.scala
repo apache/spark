@@ -42,23 +42,7 @@ abstract class Covariance(x: Expression, y: Expression)
 
   override val initialValues: Seq[Expression] = Array.fill(4)(Literal(0.0))
 
-  override lazy val updateExpressions: Seq[Expression] = {
-    val newN = n + Literal(1.0)
-    val dx = x - xAvg
-    val dy = y - yAvg
-    val dyN = dy / newN
-    val newXAvg = xAvg + dx / newN
-    val newYAvg = yAvg + dyN
-    val newCk = ck + dx * (y - newYAvg)
-
-    val isNull = IsNull(x) || IsNull(y)
-    Seq(
-      If(isNull, n, newN),
-      If(isNull, xAvg, newXAvg),
-      If(isNull, yAvg, newYAvg),
-      If(isNull, ck, newCk)
-    )
-  }
+  override lazy val updateExpressions: Seq[Expression] = updateExpressionsDef
 
   override val mergeExpressions: Seq[Expression] = {
 
@@ -66,35 +50,63 @@ abstract class Covariance(x: Expression, y: Expression)
     val n2 = n.right
     val newN = n1 + n2
     val dx = xAvg.right - xAvg.left
-    val dxN = If(newN === Literal(0.0), Literal(0.0), dx / newN)
+    val dxN = If(newN === 0.0, 0.0, dx / newN)
     val dy = yAvg.right - yAvg.left
-    val dyN = If(newN === Literal(0.0), Literal(0.0), dy / newN)
+    val dyN = If(newN === 0.0, 0.0, dy / newN)
     val newXAvg = xAvg.left + dxN * n2
     val newYAvg = yAvg.left + dyN * n2
     val newCk = ck.left + ck.right + dx * dyN * n1 * n2
 
     Seq(newN, newXAvg, newYAvg, newCk)
   }
+
+  protected def updateExpressionsDef: Seq[Expression] = {
+    val newN = n + 1.0
+    val dx = x - xAvg
+    val dy = y - yAvg
+    val dyN = dy / newN
+    val newXAvg = xAvg + dx / newN
+    val newYAvg = yAvg + dyN
+    val newCk = ck + dx * (y - newYAvg)
+
+    val isNull = x.isNull || y.isNull
+    Seq(
+      If(isNull, n, newN),
+      If(isNull, xAvg, newXAvg),
+      If(isNull, yAvg, newYAvg),
+      If(isNull, ck, newCk)
+    )
+  }
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.")
+  usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2);
+       0.6666666666666666
+  """,
+  since = "2.0.0")
 case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
-    If(n === Literal(0.0), Literal.create(null, DoubleType),
-      ck / n)
+    If(n === 0.0, Literal.create(null, DoubleType), ck / n)
   }
   override def prettyName: String = "covar_pop"
 }
 
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.")
+  usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2);
+       1.0
+  """,
+  since = "2.0.0")
 case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
-    If(n === Literal(0.0), Literal.create(null, DoubleType),
-      If(n === Literal(1.0), Literal(Double.NaN),
-        ck / (n - Literal(1.0))))
+    If(n === 0.0, Literal.create(null, DoubleType),
+      If(n === 1.0, Double.NaN, ck / (n - 1.0)))
   }
   override def prettyName: String = "covar_samp"
 }

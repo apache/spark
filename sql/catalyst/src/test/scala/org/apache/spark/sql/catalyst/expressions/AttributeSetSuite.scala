@@ -39,8 +39,8 @@ class AttributeSetSuite extends SparkFunSuite {
   }
 
   test("checks by id not name") {
-    assert(aSet.contains(aUpper) === true)
-    assert(aSet.contains(aLower) === true)
+    assert(aSet.contains(aUpper))
+    assert(aSet.contains(aLower))
     assert(aSet.contains(fakeA) === false)
 
     assert(aSet.contains(bUpper) === false)
@@ -48,8 +48,8 @@ class AttributeSetSuite extends SparkFunSuite {
   }
 
   test("++ preserves AttributeSet")  {
-    assert((aSet ++ bSet).contains(aUpper) === true)
-    assert((aSet ++ bSet).contains(aLower) === true)
+    assert((aSet ++ bSet).contains(aUpper))
+    assert((aSet ++ bSet).contains(aLower))
   }
 
   test("extracts all references ") {
@@ -65,7 +65,7 @@ class AttributeSetSuite extends SparkFunSuite {
   }
 
   test("subset") {
-    assert(aSet.subsetOf(aAndBSet) === true)
+    assert(aSet.subsetOf(aAndBSet))
     assert(aAndBSet.subsetOf(aSet) === false)
   }
 

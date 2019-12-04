@@ -90,12 +90,12 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
           // Otherwise, interpolate the number of partitions we need to try, but overestimate it
           // by 50%. We also cap the estimation in the end.
           if (results.size == 0) {
-            numPartsToTry = partsScanned * 4
+            numPartsToTry = partsScanned * 4L
           } else {
             // the left side of max is >=1 whenever partsScanned >= 2
             numPartsToTry = Math.max(1,
               (1.5 * num * partsScanned / results.size).toInt - partsScanned)
-            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4L)
           }
         }
 
@@ -109,7 +109,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
           (it: Iterator[T]) => it.take(left).toArray,
           p,
           (index: Int, data: Array[T]) => buf(index) = data,
-          Unit)
+          ())
         job.flatMap { _ =>
           buf.foreach(results ++= _.take(num - results.size))
           continue(partsScanned + p.size)
@@ -125,7 +125,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
   def foreachAsync(f: T => Unit): FutureAction[Unit] = self.withScope {
     val cleanF = self.context.clean(f)
     self.context.submitJob[T, Unit, Unit](self, _.foreach(cleanF), Range(0, self.partitions.length),
-      (index, data) => Unit, Unit)
+      (index, data) => (), ())
   }
 
   /**
@@ -133,7 +133,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    */
   def foreachPartitionAsync(f: Iterator[T] => Unit): FutureAction[Unit] = self.withScope {
     self.context.submitJob[T, Unit, Unit](self, f, Range(0, self.partitions.length),
-      (index, data) => Unit, Unit)
+      (index, data) => (), ())
   }
 }
 

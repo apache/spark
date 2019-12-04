@@ -73,4 +73,29 @@ class VersionUtilsSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("Return short version number") {
+    assert(shortVersion("3.0.0") === "3.0.0")
+    assert(shortVersion("3.0.0-SNAPSHOT") === "3.0.0")
+    withClue("shortVersion parsing should fail for missing maintenance version number") {
+      intercept[IllegalArgumentException] {
+        shortVersion("3.0")
+      }
+    }
+    withClue("shortVersion parsing should fail for invalid major version number") {
+      intercept[IllegalArgumentException] {
+        shortVersion("x.0.0")
+      }
+    }
+    withClue("shortVersion parsing should fail for invalid minor version number") {
+      intercept[IllegalArgumentException] {
+        shortVersion("3.x.0")
+      }
+    }
+    withClue("shortVersion parsing should fail for invalid maintenance version number") {
+      intercept[IllegalArgumentException] {
+        shortVersion("3.0.x")
+      }
+    }
+  }
 }

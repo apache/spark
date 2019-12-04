@@ -22,7 +22,7 @@ SELECT key + (value/2) FROM DECIMAL_UDF;
 EXPLAIN SELECT key + '1.0' FROM DECIMAL_UDF;
 SELECT key + '1.0' FROM DECIMAL_UDF;
 
--- substraction
+-- subtraction
 EXPLAIN SELECT key - key FROM DECIMAL_UDF;
 SELECT key - key FROM DECIMAL_UDF;
 

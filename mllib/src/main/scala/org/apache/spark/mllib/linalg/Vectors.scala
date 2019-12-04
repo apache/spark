@@ -117,7 +117,7 @@ sealed trait Vector extends Serializable {
    */
   @Since("1.1.0")
   def copy: Vector = {
-    throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
+    throw new UnsupportedOperationException(s"copy is not implemented for ${this.getClass}.")
   }
 
   /**
@@ -204,6 +204,14 @@ sealed trait Vector extends Serializable {
    */
   @Since("2.0.0")
   def asML: newlinalg.Vector
+
+  /**
+   * Calculate the dot product of this vector with another.
+   *
+   * If `size` does not match an [[IllegalArgumentException]] is thrown.
+   */
+  @Since("3.0.0")
+  def dot(v: Vector): Double = BLAS.dot(this, v)
 }
 
 /**
@@ -326,8 +334,6 @@ object Vectors {
    */
   @Since("1.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
-    require(size > 0, "The size of the requested sparse vector must be greater than 0.")
-
     val (indices, values) = elements.sortBy(_._1).unzip
     var prev = -1
     indices.foreach { i =>
@@ -758,6 +764,7 @@ class SparseVector @Since("1.0.0") (
     @Since("1.0.0") val indices: Array[Int],
     @Since("1.0.0") val values: Array[Double]) extends Vector {
 
+  require(size >= 0, "The size of the requested sparse vector must be no less than 0.")
   require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
     s" indices match the dimension of the values. You provided ${indices.length} indices and " +
     s" ${values.length} values.")
@@ -785,6 +792,15 @@ class SparseVector @Since("1.0.0") (
   }
 
   private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
+
+  override def apply(i: Int): Double = {
+    if (i < 0 || i >= size) {
+      throw new IndexOutOfBoundsException(s"Index $i out of bounds [0, $size)")
+    }
+
+    val j = util.Arrays.binarySearch(indices, i)
+    if (j < 0) 0.0 else values(j)
+  }
 
   @Since("1.6.0")
   override def foreachActive(f: (Int, Double) => Unit): Unit = {

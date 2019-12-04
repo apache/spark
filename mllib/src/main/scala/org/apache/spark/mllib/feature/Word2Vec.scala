@@ -32,6 +32,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
@@ -45,7 +46,7 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 private case class VocabWord(
   var word: String,
-  var cn: Int,
+  var cn: Long,
   var point: Array[Int],
   var code: Array[Int],
   var codeLen: Int
@@ -194,7 +195,7 @@ class Word2Vec extends Serializable with Logging {
         new Array[Int](MAX_CODE_LENGTH),
         0))
       .collect()
-      .sortWith((a, b) => a.cn > b.cn)
+      .sortBy(_.cn)(Ordering[Long].reverse)
 
     vocabSize = vocab.length
     require(vocabSize > 0, "The vocabulary size should be > 0. You may need to check " +
@@ -232,7 +233,7 @@ class Word2Vec extends Serializable with Logging {
       a += 1
     }
     while (a < 2 * vocabSize) {
-      count(a) = 1e9.toInt
+      count(a) = Long.MaxValue
       a += 1
     }
     var pos1 = vocabSize - 1
@@ -267,6 +268,8 @@ class Word2Vec extends Serializable with Logging {
         min2i = pos2
         pos2 += 1
       }
+      assert(count(min1i) < Long.MaxValue)
+      assert(count(min2i) < Long.MaxValue)
       count(vocabSize + a) = count(min1i) + count(min2i)
       parentNode(min1i) = vocabSize + a
       parentNode(min2i) = vocabSize + a
@@ -318,9 +321,9 @@ class Word2Vec extends Serializable with Logging {
     try {
       doFit(dataset, sc, expTable, bcVocab, bcVocabHash)
     } finally {
-      expTable.destroy(blocking = false)
-      bcVocab.destroy(blocking = false)
-      bcVocabHash.destroy(blocking = false)
+      expTable.destroy()
+      bcVocab.destroy()
+      bcVocabHash.destroy()
     }
   }
 
@@ -450,8 +453,8 @@ class Word2Vec extends Serializable with Logging {
         }
         i += 1
       }
-      bcSyn0Global.destroy(false)
-      bcSyn1Global.destroy(false)
+      bcSyn0Global.destroy()
+      bcSyn1Global.destroy()
     }
     newSentences.unpersist()
 
@@ -510,8 +513,6 @@ class Word2VecModel private[spark] (
   def this(model: Map[String, Array[Float]]) = {
     this(Word2VecModel.buildWordIndex(model), Word2VecModel.buildWordVectors(model))
   }
-
-  override protected def formatVersion = "1.0"
 
   @Since("1.4.0")
   def save(sc: SparkContext, path: String): Unit = {
@@ -681,7 +682,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       // We want to partition the model in partitions smaller than
       // spark.kryoserializer.buffer.max
       val bufferSize = Utils.byteStringAsBytes(
-        spark.conf.get("spark.kryoserializer.buffer.max", "64m"))
+        spark.conf.get(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, "64m"))
       // We calculate the approximate size of the model
       // We only calculate the array size, considering an
       // average string size of 15 bytes, the formula is:

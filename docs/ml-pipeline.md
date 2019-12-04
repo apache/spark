@@ -2,6 +2,21 @@
 layout: global
 title: ML Pipelines
 displayTitle: ML Pipelines
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 `\[
@@ -57,12 +72,12 @@ E.g., a learning algorithm is an `Estimator` which trains on a `DataFrame` and p
 Machine learning can be applied to a wide variety of data types, such as vectors, text, images, and structured data.
 This API adopts the `DataFrame` from Spark SQL in order to support a variety of data types.
 
-`DataFrame` supports many basic and structured types; see the [Spark SQL datatype reference](sql-programming-guide.html#data-types) for a list of supported types.
+`DataFrame` supports many basic and structured types; see the [Spark SQL datatype reference](sql-reference.html#data-types) for a list of supported types.
 In addition to the types listed in the Spark SQL guide, `DataFrame` can use ML [`Vector`](mllib-data-types.html#local-vector) types.
 
 A `DataFrame` can be created either implicitly or explicitly from a regular `RDD`.  See the code examples below and the [Spark SQL programming guide](sql-programming-guide.html) for examples.
 
-Columns in a `DataFrame` are named.  The code examples below use names such as "text," "features," and "label."
+Columns in a `DataFrame` are named. The code examples below use names such as "text", "features", and "label".
 
 ## Pipeline components
 
@@ -188,9 +203,36 @@ Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
 
-## Saving and Loading Pipelines
+## ML persistence: Saving and Loading Pipelines
 
-Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models. Please refer to the algorithm's API documentation to see if saving and loading is supported.
+Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API.
+As of Spark 2.3, the DataFrame-based API in `spark.ml` and `pyspark.ml` has complete coverage.
+
+ML persistence works across Scala, Java and Python.  However, R currently uses a modified format,
+so models saved in R can only be loaded back in R; this should be fixed in the future and is
+tracked in [SPARK-15572](https://issues.apache.org/jira/browse/SPARK-15572).
+
+### Backwards compatibility for ML persistence
+
+In general, MLlib maintains backwards compatibility for ML persistence.  I.e., if you save an ML
+model or Pipeline in one version of Spark, then you should be able to load it back and use it in a
+future version of Spark.  However, there are rare exceptions, described below.
+
+Model persistence: Is a model or Pipeline saved using Apache Spark ML persistence in Spark
+version X loadable by Spark version Y?
+
+* Major versions: No guarantees, but best-effort.
+* Minor and patch versions: Yes; these are backwards compatible.
+* Note about the format: There are no guarantees for a stable persistence format, but model loading itself is designed to be backwards compatible.
+
+Model behavior: Does a model or Pipeline in Spark version X behave identically in Spark version Y?
+
+* Major versions: No guarantees, but best-effort.
+* Minor and patch versions: Identical behavior, except for bug fixes.
+
+For both model persistence and model behavior, any breaking changes across a minor version or patch
+version are reported in the Spark version release notes. If a breakage is not reported in release
+notes, then it should be treated as a bug to be fixed.
 
 # Code examples
 

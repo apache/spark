@@ -218,6 +218,11 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
   @Since("1.6.0")
   override def copy(extra: ParamMap): Interaction = defaultCopy(extra)
 
+  @Since("3.0.0")
+  override def toString: String = {
+    s"Interaction: uid=$uid" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")
@@ -261,7 +266,8 @@ private[ml] class FeatureEncoder(numFeatures: Array[Int]) extends Serializable {
    */
   def foreachNonzeroOutput(value: Any, f: (Int, Double) => Unit): Unit = value match {
     case d: Double =>
-      assert(numFeatures.length == 1, "DoubleType columns should only contain one feature.")
+      assert(numFeatures.length == 1,
+        s"${DoubleType.catalogString} columns should only contain one feature.")
       val numOutputCols = numFeatures.head
       if (numOutputCols > 1) {
         assert(

@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
+import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
 
@@ -25,6 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.google.common.base.Splitter
+import com.google.common.io.Files
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.FrameworkInfo.Capability
@@ -33,8 +36,9 @@ import org.apache.mesos.protobuf.{ByteString, GeneratedMessageV3}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
+import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{Status => _, _}
 import org.apache.spark.util.Utils
 
 /**
@@ -71,39 +75,64 @@ trait MesosSchedulerUtils extends Logging {
       failoverTimeout: Option[Double] = None,
       frameworkId: Option[String] = None): SchedulerDriver = {
     val fwInfoBuilder = FrameworkInfo.newBuilder().setUser(sparkUser).setName(appName)
-    val credBuilder = Credential.newBuilder()
+    fwInfoBuilder.setHostname(Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
+      conf.get(DRIVER_HOST_ADDRESS)))
     webuiUrl.foreach { url => fwInfoBuilder.setWebuiUrl(url) }
     checkpoint.foreach { checkpoint => fwInfoBuilder.setCheckpoint(checkpoint) }
     failoverTimeout.foreach { timeout => fwInfoBuilder.setFailoverTimeout(timeout) }
     frameworkId.foreach { id =>
       fwInfoBuilder.setId(FrameworkID.newBuilder().setValue(id).build())
     }
-    fwInfoBuilder.setHostname(Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
-      conf.get(DRIVER_HOST_ADDRESS)))
-    conf.getOption("spark.mesos.principal").foreach { principal =>
-      fwInfoBuilder.setPrincipal(principal)
-      credBuilder.setPrincipal(principal)
-    }
-    conf.getOption("spark.mesos.secret").foreach { secret =>
-      credBuilder.setSecret(secret)
-    }
-    if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
-      throw new SparkException(
-        "spark.mesos.principal must be configured when spark.mesos.secret is set")
-    }
-    conf.getOption("spark.mesos.role").foreach { role =>
+
+    conf.get(mesosConfig.ROLE).foreach { role =>
       fwInfoBuilder.setRole(role)
     }
-    val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+    val maxGpus = conf.get(mesosConfig.MAX_GPUS)
     if (maxGpus > 0) {
       fwInfoBuilder.addCapabilities(Capability.newBuilder().setType(Capability.Type.GPU_RESOURCES))
     }
+    val credBuilder = buildCredentials(conf, fwInfoBuilder)
     if (credBuilder.hasPrincipal) {
       new MesosSchedulerDriver(
         scheduler, fwInfoBuilder.build(), masterUrl, credBuilder.build())
     } else {
       new MesosSchedulerDriver(scheduler, fwInfoBuilder.build(), masterUrl)
     }
+  }
+
+  def buildCredentials(
+      conf: SparkConf,
+      fwInfoBuilder: Protos.FrameworkInfo.Builder): Protos.Credential.Builder = {
+    val credBuilder = Credential.newBuilder()
+    conf.get(mesosConfig.CREDENTIAL_PRINCIPAL)
+      .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL")))
+      .orElse(
+        conf.get(mesosConfig.CREDENTIAL_PRINCIPAL_FILE)
+          .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL_FILE")))
+          .map { principalFile =>
+            Files.toString(new File(principalFile), StandardCharsets.UTF_8)
+          }
+      ).foreach { principal =>
+        fwInfoBuilder.setPrincipal(principal)
+        credBuilder.setPrincipal(principal)
+      }
+    conf.get(mesosConfig.CREDENTIAL_SECRET)
+      .orElse(Option(conf.getenv("SPARK_MESOS_SECRET")))
+      .orElse(
+        conf.get(mesosConfig.CREDENTIAL_SECRET_FILE)
+         .orElse(Option(conf.getenv("SPARK_MESOS_SECRET_FILE")))
+         .map { secretFile =>
+           Files.toString(new File(secretFile), StandardCharsets.UTF_8)
+         }
+      ).foreach { secret =>
+        credBuilder.setSecret(secret)
+      }
+    if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
+      throw new SparkException(
+        s"${mesosConfig.CREDENTIAL_PRINCIPAL} must be configured when " +
+          s"${mesosConfig.CREDENTIAL_SECRET} is set")
+    }
+    credBuilder
   }
 
   /**
@@ -120,7 +149,7 @@ trait MesosSchedulerUtils extends Logging {
       // until the scheduler exists
       new Thread(Utils.getFormattedClassName(this) + "-mesos-driver") {
         setDaemon(true)
-        override def run() {
+        override def run(): Unit = {
           try {
             val ret = newDriver.run()
             logInfo("driver.run() returned with code " + ret)
@@ -256,7 +285,6 @@ trait MesosSchedulerUtils extends Logging {
    * The attribute values are the mesos attribute types and they are
    *
    * @param offerAttributes the attributes offered
-   * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute])
     : Map[String, GeneratedMessageV3] = {
@@ -328,7 +356,7 @@ trait MesosSchedulerUtils extends Logging {
    *                       https://github.com/apache/mesos/blob/master/src/common/values.cpp
    *                       https://github.com/apache/mesos/blob/master/src/common/attributes.cpp
    *
-   * @param constraintsVal constaints string consisting of ';' separated key-value pairs (separated
+   * @param constraintsVal constains string consisting of ';' separated key-value pairs (separated
    *                       by ':')
    * @return  Map of constraints to match resources offers.
    */
@@ -372,37 +400,31 @@ trait MesosSchedulerUtils extends Logging {
    *         (whichever is larger)
    */
   def executorMemory(sc: SparkContext): Int = {
-    sc.conf.getInt("spark.mesos.executor.memoryOverhead",
+    sc.conf.get(mesosConfig.EXECUTOR_MEMORY_OVERHEAD).getOrElse(
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory
   }
 
-  def setupUris(uris: String,
+  def setupUris(uris: Seq[String],
                 builder: CommandInfo.Builder,
                 useFetcherCache: Boolean = false): Unit = {
-    uris.split(",").foreach { uri =>
+    uris.foreach { uri =>
       builder.addUris(CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetcherCache))
     }
   }
 
-  private def getRejectOfferDurationStr(conf: SparkConf): String = {
-    conf.get("spark.mesos.rejectOfferDuration", "120s")
-  }
-
   protected def getRejectOfferDuration(conf: SparkConf): Long = {
-    Utils.timeStringAsSeconds(getRejectOfferDurationStr(conf))
+    conf.get(mesosConfig.REJECT_OFFER_DURATION)
   }
 
   protected def getRejectOfferDurationForUnmetConstraints(conf: SparkConf): Long = {
-    conf.getTimeAsSeconds(
-      "spark.mesos.rejectOfferDurationForUnmetConstraints",
-      getRejectOfferDurationStr(conf))
+    conf.get(mesosConfig.REJECT_OFFER_DURATION_FOR_UNMET_CONSTRAINTS)
+      .getOrElse(getRejectOfferDuration(conf))
   }
 
   protected def getRejectOfferDurationForReachedMaxCores(conf: SparkConf): Long = {
-    conf.getTimeAsSeconds(
-      "spark.mesos.rejectOfferDurationForReachedMaxCores",
-      getRejectOfferDurationStr(conf))
+    conf.get(mesosConfig.REJECT_OFFER_DURATION_FOR_REACHED_MAX_CORES)
+      .getOrElse(getRejectOfferDuration(conf))
   }
 
   /**
@@ -530,9 +552,9 @@ trait MesosSchedulerUtils extends Logging {
    * the same frameworkID.  To enforce that only the first driver registers with the configured
    * framework ID, the driver calls this method after the first registration.
    */
-  def unsetFrameworkID(sc: SparkContext) {
-    sc.conf.remove("spark.mesos.driver.frameworkId")
-    System.clearProperty("spark.mesos.driver.frameworkId")
+  def unsetFrameworkID(sc: SparkContext): Unit = {
+    sc.conf.remove(mesosConfig.DRIVER_FRAMEWORK_ID)
+    System.clearProperty(mesosConfig.DRIVER_FRAMEWORK_ID.key)
   }
 
   def mesosToTaskState(state: MesosTaskState): TaskState.TaskState = state match {

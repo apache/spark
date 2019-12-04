@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.json.JSONOptions
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Test cases for various [[JSONOptions]].
  */
-class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
+class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("allowComments off") {

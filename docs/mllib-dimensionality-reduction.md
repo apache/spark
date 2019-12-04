@@ -2,6 +2,21 @@
 layout: global
 title: Dimensionality Reduction - RDD-based API
 displayTitle: Dimensionality Reduction - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -91,7 +106,7 @@ The same code applies to `IndexedRowMatrix` if `U` is defined as an
 
 [Principal component analysis (PCA)](http://en.wikipedia.org/wiki/Principal_component_analysis) is a
 statistical method to find a rotation such that the first coordinate has the largest variance
-possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
+possible, and each succeeding coordinate, in turn, has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
 `spark.mllib` supports PCA for tall-and-skinny matrices stored in row-oriented format and any Vectors.

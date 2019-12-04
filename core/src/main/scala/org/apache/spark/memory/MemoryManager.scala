@@ -41,6 +41,8 @@ private[spark] abstract class MemoryManager(
     onHeapStorageMemory: Long,
     onHeapExecutionMemory: Long) extends Logging {
 
+  require(onHeapExecutionMemory > 0, "onHeapExecutionMemory must be > 0")
+
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
   @GuardedBy("this")
@@ -57,7 +59,7 @@ private[spark] abstract class MemoryManager(
 
   protected[this] val maxOffHeapMemory = conf.get(MEMORY_OFFHEAP_SIZE)
   protected[this] val offHeapStorageMemory =
-    (maxOffHeapMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong
+    (maxOffHeapMemory * conf.get(MEMORY_STORAGE_FRACTION)).toLong
 
   offHeapExecutionMemoryPool.incrementPoolSize(maxOffHeapMemory - offHeapStorageMemory)
   offHeapStorageMemoryPool.incrementPoolSize(offHeapStorageMemory)
@@ -181,6 +183,34 @@ private[spark] abstract class MemoryManager(
   }
 
   /**
+   *  On heap execution memory currently in use, in bytes.
+   */
+  final def onHeapExecutionMemoryUsed: Long = synchronized {
+    onHeapExecutionMemoryPool.memoryUsed
+  }
+
+  /**
+   *  Off heap execution memory currently in use, in bytes.
+   */
+  final def offHeapExecutionMemoryUsed: Long = synchronized {
+    offHeapExecutionMemoryPool.memoryUsed
+  }
+
+  /**
+   *  On heap storage memory currently in use, in bytes.
+   */
+  final def onHeapStorageMemoryUsed: Long = synchronized {
+    onHeapStorageMemoryPool.memoryUsed
+  }
+
+  /**
+   *  Off heap storage memory currently in use, in bytes.
+   */
+  final def offHeapStorageMemoryUsed: Long = synchronized {
+    offHeapStorageMemoryPool.memoryUsed
+  }
+
+  /**
    * Returns the execution memory consumption, in bytes, for the given task.
    */
   private[memory] def getExecutionMemoryUsageForTask(taskAttemptId: Long): Long = synchronized {
@@ -225,7 +255,7 @@ private[spark] abstract class MemoryManager(
     }
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
     val default = math.min(maxPageSize, math.max(minPageSize, size))
-    conf.getSizeAsBytes("spark.buffer.pageSize", default)
+    conf.get(BUFFER_PAGESIZE).getOrElse(default)
   }
 
   /**

@@ -18,51 +18,68 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.{ConcurrentMap, ExecutionException, TimeUnit}
+import java.io.Closeable
 
-import com.google.common.cache._
-import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.apache.kafka.clients.producer.KafkaProducer
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord}
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
+import org.apache.spark.sql.kafka010.InternalKafkaProducerPool._
+import org.apache.spark.util.ShutdownHookManager
 
-private[kafka010] object CachedKafkaProducer extends Logging {
+private[kafka010] class CachedKafkaProducer(val kafkaParams: ju.Map[String, Object])
+  extends Closeable with Logging {
 
   private type Producer = KafkaProducer[Array[Byte], Array[Byte]]
 
-  private lazy val cacheExpireTimeout: Long =
-    SparkEnv.get.conf.getTimeAsMs("spark.kafka.producer.cache.timeout", "10m")
+  private val producer = createProducer()
 
-  private val cacheLoader = new CacheLoader[Seq[(String, Object)], Producer] {
-    override def load(config: Seq[(String, Object)]): Producer = {
-      val configMap = config.map(x => x._1 -> x._2).toMap.asJava
-      createKafkaProducer(configMap)
+  private def createProducer(): Producer = {
+    val producer: Producer = new Producer(kafkaParams)
+    if (log.isDebugEnabled()) {
+      val redactedParamsSeq = KafkaRedactionUtil.redactParams(toCacheKey(kafkaParams))
+      logDebug(s"Created a new instance of kafka producer for $redactedParamsSeq.")
+    }
+    producer
+  }
+
+  override def close(): Unit = {
+    try {
+      if (log.isInfoEnabled()) {
+        val redactedParamsSeq = KafkaRedactionUtil.redactParams(toCacheKey(kafkaParams))
+        logInfo(s"Closing the KafkaProducer with params: ${redactedParamsSeq.mkString("\n")}.")
+      }
+      producer.close()
+    } catch {
+      case NonFatal(e) => logWarning("Error while closing kafka producer.", e)
     }
   }
 
-  private val removalListener = new RemovalListener[Seq[(String, Object)], Producer]() {
-    override def onRemoval(
-        notification: RemovalNotification[Seq[(String, Object)], Producer]): Unit = {
-      val paramsSeq: Seq[(String, Object)] = notification.getKey
-      val producer: Producer = notification.getValue
-      logDebug(
-        s"Evicting kafka producer $producer params: $paramsSeq, due to ${notification.getCause}")
-      close(paramsSeq, producer)
-    }
+  def send(record: ProducerRecord[Array[Byte], Array[Byte]], callback: Callback): Unit = {
+    producer.send(record, callback)
   }
 
-  private lazy val guavaCache: LoadingCache[Seq[(String, Object)], Producer] =
-    CacheBuilder.newBuilder().expireAfterAccess(cacheExpireTimeout, TimeUnit.MILLISECONDS)
-      .removalListener(removalListener)
-      .build[Seq[(String, Object)], Producer](cacheLoader)
+  def flush(): Unit = {
+    producer.flush()
+  }
+}
 
-  private def createKafkaProducer(producerConfiguration: ju.Map[String, Object]): Producer = {
-    val kafkaProducer: Producer = new Producer(producerConfiguration)
-    logDebug(s"Created a new instance of KafkaProducer for $producerConfiguration.")
-    kafkaProducer
+private[kafka010] object CachedKafkaProducer extends Logging {
+
+  private val sparkConf = SparkEnv.get.conf
+  private val producerPool = new InternalKafkaProducerPool(sparkConf)
+
+  ShutdownHookManager.addShutdownHook { () =>
+    try {
+      producerPool.close()
+    } catch {
+      case e: Throwable =>
+        logWarning("Ignoring exception while shutting down pool from shutdown hook", e)
+    }
   }
 
   /**
@@ -70,43 +87,20 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * exist, a new KafkaProducer will be created. KafkaProducer is thread safe, it is best to keep
    * one instance per specified kafkaParams.
    */
-  private[kafka010] def getOrCreate(kafkaParams: ju.Map[String, Object]): Producer = {
-    val paramsSeq: Seq[(String, Object)] = paramsToSeq(kafkaParams)
-    try {
-      guavaCache.get(paramsSeq)
-    } catch {
-      case e @ (_: ExecutionException | _: UncheckedExecutionException | _: ExecutionError)
-        if e.getCause != null =>
-        throw e.getCause
-    }
+  def acquire(kafkaParams: ju.Map[String, Object]): CachedKafkaProducer = {
+    val updatedKafkaParams =
+      KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
+        .setAuthenticationConfigIfNeeded()
+        .build()
+    val key = toCacheKey(updatedKafkaParams)
+    producerPool.borrowObject(key, updatedKafkaParams)
   }
 
-  private def paramsToSeq(kafkaParams: ju.Map[String, Object]): Seq[(String, Object)] = {
-    val paramsSeq: Seq[(String, Object)] = kafkaParams.asScala.toSeq.sortBy(x => x._1)
-    paramsSeq
+  def release(producer: CachedKafkaProducer): Unit = {
+    producerPool.returnObject(producer)
   }
 
-  /** For explicitly closing kafka producer */
-  private[kafka010] def close(kafkaParams: ju.Map[String, Object]): Unit = {
-    val paramsSeq = paramsToSeq(kafkaParams)
-    guavaCache.invalidate(paramsSeq)
+  private[kafka010] def clear(): Unit = {
+    producerPool.reset()
   }
-
-  /** Auto close on cache evict */
-  private def close(paramsSeq: Seq[(String, Object)], producer: Producer): Unit = {
-    try {
-      logInfo(s"Closing the KafkaProducer with params: ${paramsSeq.mkString("\n")}.")
-      producer.close()
-    } catch {
-      case NonFatal(e) => logWarning("Error while closing kafka producer.", e)
-    }
-  }
-
-  private def clear(): Unit = {
-    logInfo("Cleaning up guava cache.")
-    guavaCache.invalidateAll()
-  }
-
-  // Intended for testing purpose only.
-  private def getAsMap: ConcurrentMap[Seq[(String, Object)], Producer] = guavaCache.asMap()
 }

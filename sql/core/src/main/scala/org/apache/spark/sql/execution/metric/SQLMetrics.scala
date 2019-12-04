@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.metric
 
 import java.text.NumberFormat
-import java.util.Locale
+import java.util.{Arrays, Locale}
+
+import scala.concurrent.duration._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
@@ -78,6 +80,7 @@ object SQLMetrics {
   private val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
+  private val NS_TIMING_METRIC = "nsTiming"
   private val AVERAGE_METRIC = "average"
 
   private val baseForAvgMetric: Int = 10
@@ -104,7 +107,7 @@ object SQLMetrics {
    * spill size, etc.
    */
   def createSizeMetric(sc: SparkContext, name: String): SQLMetric = {
-    // The final result of this metric in physical operator UI may looks like:
+    // The final result of this metric in physical operator UI may look like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
     val acc = new SQLMetric(SIZE_METRIC, -1)
@@ -117,6 +120,13 @@ object SQLMetrics {
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
+    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc
+  }
+
+  def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+    // Same with createTimingMetric, just normalize the unit of time to millisecond.
+    val acc = new SQLMetric(NS_TIMING_METRIC, -1)
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
   }
@@ -140,7 +150,7 @@ object SQLMetrics {
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
    */
-  def stringValue(metricsType: String, values: Seq[Long]): String = {
+  def stringValue(metricsType: String, values: Array[Long]): String = {
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
@@ -152,8 +162,9 @@ object SQLMetrics {
         val metric = if (validValues.isEmpty) {
           Seq.fill(3)(0L)
         } else {
-          val sorted = validValues.sorted
-          Seq(sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+          Arrays.sort(validValues)
+          Seq(validValues(0), validValues(validValues.length / 2),
+            validValues(validValues.length - 1))
         }
         metric.map(v => numberFormat.format(v.toDouble / baseForAvgMetric))
       }
@@ -163,6 +174,8 @@ object SQLMetrics {
         Utils.bytesToString
       } else if (metricsType == TIMING_METRIC) {
         Utils.msDurationToString
+      } else if (metricsType == NS_TIMING_METRIC) {
+        duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
         throw new IllegalStateException("unexpected metrics type: " + metricsType)
       }
@@ -172,8 +185,9 @@ object SQLMetrics {
         val metric = if (validValues.isEmpty) {
           Seq.fill(4)(0L)
         } else {
-          val sorted = validValues.sorted
-          Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+          Arrays.sort(validValues)
+          Seq(validValues.sum, validValues(0), validValues(validValues.length / 2),
+            validValues(validValues.length - 1))
         }
         metric.map(strFormat)
       }

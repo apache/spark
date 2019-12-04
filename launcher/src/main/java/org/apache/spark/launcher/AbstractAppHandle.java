@@ -18,39 +18,40 @@
 package org.apache.spark.launcher;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 abstract class AbstractAppHandle implements SparkAppHandle {
 
-  private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
+  private static final Logger LOG = Logger.getLogger(AbstractAppHandle.class.getName());
 
   private final LauncherServer server;
 
-  private LauncherConnection connection;
-  private List<Listener> listeners;
-  private State state;
-  private String appId;
-  private boolean disposed;
+  private LauncherServer.ServerConnection connection;
+  private List<SparkAppHandle.Listener> listeners;
+  private AtomicReference<SparkAppHandle.State> state;
+  private volatile String appId;
+  private volatile boolean disposed;
 
   protected AbstractAppHandle(LauncherServer server) {
     this.server = server;
-    this.state = State.UNKNOWN;
+    this.state = new AtomicReference<>(State.UNKNOWN);
   }
 
   @Override
-  public synchronized void addListener(Listener l) {
+  public synchronized void addListener(SparkAppHandle.Listener l) {
     if (listeners == null) {
-      listeners = new ArrayList<>();
+      listeners = new CopyOnWriteArrayList<>();
     }
     listeners.add(l);
   }
 
   @Override
-  public State getState() {
-    return state;
+  public SparkAppHandle.State getState() {
+    return state.get();
   }
 
   @Override
@@ -70,20 +71,17 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   @Override
   public synchronized void disconnect() {
-    if (!disposed) {
-      disposed = true;
-      if (connection != null) {
-        try {
-          connection.close();
-        } catch (IOException ioe) {
-          // no-op.
-        }
+    if (connection != null && connection.isOpen()) {
+      try {
+        connection.close();
+      } catch (IOException ioe) {
+        // no-op.
       }
-      server.unregister(this);
     }
+    dispose();
   }
 
-  void setConnection(LauncherConnection connection) {
+  void setConnection(LauncherServer.ServerConnection connection) {
     this.connection = connection;
   }
 
@@ -95,21 +93,60 @@ abstract class AbstractAppHandle implements SparkAppHandle {
     return disposed;
   }
 
-  void setState(State s) {
-    setState(s, false);
-  }
+  /**
+   * Mark the handle as disposed, and set it as LOST in case the current state is not final.
+   *
+   * This method should be called only when there's a reasonable expectation that the communication
+   * with the child application is not needed anymore, either because the code managing the handle
+   * has said so, or because the child application is finished.
+   */
+  synchronized void dispose() {
+    if (!isDisposed()) {
+      // First wait for all data from the connection to be read. Then unregister the handle.
+      // Otherwise, unregistering might cause the server to be stopped and all child connections
+      // to be closed.
+      if (connection != null) {
+        try {
+          connection.waitForClose();
+        } catch (IOException ioe) {
+          // no-op.
+        }
+      }
+      server.unregister(this);
 
-  synchronized void setState(State s, boolean force) {
-    if (force || !state.isFinal()) {
-      state = s;
-      fireEvent(false);
-    } else {
-      LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
-        new Object[] { state, s });
+      // Set state to LOST if not yet final.
+      setState(State.LOST, false);
+      this.disposed = true;
     }
   }
 
-  synchronized void setAppId(String appId) {
+  void setState(SparkAppHandle.State s) {
+    setState(s, false);
+  }
+
+  void setState(SparkAppHandle.State s, boolean force) {
+    if (force) {
+      state.set(s);
+      fireEvent(false);
+      return;
+    }
+
+    State current = state.get();
+    while (!current.isFinal()) {
+      if (state.compareAndSet(current, s)) {
+        fireEvent(false);
+        return;
+      }
+      current = state.get();
+    }
+
+    if (s != State.LOST) {
+      LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
+        new Object[] { current, s });
+    }
+  }
+
+  void setAppId(String appId) {
     this.appId = appId;
     fireEvent(true);
   }

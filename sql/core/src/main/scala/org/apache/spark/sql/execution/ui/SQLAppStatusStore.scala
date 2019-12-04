@@ -23,11 +23,12 @@ import java.util.Date
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.KVUtils.KVIndexParam
-import org.apache.spark.util.kvstore.KVStore
+import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
 /**
  * Provides a view of a KVStore with methods that make it easy to query SQL-specific state. There's
@@ -51,6 +52,10 @@ class SQLAppStatusStore(
 
   def executionsCount(): Long = {
     store.count(classOf[SQLExecutionUIData])
+  }
+
+  def planGraphCount(): Long = {
+    store.count(classOf[SparkPlanGraphWrapper])
   }
 
   def executionMetrics(executionId: Long): Map[Long, String] = {
@@ -90,7 +95,11 @@ class SQLExecutionUIData(
      * from the SQL listener instance.
      */
     @JsonDeserialize(keyAs = classOf[JLong])
-    val metricValues: Map[Long, String])
+    val metricValues: Map[Long, String]) {
+
+  @JsonIgnore @KVIndex("completionTime")
+  private def completionTimeIndex: Long = completionTime.map(_.getTime).getOrElse(-1L)
+}
 
 class SparkPlanGraphWrapper(
     @KVIndexParam val executionId: Long,
@@ -124,7 +133,7 @@ class SparkPlanGraphNodeWrapper(
     val cluster: SparkPlanGraphClusterWrapper) {
 
   def toSparkPlanGraphNode(): SparkPlanGraphNode = {
-    assert(node == null ^ cluster == null, "One and only of of nore or cluster must be set.")
+    assert(node == null ^ cluster == null, "Exactly one of node, cluster values to be set.")
     if (node != null) node else cluster.toSparkPlanGraphCluster()
   }
 

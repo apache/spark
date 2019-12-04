@@ -21,6 +21,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
+ * Exception thrown when the underlying parser returns a partial result of parsing.
+ * @param partialResult the partial result of parsing a bad record.
+ * @param cause the actual exception about why the parser cannot return full result.
+ */
+case class PartialResultException(
+     partialResult: InternalRow,
+     cause: Throwable)
+  extends Exception(cause)
+
+/**
  * Exception thrown when the underlying parser meet a bad record and can't parse it.
  * @param record a function to return the record that cause the parser to fail
  * @param partialResult a function that returns an optional row, which is the partial result of

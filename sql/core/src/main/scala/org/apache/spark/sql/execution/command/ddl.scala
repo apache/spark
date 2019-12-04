@@ -18,18 +18,21 @@
 package org.apache.spark.sql.execution.command
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit._
 
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
+import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -71,7 +74,7 @@ case class CreateDatabaseCommand(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        path.map(CatalogUtils.stringToURI(_)).getOrElse(catalog.getDefaultDBPath(databaseName)),
+        path.map(CatalogUtils.stringToURI).getOrElse(catalog.getDefaultDBPath(databaseName)),
         props),
       ifNotExists)
     Seq.empty[Row]
@@ -125,6 +128,27 @@ case class AlterDatabasePropertiesCommand(
     val catalog = sparkSession.sessionState.catalog
     val db: CatalogDatabase = catalog.getDatabaseMetadata(databaseName)
     catalog.alterDatabase(db.copy(properties = db.properties ++ props))
+
+    Seq.empty[Row]
+  }
+}
+
+/**
+ * A command for users to set new location path for a database
+ * If the database does not exist, an error message will be issued to indicate the database
+ * does not exist.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    ALTER (DATABASE|SCHEMA) database_name SET LOCATION path
+ * }}}
+ */
+case class AlterDatabaseSetLocationCommand(databaseName: String, location: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val oldDb = catalog.getDatabaseMetadata(databaseName)
+    catalog.alterDatabase(oldDb.copy(locationUri = CatalogUtils.stringToURI(location)))
 
     Seq.empty[Row]
   }
@@ -189,8 +213,9 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val isTempView = catalog.isTemporaryTable(tableName)
 
-    if (!catalog.isTemporaryTable(tableName) && catalog.tableExists(tableName)) {
+    if (!isTempView && catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
@@ -204,9 +229,10 @@ case class DropTableCommand(
       }
     }
 
-    if (catalog.isTemporaryTable(tableName) || catalog.tableExists(tableName)) {
+    if (isTempView || catalog.tableExists(tableName)) {
       try {
-        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
+        sparkSession.sharedState.cacheManager.uncacheQuery(
+          sparkSession.table(tableName), cascade = !isTempView)
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }
@@ -314,8 +340,8 @@ case class AlterTableChangeColumnCommand(
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
-    // Find the origin column from schema by column name.
-    val originColumn = findColumnByName(table.schema, columnName, resolver)
+    // Find the origin column from dataSchema by column name.
+    val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw new AnalysisException(
@@ -324,7 +350,7 @@ case class AlterTableChangeColumnCommand(
           s"'${newColumn.name}' with type '${newColumn.dataType}'")
     }
 
-    val newSchema = table.schema.fields.map { field =>
+    val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new comment.
         addComment(field, newColumn.getComment)
@@ -332,8 +358,7 @@ case class AlterTableChangeColumnCommand(
         field
       }
     }
-    val newTable = table.copy(schema = StructType(newSchema))
-    catalog.alterTable(newTable)
+    catalog.alterTableDataSchema(tableName, StructType(newDataSchema))
 
     Seq.empty[Row]
   }
@@ -345,13 +370,13 @@ case class AlterTableChangeColumnCommand(
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
     }.getOrElse(throw new AnalysisException(
-      s"Invalid column reference '$name', table schema is '${schema}'"))
+      s"Can't find column `$name` given table data columns " +
+        s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))
   }
 
   // Add the comment to a column, if comment is empty, return the original column.
-  private def addComment(column: StructField, comment: Option[String]): StructField = {
-    comment.map(column.withComment(_)).getOrElse(column)
-  }
+  private def addComment(column: StructField, comment: Option[String]): StructField =
+    comment.map(column.withComment).getOrElse(column)
 
   // Compare a [[StructField]] to another, return true if they have the same column
   // name(by resolver) and dataType.
@@ -581,14 +606,12 @@ case class AlterTableRecoverPartitionsCommand(
     // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
     val jobConf = new JobConf(hadoopConf, this.getClass)
     val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-    new PathFilter {
-      override def accept(path: Path): Boolean = {
-        val name = path.getName
-        if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
-          pathFilter == null || pathFilter.accept(path)
-        } else {
-          false
-        }
+    path: Path => {
+      val name = path.getName
+      if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
+        pathFilter == null || pathFilter.accept(path)
+      } else {
+        false
       }
     }
   }
@@ -610,10 +633,10 @@ case class AlterTableRecoverPartitionsCommand(
 
     val root = new Path(table.location)
     logInfo(s"Recover all the partitions in $root")
-    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val fs = root.getFileSystem(hadoopConf)
 
-    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
     val pathFilter = getPathFilter(hadoopConf)
 
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
@@ -662,7 +685,7 @@ case class AlterTableRecoverPartitionsCommand(
     val statusPar: GenSeq[FileStatus] =
       if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
         // parallelize the list of partitions here, then we can have better parallelism later.
-        val parArray = statuses.par
+        val parArray = new ParVector(statuses.toVector)
         parArray.tasksupport = evalTaskSupport
         parArray
       } else {
@@ -697,7 +720,7 @@ case class AlterTableRecoverPartitionsCommand(
       pathFilter: PathFilter,
       threshold: Int): GenMap[String, PartitionStatistics] = {
     if (partitionSpecsAndLocs.length > threshold) {
-      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val hadoopConf = spark.sessionState.newHadoopConf()
       val serializableConfiguration = new SerializableConfiguration(hadoopConf)
       val serializedPaths = partitionSpecsAndLocs.map(_._2.toString).toArray
 
@@ -737,7 +760,7 @@ case class AlterTableRecoverPartitionsCommand(
     // do this in parallel.
     val batchSize = 100
     partitionSpecsAndLocs.toIterator.grouped(batchSize).foreach { batch =>
-      val now = System.currentTimeMillis() / 1000
+      val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>
         val params = partitionStats.get(location.toString).map {
           case PartitionStatistics(numFiles, totalSize) =>
@@ -818,6 +841,14 @@ object DDLUtils {
     table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
   }
 
+  def readHiveTable(table: CatalogTable): HiveTableRelation = {
+    HiveTableRelation(
+      table,
+      // Hive table columns are always nullable.
+      table.dataSchema.asNullable.toAttributes,
+      table.partitionSchema.asNullable.toAttributes)
+  }
+
   /**
    * Throws a standard error for actions that require partitionProvider = hive.
    */
@@ -875,7 +906,8 @@ object DDLUtils {
           if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             OrcFileFormat.checkFieldNames(colNames)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
-              serde == Some("parquet.hive.serde.ParquetHiveSerDe")) {
+            serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
+            serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
             ParquetSchemaConverter.checkFieldNames(colNames)
           }
         case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)
@@ -890,7 +922,8 @@ object DDLUtils {
    */
   def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
     val inputPaths = query.collect {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) => r.location.rootPaths
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+        r.location.rootPaths
     }.flatten
 
     if (inputPaths.contains(outputPath)) {

@@ -24,8 +24,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.spark.ml.feature.OneHotEncoder;
-import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.ml.feature.StringIndexerModel;
+import org.apache.spark.ml.feature.OneHotEncoderModel;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -42,34 +41,30 @@ public class JavaOneHotEncoderExample {
       .appName("JavaOneHotEncoderExample")
       .getOrCreate();
 
+    // Note: categorical features are usually first encoded with StringIndexer
     // $example on$
     List<Row> data = Arrays.asList(
-      RowFactory.create(0, "a"),
-      RowFactory.create(1, "b"),
-      RowFactory.create(2, "c"),
-      RowFactory.create(3, "a"),
-      RowFactory.create(4, "a"),
-      RowFactory.create(5, "c")
+      RowFactory.create(0.0, 1.0),
+      RowFactory.create(1.0, 0.0),
+      RowFactory.create(2.0, 1.0),
+      RowFactory.create(0.0, 2.0),
+      RowFactory.create(0.0, 1.0),
+      RowFactory.create(2.0, 0.0)
     );
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-      new StructField("category", DataTypes.StringType, false, Metadata.empty())
+      new StructField("categoryIndex1", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("categoryIndex2", DataTypes.DoubleType, false, Metadata.empty())
     });
 
     Dataset<Row> df = spark.createDataFrame(data, schema);
 
-    StringIndexerModel indexer = new StringIndexer()
-      .setInputCol("category")
-      .setOutputCol("categoryIndex")
-      .fit(df);
-    Dataset<Row> indexed = indexer.transform(df);
-
     OneHotEncoder encoder = new OneHotEncoder()
-      .setInputCol("categoryIndex")
-      .setOutputCol("categoryVec");
+      .setInputCols(new String[] {"categoryIndex1", "categoryIndex2"})
+      .setOutputCols(new String[] {"categoryVec1", "categoryVec2"});
 
-    Dataset<Row> encoded = encoder.transform(indexed);
+    OneHotEncoderModel model = encoder.fit(df);
+    Dataset<Row> encoded = model.transform(df);
     encoded.show();
     // $example off$
 

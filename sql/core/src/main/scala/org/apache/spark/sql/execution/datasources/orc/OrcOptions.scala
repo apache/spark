@@ -57,9 +57,20 @@ class OrcOptions(
     }
     shortOrcCompressionCodecNames(codecName)
   }
+
+  /**
+   * Whether it merges schemas or not. When the given Orc files have different schemas,
+   * the schemas can be merged. By default use the value specified in SQLConf.
+   */
+  val mergeSchema: Boolean = parameters
+    .get(MERGE_SCHEMA)
+    .map(_.toBoolean)
+    .getOrElse(sqlConf.isOrcSchemaMergingEnabled)
 }
 
 object OrcOptions {
+  val MERGE_SCHEMA = "mergeSchema"
+
   // The ORC compression short names
   private val shortOrcCompressionCodecNames = Map(
     "none" -> "NONE",
@@ -67,4 +78,6 @@ object OrcOptions {
     "snappy" -> "SNAPPY",
     "zlib" -> "ZLIB",
     "lzo" -> "LZO")
+
+  def getORCCompressionCodecName(name: String): String = shortOrcCompressionCodecNames(name)
 }

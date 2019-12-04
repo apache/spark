@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -177,6 +177,10 @@ object AggUtils {
       case agg @ AggregateExpression(aggregateFunction, mode, true, _) =>
         aggregateFunction.transformDown(distinctColumnAttributeLookup)
           .asInstanceOf[AggregateFunction]
+      case agg =>
+        throw new IllegalArgumentException(
+          "Non-distinct aggregate is found in functionsWithDistinct " +
+          s"at planAggregateWithOneDistinct: $agg")
     }
 
     val partialDistinctAggregate: SparkPlan = {
@@ -256,6 +260,7 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
+      stateFormatVersion: Int,
       child: SparkPlan): Seq[SparkPlan] = {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
@@ -287,7 +292,8 @@ object AggUtils {
         child = partialAggregate)
     }
 
-    val restored = StateStoreRestoreExec(groupingAttributes, None, partialMerged1)
+    val restored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
+      partialMerged1)
 
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
@@ -311,6 +317,7 @@ object AggUtils {
         stateInfo = None,
         outputMode = None,
         eventTimeWatermark = None,
+        stateFormatVersion = stateFormatVersion,
         partialMerged2)
 
     val finalAndCompleteAggregate: SparkPlan = {

@@ -21,7 +21,6 @@ import java.io.{FileDescriptor, InputStream}
 import java.lang
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs._
@@ -103,8 +102,11 @@ class DebugFilesystem extends LocalFileSystem {
       override def markSupported(): Boolean = wrapped.markSupported()
 
       override def close(): Unit = {
-        wrapped.close()
-        removeOpenStream(wrapped)
+        try {
+          wrapped.close()
+        } finally {
+          removeOpenStream(wrapped)
+        }
       }
 
       override def read(): Int = wrapped.read()

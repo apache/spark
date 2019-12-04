@@ -41,7 +41,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
   @Override
   public UnsafeRow appendRow(Object kbase, long koff, int klen,
                              Object vbase, long voff, int vlen) {
-    final long recordLength = 8 + klen + vlen + 8;
+    final long recordLength = 8L + klen + vlen + 8;
     // if run out of max supported rows or page size, return null
     if (numRows >= capacity || page == null || page.size() - pageCursor < recordLength) {
       return null;

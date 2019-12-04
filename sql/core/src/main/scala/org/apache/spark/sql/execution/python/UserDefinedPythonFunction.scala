@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -32,7 +32,7 @@ case class UserDefinedPythonFunction(
     pythonEvalType: Int,
     udfDeterministic: Boolean) {
 
-  def builder(e: Seq[Expression]): PythonUDF = {
+  def builder(e: Seq[Expression]): Expression = {
     PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
   }
 

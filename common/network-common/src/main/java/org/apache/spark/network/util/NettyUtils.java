@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.util;
 
-import java.lang.reflect.Field;
 import java.util.concurrent.ThreadFactory;
 
 import io.netty.buffer.PooledByteBufAllocator;
@@ -37,6 +36,22 @@ import io.netty.util.internal.PlatformDependent;
  * Utilities for creating various Netty constructs based on whether we're using EPOLL or NIO.
  */
 public class NettyUtils {
+
+  /**
+   * Specifies an upper bound on the number of Netty threads that Spark requires by default.
+   * In practice, only 2-4 cores should be required to transfer roughly 10 Gb/s, and each core
+   * that we use will have an initial overhead of roughly 32 MB of off-heap memory, which comes
+   * at a premium.
+   *
+   * Thus, this value should still retain maximum throughput and reduce wasted off-heap memory
+   * allocation. It can be overridden by setting the number of serverThreads and clientThreads
+   * manually in Spark's configuration.
+   */
+  private static int MAX_DEFAULT_NETTY_THREADS = 8;
+
+  private static final PooledByteBufAllocator[] _sharedPooledByteBufAllocator =
+      new PooledByteBufAllocator[2];
+
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new DefaultThreadFactory(threadPoolPrefix, true);
@@ -97,6 +112,38 @@ public class NettyUtils {
   }
 
   /**
+   * Returns the default number of threads for both the Netty client and server thread pools.
+   * If numUsableCores is 0, we will use Runtime get an approximate number of available cores.
+   */
+  public static int defaultNumThreads(int numUsableCores) {
+    final int availableCores;
+    if (numUsableCores > 0) {
+      availableCores = numUsableCores;
+    } else {
+      availableCores = Runtime.getRuntime().availableProcessors();
+    }
+    return Math.min(availableCores, MAX_DEFAULT_NETTY_THREADS);
+  }
+
+  /**
+   * Returns the lazily created shared pooled ByteBuf allocator for the specified allowCache
+   * parameter value.
+   */
+  public static synchronized PooledByteBufAllocator getSharedPooledByteBufAllocator(
+      boolean allowDirectBufs,
+      boolean allowCache) {
+    final int index = allowCache ? 0 : 1;
+    if (_sharedPooledByteBufAllocator[index] == null) {
+      _sharedPooledByteBufAllocator[index] =
+        createPooledByteBufAllocator(
+          allowDirectBufs,
+          allowCache,
+          defaultNumThreads(0));
+    }
+    return _sharedPooledByteBufAllocator[index];
+  }
+
+  /**
    * Create a pooled ByteBuf allocator but disables the thread-local cache. Thread-local caches
    * are disabled for TransportClients because the ByteBufs are allocated by the event loop thread,
    * but released by the executor thread rather than the event loop thread. Those thread-local
@@ -111,24 +158,14 @@ public class NettyUtils {
     }
     return new PooledByteBufAllocator(
       allowDirectBufs && PlatformDependent.directBufferPreferred(),
-      Math.min(getPrivateStaticField("DEFAULT_NUM_HEAP_ARENA"), numCores),
-      Math.min(getPrivateStaticField("DEFAULT_NUM_DIRECT_ARENA"), allowDirectBufs ? numCores : 0),
-      getPrivateStaticField("DEFAULT_PAGE_SIZE"),
-      getPrivateStaticField("DEFAULT_MAX_ORDER"),
-      allowCache ? getPrivateStaticField("DEFAULT_TINY_CACHE_SIZE") : 0,
-      allowCache ? getPrivateStaticField("DEFAULT_SMALL_CACHE_SIZE") : 0,
-      allowCache ? getPrivateStaticField("DEFAULT_NORMAL_CACHE_SIZE") : 0
+      Math.min(PooledByteBufAllocator.defaultNumHeapArena(), numCores),
+      Math.min(PooledByteBufAllocator.defaultNumDirectArena(), allowDirectBufs ? numCores : 0),
+      PooledByteBufAllocator.defaultPageSize(),
+      PooledByteBufAllocator.defaultMaxOrder(),
+      allowCache ? PooledByteBufAllocator.defaultTinyCacheSize() : 0,
+      allowCache ? PooledByteBufAllocator.defaultSmallCacheSize() : 0,
+      allowCache ? PooledByteBufAllocator.defaultNormalCacheSize() : 0,
+      allowCache ? PooledByteBufAllocator.defaultUseCacheForAllThreads() : false
     );
-  }
-
-  /** Used to get defaults from Netty's private static fields. */
-  private static int getPrivateStaticField(String name) {
-    try {
-      Field f = PooledByteBufAllocator.DEFAULT.getClass().getDeclaredField(name);
-      f.setAccessible(true);
-      return f.getInt(null);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
   }
 }

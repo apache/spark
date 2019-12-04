@@ -64,7 +64,8 @@ import org.apache.spark.sql.types._
        [10.0,10.0,10.0]
       > SELECT _FUNC_(10.0, 0.5, 100);
        10.0
-  """)
+  """,
+  since = "2.1.0")
 case class ApproximatePercentile(
     child: Expression,
     percentageExpression: Expression,
@@ -132,7 +133,7 @@ case class ApproximatePercentile(
         case TimestampType => value.asInstanceOf[Long].toDouble
         case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
         case other: DataType =>
-          throw new UnsupportedOperationException(s"Unexpected data type ${other.simpleString}")
+          throw new UnsupportedOperationException(s"Unexpected data type ${other.catalogString}")
       }
       buffer.add(doubleValue)
     }
@@ -157,7 +158,7 @@ case class ApproximatePercentile(
       case DoubleType => doubleResult
       case _: DecimalType => doubleResult.map(Decimal(_))
       case other: DataType =>
-        throw new UnsupportedOperationException(s"Unexpected data type ${other.simpleString}")
+        throw new UnsupportedOperationException(s"Unexpected data type ${other.catalogString}")
     }
     if (result.length == 0) {
       null
@@ -206,26 +207,14 @@ object ApproximatePercentile {
    * with limited memory. PercentileDigest is backed by [[QuantileSummaries]].
    *
    * @param summaries underlying probabilistic data structure [[QuantileSummaries]].
-   * @param isCompressed An internal flag from class [[QuantileSummaries]] to indicate whether the
-   *                   underlying quantileSummaries is compressed.
    */
-  class PercentileDigest(
-      private var summaries: QuantileSummaries,
-      private var isCompressed: Boolean) {
-
-    // Trigger compression if the QuantileSummaries's buffer length exceeds
-    // compressThresHoldBufferLength. The buffer length can be get by
-    // quantileSummaries.sampled.length
-    private[this] final val compressThresHoldBufferLength: Int = {
-      // Max buffer length after compression.
-      val maxBufferLengthAfterCompression: Int = (1 / summaries.relativeError).toInt * 2
-      // A safe upper bound for buffer length before compression
-      maxBufferLengthAfterCompression * 2
-    }
+  class PercentileDigest(private var summaries: QuantileSummaries) {
 
     def this(relativeError: Double) = {
-      this(new QuantileSummaries(defaultCompressThreshold, relativeError), isCompressed = true)
+      this(new QuantileSummaries(defaultCompressThreshold, relativeError, compressed = true))
     }
+
+    private[sql] def isCompressed: Boolean = summaries.compressed
 
     /** Returns compressed object of [[QuantileSummaries]] */
     def quantileSummaries: QuantileSummaries = {
@@ -236,14 +225,6 @@ object ApproximatePercentile {
     /** Insert an observation value into the PercentileDigest data structure. */
     def add(value: Double): Unit = {
       summaries = summaries.insert(value)
-      // The result of QuantileSummaries.insert is un-compressed
-      isCompressed = false
-
-      // Currently, QuantileSummaries ignores the construction parameter compressThresHold,
-      // which may cause QuantileSummaries to occupy unbounded memory. We have to hack around here
-      // to make sure QuantileSummaries doesn't occupy infinite memory.
-      // TODO: Figure out why QuantileSummaries ignores construction parameter compressThresHold
-      if (summaries.sampled.length >= compressThresHoldBufferLength) compress()
     }
 
     /** In-place merges in another PercentileDigest. */
@@ -280,7 +261,6 @@ object ApproximatePercentile {
 
     private final def compress(): Unit = {
       summaries = summaries.compress()
-      isCompressed = true
     }
   }
 
@@ -335,8 +315,8 @@ object ApproximatePercentile {
         sampled(i) = Stats(value, g, delta)
         i += 1
       }
-      val summary = new QuantileSummaries(compressThreshold, relativeError, sampled, count)
-      new PercentileDigest(summary, isCompressed = true)
+      val summary = new QuantileSummaries(compressThreshold, relativeError, sampled, count, true)
+      new PercentileDigest(summary)
     }
   }
 

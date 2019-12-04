@@ -71,7 +71,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
         taskAccum.value.get.asInstanceOf[Long]
       }
       // Each task should keep track of the partial value on the way, i.e. 1, 2, ... numPartitions
-      assert(taskAccumValues.sorted === (1L to numPartitions).toSeq)
+      assert(taskAccumValues.sorted === (1L to numPartitions))
     }
     rdd.count()
     listener.awaitNextJobCompletion()
@@ -135,11 +135,12 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       // This job runs 2 stages, and we're in the second stage. Therefore, any task attempt
       // ID that's < 2 * numPartitions belongs to the first attempt of this stage.
       val taskContext = TaskContext.get()
-      val isFirstStageAttempt = taskContext.taskAttemptId() < numPartitions * 2
+      val isFirstStageAttempt = taskContext.taskAttemptId() < numPartitions * 2L
       if (isFirstStageAttempt) {
         throw new FetchFailedException(
           SparkEnv.get.blockManager.blockManagerId,
           sid,
+          taskContext.partitionId(),
           taskContext.partitionId(),
           taskContext.partitionId(),
           "simulated fetch failure")
@@ -210,7 +211,8 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   /**
    * A special [[ContextCleaner]] that saves the IDs of the accumulators registered for cleanup.
    */
-  private class SaveAccumContextCleaner(sc: SparkContext) extends ContextCleaner(sc) {
+  private class SaveAccumContextCleaner(sc: SparkContext) extends
+      ContextCleaner(sc, null) {
     private val accumsRegistered = new ArrayBuffer[Long]
 
     override def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {

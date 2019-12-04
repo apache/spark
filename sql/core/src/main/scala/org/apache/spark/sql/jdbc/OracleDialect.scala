@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, Timestamp, Types}
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -30,7 +30,8 @@ private case object OracleDialect extends JdbcDialect {
   private[jdbc] val BINARY_DOUBLE = 101
   private[jdbc] val TIMESTAMPTZ = -101
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
   private def supportTimeZoneTypes: Boolean = {
     val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
@@ -95,4 +96,20 @@ private case object OracleDialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  /**
+   * The SQL query used to truncate a table.
+   * @param table The table to truncate
+   * @param cascade Whether or not to cascade the truncation. Default value is the
+   *                value of isCascadingTruncateTable()
+   * @return The SQL query to use for truncating a table
+   */
+  override def getTruncateQuery(
+      table: String,
+      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade match {
+      case Some(true) => s"TRUNCATE TABLE $table CASCADE"
+      case _ => s"TRUNCATE TABLE $table"
+    }
+  }
 }

@@ -27,7 +27,11 @@ import com.google.common.io.Files
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPARK_EXECUTOR_PREFIX
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
@@ -44,6 +48,7 @@ private[deploy] class ExecutorRunner(
     val memory: Int,
     val worker: RpcEndpointRef,
     val workerId: String,
+    val webUiScheme: String,
     val host: String,
     val webUiPort: Int,
     val publicAddress: String,
@@ -52,7 +57,8 @@ private[deploy] class ExecutorRunner(
     val workerUrl: String,
     conf: SparkConf,
     val appLocalDirs: Seq[String],
-    @volatile var state: ExecutorState.Value)
+    @volatile var state: ExecutorState.Value,
+    val resources: Map[String, ResourceInformation] = Map.empty)
   extends Logging {
 
   private val fullId = appId + "/" + execId
@@ -68,16 +74,16 @@ private[deploy] class ExecutorRunner(
   // make sense to remove this in the future.
   private var shutdownHook: AnyRef = null
 
-  private[worker] def start() {
+  private[worker] def start(): Unit = {
     workerThread = new Thread("ExecutorRunner for " + fullId) {
-      override def run() { fetchAndRunExecutor() }
+      override def run(): Unit = { fetchAndRunExecutor() }
     }
     workerThread.start()
     // Shutdown hook that kills actors on shutdown.
     shutdownHook = ShutdownHookManager.addShutdownHook { () =>
       // It's possible that we arrive here before calling `fetchAndRunExecutor`, then `state` will
-      // be `ExecutorState.RUNNING`. In this case, we should set `state` to `FAILED`.
-      if (state == ExecutorState.RUNNING) {
+      // be `ExecutorState.LAUNCHING`. In this case, we should set `state` to `FAILED`.
+      if (state == ExecutorState.LAUNCHING) {
         state = ExecutorState.FAILED
       }
       killProcess(Some("Worker shutting down")) }
@@ -88,7 +94,7 @@ private[deploy] class ExecutorRunner(
    *
    * @param message the exception message which caused the executor's death
    */
-  private def killProcess(message: Option[String]) {
+  private def killProcess(message: Option[String]): Unit = {
     var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
@@ -112,7 +118,7 @@ private[deploy] class ExecutorRunner(
   }
 
   /** Stop this executor runner, including killing the process it launched */
-  private[worker] def kill() {
+  private[worker] def kill(): Unit = {
     if (workerThread != null) {
       // the workerThread will kill the child process when interrupted
       workerThread.interrupt()
@@ -139,14 +145,22 @@ private[deploy] class ExecutorRunner(
   /**
    * Download and run the executor described in our ApplicationDescription
    */
-  private def fetchAndRunExecutor() {
+  private def fetchAndRunExecutor(): Unit = {
     try {
+      val resourceFileOpt = prepareResourcesFile(SPARK_EXECUTOR_PREFIX, resources, executorDir)
       // Launch the process
-      val builder = CommandUtils.buildProcessBuilder(appDesc.command, new SecurityManager(conf),
+      val arguments = appDesc.command.arguments ++ resourceFileOpt.map(f =>
+        Seq("--resourcesFile", f.getAbsolutePath)).getOrElse(Seq.empty)
+      val subsOpts = appDesc.command.javaOpts.map {
+        Utils.substituteAppNExecIds(_, appId, execId.toString)
+      }
+      val subsCommand = appDesc.command.copy(arguments = arguments, javaOpts = subsOpts)
+      val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
-      val formattedCommand = command.asScala.mkString("\"", "\" \"", "\"")
-      logInfo(s"Launch command: $formattedCommand")
+      val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala)
+        .mkString("\"", "\" \"", "\"")
+      logInfo(s"Launch command: $redactedCommand")
 
       builder.directory(executorDir)
       builder.environment.put("SPARK_EXECUTOR_DIRS", appLocalDirs.mkString(File.pathSeparator))
@@ -156,17 +170,17 @@ private[deploy] class ExecutorRunner(
 
       // Add webUI log urls
       val baseUrl =
-        if (conf.getBoolean("spark.ui.reverseProxy", false)) {
+        if (conf.get(UI_REVERSE_PROXY)) {
           s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
         } else {
-          s"http://$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
+          s"$webUiScheme$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
         }
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
 
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
-        formattedCommand, "=" * 40)
+        redactedCommand, "=" * 40)
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")
@@ -176,6 +190,8 @@ private[deploy] class ExecutorRunner(
       Files.write(header, stderr, StandardCharsets.UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
+      state = ExecutorState.RUNNING
+      worker.send(ExecutorStateChanged(appId, execId, state, None, None))
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
       // or with nonzero exit code
       val exitCode = process.waitFor()

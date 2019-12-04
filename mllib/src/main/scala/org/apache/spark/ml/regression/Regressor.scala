@@ -28,7 +28,8 @@ import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
  * @tparam Learner  Concrete Estimator type
  * @tparam M  Concrete Model type
  */
-private[spark] abstract class Regressor[
+@DeveloperApi
+abstract class Regressor[
     FeaturesType,
     Learner <: Regressor[FeaturesType, Learner, M],
     M <: RegressionModel[FeaturesType, M]]

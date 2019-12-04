@@ -199,7 +199,7 @@ class HyperLogLogPlusPlusHelper(relativeSD: Double) extends Serializable {
       var shift = 0
       while (idx < m && i < REGISTERS_PER_WORD) {
         val Midx = (word >>> shift) & REGISTER_WORD_MASK
-        zInverse += 1.0 / (1 << Midx)
+        zInverse += 1.0 / (1L << Midx)
         if (Midx == 0) {
           V += 1.0d
         }

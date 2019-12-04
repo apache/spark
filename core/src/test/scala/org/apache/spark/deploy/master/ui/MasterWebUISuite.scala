@@ -47,14 +47,17 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
   when(master.self).thenReturn(masterEndpointRef)
   val masterWebUI = new MasterWebUI(master, 0)
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     masterWebUI.bind()
   }
 
-  override def afterAll() {
-    masterWebUI.stop()
-    super.afterAll()
+  override def afterAll(): Unit = {
+    try {
+      masterWebUI.stop()
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("kill application") {

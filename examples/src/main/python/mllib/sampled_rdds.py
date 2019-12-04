@@ -29,7 +29,7 @@ from pyspark.mllib.util import MLUtils
 if __name__ == "__main__":
     if len(sys.argv) not in [1, 2]:
         print("Usage: sampled_rdds <libsvm data file>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
     if len(sys.argv) == 2:
         datapath = sys.argv[1]
     else:
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     numExamples = examples.count()
     if numExamples == 0:
         print("Error: Data file had no samples to load.", file=sys.stderr)
-        exit(1)
+        sys.exit(1)
     print('Loaded data with %d examples from file: %s' % (numExamples, datapath))
 
     # Example: RDD.sample() and RDD.takeSample()

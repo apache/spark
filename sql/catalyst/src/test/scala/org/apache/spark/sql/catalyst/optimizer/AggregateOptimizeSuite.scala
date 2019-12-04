@@ -67,10 +67,9 @@ class AggregateOptimizeSuite extends PlanTest {
   }
 
   test("remove repetition in grouping expression") {
-    val input = LocalRelation('a.int, 'b.int, 'c.int)
-    val query = input.groupBy('a + 1, 'b + 2, Literal(1) + 'A, Literal(2) + 'B)(sum('c))
+    val query = testRelation.groupBy('a + 1, 'b + 2, Literal(1) + 'A, Literal(2) + 'B)(sum('c))
     val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = input.groupBy('a + 1, 'b + 2)(sum('c)).analyze
+    val correctAnswer = testRelation.groupBy('a + 1, 'b + 2)(sum('c)).analyze
 
     comparePlans(optimized, correctAnswer)
   }

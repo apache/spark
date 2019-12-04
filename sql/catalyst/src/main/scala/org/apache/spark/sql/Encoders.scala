@@ -22,7 +22,6 @@ import java.lang.reflect.Modifier
 import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
@@ -30,13 +29,10 @@ import org.apache.spark.sql.catalyst.expressions.objects.{DecodeUsingSerializer,
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
  * Methods for creating an [[Encoder]].
  *
  * @since 1.6.0
  */
-@Experimental
-@InterfaceStability.Evolving
 object Encoders {
 
   /**
@@ -110,11 +106,27 @@ object Encoders {
   def DATE: Encoder[java.sql.Date] = ExpressionEncoder()
 
   /**
+   * Creates an encoder that serializes instances of the `java.time.LocalDate` class
+   * to the internal representation of nullable Catalyst's DateType.
+   *
+   * @since 3.0.0
+   */
+  def LOCALDATE: Encoder[java.time.LocalDate] = ExpressionEncoder()
+
+  /**
    * An encoder for nullable timestamp type.
    *
    * @since 1.6.0
    */
   def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
+
+  /**
+   * Creates an encoder that serializes instances of the `java.time.Instant` class
+   * to the internal representation of nullable Catalyst's TimestampType.
+   *
+   * @since 3.0.0
+   */
+  def INSTANT: Encoder[java.time.Instant] = ExpressionEncoder()
 
   /**
    * An encoder for arrays of bytes.
@@ -132,8 +144,8 @@ object Encoders {
    *  - primitive types: boolean, int, double, etc.
    *  - boxed types: Boolean, Integer, Double, etc.
    *  - String
-   *  - java.math.BigDecimal
-   *  - time related: java.sql.Date, java.sql.Timestamp
+   *  - java.math.BigDecimal, java.math.BigInteger
+   *  - time related: java.sql.Date, java.sql.Timestamp, java.time.LocalDate, java.time.Instant
    *  - collection types: only array and java.util.List currently, map support is in progress
    *  - nested java bean.
    *
@@ -203,12 +215,10 @@ object Encoders {
     validatePublicClass[T]()
 
     ExpressionEncoder[T](
-      schema = new StructType().add("value", BinaryType),
-      flat = true,
-      serializer = Seq(
+      objSerializer =
         EncodeUsingSerializer(
-          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo)),
-      deserializer =
+          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo),
+      objDeserializer =
         DecodeUsingSerializer[T](
           Cast(GetColumnByOrdinal(0, BinaryType), BinaryType),
           classTag[T],

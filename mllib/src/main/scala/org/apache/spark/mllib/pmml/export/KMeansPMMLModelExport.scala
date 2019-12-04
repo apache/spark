@@ -19,7 +19,9 @@ package org.apache.spark.mllib.pmml.export
 
 import scala.{Array => SArray}
 
-import org.dmg.pmml._
+import org.dmg.pmml.{Array, CompareFunction, ComparisonMeasure, DataDictionary, DataField, DataType,
+  FieldName, MiningField, MiningFunction, MiningSchema, OpType, SquaredEuclidean}
+import org.dmg.pmml.clustering.{Cluster, ClusteringField, ClusteringModel}
 
 import org.apache.spark.mllib.clustering.KMeansModel
 
@@ -48,7 +50,7 @@ private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModel
         .setModelName("k-means")
         .setMiningSchema(miningSchema)
         .setComparisonMeasure(comparisonMeasure)
-        .setFunctionName(MiningFunctionType.CLUSTERING)
+        .setMiningFunction(MiningFunction.CLUSTERING)
         .setModelClass(ClusteringModel.ModelClass.CENTER_BASED)
         .setNumberOfClusters(model.clusterCenters.length)
 
@@ -57,9 +59,9 @@ private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModel
         dataDictionary.addDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
         miningSchema
           .addMiningFields(new MiningField(fields(i))
-          .setUsageType(FieldUsageType.ACTIVE))
+          .setUsageType(MiningField.UsageType.ACTIVE))
         clusteringModel.addClusteringFields(
-          new ClusteringField(fields(i)).setCompareFunction(CompareFunctionType.ABS_DIFF))
+          new ClusteringField(fields(i)).setCompareFunction(CompareFunction.ABS_DIFF))
       }
 
       dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)

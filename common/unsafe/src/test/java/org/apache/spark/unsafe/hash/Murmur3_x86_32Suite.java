@@ -22,6 +22,8 @@ import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
 
+import scala.util.hashing.MurmurHash3$;
+
 import org.apache.spark.unsafe.Platform;
 import org.junit.Assert;
 import org.junit.Test;
@@ -49,6 +51,23 @@ public class Murmur3_x86_32Suite {
     Assert.assertEquals(1871679806, hasher.hashLong(42L));
     Assert.assertEquals(1366273829, hasher.hashLong(Long.MIN_VALUE));
     Assert.assertEquals(-2106506049, hasher.hashLong(Long.MAX_VALUE));
+  }
+
+  // SPARK-23381 Check whether the hash of the byte array is the same as another implementations
+  @Test
+  public void testKnownBytesInputs() {
+    byte[] test = "test".getBytes(StandardCharsets.UTF_8);
+    Assert.assertEquals(MurmurHash3$.MODULE$.bytesHash(test, 0),
+      Murmur3_x86_32.hashUnsafeBytes2(test, Platform.BYTE_ARRAY_OFFSET, test.length, 0));
+    byte[] test1 = "test1".getBytes(StandardCharsets.UTF_8);
+    Assert.assertEquals(MurmurHash3$.MODULE$.bytesHash(test1, 0),
+      Murmur3_x86_32.hashUnsafeBytes2(test1, Platform.BYTE_ARRAY_OFFSET, test1.length, 0));
+    byte[] te = "te".getBytes(StandardCharsets.UTF_8);
+    Assert.assertEquals(MurmurHash3$.MODULE$.bytesHash(te, 0),
+      Murmur3_x86_32.hashUnsafeBytes2(te, Platform.BYTE_ARRAY_OFFSET, te.length, 0));
+    byte[] tes = "tes".getBytes(StandardCharsets.UTF_8);
+    Assert.assertEquals(MurmurHash3$.MODULE$.bytesHash(tes, 0),
+      Murmur3_x86_32.hashUnsafeBytes2(tes, Platform.BYTE_ARRAY_OFFSET, tes.length, 0));
   }
 
   @Test

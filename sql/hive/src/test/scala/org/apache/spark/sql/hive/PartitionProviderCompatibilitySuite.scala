@@ -37,11 +37,11 @@ class PartitionProviderCompatibilitySuite
     spark.range(5).selectExpr("id as fieldOne", "id as partCol").write
       .partitionBy("partCol")
       .mode("overwrite")
-      .parquet(dir.getAbsolutePath)
+      .save(dir.getAbsolutePath)
 
     spark.sql(s"""
       |create table $tableName (fieldOne long, partCol int)
-      |using parquet
+      |using ${spark.sessionState.conf.defaultDataSourceName}
       |options (path "${dir.toURI}")
       |partitioned by (partCol)""".stripMargin)
   }
@@ -358,7 +358,7 @@ class PartitionProviderCompatibilitySuite
     try {
       spark.sql(s"""
         |create table test (id long, P1 int, P2 int)
-        |using parquet
+        |using ${spark.sessionState.conf.defaultDataSourceName}
         |options (path "${base.toURI}")
         |partitioned by (P1, P2)""".stripMargin)
       spark.sql(s"alter table test add partition (P1=0, P2=0) location '${a.toURI}'")

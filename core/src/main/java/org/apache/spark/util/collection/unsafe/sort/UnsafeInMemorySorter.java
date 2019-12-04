@@ -62,12 +62,13 @@ public final class UnsafeInMemorySorter {
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
       if (prefixComparisonResult == 0) {
         final Object baseObject1 = memoryManager.getPage(r1.recordPointer);
-        // skip length
         final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer) + uaoSize;
+        final int baseLength1 = UnsafeAlignedOffset.getSize(baseObject1, baseOffset1 - uaoSize);
         final Object baseObject2 = memoryManager.getPage(r2.recordPointer);
-        // skip length
         final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer) + uaoSize;
-        return recordComparator.compare(baseObject1, baseOffset1, baseObject2, baseOffset2);
+        final int baseLength2 = UnsafeAlignedOffset.getSize(baseObject2, baseOffset2 - uaoSize);
+        return recordComparator.compare(baseObject1, baseOffset1, baseLength1, baseObject2,
+          baseOffset2, baseLength2);
       } else {
         return prefixComparisonResult;
       }
@@ -124,7 +125,7 @@ public final class UnsafeInMemorySorter {
     int initialSize,
     boolean canUseRadixSort) {
     this(consumer, memoryManager, recordComparator, prefixComparator,
-      consumer.allocateArray(initialSize * 2), canUseRadixSort);
+      consumer.allocateArray(initialSize * 2L), canUseRadixSort);
   }
 
   public UnsafeInMemorySorter(
@@ -204,6 +205,10 @@ public final class UnsafeInMemorySorter {
   }
 
   public long getMemoryUsage() {
+    if (array == null) {
+      return 0L;
+    }
+
     return array.size() * 8;
   }
 
@@ -213,7 +218,9 @@ public final class UnsafeInMemorySorter {
 
   public void expandPointerArray(LongArray newArray) {
     if (newArray.size() < array.size()) {
+      // checkstyle.off: RegexpSinglelineJava
       throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
+      // checkstyle.on: RegexpSinglelineJava
     }
     Platform.copyMemory(
       array.getBaseObject(),

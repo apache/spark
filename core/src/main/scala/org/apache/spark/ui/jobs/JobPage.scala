@@ -23,10 +23,9 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable.{Buffer, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
@@ -62,7 +61,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       val stageId = stage.stageId
       val attemptId = stage.attemptId
       val name = stage.name
-      val status = stage.status.toString
+      val status = stage.status.toString.toLowerCase(Locale.ROOT)
       val submissionTime = stage.submissionTime.get.getTime()
       val completionTime = stage.completionTime.map(_.getTime())
         .getOrElse(System.currentTimeMillis())
@@ -105,7 +104,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="bottom"' +
+           |    'data-toggle="tooltip" data-placement="top"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
            |    'data-html="true">Executor ${e.id} added</div>'
@@ -121,7 +120,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-toggle="tooltip" data-placement="top"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -165,7 +164,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="right">
+      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="top">
         Event Timeline
       </a>
     </span> ++
@@ -184,39 +183,76 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val jobId = parameterId.toInt
-    val jobData = store.asOption(store.job(jobId)).getOrElse {
+    val (jobData, sqlExecutionId) = store.asOption(store.jobWithAssociatedSql(jobId)).getOrElse {
       val content =
         <div id="no-info">
           <p>No information to display for job {jobId}</p>
         </div>
       return UIUtils.headerSparkPage(
-        s"Details for Job $jobId", content, parent)
+        request, s"Details for Job $jobId", content, parent)
     }
+
     val isComplete = jobData.status != JobExecutionStatus.RUNNING
     val stages = jobData.stageIds.map { stageId =>
       // This could be empty if the listener hasn't received information about the
       // stage or if the stage information has been garbage collected
       store.asOption(store.lastStageAttempt(stageId)).getOrElse {
         new v1.StageData(
-          v1.StageStatus.PENDING,
-          stageId,
-          0, 0, 0, 0, 0, 0, 0,
-          0L, 0L, None, None, None, None,
-          0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L,
-          "Unknown",
-          None,
-          "Unknown",
-          null,
-          Nil,
-          Nil,
-          None,
-          None,
-          Map())
+          status = v1.StageStatus.PENDING,
+          stageId = stageId,
+          attemptId = 0,
+          numTasks = 0,
+          numActiveTasks = 0,
+          numCompleteTasks = 0,
+          numFailedTasks = 0,
+          numKilledTasks = 0,
+          numCompletedIndices = 0,
+
+          submissionTime = None,
+          firstTaskLaunchedTime = None,
+          completionTime = None,
+          failureReason = None,
+
+          executorDeserializeTime = 0L,
+          executorDeserializeCpuTime = 0L,
+          executorRunTime = 0L,
+          executorCpuTime = 0L,
+          resultSize = 0L,
+          jvmGcTime = 0L,
+          resultSerializationTime = 0L,
+          memoryBytesSpilled = 0L,
+          diskBytesSpilled = 0L,
+          peakExecutionMemory = 0L,
+          inputBytes = 0L,
+          inputRecords = 0L,
+          outputBytes = 0L,
+          outputRecords = 0L,
+          shuffleRemoteBlocksFetched = 0L,
+          shuffleLocalBlocksFetched = 0L,
+          shuffleFetchWaitTime = 0L,
+          shuffleRemoteBytesRead = 0L,
+          shuffleRemoteBytesReadToDisk = 0L,
+          shuffleLocalBytesRead = 0L,
+          shuffleReadBytes = 0L,
+          shuffleReadRecords = 0L,
+          shuffleWriteBytes = 0L,
+          shuffleWriteTime = 0L,
+          shuffleWriteRecords = 0L,
+
+          name = "Unknown",
+          description = None,
+          details = "Unknown",
+          schedulingPool = null,
+
+          rddIds = Nil,
+          accumulatorUpdates = Nil,
+          tasks = None,
+          executorSummary = None,
+          killedTasksSummary = Map())
       }
     }
 
@@ -279,6 +315,17 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
             {jobData.status}
           </li>
           {
+            if (sqlExecutionId.isDefined) {
+              <li>
+                <strong>Associated SQL Query: </strong>
+                {<a href={"%s/SQL/execution/?id=%s".format(
+                  UIUtils.prependBaseUri(request, parent.basePath),
+                  sqlExecutionId.get)
+                }>{sqlExecutionId.get}</a>}
+              </li>
+            }
+          }
+          {
             if (jobData.jobGroup.isDefined) {
               <li>
                 <strong>Job Group:</strong>
@@ -336,29 +383,84 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
       store.executorList(false), appStartTime)
 
-    content ++= UIUtils.showDagVizForJob(
-      jobId, store.operationGraphForJob(jobId))
+    val operationGraphContent = store.asOption(store.operationGraphForJob(jobId)) match {
+      case Some(operationGraph) => UIUtils.showDagVizForJob(jobId, operationGraph)
+      case None =>
+        <div id="no-info">
+          <p>No DAG visualization information to display for job {jobId}</p>
+        </div>
+    }
+    content ++= operationGraphContent
 
     if (shouldShowActiveStages) {
-      content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
-        activeStagesTable.toNodeSeq
+      content ++=
+        <span id="active" class="collapse-aggregated-activeStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Active Stages ({activeStages.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-activeStages collapsible-table">
+          {activeStagesTable.toNodeSeq}
+        </div>
     }
     if (shouldShowPendingStages) {
-      content ++= <h4 id="pending">Pending Stages ({pendingOrSkippedStages.size})</h4> ++
-        pendingOrSkippedStagesTable.toNodeSeq
+      content ++=
+        <span id="pending" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
+            'aggregated-pendingOrSkippedStages')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Pending Stages ({pendingOrSkippedStages.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-pendingOrSkippedStages collapsible-table">
+          {pendingOrSkippedStagesTable.toNodeSeq}
+        </div>
     }
     if (shouldShowCompletedStages) {
-      content ++= <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
-        completedStagesTable.toNodeSeq
+      content ++=
+        <span id="completed" class="collapse-aggregated-completedStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-completedStages',
+            'aggregated-completedStages')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Completed Stages ({completedStages.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-completedStages collapsible-table">
+          {completedStagesTable.toNodeSeq}
+        </div>
     }
     if (shouldShowSkippedStages) {
-      content ++= <h4 id="skipped">Skipped Stages ({pendingOrSkippedStages.size})</h4> ++
-        pendingOrSkippedStagesTable.toNodeSeq
+      content ++=
+        <span id="skipped" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
+            'aggregated-pendingOrSkippedStages')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Skipped Stages ({pendingOrSkippedStages.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-pendingOrSkippedStages collapsible-table">
+          {pendingOrSkippedStagesTable.toNodeSeq}
+        </div>
     }
     if (shouldShowFailedStages) {
-      content ++= <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
-        failedStagesTable.toNodeSeq
+      content ++=
+        <span id ="failed" class="collapse-aggregated-failedStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-failedStages','aggregated-failedStages')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Failed Stages ({failedStages.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-failedStages collapsible-table">
+          {failedStagesTable.toNodeSeq}
+        </div>
     }
-    UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent, showVisualization = true)
+    UIUtils.headerSparkPage(
+      request, s"Details for Job $jobId", content, parent, showVisualization = true)
   }
 }

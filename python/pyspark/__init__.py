@@ -36,7 +36,12 @@ Public classes:
       Finer-grained cache persistence levels.
   - :class:`TaskContext`:
       Information about the current running task, available on the workers and experimental.
-
+  - :class:`RDDBarrier`:
+      Wraps an RDD under a barrier stage for barrier execution.
+  - :class:`BarrierTaskContext`:
+      A :class:`TaskContext` that provides extra info and tooling for barrier execution.
+  - :class:`BarrierTaskInfo`:
+      Information about a barrier task.
 """
 
 from functools import wraps
@@ -44,16 +49,18 @@ import types
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, RDDBarrier
 from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
+from pyspark.resourceinformation import ResourceInformation
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.status import *
-from pyspark.taskcontext import TaskContext
+from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
+from pyspark._globals import _NoValue
 
 
 def since(version):
@@ -106,10 +113,11 @@ def keyword_only(func):
 
 
 # for back compatibility
-from pyspark.sql import SQLContext, HiveContext, Row
+from pyspark.sql import SQLContext, Row
 
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
     "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
+    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "ResourceInformation",
 ]

@@ -21,24 +21,16 @@ import java.util.regex.{Matcher, Pattern}
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.CredentialUpdater
-import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {
-
-  private var credentialUpdater: CredentialUpdater = _
 
   // Additional memory overhead
   // 10% was arrived at experimentally. In the interest of minimizing memory waste while covering
@@ -191,36 +183,17 @@ object YarnSparkHadoopUtil {
     ConverterUtils.toContainerId(containerIdString)
   }
 
-  /** The filesystems for which YARN should fetch delegation tokens. */
-  def hadoopFSsToAccess(
-      sparkConf: SparkConf,
-      hadoopConf: Configuration): Set[FileSystem] = {
-    val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .toSet
-
-    val stagingFS = sparkConf.get(STAGING_DIR)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .getOrElse(FileSystem.get(hadoopConf))
-
-    filesystemsToAccess + stagingFS
-  }
-
-  def startCredentialUpdater(sparkConf: SparkConf): Unit = {
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val credentialManager = new YARNHadoopDelegationTokenManager(
-      sparkConf,
-      hadoopConf,
-      conf => YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, conf))
-    credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
-    credentialUpdater.start()
-  }
-
-  def stopCredentialUpdater(): Unit = {
-    if (credentialUpdater != null) {
-      credentialUpdater.stop()
-      credentialUpdater = null
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
+      require(sizeInMB > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      sizeInMB
+    } else {
+      0
     }
   }
-
 }

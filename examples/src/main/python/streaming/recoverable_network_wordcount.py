@@ -83,9 +83,9 @@ def createContext(host, port, outputPath):
         def filterFunc(wordCount):
             if wordCount[0] in blacklist.value:
                 droppedWordsCounter.add(wordCount[1])
-                False
+                return False
             else:
-                True
+                return True
 
         counts = "Counts at time %s %s" % (time, rdd.filter(filterFunc).collect())
         print(counts)
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 5:
         print("Usage: recoverable_network_wordcount.py <hostname> <port> "
               "<checkpoint-directory> <output-file>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
     host, port, checkpoint, output = sys.argv[1:]
     ssc = StreamingContext.getOrCreate(checkpoint,
                                        lambda: createContext(host, int(port), output))

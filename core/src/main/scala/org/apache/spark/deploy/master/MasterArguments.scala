@@ -21,6 +21,7 @@ import scala.annotation.tailrec
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.MASTER_UI_PORT
 import org.apache.spark.util.{IntParam, Utils}
 
 /**
@@ -53,8 +54,8 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) exte
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
-  if (conf.contains("spark.master.ui.port")) {
-    webUiPort = conf.get("spark.master.ui.port").toInt
+  if (conf.contains(MASTER_UI_PORT.key)) {
+    webUiPort = conf.get(MASTER_UI_PORT)
   }
 
   @tailrec
@@ -93,7 +94,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) exte
   /**
    * Print usage and exit JVM with the given exit code.
    */
-  private def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int): Unit = {
     // scalastyle:off println
     System.err.println(
       "Usage: Master [options]\n" +

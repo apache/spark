@@ -21,10 +21,10 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.Table
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
+class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   override protected def beforeAll(): Unit = {
@@ -134,8 +134,8 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
       assert(spark.catalog.listTables(globalTempDB).collect().toSeq.map(_.name) == Seq("v1", "v2"))
     } finally {
-      spark.catalog.dropTempView("v1")
-      spark.catalog.dropGlobalTempView("v2")
+      spark.catalog.dropGlobalTempView("v1")
+      spark.catalog.dropTempView("v2")
     }
   }
 

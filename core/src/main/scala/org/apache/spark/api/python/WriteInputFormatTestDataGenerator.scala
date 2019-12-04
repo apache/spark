@@ -37,11 +37,11 @@ case class TestWritable(var str: String, var int: Int, var double: Double) exten
   def this() = this("", 0, 0.0)
 
   def getStr: String = str
-  def setStr(str: String) { this.str = str }
+  def setStr(str: String): Unit = { this.str = str }
   def getInt: Int = int
-  def setInt(int: Int) { this.int = int }
+  def setInt(int: Int): Unit = { this.int = int }
   def getDouble: Double = double
-  def setDouble(double: Double) { this.double = double }
+  def setDouble(double: Double): Unit = { this.double = double }
 
   def write(out: DataOutput): Unit = {
     out.writeUTF(str)
@@ -106,13 +106,13 @@ private[python] class WritableToDoubleArrayConverter extends Converter[Any, Arra
  */
 object WriteInputFormatTestDataGenerator {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val path = args(0)
     val sc = new JavaSparkContext("local[4]", "test-writables")
     generateData(path, sc)
   }
 
-  def generateData(path: String, jsc: JavaSparkContext) {
+  def generateData(path: String, jsc: JavaSparkContext): Unit = {
     val sc = jsc.sc
 
     val basePath = s"$path/sftestdata/"

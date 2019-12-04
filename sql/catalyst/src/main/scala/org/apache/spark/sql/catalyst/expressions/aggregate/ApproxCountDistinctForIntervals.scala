@@ -63,11 +63,11 @@ case class ApproxCountDistinctForIntervals(
   }
 
   // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.
-  lazy val endpoints: Array[Double] =
-    (endpointsExpression.dataType, endpointsExpression.eval()) match {
-      case (ArrayType(elementType, _), arrayData: ArrayData) =>
-        arrayData.toObjectArray(elementType).map(_.toString.toDouble)
-    }
+  lazy val endpoints: Array[Double] = {
+    val endpointsType = endpointsExpression.dataType.asInstanceOf[ArrayType]
+    val endpoints = endpointsExpression.eval().asInstanceOf[ArrayData]
+    endpoints.toObjectArray(endpointsType.elementType).map(_.toString.toDouble)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()

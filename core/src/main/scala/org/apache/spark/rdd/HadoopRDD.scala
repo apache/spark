@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
@@ -25,9 +25,11 @@ import scala.collection.immutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -39,7 +41,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager}
+import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -134,6 +136,8 @@ class HadoopRDD[K, V](
 
   private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
+  private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
+
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
@@ -197,17 +201,38 @@ class HadoopRDD[K, V](
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
-    val allInputSplits = getInputFormat(jobConf).getSplits(jobConf, minPartitions)
-    val inputSplits = if (ignoreEmptySplits) {
-      allInputSplits.filter(_.getLength > 0)
-    } else {
-      allInputSplits
+    try {
+      val allInputSplits = getInputFormat(jobConf).getSplits(jobConf, minPartitions)
+      val inputSplits = if (ignoreEmptySplits) {
+        allInputSplits.filter(_.getLength > 0)
+      } else {
+        allInputSplits
+      }
+      if (inputSplits.length == 1 && inputSplits(0).isInstanceOf[FileSplit]) {
+        val fileSplit = inputSplits(0).asInstanceOf[FileSplit]
+        val path = fileSplit.getPath
+        if (fileSplit.getLength > conf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
+          val codecFactory = new CompressionCodecFactory(jobConf)
+          if (Utils.isFileSplittable(path, codecFactory)) {
+            logWarning(s"Loading one large file ${path.toString} with only one partition, " +
+              s"we can increase partition numbers for improving performance.")
+          } else {
+            logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
+              s"partition, because the file is compressed by unsplittable compression codec.")
+          }
+        }
+      }
+      val array = new Array[Partition](inputSplits.size)
+      for (i <- 0 until inputSplits.size) {
+        array(i) = new HadoopPartition(id, i, inputSplits(i))
+      }
+      array
+    } catch {
+      case e: InvalidInputException if ignoreMissingFiles =>
+        logWarning(s"${jobConf.get(FileInputFormat.INPUT_DIR)} doesn't exist and no" +
+            s" partitions returned from this path.", e)
+        Array.empty[Partition]
     }
-    val array = new Array[Partition](inputSplits.size)
-    for (i <- 0 until inputSplits.size) {
-      array(i) = new HadoopPartition(id, i, inputSplits(i))
-    }
-    array
   }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
@@ -256,13 +281,19 @@ class HadoopRDD[K, V](
         try {
           inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
         } catch {
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning(s"Skipped missing file: ${split.inputSplit}", e)
+            finished = true
+            null
+          // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
             finished = true
             null
         }
       // Register an on-task-completion callback to close the input stream.
-      context.addTaskCompletionListener { context =>
+      context.addTaskCompletionListener[Unit] { context =>
         // Update the bytes read before closing is to make sure lingering bytesRead statistics in
         // this thread get correctly added.
         updateBytesRead()
@@ -276,6 +307,11 @@ class HadoopRDD[K, V](
         try {
           finished = !reader.next(key, value)
         } catch {
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning(s"Skipped missing file: ${split.inputSplit}", e)
+            finished = true
+          // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
             finished = true
@@ -339,7 +375,7 @@ class HadoopRDD[K, V](
     locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
   }
 
-  override def checkpoint() {
+  override def checkpoint(): Unit = {
     // Do nothing. Hadoop RDD should not be checkpointed.
   }
 
@@ -376,7 +412,7 @@ private[spark] object HadoopRDD extends Logging {
 
   /** Add Hadoop configuration specific to a single partition and attempt. */
   def addLocalConfiguration(jobTrackerId: String, jobId: Int, splitId: Int, attemptId: Int,
-                            conf: JobConf) {
+                            conf: JobConf): Unit = {
     val jobID = new JobID(jobTrackerId, jobId)
     val taId = new TaskAttemptID(new TaskID(jobID, TaskType.MAP, splitId), attemptId)
 

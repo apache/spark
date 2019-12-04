@@ -15,18 +15,18 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
-# $example on$
-from pyspark.ml.clustering import BisectingKMeans
-# $example off$
-from pyspark.sql import SparkSession
-
 """
 An example demonstrating bisecting k-means clustering.
 Run with:
   bin/spark-submit examples/src/main/python/ml/bisecting_k_means_example.py
 """
+from __future__ import print_function
+
+# $example on$
+from pyspark.ml.clustering import BisectingKMeans
+from pyspark.ml.evaluation import ClusteringEvaluator
+# $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     spark = SparkSession\
@@ -42,9 +42,14 @@ if __name__ == "__main__":
     bkm = BisectingKMeans().setK(2).setSeed(1)
     model = bkm.fit(dataset)
 
-    # Evaluate clustering.
-    cost = model.computeCost(dataset)
-    print("Within Set Sum of Squared Errors = " + str(cost))
+    # Make predictions
+    predictions = model.transform(dataset)
+
+    # Evaluate clustering by computing Silhouette score
+    evaluator = ClusteringEvaluator()
+
+    silhouette = evaluator.evaluate(predictions)
+    print("Silhouette with squared euclidean distance = " + str(silhouette))
 
     # Shows the result.
     print("Cluster Centers: ")

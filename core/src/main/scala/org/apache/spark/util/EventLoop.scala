@@ -37,7 +37,8 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
 
   private val stopped = new AtomicBoolean(false)
 
-  private val eventThread = new Thread(name) {
+  // Exposed for testing.
+  private[spark] val eventThread = new Thread(name) {
     setDaemon(true)
 
     override def run(): Unit = {
@@ -99,7 +100,13 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
    * Put the event into the event queue. The event thread will process it later.
    */
   def post(event: E): Unit = {
-    eventQueue.put(event)
+    if (!stopped.get) {
+      if (eventThread.isAlive) {
+        eventQueue.put(event)
+      } else {
+        onError(new IllegalStateException(s"$name has already been stopped accidentally."))
+      }
+    }
   }
 
   /**

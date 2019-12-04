@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.4.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-docker-integration-tests_2.11</artifactId>
+  <artifactId>spark-docker-integration-tests_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Docker Integration Tests</name>
   <url>http://spark.apache.org/</url>
@@ -106,6 +106,14 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <!-- Although SPARK-28737 upgraded Jersey to 2.29 for JDK11, 'com.spotify.docker-client' still
+      uses this repackaged 'jersey-guava'. We add this back for JDK8/JDK11 testing. -->
+    <dependency>
+      <groupId>org.glassfish.jersey.bundles.repackaged</groupId>
+      <artifactId>jersey-guava</artifactId>
+      <version>2.25.1</version>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>mysql</groupId>
       <artifactId>mysql-connector-java</artifactId>
@@ -149,6 +157,12 @@
       <artifactId>db2jcc4</artifactId>
       <version>10.5.0.5</version>
       <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>com.microsoft.sqlserver</groupId>
+      <artifactId>mssql-jdbc</artifactId>
+      <version>7.2.1.jre8</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 </project>

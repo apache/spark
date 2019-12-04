@@ -33,6 +33,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var targetPartitionSchema: StructType = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     targetAttributes = Seq('a.int, 'd.int, 'b.int, 'c.int)
     targetPartitionSchema = new StructType()
       .add("b", IntegerType)

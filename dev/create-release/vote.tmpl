@@ -1,0 +1,65 @@
+Please vote on releasing the following candidate as Apache Spark version {version}.
+
+The vote is open until {deadline} and passes if a majority +1 PMC votes are cast, with
+a minimum of 3 +1 votes.
+
+[ ] +1 Release this package as Apache Spark {version}
+[ ] -1 Do not release this package because ...
+
+To learn more about Apache Spark, please see https://spark.apache.org/
+
+The tag to be voted on is {tag} (commit {tag_commit}):
+https://github.com/apache/spark/tree/{tag}
+
+The release files, including signatures, digests, etc. can be found at:
+https://dist.apache.org/repos/dist/dev/spark/{tag}-bin/
+
+Signatures used for Spark RCs can be found in this file:
+https://dist.apache.org/repos/dist/dev/spark/KEYS
+
+The staging repository for this release can be found at:
+https://repository.apache.org/content/repositories/orgapachespark-{repo_id}/
+
+The documentation corresponding to this release can be found at:
+https://dist.apache.org/repos/dist/dev/spark/{tag}-docs/
+
+The list of bug fixes going into {version} can be found at the following URL:
+https://issues.apache.org/jira/projects/SPARK/versions/{jira_version_id}
+
+FAQ
+
+=========================
+How can I help test this release?
+=========================
+
+If you are a Spark user, you can help us test this release by taking
+an existing Spark workload and running on this release candidate, then
+reporting any regressions.
+
+If you're working in PySpark you can set up a virtual env and install
+the current RC and see if anything important breaks, in the Java/Scala
+you can add the staging repository to your projects resolvers and test
+with the RC (make sure to clean up the artifact cache before/after so
+you don't end up building with a out of date RC going forward).
+
+===========================================
+What should happen to JIRA tickets still targeting {version}?
+===========================================
+
+The current list of open tickets targeted at {version} can be found at:
+{open_issues_link}
+
+Committers should look at those and triage. Extremely important bug
+fixes, documentation, and API tweaks that impact compatibility should
+be worked on immediately. Everything else please retarget to an
+appropriate release.
+
+==================
+But my bug isn't fixed?
+==================
+
+In order to make timely releases, we will typically not hold the
+release unless the bug in question is a regression from the previous
+release. That being said, if there is something which is a regression
+that has not been correctly targeted please ping me or a committer to
+help target the issue.

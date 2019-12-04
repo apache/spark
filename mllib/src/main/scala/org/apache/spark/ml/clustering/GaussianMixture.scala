@@ -20,7 +20,7 @@ package org.apache.spark.ml.clustering
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.EPSILON
@@ -29,19 +29,21 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 
 /**
  * Common params for GaussianMixture and GaussianMixtureModel
  */
 private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol {
+  with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol with HasAggregationDepth {
 
   /**
    * Number of independent Gaussians in the mixture model. Must be greater than 1. Default: 2.
@@ -63,7 +65,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
     val schemaWithPredictionCol = SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
     SchemaUtils.appendColumn(schemaWithPredictionCol, $(probabilityCol), new VectorUDT)
   }
@@ -84,7 +86,11 @@ class GaussianMixtureModel private[ml] (
     @Since("2.0.0") override val uid: String,
     @Since("2.0.0") val weights: Array[Double],
     @Since("2.0.0") val gaussians: Array[MultivariateGaussian])
-  extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable {
+  extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable
+  with HasTrainingSummary[GaussianMixtureSummary] {
+
+  @Since("3.0.0")
+  lazy val numFeatures: Int = gaussians.head.mean.size
 
   /** @group setParam */
   @Since("2.1.0")
@@ -106,24 +112,61 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
-    val predUDF = udf((vector: Vector) => predict(vector))
-    val probUDF = udf((vector: Vector) => predictProbability(vector))
-    dataset.withColumn($(predictionCol), predUDF(col($(featuresCol))))
-      .withColumn($(probabilityCol), probUDF(col($(featuresCol))))
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+
+    val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
+    var outputData = dataset
+    var numColsOutput = 0
+
+    if ($(probabilityCol).nonEmpty) {
+      val probUDF = udf((vector: Vector) => predictProbability(vector))
+      outputData = outputData.withColumn($(probabilityCol), probUDF(vectorCol),
+        outputSchema($(probabilityCol)).metadata)
+      numColsOutput += 1
+    }
+
+    if ($(predictionCol).nonEmpty) {
+      if ($(probabilityCol).nonEmpty) {
+        val predUDF = udf((vector: Vector) => vector.argmax)
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(probabilityCol))),
+          outputSchema($(predictionCol)).metadata)
+      } else {
+        val predUDF = udf((vector: Vector) => predict(vector))
+        outputData = outputData.withColumn($(predictionCol), predUDF(vectorCol),
+          outputSchema($(predictionCol)).metadata)
+      }
+      numColsOutput += 1
+    }
+
+    if (numColsOutput == 0) {
+      this.logWarning(s"$uid: GaussianMixtureModel.transform() does nothing" +
+        " because no output columns were set.")
+    }
+    outputData.toDF
   }
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), weights.length)
+    }
+    if ($(probabilityCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(probabilityCol), weights.length)
+    }
+    outputSchema
   }
 
-  private[clustering] def predict(features: Vector): Int = {
+  @Since("3.0.0")
+  def predict(features: Vector): Int = {
     val r = predictProbability(features)
     r.argmax
   }
 
-  private[clustering] def predictProbability(features: Vector): Vector = {
+  @Since("3.0.0")
+  def predictProbability(features: Vector): Vector = {
     val probs: Array[Double] =
       GaussianMixtureModel.computeProbabilities(features.asBreeze.toDenseVector, gaussians, weights)
     Vectors.dense(probs)
@@ -158,28 +201,18 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter = new GaussianMixtureModel.GaussianMixtureModelWriter(this)
 
-  private var trainingSummary: Option[GaussianMixtureSummary] = None
-
-  private[clustering] def setSummary(summary: Option[GaussianMixtureSummary]): this.type = {
-    this.trainingSummary = summary
-    this
+  @Since("3.0.0")
+  override def toString: String = {
+    s"GaussianMixtureModel: uid=$uid, k=${weights.length}, numFeatures=$numFeatures"
   }
-
-  /**
-   * Return true if there exists summary of model.
-   */
-  @Since("2.0.0")
-  def hasSummary: Boolean = trainingSummary.nonEmpty
 
   /**
    * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
+   * thrown if `hasSummary` is false.
    */
   @Since("2.0.0")
-  def summary: GaussianMixtureSummary = trainingSummary.getOrElse {
-    throw new RuntimeException(
-      s"No training summary available for the ${this.getClass.getSimpleName}")
-  }
+  override def summary: GaussianMixtureSummary = super.summary
+
 }
 
 @Since("2.0.0")
@@ -233,7 +266,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       }
       val model = new GaussianMixtureModel(metadata.uid, weights, gaussians)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -328,21 +361,31 @@ class GaussianMixture @Since("2.0.0") (
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group expertSetParam */
+  @Since("3.0.0")
+  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
+
   /**
    * Number of samples per cluster to use when initializing Gaussians.
    */
   private val numSamples = 5
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
+  override def fit(dataset: Dataset[_]): GaussianMixtureModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
     val sc = dataset.sparkSession.sparkContext
     val numClusters = $(k)
 
-    val instances: RDD[Vector] = dataset.select(col($(featuresCol))).rdd.map {
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    val instances = dataset
+      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol)).rdd.map {
       case Row(features: Vector) => features
-    }.cache()
+    }
+
+    if (handlePersistence) {
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
+    }
 
     // Extract the number of features.
     val numFeatures = instances.first().size
@@ -350,8 +393,10 @@ class GaussianMixture @Since("2.0.0") (
       s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
       s" matrix is quadratic in the number of features.")
 
-    val instr = Instrumentation.create(this, instances)
-    instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol,
+      aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
     val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(
@@ -377,10 +422,16 @@ class GaussianMixture @Since("2.0.0") (
         },
         combOp = (c1, c2) => (c1, c2) match {
           case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
-        })
+        },
+        depth = $(aggregationDepth))
 
-      bcWeights.destroy(blocking = false)
-      bcGaussians.destroy(blocking = false)
+      bcWeights.destroy()
+      bcGaussians.destroy()
+
+      if (iter == 0) {
+        val numSamples = sums.count
+        instr.logNumExamples(numSamples)
+      }
 
       /*
          Create new distributions based on the partial assignments
@@ -413,6 +464,9 @@ class GaussianMixture @Since("2.0.0") (
       logLikelihood = sums.logLikelihood  // this is the freshly computed log-likelihood
       iter += 1
     }
+    if (handlePersistence) {
+      instances.unpersist()
+    }
 
     val gaussianDists = gaussians.map { case (mean, covVec) =>
       val cov = GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values)
@@ -421,10 +475,10 @@ class GaussianMixture @Since("2.0.0") (
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
-      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iter)
+    instr.logNamedValue("logLikelihood", logLikelihood)
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
     model.setSummary(Some(summary))
-    instr.logSuccess(model)
-    model
   }
 
   @Since("2.0.0")
@@ -673,7 +727,6 @@ private class ExpectationAggregator(
 }
 
 /**
- * :: Experimental ::
  * Summary of GaussianMixture.
  *
  * @param predictions  `DataFrame` produced by `GaussianMixtureModel.transform()`.
@@ -683,17 +736,18 @@ private class ExpectationAggregator(
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
  * @param logLikelihood  Total log-likelihood for this model on the given data.
+ * @param numIter  Number of iterations.
  */
 @Since("2.0.0")
-@Experimental
 class GaussianMixtureSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     @Since("2.0.0") val probabilityCol: String,
     featuresCol: String,
     k: Int,
-    @Since("2.2.0") val logLikelihood: Double)
-  extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
+    @Since("2.2.0") val logLikelihood: Double,
+    numIter: Int)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter) {
 
   /**
    * Probability of each cluster.
