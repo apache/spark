@@ -411,7 +411,7 @@ class DataStreamReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None,
-             dropFieldIfAllNull=None, encoding=None):
+             dropFieldIfAllNull=None, encoding=None, recursiveFileLookup=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -487,6 +487,10 @@ class DataStreamReader(OptionUtils):
                          the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
                          the encoding of input JSON will be detected automatically
                          when the multiLine option is set to ``true``.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
+
+        .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -502,17 +506,21 @@ class DataStreamReader(OptionUtils):
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
-            dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding)
+            dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
+            recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
             raise TypeError("path can be only a single string")
 
     @since(2.3)
-    def orc(self, path):
+    def orc(self, path, recursiveFileLookup=None):
         """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
 
         .. note:: Evolving.
+
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
         >>> orc_sdf.isStreaming
@@ -520,14 +528,18 @@ class DataStreamReader(OptionUtils):
         >>> orc_sdf.schema == sdf_schema
         True
         """
+        self._set_opts(recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.orc(path))
         else:
             raise TypeError("path can be only a single string")
 
     @since(2.0)
-    def parquet(self, path):
+    def parquet(self, path, recursiveFileLookup=None):
         """Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
+
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         You can set the following Parquet-specific option(s) for reading Parquet files:
             * ``mergeSchema``: sets whether we should merge schemas collected from all \
@@ -542,6 +554,7 @@ class DataStreamReader(OptionUtils):
         >>> parquet_sdf.schema == sdf_schema
         True
         """
+        self._set_opts(recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.parquet(path))
         else:
@@ -549,7 +562,7 @@ class DataStreamReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def text(self, path, wholetext=False, lineSep=None):
+    def text(self, path, wholetext=False, lineSep=None, recursiveFileLookup=None):
         """
         Loads a text file stream and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -564,6 +577,8 @@ class DataStreamReader(OptionUtils):
         :param wholetext: if true, read each file from input path(s) as a single row.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
@@ -571,7 +586,8 @@ class DataStreamReader(OptionUtils):
         >>> "value" in str(text_sdf.schema)
         True
         """
-        self._set_opts(wholetext=wholetext, lineSep=lineSep)
+        self._set_opts(
+            wholetext=wholetext, lineSep=lineSep, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.text(path))
         else:
@@ -584,7 +600,8 @@ class DataStreamReader(OptionUtils):
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            enforceSchema=None, emptyValue=None, locale=None, lineSep=None):
+            enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
+            recursiveFileLookup=None):
         r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -687,6 +704,8 @@ class DataStreamReader(OptionUtils):
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
                         Maximum length is 1 character.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -704,7 +723,8 @@ class DataStreamReader(OptionUtils):
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
-            emptyValue=emptyValue, locale=locale, lineSep=lineSep)
+            emptyValue=emptyValue, locale=locale, lineSep=lineSep,
+            recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
