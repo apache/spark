@@ -109,11 +109,11 @@ statement
         (LIKE? pattern=STRING)?                                        #showNamespaces
     | {!legacy_create_hive_table_by_default_enabled}?
         createTableHeader ('(' colTypeList ')')? tableProvider?
-        createTableClauses*
+        createTableClauses
         (AS? query)?                                                   #createTable
     | {legacy_create_hive_table_by_default_enabled}?
         createTableHeader ('(' colTypeList ')')? tableProvider
-        createTableClauses*
+        createTableClauses
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
         ((COMMENT comment=STRING) |
@@ -134,7 +134,7 @@ statement
         locationSpec |
         (TBLPROPERTIES tableProps=tablePropertyList))*                 #createTableLike
     | replaceTableHeader ('(' colTypeList ')')? tableProvider
-        createTableClauses*
+        createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
@@ -354,12 +354,12 @@ tableProvider
     ;
 
 createTableClauses
-    :(OPTIONS options=tablePropertyList) |
+    :((OPTIONS options=tablePropertyList) |
      (PARTITIONED BY partitioning=transformList) |
      bucketSpec |
      locationSpec |
      (COMMENT comment=STRING) |
-     (TBLPROPERTIES tableProps=tablePropertyList)
+     (TBLPROPERTIES tableProps=tablePropertyList))*
     ;
 
 tablePropertyList
