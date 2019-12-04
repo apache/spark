@@ -1792,7 +1792,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"SHOW FUNCTIONS LIKE $function")
     }
-    assert(e.message.contains(s"SHOW FUNCTIONS is only supported in v1 catalog"))
+    assert(e.message.contains("SHOW FUNCTIONS is only supported in v1 catalog"))
   }
 
   test("global temp view should not be masked by v2 catalog") {

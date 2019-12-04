@@ -467,7 +467,7 @@ class ResolveSessionCatalog(
                 throw new AnalysisException(s"Unsupported function name '${functionName.quoted}'")
             }
           } else {
-            throw new AnalysisException (s"SHOW FUNCTIONS is only supported in v1 catalog")
+            throw new AnalysisException ("SHOW FUNCTIONS is only supported in v1 catalog")
           }
         case None => (None, pattern)
       }
