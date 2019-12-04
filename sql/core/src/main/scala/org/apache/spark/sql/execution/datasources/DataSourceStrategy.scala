@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, InsertIntoDir, InsertIntoStatement, LocalLimit, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -220,27 +220,47 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
+  private def readDataSourceTable(
+      table: CatalogTable, partialListing: Boolean = false): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
-    catalog.getCachedPlan(qualifiedTableName, () => {
-      val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
-      val dataSource =
-        DataSource(
-          sparkSession,
-          // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
-          // inferred at runtime. We should still support it.
-          userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-          partitionColumns = table.partitionColumnNames,
-          bucketSpec = table.bucketSpec,
-          className = table.provider.get,
-          options = table.storage.properties ++ pathOption,
-          catalogTable = Some(table))
-      LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
-    })
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+    val dataSource =
+      DataSource(
+        sparkSession,
+        // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+        // inferred at runtime. We should still support it.
+        userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+        partitionColumns = table.partitionColumnNames,
+        bucketSpec = table.bucketSpec,
+        className = table.provider.get,
+        options = table.storage.properties ++ pathOption,
+        catalogTable = Some(table))
+    if (partialListing) {
+      LogicalRelation(dataSource.resolveRelation(checkFilesExist = false, partialListing), table)
+    } else {
+      catalog.getCachedPlan(qualifiedTableName, () => {
+        LogicalRelation(dataSource.resolveRelation(checkFilesExist = false, partialListing), table)
+      })
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case l @ GlobalLimit(_, LocalLimit(limitExpr,
+      Project(projectList, UnresolvedCatalogRelation(tableMeta))))
+        if (sparkSession.sessionState.conf.partialListingEnabled &&
+          DDLUtils.isDatasourceTable(tableMeta)) =>
+        val resolvedDataSourceTable = readDataSourceTable(tableMeta, partialListing = true)
+        l.copy(child = LocalLimit(limitExpr, Project(projectList, resolvedDataSourceTable)))
+
+    case l @ GlobalLimit(_, LocalLimit(limitExpr,
+      Project(projectList, SubqueryAlias(alias, UnresolvedCatalogRelation(tableMeta)))))
+        if (sparkSession.sessionState.conf.partialListingEnabled &&
+          DDLUtils.isDatasourceTable(tableMeta)) =>
+        val resolvedDataSourceTable = readDataSourceTable(tableMeta, partialListing = true)
+        l.copy(child = LocalLimit(limitExpr, SubqueryAlias(alias,
+          Project(projectList, resolvedDataSourceTable))))
+
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta))

@@ -50,7 +50,8 @@ class InMemoryFileIndex(
     rootPathsSpecified: Seq[Path],
     parameters: Map[String, String],
     userSpecifiedSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = NoopCache)
+    fileStatusCache: FileStatusCache = NoopCache,
+    val partialListing: Boolean = false)
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
 
@@ -68,11 +69,16 @@ class InMemoryFileIndex(
   refresh0()
 
   override def partitionSpec(): PartitionSpec = {
-    if (cachedPartitionSpec == null) {
-      cachedPartitionSpec = inferPartitioning()
+    // inferPartitioning() would list files, so we skip it when partially list
+    if (partialListing && userSpecifiedSchema.isEmpty) {
+      PartitionSpec.emptySpec
+    } else {
+      if (cachedPartitionSpec == null) {
+        cachedPartitionSpec = inferPartitioning()
+      }
+      logTrace(s"Partition spec: $cachedPartitionSpec")
+      cachedPartitionSpec
     }
-    logTrace(s"Partition spec: $cachedPartitionSpec")
-    cachedPartitionSpec
   }
 
   override protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus] = {
@@ -124,8 +130,25 @@ class InMemoryFileIndex(
       () // for some reasons scalac 2.12 needs this; return type doesn't matter
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
-    val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch, hadoopConf, filter, sparkSession, areRootPaths = true)
+    val start = System.currentTimeMillis()
+    val discovered = if (partialListing) {
+      InMemoryFileIndex.bulkListLeafFiles(
+        pathsToFetch, hadoopConf, filter, sparkSession, areRootPaths = true,
+        sparkSession.sessionState.conf.partialListingMaxFiles)
+    } else {
+      InMemoryFileIndex.bulkListLeafFiles(
+        pathsToFetch, hadoopConf, filter, sparkSession, areRootPaths = true)
+    }
+    val end = System.currentTimeMillis()
+    val numListedFiles = discovered.map(_._2.size).sum
+    val logMsg = if (paths.size <= 5) {
+      s"List files under path ${paths.mkString(", ")} " +
+        s"discovered $numListedFiles files, took ${end - start} ms"
+    } else {
+      s"List files under path ${paths.take(5).mkString(", ")}, ... " +
+        s"discovered $numListedFiles files, took ${end - start} ms"
+    }
+    logInfo(logMsg)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -168,13 +191,16 @@ object InMemoryFileIndex extends Logging {
       hadoopConf: Configuration,
       filter: PathFilter,
       sparkSession: SparkSession,
-      areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
+      areRootPaths: Boolean,
+      maxListing: Int = Int.MaxValue): Seq[(Path, Seq[FileStatus])] = {
 
     val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
     val ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
-    if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+    if (maxListing <= paths.size ||
+      (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)) {
+      var maxListingNextTurn = maxListing
       return paths.map { path =>
         val leafFiles = listLeafFiles(
           path,
@@ -183,7 +209,9 @@ object InMemoryFileIndex extends Logging {
           Some(sparkSession),
           ignoreMissingFiles = ignoreMissingFiles,
           ignoreLocality = ignoreLocality,
-          isRootPath = areRootPaths)
+          isRootPath = areRootPaths,
+          maxListingNextTurn)
+        maxListingNextTurn -= leafFiles.length
         (path, leafFiles)
       }
     }
@@ -260,8 +288,8 @@ object InMemoryFileIndex extends Logging {
       sparkContext.setJobDescription(previousJobDescription)
     }
 
-    // turn SerializableFileStatus back to Status
-    statusMap.map { case (path, serializableStatuses) =>
+    // turn SerializableFileStatus back to Status todo (lajin) is it ok?
+    statusMap.take(maxListing).map { case (path, serializableStatuses) =>
       val statuses = serializableStatuses.map { f =>
         val blockLocations = f.blockLocations.map { loc =>
           new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
@@ -291,7 +319,8 @@ object InMemoryFileIndex extends Logging {
       sessionOpt: Option[SparkSession],
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
-      isRootPath: Boolean): Seq[FileStatus] = {
+      isRootPath: Boolean,
+      maxListing: Int = Int.MaxValue): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
 
@@ -347,7 +376,8 @@ object InMemoryFileIndex extends Logging {
             hadoopConf,
             filter,
             session,
-            areRootPaths = false
+            areRootPaths = false,
+            maxListing
           ).flatMap(_._2)
         case _ =>
           dirs.flatMap { dir =>
@@ -358,7 +388,8 @@ object InMemoryFileIndex extends Logging {
               sessionOpt,
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
-              isRootPath = false)
+              isRootPath = false,
+              maxListing)
           }
       }
       val allFiles = topLevelFiles ++ nestedFiles
@@ -367,7 +398,7 @@ object InMemoryFileIndex extends Logging {
 
     val missingFiles = mutable.ArrayBuffer.empty[String]
     val filteredLeafStatuses = allLeafStatuses.filterNot(
-      status => shouldFilterOut(status.getPath.getName))
+      status => shouldFilterOut(status.getPath.getName)).take(maxListing)
     val resolvedLeafStatuses = filteredLeafStatuses.flatMap {
       case f: LocatedFileStatus =>
         Some(f)

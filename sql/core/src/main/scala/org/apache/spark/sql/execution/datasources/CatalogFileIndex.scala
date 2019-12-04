@@ -34,11 +34,13 @@ import org.apache.spark.sql.types.StructType
  * @param sparkSession a [[SparkSession]]
  * @param table the metadata of the table
  * @param sizeInBytes the table's data size in bytes
+ * @param partialListing partially list files for limit only query
  */
 class CatalogFileIndex(
     sparkSession: SparkSession,
     val table: CatalogTable,
-    override val sizeInBytes: Long) extends FileIndex {
+    override val sizeInBytes: Long,
+    val partialListing: Boolean = false) extends FileIndex {
 
   protected val hadoopConf: Configuration = sparkSession.sessionState.newHadoopConf()
 
@@ -82,10 +84,22 @@ class CatalogFileIndex(
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val timeNs = System.nanoTime() - startTime
       new PrunedInMemoryFileIndex(
-        sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec, Option(timeNs))
+        sparkSession,
+        new Path(baseLocation.get),
+        // we don't cache the partially list files
+        if (partialListing) NoopCache else fileStatusCache,
+        partitionSpec,
+        Option(timeNs),
+        partialListing)
     } else {
-      new InMemoryFileIndex(sparkSession, rootPaths, table.storage.properties,
-        userSpecifiedSchema = None, fileStatusCache = fileStatusCache)
+      new InMemoryFileIndex(
+        sparkSession,
+        rootPaths,
+        table.storage.properties,
+        userSpecifiedSchema = None,
+        // we don't cache the partially list files
+        if (partialListing) NoopCache else fileStatusCache,
+        partialListing)
     }
   }
 
@@ -114,10 +128,12 @@ private class PrunedInMemoryFileIndex(
     tableBasePath: Path,
     fileStatusCache: FileStatusCache,
     override val partitionSpec: PartitionSpec,
-    override val metadataOpsTimeNs: Option[Long])
+    override val metadataOpsTimeNs: Option[Long],
+    partialListing: Boolean)
   extends InMemoryFileIndex(
     sparkSession,
     partitionSpec.partitions.map(_.path),
     Map.empty,
     Some(partitionSpec.partitionColumns),
-    fileStatusCache)
+    fileStatusCache,
+    partialListing)

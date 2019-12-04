@@ -94,4 +94,10 @@ object FilePartition extends Logging {
 
     Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
   }
+
+  def getSingleFilePartitions(partitionedFiles: Seq[PartitionedFile]): Seq[FilePartition] = {
+    // Assign all files to a single partition
+    val newPartition = FilePartition(0, partitionedFiles.toArray)
+    Seq(newPartition)
+  }
 }

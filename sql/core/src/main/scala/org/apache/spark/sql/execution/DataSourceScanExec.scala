@@ -397,7 +397,13 @@ case class FileSourceScanExec(
       case Some(bucketing) if relation.sparkSession.sessionState.conf.bucketingEnabled =>
         createBucketedReadRDD(bucketing, readFile, dynamicallySelectedPartitions, relation)
       case _ =>
-        createNonBucketedReadRDD(readFile, dynamicallySelectedPartitions, relation)
+        relation.location match {
+          case i: InMemoryFileIndex if (i.partialListing) =>
+            createSinglePartitionReadRDD(readFile, dynamicallySelectedPartitions, relation)
+          case c: CatalogFileIndex if (c.partialListing) =>
+            createSinglePartitionReadRDD(readFile, dynamicallySelectedPartitions, relation)
+          case _ => createNonBucketedReadRDD(readFile, dynamicallySelectedPartitions, relation)
+        }
     }
     sendDriverMetrics()
     readRDD
@@ -583,6 +589,60 @@ case class FileSourceScanExec(
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
+  }
+
+
+  /**
+   * Create an single partition RDD for limit only query.
+   *
+   * @param readFile a function to read each (part of a) file.
+   * @param selectedPartitions Hive-style partition that are part of the read.
+   * @param fsRelation [[HadoopFsRelation]] associated with the read.
+   */
+  private def createSinglePartitionReadRDD(
+      readFile: (PartitionedFile) => Iterator[InternalRow],
+      selectedPartitions: Seq[PartitionDirectory],
+      fsRelation: HadoopFsRelation): RDD[InternalRow] = {
+    assert(dataFilters.isEmpty, "dataFilters should be empty!")
+    val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
+    val maxSplitBytes =
+      FilePartition.maxSplitBytes(fsRelation.sparkSession, selectedPartitions)
+    logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
+      s"open cost is considered as scanning $openCostInBytes bytes.")
+    val splitFiles = selectedPartitions.flatMap { partition =>
+      partition.files.flatMap { file =>
+        // getPath() is very expensive so we only want to call it once in this block:
+        val filePath = file.getPath
+        val isSplitable = relation.fileFormat.isSplitable(
+          relation.sparkSession, relation.options, filePath)
+        PartitionedFileUtil.splitFiles(
+          sparkSession = relation.sparkSession,
+          file = file,
+          filePath = filePath,
+          isSplitable = isSplitable,
+          maxSplitBytes = maxSplitBytes,
+          partitionValues = partition.values
+        )
+      }
+    }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+
+    logInfo(s"SinglePartitionReadRDD scan ${splitFiles.length} files")
+    val partitions = FilePartition.getSingleFilePartitions(splitFiles)
+
+    if (relation.location.partitionSchema.length == 0) {
+      new SinglePartitionFileScanRDD(
+        fsRelation.sparkSession, readFile, partitions,
+        fsRelation.location.rootPaths.map(_.toUri.toString -> InternalRow.empty).toMap)
+    } else {
+      val prunedPartitions = relation.sparkSession.sessionState.catalog.listPartitionsByFilter(
+        tableIdentifier.get, partitionFilters)
+      val recoveredPartitions = prunedPartitions.map { p =>
+        p.location.toString -> p.toRow(relation.location.partitionSchema,
+          relation.sparkSession.sessionState.conf.sessionLocalTimeZone)
+      }.toMap
+      new SinglePartitionFileScanRDD(
+        fsRelation.sparkSession, readFile, partitions, recoveredPartitions)
+    }
   }
 
   override def doCanonicalize(): FileSourceScanExec = {

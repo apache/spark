@@ -2072,6 +2072,21 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+
+  val PARTIAL_LISTING_ENABLED =
+    buildConf("spark.sql.sources.partialListing.enabled")
+      .doc("The configuration property enables the partial listing for limit only query. " +
+        "When set to true, same queries with limit won't scan all files.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PARTIAL_LISTING_MAX_FILES =
+    buildConf("spark.sql.sources.partialListing.maxFiles")
+      .doc("The max number of listing files for limit only query at driver side.")
+      .intConf
+      .checkValue(files => files >= 0, "The max number of listing files for " +
+        "limit only query must not be negative")
+      .createWithDefault(5)
 }
 
 /**
@@ -2572,6 +2587,10 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
+
+  def partialListingEnabled: Boolean = getConf(SQLConf.PARTIAL_LISTING_ENABLED)
+
+  def partialListingMaxFiles: Int = getConf(SQLConf.PARTIAL_LISTING_MAX_FILES)
 
   /** ********************** SQLConf functionality methods ************ */
 

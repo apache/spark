@@ -253,7 +253,7 @@ case class DataSource(
           // we will never have to materialize the lazy val below
           val globbedPaths =
             checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
-          createInMemoryFileIndex(globbedPaths)
+          createInMemoryFileIndex(globbedPaths, partialListing = false)
         })
         val forceNullable =
           sparkSession.sessionState.conf.getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
@@ -330,7 +330,9 @@ case class DataSource(
    *                        is considered as a non-streaming file based data source. Since we know
    *                        that files already exist, we don't need to check them again.
    */
-  def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
+  def resolveRelation(
+      checkFilesExist: Boolean = true,
+      partialListing: Boolean = false): BaseRelation = {
     val relation = (providingInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
@@ -386,12 +388,13 @@ case class DataSource(
           val index = new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
-            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
+            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize),
+            partialListing)
           (index, catalogTable.get.dataSchema, catalogTable.get.partitionSchema)
         } else {
           val globbedPaths = checkAndGlobPathIfNecessary(
             checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
-          val index = createInMemoryFileIndex(globbedPaths)
+          val index = createInMemoryFileIndex(globbedPaths, partialListing)
           val (resultDataSchema, resultPartitionSchema) =
             getOrInferFileFormatSchema(format, () => index)
           (index, resultDataSchema, resultPartitionSchema)
@@ -401,7 +404,7 @@ case class DataSource(
           fileCatalog,
           partitionSchema = partitionSchema,
           dataSchema = dataSchema.asNullable,
-          bucketSpec = bucketSpec,
+          bucketSpec = if (partialListing) None else bucketSpec,
           format,
           caseInsensitiveOptions)(sparkSession)
 
@@ -551,10 +554,11 @@ case class DataSource(
   }
 
   /** Returns an [[InMemoryFileIndex]] that can be used to get partition schema and file list. */
-  private def createInMemoryFileIndex(globbedPaths: Seq[Path]): InMemoryFileIndex = {
+  private def createInMemoryFileIndex(
+      globbedPaths: Seq[Path], partialListing: Boolean): InMemoryFileIndex = {
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
     new InMemoryFileIndex(
-      sparkSession, globbedPaths, options, userSpecifiedSchema, fileStatusCache)
+      sparkSession, globbedPaths, options, userSpecifiedSchema, fileStatusCache, partialListing)
   }
 
   /**
