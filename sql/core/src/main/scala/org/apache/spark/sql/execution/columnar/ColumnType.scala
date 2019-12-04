@@ -719,6 +719,7 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval]
   }
 
   override def extract(buffer: ByteBuffer): CalendarInterval = {
+    ByteBufferHelper.getInt(buffer)
     val months = ByteBufferHelper.getInt(buffer)
     val days = ByteBufferHelper.getInt(buffer)
     val microseconds = ByteBufferHelper.getLong(buffer)
@@ -726,6 +727,7 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval]
   }
 
   override def append(v: CalendarInterval, buffer: ByteBuffer): Unit = {
+    ByteBufferHelper.putInt(buffer, 16)
     ByteBufferHelper.putInt(buffer, v.months)
     ByteBufferHelper.putInt(buffer, v.days)
     ByteBufferHelper.putLong(buffer, v.microseconds)
