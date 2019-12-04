@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -59,6 +60,21 @@ case class InsertIntoHadoopFsRelationCommand(
     outputColumnNames: Seq[String])
   extends DataWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
+
+  private lazy val parameters = CaseInsensitiveMap(options)
+
+  private[sql] lazy val dynamicPartitionOverwriteEnabled: Boolean = {
+    val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
+      // scalastyle:off caselocale
+      .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase))
+      // scalastyle:on caselocale
+      .getOrElse(SQLConf.get.partitionOverwriteMode)
+    val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
+    // This config only makes sense when we are overwriting a partitioned dataset with dynamic
+    // partition columns.
+    enableDynamicOverwrite && mode == SaveMode.Overwrite &&
+      staticPartitions.size < partitionColumns.length
+  }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -90,18 +106,7 @@ case class InsertIntoHadoopFsRelationCommand(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
     }
 
-    val parameters = CaseInsensitiveMap(options)
-
-    val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
-      // scalastyle:off caselocale
-      .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase))
-      // scalastyle:on caselocale
-      .getOrElse(sparkSession.sessionState.conf.partitionOverwriteMode)
-    val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
-    // This config only makes sense when we are overwriting a partitioned dataset with dynamic
-    // partition columns.
-    val dynamicPartitionOverwrite = enableDynamicOverwrite && mode == SaveMode.Overwrite &&
-      staticPartitions.size < partitionColumns.length
+    val dynamicPartitionOverwrite = dynamicPartitionOverwriteEnabled
 
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,

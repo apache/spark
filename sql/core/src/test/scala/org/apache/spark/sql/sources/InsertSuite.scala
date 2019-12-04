@@ -270,6 +270,44 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       "INSERT OVERWRITE to a table while querying it should not be allowed.")
   }
 
+  test("it is allowed to write to a table while querying it for dynamic partition overwrite.") {
+    Seq(PartitionOverwriteMode.DYNAMIC.toString,
+        PartitionOverwriteMode.STATIC.toString).foreach { usedMode =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> usedMode) {
+        withTable("insertTable") {
+          sql(
+            """
+              |CREATE TABLE insertTable(i int, part1 int, part2 int) USING PARQUET
+              |PARTITIONED BY (part1, part2)
+           """.stripMargin)
+
+          sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2=1) SELECT 1")
+          checkAnswer(spark.table("insertTable"), Row(1, 1, 1))
+
+          if (usedMode == PartitionOverwriteMode.DYNAMIC.toString) {
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                |SELECT i + 1, part2 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"), Row(2, 1, 1))
+          } else {
+            val message = intercept[AnalysisException] {
+              sql(
+                """
+                  |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                  |SELECT i + 1, part2 FROM insertTable
+              """.stripMargin)
+            }.getMessage
+            assert(
+              message.contains("Cannot overwrite a path that is also being read from."),
+              "INSERT OVERWRITE to a table while querying it should not be allowed.")
+          }
+        }
+      }
+    }
+  }
+
   test("Caching")  {
     // write something to the jsonTable
     sql(
