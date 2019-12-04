@@ -137,10 +137,16 @@ class KafkaTestUtils(
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
     kdc = new MiniKdc(kdcConf, kdcDir)
     kdc.start()
+    // TODO https://issues.apache.org/jira/browse/SPARK-30037
+    //  Need to customize krb5.conf like Kafka
     rewriteKrb5Conf()
     kdcReady = true
   }
 
+  /**
+   * In this method we rewrite krb5.conf to make kdc nad client use the same enctypes
+   *
+   */
   private def rewriteKrb5Conf(): Unit = {
     val krb5Conf = Source.fromFile(kdc.getKrb5conf, "UTF-8").getLines()
     var rewritten = false
