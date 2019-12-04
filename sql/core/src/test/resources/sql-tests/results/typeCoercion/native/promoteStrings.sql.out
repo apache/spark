@@ -104,9 +104,10 @@ cannot resolve '(CAST('1' AS DOUBLE) + CAST('2017-12-11 09:30:00.0' AS TIMESTAMP
 -- !query 12
 SELECT '1' + cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query 12 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS INT)):date>
+struct<>
 -- !query 12 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), '1')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query 13
@@ -693,9 +694,10 @@ cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) + CAST('1' AS DOUBLE
 -- !query 83
 SELECT cast('2017-12-11 09:30:00' as date)        + '1' FROM t
 -- !query 83 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS INT)):date>
+struct<>
 -- !query 83 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), '1')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query 84
@@ -783,9 +785,10 @@ NULL
 -- !query 94
 SELECT cast('2017-12-11 09:30:00' as date)        - '1' FROM t
 -- !query 94 schema
-struct<date_sub(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS INT)):date>
+struct<>
 -- !query 94 output
-2017-12-10
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_sub(CAST('2017-12-11 09:30:00' AS DATE), '1')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query 95

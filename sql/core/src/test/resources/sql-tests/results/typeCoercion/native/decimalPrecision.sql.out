@@ -309,33 +309,37 @@ cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) + CAST(1 AS DECIMAL(
 -- !query 37
 SELECT cast('2017-12-11 09:30:00' as date) + cast(1 as decimal(3, 0)) FROM t
 -- !query 37 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(3,0)) AS INT)):date>
+struct<>
 -- !query 37 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(3,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(3,0))' is of decimal(3,0) type.; line 1 pos 7
 
 
 -- !query 38
 SELECT cast('2017-12-11 09:30:00' as date) + cast(1 as decimal(5, 0)) FROM t
 -- !query 38 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(5,0)) AS INT)):date>
+struct<>
 -- !query 38 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(5,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(5,0))' is of decimal(5,0) type.; line 1 pos 7
 
 
 -- !query 39
 SELECT cast('2017-12-11 09:30:00' as date) + cast(1 as decimal(10, 0)) FROM t
 -- !query 39 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(10,0)) AS INT)):date>
+struct<>
 -- !query 39 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(10,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(10,0))' is of decimal(10,0) type.; line 1 pos 7
 
 
 -- !query 40
 SELECT cast('2017-12-11 09:30:00' as date) + cast(1 as decimal(20, 0)) FROM t
 -- !query 40 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(20,0)) AS INT)):date>
+struct<>
 -- !query 40 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(20,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(20,0))' is of decimal(20,0) type.; line 1 pos 7
 
 
 -- !query 41
@@ -705,33 +709,37 @@ cannot resolve '(CAST(1 AS DECIMAL(20,0)) + CAST('2017-12-11 09:30:00.0' AS TIME
 -- !query 85
 SELECT cast(1 as decimal(3, 0))  + cast('2017-12-11 09:30:00' as date) FROM t
 -- !query 85 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(3,0)) AS INT)):date>
+struct<>
 -- !query 85 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(3,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(3,0))' is of decimal(3,0) type.; line 1 pos 7
 
 
 -- !query 86
 SELECT cast(1 as decimal(5, 0))  + cast('2017-12-11 09:30:00' as date) FROM t
 -- !query 86 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(5,0)) AS INT)):date>
+struct<>
 -- !query 86 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(5,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(5,0))' is of decimal(5,0) type.; line 1 pos 7
 
 
 -- !query 87
 SELECT cast(1 as decimal(10, 0)) + cast('2017-12-11 09:30:00' as date) FROM t
 -- !query 87 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(10,0)) AS INT)):date>
+struct<>
 -- !query 87 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(10,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(10,0))' is of decimal(10,0) type.; line 1 pos 7
 
 
 -- !query 88
 SELECT cast(1 as decimal(20, 0)) + cast('2017-12-11 09:30:00' as date) FROM t
 -- !query 88 schema
-struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(20,0)) AS INT)):date>
+struct<>
 -- !query 88 output
-2017-12-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(20,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(20,0))' is of decimal(20,0) type.; line 1 pos 7
 
 
 -- !query 89
@@ -1033,33 +1041,37 @@ cannot resolve 'subtracttimestamps(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP), C
 -- !query 125
 SELECT cast('2017-12-11 09:30:00' as date) - cast(1 as decimal(3, 0)) FROM t
 -- !query 125 schema
-struct<date_sub(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(3,0)) AS INT)):date>
+struct<>
 -- !query 125 output
-2017-12-10
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_sub(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(3,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(3,0))' is of decimal(3,0) type.; line 1 pos 7
 
 
 -- !query 126
 SELECT cast('2017-12-11 09:30:00' as date) - cast(1 as decimal(5, 0)) FROM t
 -- !query 126 schema
-struct<date_sub(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(5,0)) AS INT)):date>
+struct<>
 -- !query 126 output
-2017-12-10
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_sub(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(5,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(5,0))' is of decimal(5,0) type.; line 1 pos 7
 
 
 -- !query 127
 SELECT cast('2017-12-11 09:30:00' as date) - cast(1 as decimal(10, 0)) FROM t
 -- !query 127 schema
-struct<date_sub(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(10,0)) AS INT)):date>
+struct<>
 -- !query 127 output
-2017-12-10
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_sub(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(10,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(10,0))' is of decimal(10,0) type.; line 1 pos 7
 
 
 -- !query 128
 SELECT cast('2017-12-11 09:30:00' as date) - cast(1 as decimal(20, 0)) FROM t
 -- !query 128 schema
-struct<date_sub(CAST(2017-12-11 09:30:00 AS DATE), CAST(CAST(1 AS DECIMAL(20,0)) AS INT)):date>
+struct<>
 -- !query 128 output
-2017-12-10
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_sub(CAST('2017-12-11 09:30:00' AS DATE), CAST(1 AS DECIMAL(20,0)))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(1 AS DECIMAL(20,0))' is of decimal(20,0) type.; line 1 pos 7
 
 
 -- !query 129

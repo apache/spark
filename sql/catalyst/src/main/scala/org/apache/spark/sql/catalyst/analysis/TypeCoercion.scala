@@ -438,8 +438,6 @@ object TypeCoercion {
       case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
       case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
       case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
-      case DateAdd(left @ StringType(), right) => DateAdd(Cast(left, DateType), right)
-      case DateSub(left @ StringType(), right) => DateSub(Cast(left, DateType), right)
     }
   }
 
