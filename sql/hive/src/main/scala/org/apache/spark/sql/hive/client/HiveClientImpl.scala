@@ -381,7 +381,7 @@ private[hive] class HiveClientImpl(
   private def toHiveDatabase(database: CatalogDatabase, isCreate: Boolean): HiveDatabase = {
     val props = database.properties
     val dbOwner = props.getOrElse(PROP_OWNER_NAME, if (isCreate) userName else null)
-    val dbOwnerType = props.getOrElse(PROP_OWNER_TYPE, if (isCreate) "USER" else null)
+    val dbOwnerType = props.getOrElse(PROP_OWNER_TYPE, "USER")
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
