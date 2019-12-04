@@ -142,12 +142,10 @@ object AggUtils {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       // We will group by the original grouping expression, plus an additional expression for the
-      // DISTINCT column and the expression in the FILTER clause associated with each aggregate
-      // function. For example:
+      // DISTINCT column and the referred attributes in the FILTER clause associated with each
+      // aggregate function. For example:
       // 1.for the AVG (DISTINCT value) GROUP BY key, the grouping expression will be [key, value];
-      // 2.for the AVG (value) Filter (WHERE value2> 20) GROUP BY key, the grouping expression
-      //   will be [key, value2];
-      // 3.for AVG (DISTINCT value) Filter (WHERE value2> 20) GROUP BY key, the grouping expression
+      // 2.for AVG (DISTINCT value) Filter (WHERE value2> 20) GROUP BY key, the grouping expression
       // will be [key, value, value2].
       createAggregate(
         groupingExpressions = groupingExpressions ++ namedDistinctExpressions ++

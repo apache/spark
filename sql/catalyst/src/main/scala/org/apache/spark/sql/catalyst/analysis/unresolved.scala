@@ -248,10 +248,7 @@ case class UnresolvedFunction(
     filter: Option[Expression] = None)
   extends Expression with Unevaluable {
 
-  override def children: Seq[Expression] = filter match {
-    case Some(expr) => arguments :+ expr
-    case _ => arguments
-  }
+  override def children: Seq[Expression] = arguments ++ filter.toSeq
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
