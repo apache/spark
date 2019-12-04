@@ -514,13 +514,16 @@ class DataStreamReader(OptionUtils):
             raise TypeError("path can be only a single string")
 
     @since(2.3)
-    def orc(self, path, recursiveFileLookup=None):
+    def orc(self, path, mergeSchema=None, recursiveFileLookup=None):
         """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
 
         .. note:: Evolving.
 
+        :param mergeSchema: sets whether we should merge schemas collected from all
+            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
+            The default value is specified in ``spark.sql.orc.mergeSchema``.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
-                                    disables `partition discovery`_.
+            disables `partition discovery`_.
 
         >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
         >>> orc_sdf.isStreaming
@@ -528,7 +531,7 @@ class DataStreamReader(OptionUtils):
         >>> orc_sdf.schema == sdf_schema
         True
         """
-        self._set_opts(recursiveFileLookup=recursiveFileLookup)
+        self._set_opts(mergeSchema=mergeSchema, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.orc(path))
         else:

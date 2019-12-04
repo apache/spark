@@ -520,17 +520,20 @@ class DataFrameReader(OptionUtils):
             raise TypeError("path can be only string, list or RDD")
 
     @since(1.5)
-    def orc(self, path, recursiveFileLookup=None):
+    def orc(self, path, mergeSchema=None, recursiveFileLookup=None):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
+        :param mergeSchema: sets whether we should merge schemas collected from all
+            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
+            The default value is specified in ``spark.sql.orc.mergeSchema``.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
-                                    disables `partition discovery`_.
+            disables `partition discovery`_.
 
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
-        self._set_opts(recursiveFileLookup=recursiveFileLookup)
+        self._set_opts(mergeSchema=mergeSchema, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
