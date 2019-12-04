@@ -408,7 +408,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     if (seed != null) gmmAlg.setSeed(seed)
 
     try {
-      new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK)))
+      new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd))
     } finally {
       data.rdd.unpersist()
     }
