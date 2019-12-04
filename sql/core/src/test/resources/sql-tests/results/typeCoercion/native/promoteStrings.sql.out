@@ -195,9 +195,10 @@ cannot resolve '(CAST('1' AS DOUBLE) - CAST(1 AS BOOLEAN))' due to data type mis
 -- !query 23
 SELECT '1' - cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query 23 schema
-struct<subtracttimestamps(CAST(1 AS TIMESTAMP), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)):interval>
+struct<>
 -- !query 23 output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve 'subtracttimestamps('1', CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: argument 1 requires timestamp type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query 24
@@ -777,9 +778,10 @@ cannot resolve '(CAST(1 AS BOOLEAN) - CAST('1' AS DOUBLE))' due to data type mis
 -- !query 93
 SELECT cast('2017-12-11 09:30:00.0' as timestamp) - '1' FROM t
 -- !query 93 schema
-struct<subtracttimestamps(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS TIMESTAMP)):interval>
+struct<>
 -- !query 93 output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve 'subtracttimestamps(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP), '1')' due to data type mismatch: argument 2 requires timestamp type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query 94

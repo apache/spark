@@ -830,6 +830,10 @@ object TypeCoercion {
       case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case s @ SubtractTimestamps(DateType(), _) =>
+        s.copy(endTimestamp = Cast(s.endTimestamp, TimestampType))
+      case s @ SubtractTimestamps(_, DateType()) =>
+        s.copy(startTimestamp = Cast(s.startTimestamp, TimestampType))
     }
   }
 
