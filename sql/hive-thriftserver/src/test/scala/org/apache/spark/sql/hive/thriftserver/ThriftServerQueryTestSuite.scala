@@ -117,7 +117,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
       }
 
       testCase match {
-        case _: PgSQLTest =>
+        case _: PgSQLTest | _: AnsiTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
         case _ =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
