@@ -39,7 +39,7 @@ class DoubleType private() extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering =
-    (x: Double, y: Double) => Utils.nanSafeCompareDoubles(x, y)
+    (x: Double, y: Double) => java.lang.Double.compare(x, y)
   private[sql] val asIntegral = DoubleAsIfIntegral
 
   override private[sql] def exactNumeric = DoubleExactNumeric
