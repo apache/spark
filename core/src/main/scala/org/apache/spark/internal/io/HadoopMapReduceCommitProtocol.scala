@@ -425,17 +425,16 @@ object  HadoopMapReduceCommitProtocol extends Logging {
   }
 
   /**
-   * Merge files under staging output path to destination path.
-   * Before merging, we need delete the success file under staging output path and
-   * regenerate it after merging completed.
+   * Merge files under staging output path to destination path. Before merging, we need delete the
+   * succeeded file under staging output path and regenerate it after merging completed.
    */
   private def mergeStagingPath(
       fs: FileSystem,
       stagingOutputPath: Path,
       destPath: Path): Unit = {
     val SUCCEEDED_FILE_NAME = FileOutputCommitter.SUCCEEDED_FILE_NAME
-    val stagingSuccessFile = new Path(stagingOutputPath, SUCCEEDED_FILE_NAME)
-    fs.delete(stagingSuccessFile, true)
+    val stagingMarkerPath = new Path(stagingOutputPath, SUCCEEDED_FILE_NAME)
+    fs.delete(stagingMarkerPath, true)
 
     do {
       doMergePaths(fs, fs.getFileStatus(stagingOutputPath), destPath)

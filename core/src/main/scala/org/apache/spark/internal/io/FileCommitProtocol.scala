@@ -17,11 +17,8 @@
 
 package org.apache.spark.internal.io
 
-import java.io.IOException
-
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
