@@ -3313,6 +3313,27 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       cubeDF.join(cubeDF, "nums"),
       Row(1, 0, 0) :: Row(2, 0, 0) :: Row(3, 0, 0) :: Nil)
   }
+
+  test("SPARK-29860: Fix dataType mismatch issue for InSubquery") {
+    withTempView("ta", "tb", "tc", "td", "te", "tf") {
+      sql("CREATE TEMPORARY VIEW ta AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(8, 0))) AS ta(id)")
+      sql("CREATE TEMPORARY VIEW tb AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(7, 2))) AS tb(id)")
+      sql("CREATE TEMPORARY VIEW tc AS SELECT * FROM VALUES(CAST(1 AS DOUBLE)) AS tc(id)")
+      sql("CREATE TEMPORARY VIEW td AS SELECT * FROM VALUES(CAST(1 AS FLOAT)) AS td(id)")
+      sql("CREATE TEMPORARY VIEW te AS SELECT * FROM VALUES(CAST(1 AS BIGINT)) AS te(id)")
+      sql("CREATE TEMPORARY VIEW tf AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(38, 38))) AS tf(id)")
+      val df1 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tb)")
+      checkAnswer(df1, Row(new java.math.BigDecimal(1)))
+      val df2 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tc)")
+      checkAnswer(df2, Row(new java.math.BigDecimal(1)))
+      val df3 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM td)")
+      checkAnswer(df3, Row(new java.math.BigDecimal(1)))
+      val df4 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM te)")
+      checkAnswer(df4, Row(new java.math.BigDecimal(1)))
+      val df5 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tf)")
+      checkAnswer(df5, Array.empty[Row])
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
