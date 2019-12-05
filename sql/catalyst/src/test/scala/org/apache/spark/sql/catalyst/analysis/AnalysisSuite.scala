@@ -47,7 +47,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val plan = (1 to 120)
       .map(_ => testRelation)
       .fold[LogicalPlan](testRelation) { (a, b) =>
-        a.select(UnresolvedStar(None)).select("a").union(b.select(UnresolvedStar(None)))
+        a.select(UnresolvedStar(None)).select($"a").union(b.select(UnresolvedStar(None)))
       }
 
     assertAnalysisSuccess(plan)
@@ -99,8 +99,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Case 1: one missing attribute is in the leaf node and another is in the unary node
     val plan1 = testRelation2
-      .where($"a" > "str").select("a", "b")
-      .where($"b" > "str").select("a")
+      .where($"a" > "str").select($"a", $"b")
+      .where($"b" > "str").select($"a")
       .sortBy($"b".asc, $"c".desc)
     val expected1 = testRelation2
       .where(a > "str").select(a, b, c)
@@ -111,8 +111,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Case 2: all the missing attributes are in the leaf node
     val plan2 = testRelation2
-      .where($"a" > "str").select("a")
-      .where($"a" > "str").select("a")
+      .where($"a" > "str").select($"a")
+      .where($"a" > "str").select($"a")
       .sortBy($"b".asc, $"c".desc)
     val expected2 = testRelation2
       .where(a > "str").select(a, b, c)
@@ -130,7 +130,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Case: join itself can resolve all the missing attributes
     val plan = testRelation2.join(testRelation3)
-      .where($"a" > "str").select("a", "b")
+      .where($"a" > "str").select($"a", $"b")
       .sortBy($"c".desc, $"h".asc)
     val expected = testRelation2.join(testRelation3)
       .where(a > "str").select(a, b, c, h)
@@ -149,8 +149,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // Case 1: when the child of Sort is not Aggregate,
     //   the sort reference is handled by the rule ResolveSortReferences
     val plan1 = testRelation2
-      .groupBy("a", "c", "b")("a", "c", count("a").as("a3"))
-      .select("a", "c", "a3")
+      .groupBy($"a", $"c", $"b")($"a", $"c", count($"a").as("a3"))
+      .select($"a", $"c", $"a3")
       .orderBy($"b".asc)
 
     val expected1 = testRelation2
@@ -270,7 +270,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val a = testRelation2.output(0)
     val c = testRelation2.output(2)
 
-    val plan = testRelation2.select("c").orderBy(Floor($"a").asc)
+    val plan = testRelation2.select($"c").orderBy(Floor($"a").asc)
     val expected = testRelation2.select(c, a)
       .orderBy(Floor(Cast(a, DoubleType, Option(TimeZone.getDefault().getID))).asc).select(c)
 
@@ -374,7 +374,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val alias3 = count(a).as("a3")
 
     val plan = testRelation2
-      .groupBy("a", "c")($"a".as("a1"), $"c".as("a2"), count("a").as("a3"))
+      .groupBy($"a", $"c")($"a".as("a1"), $"c".as("a2"), count($"a").as("a3"))
       .orderBy($"a1".asc, $"c".asc)
 
     val expected = testRelation2
@@ -393,7 +393,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
     val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
       Symbol("b").struct(Symbol("x").int.withNullability(false)))
-    val plan = relation.select(CaseWhen(Seq((Literal(true), Symbol("a").attr)), "b").as("val"))
+    val plan = relation.select(
+      CaseWhen(Seq((Literal(true), Symbol("a").attr)), Symbol("b")).as("val"))
     assertAnalysisSuccess(plan)
   }
 

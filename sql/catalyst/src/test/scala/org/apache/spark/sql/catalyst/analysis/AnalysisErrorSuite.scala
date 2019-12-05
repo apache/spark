@@ -202,7 +202,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "unresolved attributes",
-    testRelation.select("abcd"),
+    testRelation.select($"abcd"),
     "cannot resolve" :: "abcd" :: Nil)
 
   errorTest(
@@ -239,7 +239,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "missing group by",
-    testRelation2.groupBy("a")("b"),
+    testRelation2.groupBy($"a")($"b"),
     "'`b`'" :: "group by" :: Nil
   )
 
