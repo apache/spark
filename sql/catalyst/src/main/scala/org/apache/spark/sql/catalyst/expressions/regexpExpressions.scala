@@ -154,8 +154,8 @@ case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
       // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
       // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
       // '\"' will cause exception 'Line break in literal not allowed'.
-      val newEscapeChar = if (escapeChar.equals("\"") || escapeChar.equals("\\")) {
-        s"""\\\\$escapeChar"""
+      val newEscapeChar = if (escapeChar == '\"' || escapeChar == '\\') {
+        s"""\\\\\\$escapeChar"""
       } else {
         escapeChar
       }
