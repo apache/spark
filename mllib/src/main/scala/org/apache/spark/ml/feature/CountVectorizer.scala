@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
@@ -334,9 +333,8 @@ class CountVectorizerModel(
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      val attrs: Array[Attribute] = vocabulary.map(_ => new NumericAttribute)
-      val field = new AttributeGroup($(outputCol), attrs).toStructField()
-      outputSchema = SchemaUtils.updateField(outputSchema, field)
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), vocabulary.length)
     }
     outputSchema
   }

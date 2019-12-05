@@ -29,7 +29,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Params for [[RobustScaler]] and [[RobustScalerModel]].
@@ -99,8 +99,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 }
 
