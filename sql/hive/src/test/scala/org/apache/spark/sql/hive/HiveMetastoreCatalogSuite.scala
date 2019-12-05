@@ -44,16 +44,9 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   }
 
   test("duplicated metastore relations") {
-    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-    try {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-      val df = spark.sql("SELECT * FROM src")
-      logInfo(df.queryExecution.toString)
-      df.as('a).join(df.as('b), $"a.key" === $"b.key")
-    } finally {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
-        originalCreateHiveTable)
-    }
+    val df = spark.sql("SELECT * FROM src")
+    logInfo(df.queryExecution.toString)
+    df.as('a).join(df.as('b), $"a.key" === $"b.key")
   }
 
   test("should not truncate struct type catalog string") {
@@ -329,47 +322,40 @@ class DataSourceWithHiveMetastoreCatalogSuite
   }
 
   test("SPARK-27592 set the partitioned bucketed data source table SerDe correctly") {
-    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-    try {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-      val provider = "parquet"
-      withTable("t") {
-        spark.sql(
-          s"""
-             |CREATE TABLE t
-             |USING $provider
-             |PARTITIONED BY (p)
-             |CLUSTERED BY (key)
-             |SORTED BY (value)
-             |INTO 2 BUCKETS
-             |AS SELECT key, value, cast(key % 3 as string) as p FROM src
-        """.stripMargin)
+    val provider = "parquet"
+    withTable("t") {
+      spark.sql(
+        s"""
+           |CREATE TABLE t
+           |USING $provider
+           |PARTITIONED BY (p)
+           |CLUSTERED BY (key)
+           |SORTED BY (value)
+           |INTO 2 BUCKETS
+           |AS SELECT key, value, cast(key % 3 as string) as p FROM src
+      """.stripMargin)
 
-        val metadata = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
+      val metadata = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
 
-        val hiveSerDe = HiveSerDe.sourceToSerDe(provider).get
-        assert(metadata.storage.serde === hiveSerDe.serde)
-        assert(metadata.storage.inputFormat === hiveSerDe.inputFormat)
-        assert(metadata.storage.outputFormat === hiveSerDe.outputFormat)
+      val hiveSerDe = HiveSerDe.sourceToSerDe(provider).get
+      assert(metadata.storage.serde === hiveSerDe.serde)
+      assert(metadata.storage.inputFormat === hiveSerDe.inputFormat)
+      assert(metadata.storage.outputFormat === hiveSerDe.outputFormat)
 
-        // It's a bucketed table at Spark side
-        assert(sql("DESC FORMATTED t").collect().containsSlice(
-          Seq(Row("Num Buckets", "2", ""), Row("Bucket Columns", "[`key`]", ""))
-        ))
-        checkAnswer(table("t").select("key", "value"), table("src"))
+      // It's a bucketed table at Spark side
+      assert(sql("DESC FORMATTED t").collect().containsSlice(
+        Seq(Row("Num Buckets", "2", ""), Row("Bucket Columns", "[`key`]", ""))
+      ))
+      checkAnswer(table("t").select("key", "value"), table("src"))
 
-        // It's not a bucketed table at Hive side
-        val hiveSide = sparkSession.metadataHive.runSqlHive("DESC FORMATTED t")
-        assert(hiveSide.contains("Num Buckets:        \t-1                  \t "))
-        assert(hiveSide.contains("Bucket Columns:     \t[]                  \t "))
-        assert(hiveSide.contains("\tspark.sql.sources.schema.numBuckets\t2                   "))
-        assert(hiveSide.contains("\tspark.sql.sources.schema.bucketCol.0\tkey                 "))
-        assert(sparkSession.metadataHive.runSqlHive("SELECT count(*) FROM t") ===
-          Seq(table("src").count().toString))
-      }
-    } finally {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
-        originalCreateHiveTable)
+      // It's not a bucketed table at Hive side
+      val hiveSide = sparkSession.metadataHive.runSqlHive("DESC FORMATTED t")
+      assert(hiveSide.contains("Num Buckets:        \t-1                  \t "))
+      assert(hiveSide.contains("Bucket Columns:     \t[]                  \t "))
+      assert(hiveSide.contains("\tspark.sql.sources.schema.numBuckets\t2                   "))
+      assert(hiveSide.contains("\tspark.sql.sources.schema.bucketCol.0\tkey                 "))
+      assert(sparkSession.metadataHive.runSqlHive("SELECT count(*) FROM t") ===
+        Seq(table("src").count().toString))
     }
   }
 

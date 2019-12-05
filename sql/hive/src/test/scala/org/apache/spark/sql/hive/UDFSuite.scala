@@ -65,19 +65,12 @@ class UDFSuite
   }
 
   test("UDF case insensitive") {
-    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-    try {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-      spark.udf.register("random0", () => { Math.random() })
-      spark.udf.register("RANDOM1", () => { Math.random() })
-      spark.udf.register("strlenScala", (_: String).length + (_: Int))
-      assert(sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-      assert(sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-      assert(sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
-    } finally {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
-        originalCreateHiveTable)
-    }
+    spark.udf.register("random0", () => { Math.random() })
+    spark.udf.register("RANDOM1", () => { Math.random() })
+    spark.udf.register("strlenScala", (_: String).length + (_: Int))
+    assert(sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
+    assert(sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
+    assert(sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
   }
 
   test("temporary function: create and drop") {

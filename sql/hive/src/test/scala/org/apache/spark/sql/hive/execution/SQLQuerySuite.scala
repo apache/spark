@@ -69,23 +69,6 @@ case class Order(
 class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
-
-  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      TestHive.conf
-        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   test("query global temp view") {
     val df = Seq(1).toDF("i1")
     df.createGlobalTempView("tbl1")
@@ -791,7 +774,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("CREATE TABLE test2 (key INT, value STRING)")
       testData.write.mode(SaveMode.Append).insertInto("test2")
       testData.write.mode(SaveMode.Append).insertInto("test2")
-      sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
+      sql("CREATE TABLE test USING hive AS " +
+        "SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
       checkAnswer(
         table("test"),
         sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
@@ -952,7 +936,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     read.json(ds).createOrReplaceTempView("data")
 
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
-      sql("CREATE TABLE explodeTest (key bigInt)")
+      sql("CREATE TABLE explodeTest (key bigInt) USING hive")
       table("explodeTest").queryExecution.analyzed match {
         case SubqueryAlias(_, r: HiveTableRelation) => // OK
         case _ =>
@@ -1906,7 +1890,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
 
       withTable("load_t") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/*part-r*' INTO TABLE load_t")
         checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1"), Row("2"), Row("3")))
 
@@ -1926,7 +1910,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8)
       }
       withTable("load_t") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000 1' INTO TABLE load_t")
         checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1")))
       }
@@ -1941,7 +1925,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t_folder_wildcard") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '${
           path.substring(0, path.length - 1)
             .concat("*")
@@ -1965,7 +1949,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t1") {
-        sql("CREATE TABLE load_t1 (a STRING)")
+        sql("CREATE TABLE load_t1 (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000?' INTO TABLE load_t1")
         checkAnswer(sql("SELECT * FROM load_t1"), Seq(Row("1"), Row("2"), Row("3")))
       }
@@ -1980,7 +1964,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t2") {
-        sql("CREATE TABLE load_t2 (a STRING)")
+        sql("CREATE TABLE load_t2 (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/?art-r-00001' INTO TABLE load_t2")
         checkAnswer(sql("SELECT * FROM load_t2"), Seq(Row("1")))
       }
@@ -2106,7 +2090,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       withTable("t") {
         df.createTempView("tempView")
         val e = intercept[AnalysisException] {
-          sql("CREATE TABLE t AS SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
+          sql("CREATE TABLE t USING hive AS " +
+            "SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
         }.getMessage
         assert(e.contains(expectedMsg))
       }

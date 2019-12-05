@@ -53,7 +53,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
-  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
 
   def spark: SparkSession = sparkSession
 
@@ -66,7 +65,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     Locale.setDefault(Locale.US)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
-    TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
   }
 
   override def afterAll(): Unit = {
@@ -76,8 +74,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       Locale.setDefault(originalLocale)
       sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
-      TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
-        originalCreateHiveTable)
     } finally {
       super.afterAll()
     }

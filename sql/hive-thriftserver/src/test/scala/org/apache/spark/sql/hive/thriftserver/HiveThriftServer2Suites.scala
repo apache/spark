@@ -60,23 +60,6 @@ object TestData {
 }
 
 class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
-
-  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      TestHive.conf
-        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   override def mode: ServerMode.Value = ServerMode.binary
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {

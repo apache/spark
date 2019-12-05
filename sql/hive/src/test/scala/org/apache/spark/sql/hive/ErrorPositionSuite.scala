@@ -29,12 +29,8 @@ import org.apache.spark.sql.internal.SQLConf
 class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterEach {
   import spark.implicits._
 
-  private  val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-
-
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
     if (spark.catalog.listTables().collect().map(_.name).contains("src")) {
       spark.catalog.dropTempView("src")
     }
@@ -46,8 +42,6 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
     try {
       spark.catalog.dropTempView("src")
       spark.catalog.dropTempView("dupAttributes")
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
-        originalCreateHiveTable)
     } finally {
       super.afterEach()
     }

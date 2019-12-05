@@ -35,22 +35,6 @@ import org.apache.spark.util.Utils
 class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
 
-  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      TestHive.conf
-        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   def rddIdOf(tableName: String): Int = {
     val plan = table(tableName).queryExecution.sparkPlan
     plan.collect {

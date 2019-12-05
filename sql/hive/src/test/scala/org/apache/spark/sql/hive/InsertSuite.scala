@@ -577,40 +577,33 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   test("insert overwrite to dir from hive metastore table") {
-    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-    try {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-      withTempDir { dir =>
-        val path = dir.toURI.getPath
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
 
-        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' SELECT * FROM src where key < 10")
+      sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' SELECT * FROM src where key < 10")
 
+      sql(
+        s"""
+           |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+           |STORED AS orc
+           |SELECT * FROM src where key < 10
+       """.stripMargin)
+
+      // use orc data source to check the data of path is right.
+      withTempView("orc_source") {
         sql(
           s"""
-             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
-             |STORED AS orc
-             |SELECT * FROM src where key < 10
+             |CREATE TEMPORARY VIEW orc_source
+             |USING org.apache.spark.sql.hive.orc
+             |OPTIONS (
+             |  PATH '${dir.getCanonicalPath}'
+             |)
          """.stripMargin)
 
-        // use orc data source to check the data of path is right.
-        withTempView("orc_source") {
-          sql(
-            s"""
-               |CREATE TEMPORARY VIEW orc_source
-               |USING org.apache.spark.sql.hive.orc
-               |OPTIONS (
-               |  PATH '${dir.getCanonicalPath}'
-               |)
-           """.stripMargin)
-
-          checkAnswer(
-            sql("select * from orc_source"),
-            sql("select * from src where key < 10"))
-        }
+        checkAnswer(
+          sql("select * from orc_source"),
+          sql("select * from src where key < 10"))
       }
-    } finally {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
-        originalCreateHiveTable)
     }
   }
 

@@ -50,21 +50,14 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
   }
 
   test("Converting Hive to Parquet Table via saveAsParquetFile") {
-    val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-    try {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-      withTempPath { dir =>
-        sql("SELECT * FROM src").write.parquet(dir.getCanonicalPath)
-        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("p")
-        withTempView("p") {
-          checkAnswer(
-            sql("SELECT * FROM src ORDER BY key"),
-            sql("SELECT * from p ORDER BY key").collect().toSeq)
-        }
+    withTempPath { dir =>
+      sql("SELECT * FROM src").write.parquet(dir.getCanonicalPath)
+      spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("p")
+      withTempView("p") {
+        checkAnswer(
+          sql("SELECT * FROM src ORDER BY key"),
+          sql("SELECT * from p ORDER BY key").collect().toSeq)
       }
-    } finally {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
-        originalCreateHiveTable)
     }
   }
 

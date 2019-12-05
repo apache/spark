@@ -180,7 +180,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("SPARK-24911: keep quotes for nested fields in hive") {
     val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
     try {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+      TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
       withTable("t1") {
         val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>)"
         sql(createTable)
@@ -194,7 +194,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
         checkCreateTable("t1")
       }
     } finally {
-      TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
+      TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
         originalCreateHiveTable)
     }
   }

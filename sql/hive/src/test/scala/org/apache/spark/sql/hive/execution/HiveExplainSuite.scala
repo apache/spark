@@ -33,23 +33,6 @@ import org.apache.spark.util.Utils
  */
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
-
-  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      TestHive.conf
-        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   test("show cost in explain command") {
     val explainCostCommand = "EXPLAIN COST  SELECT * FROM src"
     // For readability, we only show optimized plan and physical plan in explain cost command
@@ -113,13 +96,14 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("explain create table command") {
-    checkKeywordsExist(sql("explain create table temp__b as select * from src limit 2"),
+    checkKeywordsExist(sql("explain create table temp__b using hive as select * from src limit 2"),
                    "== Physical Plan ==",
                    "InsertIntoHiveTable",
                    "Limit",
                    "src")
 
-    checkKeywordsExist(sql("explain extended create table temp__b as select * from src limit 2"),
+    checkKeywordsExist(
+      sql("explain extended create table temp__b using hive as select * from src limit 2"),
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",

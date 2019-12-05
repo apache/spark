@@ -27,22 +27,6 @@ import org.apache.spark.util.Utils
 
 class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestHiveSingleton {
 
-  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      TestHive.conf
-        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   createQueryTest("partition_based_table_scan_with_different_serde",
     """
       |CREATE TABLE part_scan_test (key STRING, value STRING) PARTITIONED BY (ds STRING)

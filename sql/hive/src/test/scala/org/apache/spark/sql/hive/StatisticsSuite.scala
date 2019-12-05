@@ -44,23 +44,6 @@ import org.apache.spark.util.Utils
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
-
-  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    TestHive.conf.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      TestHive.conf
-        .setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, originalCreateHiveTable)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   test("size estimation for relations is based on row size * number of rows") {
     val dsTbl = "rel_est_ds_table"
     val hiveTbl = "rel_est_hive_table"
@@ -174,7 +157,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     // Non-partitioned table
     val nonPartTable = "non_part_table"
     withTable(nonPartTable) {
-      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING)")
+      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING) USING hive")
       sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
       sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
 
@@ -856,7 +839,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("alter table should not have the side effect to store statistics in Spark side") {
     val table = "alter_table_side_effect"
     withTable(table) {
-      sql(s"CREATE TABLE $table (i string, j string)")
+      sql(s"CREATE TABLE $table (i string, j string) USING hive")
       sql(s"INSERT INTO TABLE $table SELECT 'a', 'b'")
       val catalogTable1 = getCatalogTable(table)
       val hiveSize1 = BigInt(catalogTable1.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
