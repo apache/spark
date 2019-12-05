@@ -637,6 +637,11 @@ object FunctionRegistry {
       .filter(_.getParameterTypes.head == classOf[String])
     assert(constructors.length == 1)
     val builder = (expressions: Seq[Expression]) => {
+      assert(expressions.size == 1,
+        s"Invalid number of arguments for function $name. " +
+          s"Expected: 1; Found: ${expressions.size}")
+      assert(expressions.head == classOf[Expression],
+        s"Invalid arguments for function $name")
       try {
         constructors.head.newInstance(name.toString, expressions.head).asInstanceOf[Expression]
       } catch {
