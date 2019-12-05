@@ -1495,6 +1495,52 @@ for more details on the API.
 </div>
 
 
+## QuantileTransform
+
+QuantileTransform transforms the features to follow a uniform or a gaussian distribution.
+It reduces the impact of outliers, so it is a robust preprocessing scheme.
+The transformation is applied on each feature independently. It computes quantiles of each feature
+according to its empirical cumulative distribution function, then maps it back to another distribution
+via the associated quantile function (inverse cumulative distribution function).
+
+Algorithm: The quantiles are computed using an approximate algorithm (see the documentation for
+[approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions) for a
+detailed description). The precision of the approximation can be controlled with the
+`relativeError` parameter. When set to zero, exact quantiles are calculated
+(**Note:** Computing exact quantiles is an expensive operation).
+
+**Examples**
+
+The following example demonstrates how to load a dataset in libsvm format and then
+transform each feature to a gaussian distribution.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [QuantileTransform Scala docs](api/scala/index.html#org.apache.spark.ml.feature.QuantileTransform)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/QuantileTransformExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [QuantileTransform Java docs](api/java/org/apache/spark/ml/feature/QuantileTransform.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaQuantileTransformExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [QuantileTransform Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.QuantileTransform)
+for more details on the API.
+
+{% include_example python/ml/quantile_transform_example.py %}
+</div>
+</div>
+
+
 ## Imputer
 
 The `Imputer` estimator completes missing values in a dataset, either using the mean or the 

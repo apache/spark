@@ -49,6 +49,7 @@ __all__ = ['Binarizer',
            'PCA', 'PCAModel',
            'PolynomialExpansion',
            'QuantileDiscretizer',
+           'QuantileTransform', 'QuantileTransformModel',
            'RobustScaler', 'RobustScalerModel',
            'RegexTokenizer',
            'RFormula', 'RFormulaModel',
@@ -2864,6 +2865,193 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
                               inputCols=self.getInputCols(),
                               outputCols=self.getOutputCols(),
                               handleInvalid=self.getHandleInvalid())
+
+
+class _QuantileTransformParams(HasInputCol, HasOutputCol, HasRelativeError):
+    """
+    Params for :py:class:`QuantileTransform` and :py:class:`QuantileTransformModel`.
+
+    .. versionadded:: 3.0.0
+    """
+    numQuantiles = Param(Params._dummy(), "numQuantiles", "Number of quantiles to be computed",
+                         typeConverter=TypeConverters.toInt)
+    distribution = Param(Params._dummy(), "distribution", "Marginal distribution for the " +
+                         "transformed data", typeConverter=TypeConverters.toString)
+
+    @since("3.0.0")
+    def getNumQuantiles(self):
+        """
+        Gets the value of numQuantiles or its default value.
+        """
+        return self.getOrDefault(self.numQuantiles)
+
+    @since("3.0.0")
+    def getDistribution(self):
+        """
+        Gets the value of distribution or its default value.
+        """
+        return self.getOrDefault(self.distribution)
+
+
+@inherit_doc
+class QuantileTransform(JavaEstimator, _QuantileTransformParams, JavaMLReadable, JavaMLWritable):
+    """
+    QuantileTransform transforms the features to follow a uniform or a gaussian distribution.
+    It reduces the impact of outliers, so it is a robust preprocessing scheme.
+    The transformation is applied on each feature independently. It computes quantiles of each
+    feature according to its empirical cumulative distribution function, then maps it back to
+    another distribution via the associated quantile function (inverse cumulative distribution
+    function).
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> data = [(0, Vectors.dense([0.5, 0.5]),),
+    ...         (1, Vectors.dense([1.0, -1.0]),),
+    ...         (2, Vectors.dense([2.0, -2.0]),),
+    ...         (3, Vectors.dense([3.0, -3.0]),),
+    ...         (4, Vectors.dense([4.0, -4.0]),),]
+    >>> df = spark.createDataFrame(data, ["id", "features"])
+    >>> qt = QuantileTransform(numQuantiles=3)
+    >>> qt.setInputCol("features")
+    QuantileTransform...
+    >>> qt.setOutputCol("transformed")
+    QuantileTransform...
+    >>> model = qt.fit(df)
+    >>> model.setOutputCol("output")
+    QuantileTransformModel...
+    >>> model.references
+    DenseVector([0.0, 0.5, 1.0])
+    >>> model.quantiles
+    [DenseVector([0.5, 2.0, 4.0]), DenseVector([-4.0, -2.0, 0.5])]
+    >>> model.transform(df).collect()[1].output
+    DenseVector([0.1667, 0.7])
+    >>> qtPath = temp_path + "/quantile-transform"
+    >>> qt.save(qtPath)
+    >>> loadedQt = QuantileTransform.load(qtPath)
+    >>> loadedQt.getNumQuantiles() == qt.getNumQuantiles()
+    True
+    >>> loadedQt.getDistribution() == qt.getDistribution()
+    True
+    >>> modelPath = temp_path + "/quantile-transform-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = QuantileTransformModel.load(modelPath)
+    >>> loadedModel.references == model.references
+    True
+    >>> loadedModel.quantiles == model.quantiles
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    @keyword_only
+    def __init__(self, numQuantiles=100, distribution="uniform",
+                 inputCol=None, outputCol=None, relativeError=0.001):
+        """
+        __init__(self, numQuantiles=100, distribution="uniform", \
+                 inputCol=None, outputCol=None, relativeError=0.001)
+        """
+        super(QuantileTransform, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileTransform",
+                                            self.uid)
+        self._setDefault(numQuantiles=100, distribution="uniform",
+                         relativeError=0.001)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, numQuantiles=100, distribution="uniform",
+                  inputCol=None, outputCol=None, relativeError=0.001):
+        """
+        setParams(self, numQuantiles=100, distribution="uniform", \
+                  inputCol=None, outputCol=None, relativeError=0.001)
+        Sets params for this QuantileTransform.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("3.0.0")
+    def setNumQuantiles(self, value):
+        """
+        Sets the value of :py:attr:`numQuantiles`.
+        """
+        return self._set(numQuantiles=value)
+
+    @since("3.0.0")
+    def setDistribution(self, value):
+        """
+        Sets the value of :py:attr:`distribution`.
+        """
+        return self._set(distribution=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setRelativeError(self, value):
+        """
+        Sets the value of :py:attr:`relativeError`.
+        """
+        return self._set(relativeError=value)
+
+    def _create_model(self, java_model):
+        return QuantileTransformModel(java_model)
+
+
+class QuantileTransformModel(JavaModel, _QuantileTransformParams, JavaMLReadable, JavaMLWritable):
+    """
+    Model fitted by :py:class:`QuantileTransform`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @property
+    @since("3.0.0")
+    def numFeatures(self):
+        """
+        Number of features of the QuantileTransformModel.
+        """
+        return self._call_java("numFeatures")
+
+    @property
+    @since("3.0.0")
+    def references(self):
+        """
+        Quantiles of references of the QuantileTransformModel.
+        """
+        return self._call_java("references")
+
+    @property
+    @since("3.0.0")
+    def quantiles(self):
+        """
+        The values corresponding the quantiles of reference.
+        """
+        return self._call_java("quantiles")
 
 
 class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):

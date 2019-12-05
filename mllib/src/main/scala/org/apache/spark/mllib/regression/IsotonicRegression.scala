@@ -19,7 +19,6 @@ package org.apache.spark.mllib.regression
 
 import java.io.Serializable
 import java.lang.{Double => JDouble}
-import java.util.Arrays.binarySearch
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -32,7 +31,7 @@ import org.apache.spark.{RangePartitioner, SparkContext}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.util.{Loader, Saveable}
+import org.apache.spark.mllib.util._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 
@@ -106,8 +105,7 @@ class IsotonicRegressionModel @Since("1.3.0") (
   }
 
   /**
-   * Predict a single label.
-   * Using a piecewise linear function.
+   * Predict a single label by one-dimensional linear interpolation.
    *
    * @param testData Feature to be labeled.
    * @return Predicted label.
@@ -124,30 +122,7 @@ class IsotonicRegressionModel @Since("1.3.0") (
    */
   @Since("1.3.0")
   def predict(testData: Double): Double = {
-
-    def linearInterpolation(x1: Double, y1: Double, x2: Double, y2: Double, x: Double): Double = {
-      y1 + (y2 - y1) * (x - x1) / (x2 - x1)
-    }
-
-    val foundIndex = binarySearch(boundaries, testData)
-    val insertIndex = -foundIndex - 1
-
-    // Find if the index was lower than all values,
-    // higher than all values, in between two values or exact match.
-    if (insertIndex == 0) {
-      predictions.head
-    } else if (insertIndex == boundaries.length) {
-      predictions.last
-    } else if (foundIndex < 0) {
-      linearInterpolation(
-        boundaries(insertIndex - 1),
-        predictions(insertIndex - 1),
-        boundaries(insertIndex),
-        predictions(insertIndex),
-        testData)
-    } else {
-      predictions(foundIndex)
-    }
+    MLUtils.interpolate(boundaries, predictions, testData)
   }
 
   /** A convenient method for boundaries called by the Python API. */
