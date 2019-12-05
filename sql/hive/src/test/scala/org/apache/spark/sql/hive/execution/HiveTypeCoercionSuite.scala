@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A set of tests that validate type promotion and coercion rules.

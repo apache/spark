@@ -26,7 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -587,7 +587,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
            |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
            |STORED AS orc
            |SELECT * FROM src where key < 10
-       """.stripMargin)
+        """.stripMargin)
 
       // use orc data source to check the data of path is right.
       withTempView("orc_source") {
@@ -598,7 +598,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
              |OPTIONS (
              |  PATH '${dir.getCanonicalPath}'
              |)
-         """.stripMargin)
+          """.stripMargin)
 
         checkAnswer(
           sql("select * from orc_source"),

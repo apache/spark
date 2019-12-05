@@ -40,7 +40,6 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
     import org.apache.hadoop.hive.serde2.RegexSerDe
     super.beforeAll()
     TestHive.setCacheTables(false)
-    TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
     sql(s"""CREATE TABLE IF NOT EXISTS sales (key STRING, value INT)
        |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
        |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
@@ -84,15 +83,18 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
   }
 
   test("Test the default fileformat for Hive-serde tables") {
-    withSQLConf("hive.default.fileformat" -> "orc") {
-      val (desc, exists) = extractTableDesc("CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
+    withSQLConf("hive.default.fileformat" -> "orc",
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
+      val (desc, exists) = extractTableDesc(
+        "CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
       assert(exists)
       assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
       assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
       assert(desc.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
     }
 
-    withSQLConf("hive.default.fileformat" -> "parquet") {
+    withSQLConf("hive.default.fileformat" -> "parquet",
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
       val (desc, exists) = extractTableDesc("CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
       assert(exists)
       val input = desc.storage.inputFormat
