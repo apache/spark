@@ -34,8 +34,8 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("join - self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
+    val df1 = testData.select(testData("key")).as("df1")
+    val df2 = testData.select(testData("key")).as("df2")
 
     checkAnswer(
       df1.join(df2, $"df1.key" === $"df2.key"),
@@ -57,11 +57,11 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
   test("join - using aliases after self join") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
     checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
+      df.as("x").join(df.as("y"), $"x.str" === $"y.str").groupBy("x.str").count(),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
 
     checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
+      df.as("x").join(df.as("y"), $"x.str" === $"y.str").groupBy("y.str").count(),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 

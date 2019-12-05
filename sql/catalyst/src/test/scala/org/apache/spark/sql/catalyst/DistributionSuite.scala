@@ -221,7 +221,7 @@ class DistributionSuite extends SparkFunSuite {
 
     checkSatisfied(
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
-      OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc, 'd.desc)),
+      OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc, $"d".desc)),
       true)
 
     // TODO: We can have an optimization to first sort the dataset
@@ -240,7 +240,7 @@ class DistributionSuite extends SparkFunSuite {
 
     checkSatisfied(
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
-      OrderedDistribution(Seq($"a".asc, $"b".asc, 'd.desc)),
+      OrderedDistribution(Seq($"a".asc, $"b".asc, $"d".desc)),
       false)
 
     // RangePartitioning can satisfy ClusteredDistribution iff its ordering expressions are a subset
