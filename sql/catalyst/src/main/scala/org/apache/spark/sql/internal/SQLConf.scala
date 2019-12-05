@@ -1965,7 +1965,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.createHiveTableByDefault.enabled")
       .internal()
       .doc("When set to true, CREATE TABLE syntax without a provider will use hive " +
-        "instead of the value of spark.sql.sources.default.")
+        s"instead of the value of ${DEFAULT_DATA_SOURCE_NAME.key}.")
       .booleanConf
       .createWithDefault(false)
 
