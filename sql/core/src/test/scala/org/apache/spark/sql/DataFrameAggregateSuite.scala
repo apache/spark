@@ -969,7 +969,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
 
   test("Dataset agg functions support calendar intervals") {
     val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select('a, 'b cast CalendarIntervalType).groupBy('a % 2)
+    val df2 = df1.select($"a", $"b" cast CalendarIntervalType).groupBy($"a" % 2)
     checkAnswer(df2.sum("b"),
       Row(0, new CalendarInterval(0, 2, 0)) ::
         Row(1, new CalendarInterval(0, 4, 0)) :: Nil)
