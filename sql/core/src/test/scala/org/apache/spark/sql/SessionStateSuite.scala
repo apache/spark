@@ -193,7 +193,10 @@ class SessionStateSuite extends SparkFunSuite {
           |FROM df x JOIN df y ON x.str = y.str
           |GROUP BY x.str
         """.stripMargin),
-        Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+        Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil) match {
+        case Some(errorMessage) => fail(errorMessage)
+        case None =>
+      }
     }
 
     val spark = activeSession

@@ -352,15 +352,24 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
           .select(CONTENT)
       }
       val expected = Seq(Row(content))
-      QueryTest.checkAnswer(readContent(), expected)
+      QueryTest.checkAnswer(readContent(), expected) match {
+        case Some(errorMessage) => fail(errorMessage)
+        case None =>
+      }
       withSQLConf(SOURCES_BINARY_FILE_MAX_LENGTH.key -> content.length.toString) {
-        QueryTest.checkAnswer(readContent(), expected)
+        QueryTest.checkAnswer(readContent(), expected) match {
+          case Some(errorMessage) => fail(errorMessage)
+          case None =>
+        }
       }
       // Disable read. If the implementation attempts to read, the exception would be different.
       file.setReadable(false)
       val caught = intercept[SparkException] {
         withSQLConf(SOURCES_BINARY_FILE_MAX_LENGTH.key -> (content.length - 1).toString) {
-          QueryTest.checkAnswer(readContent(), expected)
+          QueryTest.checkAnswer(readContent(), expected) match {
+            case Some(errorMessage) => fail(errorMessage)
+            case None =>
+          }
         }
       }
       assert(caught.getMessage.contains("exceeds the max length allowed"))
