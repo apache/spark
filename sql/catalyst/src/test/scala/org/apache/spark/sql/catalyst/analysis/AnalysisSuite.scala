@@ -164,7 +164,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // Case 2: when the child of Sort is Aggregate,
     //   the sort reference is handled by the rule ResolveAggregateFunctions
     val plan2 = testRelation2
-      .groupBy("a", "c", "b")("a", "c", count("a").as("a3"))
+      .groupBy($"a", $"c", $"b")($"a", $"c", count($"a").as("a3"))
       .orderBy($"b".asc)
 
     val expected2 = testRelation2

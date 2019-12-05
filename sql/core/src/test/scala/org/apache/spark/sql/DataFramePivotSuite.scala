@@ -46,7 +46,7 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       courseSales.groupBy("course").pivot("year", Seq(2012, 2013)).agg(sum($"earnings")),
       expected)
     checkAnswer(
-      courseSales.groupBy("course").pivot($"year", Seq(2012, 2013)).agg(sum($"earnings")),
+      courseSales.groupBy($"course").pivot($"year", Seq(2012, 2013)).agg(sum($"earnings")),
       expected)
   }
 

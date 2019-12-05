@@ -176,7 +176,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "nested aggregate functions",
-    testRelation.groupBy("a")(
+    testRelation.groupBy($"a")(
       AggregateExpression(
         Max(AggregateExpression(Count(Literal(1)), Complete, isDistinct = false)),
         Complete,
@@ -207,14 +207,14 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "unresolved attributes with a generated name",
-    testRelation2.groupBy("a")(max($"b"))
+    testRelation2.groupBy($"a")(max($"b"))
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
     "cannot resolve" :: "havingCondition" :: Nil)
 
   errorTest(
     "unresolved star expansion in max",
-    testRelation2.groupBy("a")(sum(UnresolvedStar(None))),
+    testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
     "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
 
   errorTest(
@@ -224,7 +224,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "sorting by attributes are not from grouping expressions",
-    testRelation2.groupBy("a", "c")("a", "c", count("a").as("a3")).orderBy($"b".asc),
+    testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
     "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, a3, c]" :: Nil)
 
   errorTest(
@@ -317,7 +317,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
-    testRelation2.where($"bad_column" > 1).groupBy("a")(UnresolvedAlias(max($"b"))),
+    testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "cannot resolve '`bad_column`'" :: Nil)
 
   errorTest(
