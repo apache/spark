@@ -712,6 +712,19 @@ class Analyzer(
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
+
+    /**
+     * Performs the lookup of DataSourceV2 Tables from v2 catalog.
+     */
+    private def lookupV2Relation(identifier: Seq[String]): Option[DataSourceV2Relation] =
+      identifier match {
+        case NonSessionCatalogAndIdentifier(catalog, ident) =>
+          CatalogV2Util.loadTable(catalog, ident) match {
+            case Some(table) => Some(DataSourceV2Relation.create(table))
+            case None => None
+          }
+        case _ => None
+      }
   }
 
   /**
@@ -789,12 +802,9 @@ class Analyzer(
       case u: UnresolvedRelation => resolveRelation(u)
     }
 
-    // Look up a relation from a given session catalog with the following logic:
+    // Look up a relation from the given session catalog with the following logic:
     // 1) If a relation is not found in the catalog, return None.
-    // 2) If a relation is found,
-    //   a) if it is a v1 table not running on files, create a v1 relation
-    //   b) otherwise, create a v2 relation.
-    // 3) Otherwise, return None.
+    // 2) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
     // If recurse is set to true, it will call `resolveRelation` recursively to resolve
     // relations with the correct database scope.
     private def lookupRelation(
@@ -807,15 +817,11 @@ class Analyzer(
       CatalogV2Util.loadTable(catalog, newIdent) match {
         case Some(v1Table: V1Table) =>
           val tableIdent = TableIdentifier(newIdent.name, newIdent.namespace.headOption)
-          if (!isRunningDirectlyOnFiles(tableIdent)) {
-            val relation = v1SessionCatalog.getRelation(v1Table.v1Table)
-            if (recurse) {
-              Some(resolveRelation(relation))
-            } else {
-              Some(relation)
-            }
+          val relation = v1SessionCatalog.getRelation(v1Table.v1Table)
+          if (recurse) {
+            Some(resolveRelation(relation))
           } else {
-            None
+            Some(relation)
           }
         case Some(table) =>
           Some(DataSourceV2Relation.create(table))
@@ -2867,19 +2873,6 @@ class Analyzer(
       }
     }
   }
-
-  /**
-   * Performs the lookup of DataSourceV2 Tables from v2 catalog.
-   */
-  private def lookupV2Relation(identifier: Seq[String]): Option[DataSourceV2Relation] =
-    identifier match {
-      case NonSessionCatalogAndIdentifier(catalog, ident) =>
-        CatalogV2Util.loadTable(catalog, ident) match {
-          case Some(table) => Some(DataSourceV2Relation.create(table))
-          case None => None
-        }
-      case _ => None
-    }
 }
 
 /**
