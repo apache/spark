@@ -637,13 +637,13 @@ object FunctionRegistry {
       .filter(_.getParameterTypes.head == classOf[String])
     assert(constructors.length == 1)
     val builder = (expressions: Seq[Expression]) => {
-      assert(expressions.size == 1,
-        s"Invalid number of arguments for function $name. " +
+      val params = classOf[String] +: Seq.fill(expressions.size)(classOf[Expression])
+      val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
+        throw new AnalysisException(s"Invalid number of arguments for function $name. " +
           s"Expected: 1; Found: ${expressions.size}")
-      assert(expressions.head == classOf[Expression],
-        s"Invalid arguments for function $name")
+      }
       try {
-        constructors.head.newInstance(name.toString, expressions.head).asInstanceOf[Expression]
+        f.newInstance(name.toString +: expressions: _*).asInstanceOf[Expression]
       } catch {
         // the exception is an invocation exception. To get a meaningful message, we need the
         // cause.
