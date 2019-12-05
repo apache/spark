@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{InterruptedIOException, IOException, UncheckedIOException}
+import java.io.{IOException, InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit, TimeoutException}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
@@ -37,7 +37,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.connector.read.streaming.{SparkDataStream, Offset => OffsetV2}
 import org.apache.spark.sql.connector.write.SupportsTruncate
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.QueryExecution
@@ -431,6 +431,26 @@ abstract class StreamExecution(
         case NonFatal(e) =>
           logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
       }
+    }
+  }
+
+  /**
+   * Interrupts the query execution thread and awaits its termination until the
+   * `spark.sql.streaming.stopTimeout`. A timeout of 0 milliseconds will block indefinitely.
+   *
+   * @throws TimeoutException If the thread cannot be stopped within the timeout
+   * @throws IllegalArgumentException If the timeout is set as a negative value
+   */
+  protected def interruptAndAwaitExecutionThreadTermination(): Unit = {
+    val timeout = sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_TIMEOUT)
+    queryExecutionThread.interrupt()
+    queryExecutionThread.join(timeout)
+    if (queryExecutionThread.isAlive) {
+      val timeoutException = new TimeoutException(
+        s"Stream Execution thread failed to stop within $timeout milliseconds. See stack trace " +
+        "on what was being last executed.")
+      timeoutException.setStackTrace(queryExecutionThread.getStackTrace)
+      throw timeoutException
     }
   }
 
