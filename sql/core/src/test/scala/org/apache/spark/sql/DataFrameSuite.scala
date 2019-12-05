@@ -2027,7 +2027,8 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     val sourceDF = spark.createDataFrame(rows, schema)
 
     def structWhenDF: DataFrame = sourceDF
-      .select(when($"cond", struct(lit("a").as("val1"), lit(10).as("val2"))).otherwise($"s") as "res")
+      .select(when($"cond",
+        struct(lit("a").as("val1"), lit(10).as("val2"))).otherwise($"s") as "res")
       .select($"res".getField("val1"))
     def arrayWhenDF: DataFrame = sourceDF
       .select(when($"cond", array(lit("a"), lit("b"))).otherwise($"a") as "res")
