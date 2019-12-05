@@ -825,7 +825,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }
   }
 
-  test("create table - partitioned by transforms") {
+  test("create table - partitioned columns") {
     val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (id)"
     withCreateTableStatement(query) { state =>
       val transform = IdentityTransform(FieldReference(Seq("id")))
