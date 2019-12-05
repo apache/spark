@@ -39,7 +39,7 @@ class FloatType private() extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[Float]]
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val ordering =
-    (x: Float, y: Float) => Utils.nanSafeCompareFloats(x, y)
+    (x: Float, y: Float) => java.lang.Float.compare(x, y)
   private[sql] val asIntegral = FloatAsIfIntegral
 
   override private[sql] def exactNumeric = FloatExactNumeric

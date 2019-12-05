@@ -625,8 +625,8 @@ class CodegenContext extends Logging {
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
     // java boolean doesn't support > or < operator
     case BooleanType => s"($c1 == $c2 ? 0 : ($c1 ? 1 : -1))"
-    case DoubleType => s"org.apache.spark.util.Utils.nanSafeCompareDoubles($c1, $c2)"
-    case FloatType => s"org.apache.spark.util.Utils.nanSafeCompareFloats($c1, $c2)"
+    case DoubleType => s"java.lang.Double.compare($c1, $c2)"
+    case FloatType => s"java.lang.Float.compare($c1, $c2)"
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
