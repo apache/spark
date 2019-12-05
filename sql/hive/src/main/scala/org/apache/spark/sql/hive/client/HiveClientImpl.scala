@@ -32,8 +32,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{IMetaStoreClient, TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable}
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, Order, SerDeInfo, StorageDescriptor}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable, _}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
@@ -54,6 +53,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
@@ -355,13 +355,8 @@ private[hive] class HiveClientImpl(
   override def createDatabase(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
-    client.createDatabase(
-      new HiveDatabase(
-        database.name,
-        database.description,
-        CatalogUtils.URIToString(database.locationUri),
-        Option(database.properties).map(_.asJava).orNull),
-        ignoreIfExists)
+    val hiveDb = toHiveDatabase(database, true)
+    client.createDatabase(hiveDb, ignoreIfExists)
   }
 
   override def dropDatabase(
@@ -379,22 +374,38 @@ private[hive] class HiveClientImpl(
           s"Hive ${version.fullVersion} does not support altering database location")
       }
     }
-    client.alterDatabase(
+    val hiveDb = toHiveDatabase(database, false)
+    client.alterDatabase(database.name, hiveDb)
+  }
+
+  private def toHiveDatabase(database: CatalogDatabase, isCreate: Boolean): HiveDatabase = {
+    val props = database.properties
+    val hiveDb = new HiveDatabase(
       database.name,
-      new HiveDatabase(
-        database.name,
-        database.description,
-        CatalogUtils.URIToString(database.locationUri),
-        Option(database.properties).map(_.asJava).orNull))
+      database.description,
+      CatalogUtils.URIToString(database.locationUri),
+      (props -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)).asJava)
+    props.get(PROP_OWNER_NAME).orElse(if (isCreate) Some(userName) else None).foreach { ownerName =>
+      shim.setDatabaseOwnerName(hiveDb, ownerName)
+    }
+    props.get(PROP_OWNER_TYPE).orElse(if (isCreate) Some(PrincipalType.USER.name) else None)
+      .foreach { ownerType =>
+        shim.setDatabaseOwnerType(hiveDb, ownerType)
+      }
+    hiveDb
   }
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
+      val paras = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
+        Map(PROP_OWNER_NAME -> shim.getDatabaseOwnerName(d),
+          PROP_OWNER_TYPE -> shim.getDatabaseOwnerType(d))
+
       CatalogDatabase(
         name = d.getName,
         description = Option(d.getDescription).getOrElse(""),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
-        properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
+        properties = paras)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }
 
