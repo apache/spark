@@ -2110,6 +2110,7 @@ class DataFrame(object):
         from pyspark.sql.utils import require_minimum_pandas_version
         require_minimum_pandas_version()
 
+        import numpy as np
         import pandas as pd
 
         if self.sql_ctx._conf.pandasRespectSessionTimeZone():
@@ -2190,6 +2191,10 @@ class DataFrame(object):
                 not(isinstance(field.dataType, IntegralType) and field.nullable and
                     pdf[field.name].isnull().any()):
                 dtype[field.name] = pandas_type
+            if isinstance(field.dataType, IntegralType) and pdf[field.name].isnull().any():
+                dtype[field.name] = np.float64
+            if isinstance(field.dataType, BooleanType) and pdf[field.name].isnull().any():
+                dtype[field.name] = np.object
 
         for f, t in dtype.items():
             pdf[f] = pdf[f].astype(t, copy=False)
@@ -2317,6 +2322,10 @@ def _to_corrected_pandas_type(dt):
         return np.float32
     elif type(dt) == DoubleType:
         return np.float64
+    elif type(dt) == BooleanType:
+        return np.bool
+    elif type(dt) == TimestampType:
+        return np.datetime64
     else:
         return None
 

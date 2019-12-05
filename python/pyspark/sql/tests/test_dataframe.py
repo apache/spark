@@ -551,22 +551,47 @@ class DataFrameTests(ReusedSQLTestCase):
     def test_to_pandas_from_empty_dataframe(self):
         # SPARK-29188 test that toPandas() on an empty dataframe had the correct dtypes
         import numpy as np
-        schema = StructType([
-            StructField('double', DoubleType(), True),
-            StructField('float', FloatType(), True),
-            StructField('byte', ByteType(), True),
-            StructField('integer', IntegerType(), True),
-            StructField('long', LongType(), True),
-            StructField('short', ShortType(), True),
-        ])
-        df = self.spark.createDataFrame([], schema=schema)
-        types = df.toPandas().dtypes
+        sql = """
+        SELECT CAST(1 AS TINYINT) AS tinyint,
+        CAST(1 AS SMALLINT) AS smallint,
+        CAST(1 AS INT) AS int,
+        CAST(1 AS BIGINT) AS bigint,
+        CAST(0 AS FLOAT) AS float,
+        CAST(0 AS DOUBLE) AS double,
+        CAST(1 AS BOOLEAN) AS boolean,
+        CAST('foo' AS STRING) AS string,
+        CAST('2019-01-01' AS TIMESTAMP) AS timestamp
+        """
+        dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
+        dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
+        self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_to_pandas_from_null_dataframe(self):
+        # SPARK-29188 test that toPandas() on an empty dataframe had the correct dtypes
+        import numpy as np
+        sql = """
+        SELECT CAST(NULL AS TINYINT) AS tinyint,
+        CAST(NULL AS SMALLINT) AS smallint,
+        CAST(NULL AS INT) AS int,
+        CAST(NULL AS BIGINT) AS bigint,
+        CAST(NULL AS FLOAT) AS float,
+        CAST(NULL AS DOUBLE) AS double,
+        CAST(NULL AS BOOLEAN) AS boolean,
+        CAST(NULL AS STRING) AS string,
+        CAST(NULL AS TIMESTAMP) AS timestamp
+        """
+        pdf = self.spark.sql(sql).toPandas()
+        types = pdf.dtypes
         self.assertEqual(types[0], np.float64)
-        self.assertEqual(types[1], np.float32)
-        self.assertEqual(types[2], np.int8)
-        self.assertEqual(types[3], np.int32)
-        self.assertEqual(types[4], np.int64)
-        self.assertEqual(types[5], np.int16)
+        self.assertEqual(types[1], np.float64)
+        self.assertEqual(types[2], np.float64)
+        self.assertEqual(types[3], np.float64)
+        self.assertEqual(types[4], np.float32)
+        self.assertEqual(types[5], np.float64)
+        self.assertEqual(types[6], np.object)
+        self.assertEqual(types[7], np.object)
+        self.assertTrue(np.can_cast(np.datetime64, types[8]))
 
     def test_create_dataframe_from_array_of_long(self):
         import array
