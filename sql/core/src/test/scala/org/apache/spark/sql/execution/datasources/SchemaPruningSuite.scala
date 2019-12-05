@@ -101,6 +101,17 @@ abstract class SchemaPruningSuite
       Nil)
   }
 
+  testSchemaPruning("select only input_file_name()") {
+    val query = sql("select input_file_name() from contacts")
+    checkScan(query, "struct<>")
+  }
+
+  testSchemaPruning("select only expressions without references") {
+    val query = sql("select count(*) from contacts")
+    checkScan(query, "struct<>")
+    checkAnswer(query, Row(4))
+  }
+
   testSchemaPruning("select a single complex field") {
     val query = sql("select name.middle from contacts")
     checkScan(query, "struct<name:struct<middle:string>>")

@@ -93,8 +93,7 @@ object PushDownUtils extends PredicateHelper {
         }
         r.pruneColumns(prunedSchema)
         val scan = r.build()
-        val readSchema = scan.readSchema()
-        scan -> toOutputAttrs(readSchema, relation)
+        scan -> toOutputAttrs(scan.readSchema(), relation)
 
       case r: SupportsPushDownRequiredColumns =>
         val exprs = projects ++ filters
@@ -103,8 +102,7 @@ object PushDownUtils extends PredicateHelper {
         if (neededOutput != relation.output) {
           r.pruneColumns(neededOutput.toStructType)
           val scan = r.build()
-          val readSchema = scan.readSchema()
-          scan -> toOutputAttrs(readSchema, relation)
+          scan -> toOutputAttrs(scan.readSchema(), relation)
         } else {
           r.build() -> relation.output
         }
