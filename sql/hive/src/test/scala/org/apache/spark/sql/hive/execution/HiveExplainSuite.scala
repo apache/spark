@@ -32,8 +32,8 @@ import org.apache.spark.util.Utils
  * A set of tests that validates support for Hive Explain command.
  */
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-
   import testImplicits._
+
   test("show cost in explain command") {
     val explainCostCommand = "EXPLAIN COST  SELECT * FROM src"
     // For readability, we only show optimized plan and physical plan in explain cost command
