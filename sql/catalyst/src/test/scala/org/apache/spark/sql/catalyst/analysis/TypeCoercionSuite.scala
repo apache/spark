@@ -1401,44 +1401,6 @@ class TypeCoercionSuite extends AnalysisTest {
     }
   }
 
-  test("rule for date/timestamp operations") {
-    val dateTimeOperations = TypeCoercion.DateTimeOperations
-    val date = Literal(new java.sql.Date(0L))
-    val timestamp = Literal(new Timestamp(0L))
-    val interval = Literal(new CalendarInterval(0, 0, 0))
-    val str = Literal("2015-01-01")
-    val intValue = Literal(0, IntegerType)
-
-    ruleTest(dateTimeOperations, Add(date, interval), Cast(TimeAdd(date, interval), DateType))
-    ruleTest(dateTimeOperations, Add(interval, date), Cast(TimeAdd(date, interval), DateType))
-    ruleTest(dateTimeOperations, Add(timestamp, interval),
-      Cast(TimeAdd(timestamp, interval), TimestampType))
-    ruleTest(dateTimeOperations, Add(interval, timestamp),
-      Cast(TimeAdd(timestamp, interval), TimestampType))
-    ruleTest(dateTimeOperations, Add(str, interval), Cast(TimeAdd(str, interval), StringType))
-    ruleTest(dateTimeOperations, Add(interval, str), Cast(TimeAdd(str, interval), StringType))
-
-    ruleTest(dateTimeOperations, Subtract(date, interval), Cast(TimeSub(date, interval), DateType))
-    ruleTest(dateTimeOperations, Subtract(timestamp, interval),
-      Cast(TimeSub(timestamp, interval), TimestampType))
-    ruleTest(dateTimeOperations, Subtract(str, interval), Cast(TimeSub(str, interval), StringType))
-
-    // interval operations should not be effected
-    ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
-    ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
-
-    ruleTest(dateTimeOperations, Add(date, intValue), DateAdd(date, intValue))
-    ruleTest(dateTimeOperations, Add(intValue, date), DateAdd(date, intValue))
-    ruleTest(dateTimeOperations, Subtract(date, intValue), DateSub(date, intValue))
-    ruleTest(dateTimeOperations, Subtract(date, date), SubtractDates(date, date))
-    ruleTest(dateTimeOperations, Subtract(timestamp, timestamp),
-      SubtractTimestamps(timestamp, timestamp))
-    ruleTest(dateTimeOperations, Subtract(timestamp, date),
-      SubtractTimestamps(timestamp, Cast(date, TimestampType)))
-    ruleTest(dateTimeOperations, Subtract(date, timestamp),
-      SubtractTimestamps(Cast(date, TimestampType), timestamp))
-  }
-
   /**
    * There are rules that need to not fire before child expressions get resolved.
    * We use this test to make sure those rules do not fire early.
@@ -1585,27 +1547,6 @@ class TypeCoercionSuite extends AnalysisTest {
         Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)),
       Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
         Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)))
-  }
-
-  test("rule for interval operations") {
-    val dateTimeOperations = TypeCoercion.DateTimeOperations
-    val interval = Literal(new CalendarInterval(0, 0, 0))
-
-    Seq(
-      Literal(10.toByte, ByteType),
-      Literal(10.toShort, ShortType),
-      Literal(10, IntegerType),
-      Literal(10L, LongType),
-      Literal(Decimal(10), DecimalType.SYSTEM_DEFAULT),
-      Literal(10.5.toFloat, FloatType),
-      Literal(10.5, DoubleType)).foreach { num =>
-      ruleTest(dateTimeOperations, Multiply(interval, num),
-        MultiplyInterval(interval, num))
-      ruleTest(dateTimeOperations, Multiply(num, interval),
-        MultiplyInterval(interval, num))
-      ruleTest(dateTimeOperations, Divide(interval, num),
-        DivideInterval(interval, num))
-    }
   }
 }
 
