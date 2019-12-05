@@ -160,26 +160,27 @@ private[ui] class ActiveBatchTable(
   }
 }
 
-private[ui] class CompletedBatchTableRow(val batchData: BatchUIData,
-                                         val batchTime: Long,
-                                         val numRecords: Long,
-                                         val schedulingDelay: Option[Long],
-                                         val processingDelay: Option[Long],
-                                         val totalDelay: Option[Long])
+private[ui] class CompletedBatchTableRow(
+    val batchData: BatchUIData,
+    val batchTime: Long,
+    val numRecords: Long,
+    val schedulingDelay: Option[Long],
+    val processingDelay: Option[Long],
+    val totalDelay: Option[Long])
+
 
 private[ui] class CompletedBatchPagedTable(
-                                      request: HttpServletRequest,
-                                      parent: StreamingTab,
-                                      batchInterval: Long,
-                                      data: Seq[BatchUIData],
-                                      completedBatchTag: String,
-                                      basePath: String,
-                                      subPath: String,
-                                      parameterOtherTable: Iterable[String],
-                                      pageSize: Int,
-                                      sortColumn: String,
-                                      desc: Boolean)
-  extends PagedTable[CompletedBatchTableRow] {
+    request: HttpServletRequest,
+    parent: StreamingTab,
+    batchInterval: Long,
+    data: Seq[BatchUIData],
+    completedBatchTag: String,
+    basePath: String,
+    subPath: String,
+    parameterOtherTable: Iterable[String],
+    pageSize: Int,
+    sortColumn: String,
+    desc: Boolean) extends PagedTable[CompletedBatchTableRow] {
 
   override val dataSource = new CompletedBatchTableDataSource(data, pageSize, sortColumn, desc)
 
@@ -312,11 +313,11 @@ private[ui] class CompletedBatchPagedTable(
         reasonToNumKilled = Map.empty, total = batch.outputOperations.size)}
       </td>
       {
-      if (firstFailureReason.nonEmpty) {
-        getFirstFailureTableCell(batch)
-      } else {
-        Nil
-      }
+        if (firstFailureReason.nonEmpty) {
+          getFirstFailureTableCell(batch)
+        } else {
+          Nil
+        }
       }
     </tr>
   }
@@ -338,11 +339,10 @@ private[ui] class CompletedBatchPagedTable(
 
 
 private[ui] class CompletedBatchTableDataSource(
-                                           info: Seq[BatchUIData],
-                                           pageSize: Int,
-                                           sortColumn: String,
-                                           desc: Boolean)
-  extends PagedDataSource[CompletedBatchTableRow](pageSize) {
+    info: Seq[BatchUIData],
+    pageSize: Int,
+    sortColumn: String,
+    desc: Boolean) extends PagedDataSource[CompletedBatchTableRow](pageSize) {
 
   // Convert BatchUIData to CompletedBatchTableRow which contains the final contents to show in
   // the table so that we can avoid creating duplicate contents during sorting the data
@@ -367,7 +367,6 @@ private[ui] class CompletedBatchTableDataSource(
 
     new CompletedBatchTableRow(batch, batchTime, records, schedulingDelay, processingDelay,
       totalDelay)
-
   }
 
   /**
@@ -376,7 +375,7 @@ private[ui] class CompletedBatchTableDataSource(
   private def ordering(sortColumn: String, desc: Boolean): Ordering[CompletedBatchTableRow] = {
     val ordering: Ordering[CompletedBatchTableRow] = sortColumn match {
       case "Batch Time" => Ordering.by(_.batchTime)
-      case "Records" => Ordering by (_.numRecords)
+      case "Records" => Ordering.by (_.numRecords)
       case "Scheduling Delay" => Ordering.by(_.schedulingDelay)
       case "Processing Delay" => Ordering.by(_.processingDelay)
       case "Total Delay" => Ordering.by(_.totalDelay)
@@ -389,5 +388,4 @@ private[ui] class CompletedBatchTableDataSource(
       ordering
     }
   }
-
 }

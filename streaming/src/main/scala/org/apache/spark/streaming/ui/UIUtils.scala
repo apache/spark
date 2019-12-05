@@ -203,9 +203,9 @@ private[streaming] object UIUtils {
   }
 
   def prependBaseUri(
-                      request: HttpServletRequest,
-                      basePath: String = "",
-                      resource: String = ""): String = {
-    uiRoot(request) + basePath + resource
+    request: HttpServletRequest,
+    basepath: String = "",
+    resource: String = ""): String = {
+    uiRoot(request) + basepath + resource
   }
 }

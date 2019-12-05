@@ -135,7 +135,7 @@ class UISeleniumSuite
         findAll(cssSelector("""#completedBatch th""")).map(_.text).toSeq should be {
           List("Batch Time", "Records", "Scheduling Delay", "Processing Time",
             "Total Delay", "Output Ops: Succeeded/Total")
-         }
+        }
 
         val batchLinks =
           findAll(cssSelector("""#completedBatch a""")).flatMap(_.attribute("href")).toSeq

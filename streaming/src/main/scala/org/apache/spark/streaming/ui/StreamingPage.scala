@@ -484,12 +484,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </tr>
   }
 
-  private def completedBatchTable(request: HttpServletRequest,
-                                  batches: Seq[BatchUIData],
-                                  batchInterval: Long): Seq[Node] = {
+  private def completedBatchTable(
+      request: HttpServletRequest,
+      batches: Seq[BatchUIData],
+      batchInterval: Long): Seq[Node] = {
 
     val completedBatchTag = "completedBatch"
-    val parameterOtherTable = request.getParameterMap().asScala
+    val parameterOtherTable = request.getParameterMap.asScala
       .filterNot(_._1.startsWith(completedBatchTag))
       .map { case (name, vals) =>
         name + "=" + vals(0)
