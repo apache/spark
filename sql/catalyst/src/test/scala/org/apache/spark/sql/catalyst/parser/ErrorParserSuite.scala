@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * Test various parser errors.
  */
 class ErrorParserSuite extends AnalysisTest {
+  import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
-  import org.apache.spark.sql.catalyst.parser.CatalystSqlParser._
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
     assert(parsePlan(sqlCommand) == plan)

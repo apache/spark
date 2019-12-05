@@ -31,9 +31,9 @@ import org.apache.spark.sql.types.IntegerType
  * There is also SparkSqlParserSuite in sql/core module for parser rules defined in sql/core module.
  */
 class PlanParserSuite extends AnalysisTest {
+  import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
-  import org.apache.spark.sql.catalyst.parser.CatalystSqlParser._
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
     comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
