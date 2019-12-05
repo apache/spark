@@ -269,7 +269,7 @@ class HadoopMapReduceCommitProtocol(
       } else if (supportConcurrent) {
         // For InsertIntoHadoopFsRelation operation, the result has been committed to staging
         // output path, merge it to destination path.
-        mergeStagingPath(fs, stagingOutputPath, new Path(path), jobContext)
+        mergeStagingPath(fs, stagingOutputPath, new Path(path))
       }
 
       if (supportConcurrent) {
@@ -432,8 +432,7 @@ object  HadoopMapReduceCommitProtocol extends Logging {
   private def mergeStagingPath(
       fs: FileSystem,
       stagingOutputPath: Path,
-      destPath: Path,
-      jobContext: JobContext): Unit = {
+      destPath: Path): Unit = {
     val SUCCEEDED_FILE_NAME = FileOutputCommitter.SUCCEEDED_FILE_NAME
     val stagingSuccessFile = new Path(stagingOutputPath, SUCCEEDED_FILE_NAME)
     fs.delete(stagingSuccessFile, true)
@@ -443,17 +442,12 @@ object  HadoopMapReduceCommitProtocol extends Logging {
     } while (checkHasRemainingFiles(fs, stagingOutputPath))
 
     val markerPath = new Path(destPath, SUCCEEDED_FILE_NAME)
-    if (jobContext.getConfiguration.get(
-      FileOutputCommitter.FILEOUTPUTCOMMITTER_ALGORITHM_VERSION) == "2") {
-      fs.create(markerPath, true).close()
-    } else {
-      fs.create(markerPath).close()
-    }
+    fs.create(markerPath).close()
   }
 
   /**
-   * This is a reflection implementation of [[FileOutputCommitter]]'s mergePaths.
-   * We remove some unnecessary operation to improve performance.
+   * This is a reflected implementation of [[FileOutputCommitter]]'s mergePaths.
+   * Just remove some unnecessary operation to improve performance.
    */
   @throws[IOException]
   private def doMergePaths(fs: FileSystem, from: FileStatus, to: Path): Unit = {

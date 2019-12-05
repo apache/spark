@@ -333,10 +333,12 @@ case class InsertIntoHadoopFsRelationCommand(
 
         if (fs.exists(checkedPath)) {
           conflictedPathAndDepths += insertStagingDir -> staticPartitionKVs.size
+        } else {
+          stagingOutputDir = new Path(outputPath, Array(insertStagingPath,
+            getEscapedStaticPartitionPath(staticPartitionKVs), appId, jobId)
+            .mkString(File.separator))
+          fs.mkdirs(stagingOutputDir)
         }
-        stagingOutputDir = new Path(outputPath, Array(insertStagingPath,
-          getEscapedStaticPartitionPath(staticPartitionKVs), appId, jobId).mkString(File.separator))
-        fs.mkdirs(stagingOutputDir)
 
         for (i <- 0 to partitionColumns.size) {
           if (i != staticPartitionKVs.size) {
