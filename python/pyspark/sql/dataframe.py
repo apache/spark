@@ -2191,6 +2191,7 @@ class DataFrame(object):
                 not(isinstance(field.dataType, IntegralType) and field.nullable and
                     pdf[field.name].isnull().any()):
                 dtype[field.name] = pandas_type
+            # Ensure we fall back to nullable numpy types, even when whole column is null:
             if isinstance(field.dataType, IntegralType) and pdf[field.name].isnull().any():
                 dtype[field.name] = np.float64
             if isinstance(field.dataType, BooleanType) and pdf[field.name].isnull().any():
