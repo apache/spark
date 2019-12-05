@@ -595,7 +595,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_mixed_dataframe(self):
-        # SPARK-29188 test that toPandas() on a dataframe with mixed nulls and non-nulls has correct dtypes
+        # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
         import numpy as np
         sql = """
         SELECT CAST(col1 AS TINYINT) AS tinyint,
@@ -607,7 +607,8 @@ class DataFrameTests(ReusedSQLTestCase):
         CAST(col7 AS BOOLEAN) AS boolean,
         CAST(col8 AS STRING) AS string,
         CAST(col9 AS TIMESTAMP) AS timestamp
-        FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1), (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL) 
+        FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
+                    (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
         """
         pdf_with_some_nulls = self.spark.sql(sql).toPandas()
         pdf_with_only_nulls = self.spark.sql(sql).filter('tinyint is null').toPandas()
