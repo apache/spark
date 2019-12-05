@@ -2036,7 +2036,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>None</td>
   <td>
     Task duration after which scheduler would try to speculative run the task. If provided, tasks
-    would be speculatively run if there are less unfinished tasks than the number of slots on a
+    would be speculatively run if current stage contains less tasks than the number of slots on a
     single executor and the task is taking longer time than the threshold. This config helps
     speculate stage with very few tasks.
   </td>

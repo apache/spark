@@ -1819,7 +1819,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       assert(!manager.checkSpeculatableTasks(0))
       assert(sched.speculativeTasks.size == numTasks)
     } else {
-      // If the feature flag is turned off, shouldn't do speculative run if there is only one task
+      // If the feature flag is turned off, or the stage contains too few tasks
       assert(!manager.checkSpeculatableTasks(0))
       assert(sched.speculativeTasks.size == 0)
     }
@@ -1838,7 +1838,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   test("SPARK-29976 when a speculation time threshold is provided, should not speculative " +
-      "if there are too many unfinished tasks even though time threshold is provided") {
+      "if there are too many tasks in the stage even though time threshold is provided") {
     testSpeculationDurationThreshold(true, 2, 1)
   }
 
