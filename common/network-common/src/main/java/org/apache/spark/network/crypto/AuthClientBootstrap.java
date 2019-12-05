@@ -77,6 +77,7 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
 
     try {
       doSparkAuth(client, channel);
+      client.setClientId(appId);
     } catch (GeneralSecurityException | IOException e) {
       throw Throwables.propagate(e);
     } catch (RuntimeException e) {
