@@ -124,11 +124,7 @@ private[spark] class Executor(
     env.blockManager.initialize(conf.getAppId)
     env.metricsSystem.registerSource(executorSource)
     env.metricsSystem.registerSource(new JVMCPUSource())
-    executorMetricsSource match {
-      case Some(executorMetricsSource: ExecutorMetricsSource) =>
-        executorMetricsSource.register(env.metricsSystem)
-      case None => None
-    }
+    executorMetricsSource.foreach(_.register(env.metricsSystem))
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   }
 

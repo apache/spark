@@ -629,11 +629,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _env.metricsSystem.registerSource(new JVMCPUSource())
-    _executorMetricsSource match {
-      case Some(executorMetricsSource: ExecutorMetricsSource) =>
-        executorMetricsSource.register(_env.metricsSystem)
-      case None => None
-    }
+    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
     }
@@ -2487,12 +2483,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Reports heartbeat metrics for the driver. */
   private def reportHeartBeat(executorMetricsSource: Option[ExecutorMetricsSource]): Unit = {
     val currentMetrics = ExecutorMetrics.getCurrentMetrics(env.memoryManager)
-
-    executorMetricsSource match {
-      case Some(executorMetricsSource: ExecutorMetricsSource) =>
-        executorMetricsSource.updateMetricsSnapshot(currentMetrics)
-      case None => None
-    }
+    executorMetricsSource.foreach(_.updateMetricsSnapshot(currentMetrics))
 
     val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]
     // In the driver, we do not track per-stage metrics, so use a dummy stage for the key
