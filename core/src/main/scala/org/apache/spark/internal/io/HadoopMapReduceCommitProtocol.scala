@@ -383,27 +383,26 @@ object  HadoopMapReduceCommitProtocol extends Logging {
      }
 
      // Firstly, delete the staging output dir with recursive, because it is unique.
-     fs.delete(stagingOutputDir, true)
+     deletePath(fs, stagingOutputDir, true)
 
      var currentLevelPath = stagingOutputDir.getParent
-     var complete: Boolean = false
-     while (!complete && currentLevelPath != insertStagingDir) {
-       try {
-         fs.delete(currentLevelPath, false)
-         currentLevelPath = currentLevelPath.getParent
-       } catch {
-         case e: Exception =>
-           logWarning(s"Exception occurred when deleting dir: $currentLevelPath.", e)
-           complete = true
-       }
+     while (currentLevelPath != insertStagingDir) {
+       deletePath(fs, currentLevelPath, false)
+       currentLevelPath = currentLevelPath.getParent
      }
 
-     try {
-       fs.delete(insertStagingDir, false)
-     } catch {
-       case e: Exception =>
-         logWarning(s"Exception occurred when deleting dir: $insertStagingDir.", e)
-     }
+     deletePath(fs, insertStagingDir, false)
+  }
+
+  private def deletePath(fs: FileSystem, path: Path, recursive: Boolean): Unit = {
+    try {
+      if (!fs.delete(path, recursive)) {
+        logWarning(s"Failed to delete path:$path with recursive:$recursive")
+      }
+    } catch {
+      case e: Exception =>
+        logWarning(s"Exception occurred when deleting dir: $path.", e)
+    }
   }
 
   /**
