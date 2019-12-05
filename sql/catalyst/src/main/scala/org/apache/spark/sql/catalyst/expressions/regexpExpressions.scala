@@ -111,16 +111,14 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   since = "1.0.0")
 // scalastyle:on line.contains.tab
-case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Char] = None)
+case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
   extends StringRegexExpression {
 
-  override def escape(v: String): String =
-    StringUtils.escapeLikeRegex(v, escapeCharOpt.getOrElse('\\'))
+  override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  override def toString: String = s"$left LIKE $right" +
-    escapeCharOpt.map(str => s" ESCAPE $str").getOrElse("")
+  override def toString: String = s"$left LIKE $right ESCAPE '$escapeChar'"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
@@ -153,20 +151,18 @@ case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Char]
     } else {
       val pattern = ctx.freshName("pattern")
       val rightStr = ctx.freshName("rightStr")
-      val escapeChar = escapeCharOpt.map { str =>
-        // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
-        // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
-        // '\"' will cause exception 'Line break in literal not allowed'.
-        if (str.equals("\"") || str.equals("\\")) {
-          s"""\\\\$str"""
-        } else {
-          str
-        }
-      }.getOrElse("""\\\\""")
+      // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
+      // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
+      // '\"' will cause exception 'Line break in literal not allowed'.
+      val newEscapeChar = if (escapeChar.equals("\"") || escapeChar.equals("\\")) {
+        s"""\\\\$escapeChar"""
+      } else {
+        escapeChar
+      }
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, '$escapeChar'));
+          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, '$newEscapeChar'));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })

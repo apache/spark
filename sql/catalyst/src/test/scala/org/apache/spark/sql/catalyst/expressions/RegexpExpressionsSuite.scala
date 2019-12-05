@@ -119,80 +119,79 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   Seq('/', '#', '\"').foreach { escapeChar =>
-    val escapeOpt = Some(escapeChar)
     test(s"LIKE Pattern ESCAPE '$escapeChar'") {
       // null handling
-      checkLiteralRow(Literal.create(null, StringType).like(_, escapeOpt), "a", null)
+      checkLiteralRow(Literal.create(null, StringType).like(_, escapeChar), "a", null)
       checkEvaluation(
-        Literal.create("a", StringType).like(Literal.create(null, StringType), escapeOpt), null)
+        Literal.create("a", StringType).like(Literal.create(null, StringType), escapeChar), null)
       checkEvaluation(
-        Literal.create(null, StringType).like(Literal.create(null, StringType), escapeOpt), null)
+        Literal.create(null, StringType).like(Literal.create(null, StringType), escapeChar), null)
       checkEvaluation(Literal.create("a", StringType).like(
-        NonFoldableLiteral.create("a", StringType), escapeOpt), true)
+        NonFoldableLiteral.create("a", StringType), escapeChar), true)
       checkEvaluation(Literal.create("a", StringType).like(
-        NonFoldableLiteral.create(null, StringType), escapeOpt), null)
+        NonFoldableLiteral.create(null, StringType), escapeChar), null)
       checkEvaluation(Literal.create(null, StringType).like(
-        NonFoldableLiteral.create("a", StringType), escapeOpt), null)
+        NonFoldableLiteral.create("a", StringType), escapeChar), null)
       checkEvaluation(Literal.create(null, StringType).like(
-        NonFoldableLiteral.create(null, StringType), escapeOpt), null)
+        NonFoldableLiteral.create(null, StringType), escapeChar), null)
 
       // simple patterns
-      checkLiteralRow("abdef" like(_, escapeOpt), "abdef", true)
-      checkLiteralRow("a_%b" like(_, escapeOpt), s"a${escapeChar}__b", true)
-      checkLiteralRow("addb" like(_, escapeOpt), "a_%b", true)
-      checkLiteralRow("addb" like(_, escapeOpt), s"a${escapeChar}__b", false)
-      checkLiteralRow("addb" like(_, escapeOpt), s"a%$escapeChar%b", false)
-      checkLiteralRow("a_%b" like(_, escapeOpt), s"a%$escapeChar%b", true)
-      checkLiteralRow("addb" like(_, escapeOpt), "a%", true)
-      checkLiteralRow("addb" like(_, escapeOpt), "**", false)
-      checkLiteralRow("abc" like(_, escapeOpt), "a%", true)
-      checkLiteralRow("abc"  like(_, escapeOpt), "b%", false)
-      checkLiteralRow("abc"  like(_, escapeOpt), "bc%", false)
-      checkLiteralRow("a\nb" like(_, escapeOpt), "a_b", true)
-      checkLiteralRow("ab" like(_, escapeOpt), "a%b", true)
-      checkLiteralRow("a\nb" like(_, escapeOpt), "a%b", true)
+      checkLiteralRow("abdef" like(_, escapeChar), "abdef", true)
+      checkLiteralRow("a_%b" like(_, escapeChar), s"a${escapeChar}__b", true)
+      checkLiteralRow("addb" like(_, escapeChar), "a_%b", true)
+      checkLiteralRow("addb" like(_, escapeChar), s"a${escapeChar}__b", false)
+      checkLiteralRow("addb" like(_, escapeChar), s"a%$escapeChar%b", false)
+      checkLiteralRow("a_%b" like(_, escapeChar), s"a%$escapeChar%b", true)
+      checkLiteralRow("addb" like(_, escapeChar), "a%", true)
+      checkLiteralRow("addb" like(_, escapeChar), "**", false)
+      checkLiteralRow("abc" like(_, escapeChar), "a%", true)
+      checkLiteralRow("abc"  like(_, escapeChar), "b%", false)
+      checkLiteralRow("abc"  like(_, escapeChar), "bc%", false)
+      checkLiteralRow("a\nb" like(_, escapeChar), "a_b", true)
+      checkLiteralRow("ab" like(_, escapeChar), "a%b", true)
+      checkLiteralRow("a\nb" like(_, escapeChar), "a%b", true)
 
       // empty input
-      checkLiteralRow("" like(_, escapeOpt), "", true)
-      checkLiteralRow("a" like(_, escapeOpt), "", false)
-      checkLiteralRow("" like(_, escapeOpt), "a", false)
+      checkLiteralRow("" like(_, escapeChar), "", true)
+      checkLiteralRow("a" like(_, escapeChar), "", false)
+      checkLiteralRow("" like(_, escapeChar), "a", false)
 
       // SI-17647 double-escaping backslash
-      checkLiteralRow(s"""$escapeChar$escapeChar$escapeChar$escapeChar""" like(_, escapeOpt),
+      checkLiteralRow(s"""$escapeChar$escapeChar$escapeChar$escapeChar""" like(_, escapeChar),
         s"""%$escapeChar$escapeChar%""", true)
-      checkLiteralRow("""%%""" like(_, escapeOpt), """%%""", true)
-      checkLiteralRow(s"""${escapeChar}__""" like(_, escapeOpt),
+      checkLiteralRow("""%%""" like(_, escapeChar), """%%""", true)
+      checkLiteralRow(s"""${escapeChar}__""" like(_, escapeChar),
         s"""$escapeChar$escapeChar${escapeChar}__""", true)
-      checkLiteralRow(s"""$escapeChar$escapeChar${escapeChar}__""" like(_, escapeOpt),
+      checkLiteralRow(s"""$escapeChar$escapeChar${escapeChar}__""" like(_, escapeChar),
         s"""%$escapeChar$escapeChar%$escapeChar%""", false)
-      checkLiteralRow(s"""_$escapeChar$escapeChar$escapeChar%""" like(_, escapeOpt),
+      checkLiteralRow(s"""_$escapeChar$escapeChar$escapeChar%""" like(_, escapeChar),
         s"""%$escapeChar${escapeChar}""", false)
 
       // unicode
       // scalastyle:off nonascii
-      checkLiteralRow("a\u20ACa" like(_, escapeOpt), "_\u20AC_", true)
-      checkLiteralRow("a€a" like(_, escapeOpt), "_€_", true)
-      checkLiteralRow("a€a" like(_, escapeOpt), "_\u20AC_", true)
-      checkLiteralRow("a\u20ACa" like(_, escapeOpt), "_€_", true)
+      checkLiteralRow("a\u20ACa" like(_, escapeChar), "_\u20AC_", true)
+      checkLiteralRow("a€a" like(_, escapeChar), "_€_", true)
+      checkLiteralRow("a€a" like(_, escapeChar), "_\u20AC_", true)
+      checkLiteralRow("a\u20ACa" like(_, escapeChar), "_€_", true)
       // scalastyle:on nonascii
 
       // invalid escaping
       val invalidEscape = intercept[AnalysisException] {
-        evaluateWithoutCodegen("""a""" like(s"""${escapeChar}a""", escapeOpt))
+        evaluateWithoutCodegen("""a""" like(s"""${escapeChar}a""", escapeChar))
       }
       assert(invalidEscape.getMessage.contains("pattern"))
       val endEscape = intercept[AnalysisException] {
-        evaluateWithoutCodegen("""a""" like(s"""a$escapeChar""", escapeOpt))
+        evaluateWithoutCodegen("""a""" like(s"""a$escapeChar""", escapeChar))
       }
       assert(endEscape.getMessage.contains("pattern"))
 
       // case
-      checkLiteralRow("A" like(_, escapeOpt), "a%", false)
-      checkLiteralRow("a" like(_, escapeOpt), "A%", false)
-      checkLiteralRow("AaA" like(_, escapeOpt), "_a_", true)
+      checkLiteralRow("A" like(_, escapeChar), "a%", false)
+      checkLiteralRow("a" like(_, escapeChar), "A%", false)
+      checkLiteralRow("AaA" like(_, escapeChar), "_a_", true)
 
       // example
-      checkLiteralRow(s"""%SystemDrive%${escapeChar}Users${escapeChar}John""" like(_, escapeOpt),
+      checkLiteralRow(s"""%SystemDrive%${escapeChar}Users${escapeChar}John""" like(_, escapeChar),
         s"""$escapeChar%SystemDrive$escapeChar%$escapeChar${escapeChar}Users%""", true)
     }
   }
