@@ -221,7 +221,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) + CAST(CAST(1 AS DECIMAL
 -- !query 27
 SELECT cast(1 as decimal(10, 0)) + cast(1 as decimal(10, 0)) FROM t
 -- !query 27 schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) + CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0))):decimal(11,0)>
+struct<(CAST(1 AS DECIMAL(10,0)) + CAST(1 AS DECIMAL(10,0))):decimal(11,0)>
 -- !query 27 output
 2
 
@@ -553,7 +553,7 @@ struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(11,0)) + CAST(CAST(1 AS DECIMAL(
 -- !query 67
 SELECT cast(1 as decimal(10, 0)) + cast(1 as decimal(10, 0)) FROM t
 -- !query 67 schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) + CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0))):decimal(11,0)>
+struct<(CAST(1 AS DECIMAL(10,0)) + CAST(1 AS DECIMAL(10,0))):decimal(11,0)>
 -- !query 67 output
 2
 
@@ -953,7 +953,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) - CAST(CAST(1 AS DECIMAL
 -- !query 115
 SELECT cast(1 as decimal(10, 0)) - cast(1 as decimal(10, 0)) FROM t
 -- !query 115 schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) - CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0))):decimal(11,0)>
+struct<(CAST(1 AS DECIMAL(10,0)) - CAST(1 AS DECIMAL(10,0))):decimal(11,0)>
 -- !query 115 output
 0
 
@@ -1285,7 +1285,7 @@ struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(11,0)) - CAST(CAST(1 AS DECIMAL(
 -- !query 155
 SELECT cast(1 as decimal(10, 0)) - cast(1 as decimal(10, 0)) FROM t
 -- !query 155 schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0)) - CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(11,0))):decimal(11,0)>
+struct<(CAST(1 AS DECIMAL(10,0)) - CAST(1 AS DECIMAL(10,0))):decimal(11,0)>
 -- !query 155 output
 0
 
@@ -1685,7 +1685,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) * CAST(CAST(1 AS DECIMAL
 -- !query 203
 SELECT cast(1 as decimal(10, 0)) * cast(1 as decimal(10, 0)) FROM t
 -- !query 203 schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) * CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(21,0)>
+struct<(CAST(1 AS DECIMAL(10,0)) * CAST(1 AS DECIMAL(10,0))):decimal(21,0)>
 -- !query 203 output
 1
 
@@ -2017,7 +2017,7 @@ struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(10,0)) * CAST(CAST(1 AS DECIMAL(
 -- !query 243
 SELECT cast(1 as decimal(10, 0)) * cast(1 as decimal(10, 0)) FROM t
 -- !query 243 schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) * CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(21,0)>
+struct<(CAST(1 AS DECIMAL(10,0)) * CAST(1 AS DECIMAL(10,0))):decimal(21,0)>
 -- !query 243 output
 1
 
@@ -2417,7 +2417,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL
 -- !query 291
 SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(10, 0)) FROM t
 -- !query 291 schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(21,11)>
+struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 291 output
 1.00000000000
 
@@ -2749,7 +2749,7 @@ struct<(CAST(CAST(1 AS DECIMAL(5,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(
 -- !query 331
 SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(10, 0)) FROM t
 -- !query 331 schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(21,11)>
+struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 331 output
 1.00000000000
 

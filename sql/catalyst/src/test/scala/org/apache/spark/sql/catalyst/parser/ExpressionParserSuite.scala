@@ -51,15 +51,7 @@ class ExpressionParserSuite extends AnalysisTest {
       sqlCommand: String,
       e: Expression,
       parser: ParserInterface = defaultParser): Unit = {
-    // usage for UnresolvedAdd etc here is just for tests
-    val expression = parser.parseExpression(sqlCommand) transform {
-      case UnresolvedAdd(l, r) => Add(l, r)
-      case UnresolvedSubtract(l, r) => Subtract(l, r)
-      case UnresolvedMultiply(l, r) => Multiply(l, r)
-      case UnresolvedDivide(l, r) => Divide(l, r)
-      case other => other
-    }
-    compareExpressions(expression, e)
+    compareExpressions(parser.parseExpression(sqlCommand), e)
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =

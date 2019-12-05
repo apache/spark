@@ -544,23 +544,3 @@ case class UnresolvedOrdinal(ordinal: Int)
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
-
-abstract class UnresolvedBinaryExpression(operator: String)
-  extends BinaryExpression with Unevaluable {
-  override lazy val resolved: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def sql: String = s"${left.sql} $operator ${right.sql}"
-}
-
-case class UnresolvedAdd(left: Expression, right: Expression)
-  extends UnresolvedBinaryExpression("+") {
-}
-
-case class UnresolvedSubtract(left: Expression, right: Expression)
-  extends UnresolvedBinaryExpression("-")
-
-case class UnresolvedMultiply(left: Expression, right: Expression)
-  extends UnresolvedBinaryExpression("*")
-
-case class UnresolvedDivide(left: Expression, right: Expression)
-  extends UnresolvedBinaryExpression("/")

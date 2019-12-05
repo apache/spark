@@ -248,41 +248,41 @@ class Analyzer(
   )
 
   /**
-   * For [[UnresolvedAdd]]:
-   * 1. if both side are interval, turns it to [[Add]];
+   * For [[Add]]:
+   * 1. if both side are interval, stays the same;
    * 2. else if one side is interval, turns it to [[TimeAdd]];
    * 3. else if one side is date, turns it to [[DateAdd]] ;
-   * 4. else turns it to [[Add]].
+   * 4. else stays the same.
    *
-   * For [[UnresolvedSubtract]]:
-   * 1. if both side are interval, turns it to [[Subtract]];
+   * For [[Subtract]]:
+   * 1. if both side are interval, stays the same;
    * 2. else if the right side is an interval, turns it to [[TimeSub]];
    * 3. else if one side is timestamp, turns it to [[SubtractTimestamps]];
    * 4. else if the right side is date, turns it to [[DateDiff]]/[[SubtractDates]];
    * 5. else if the left side is date, turns it to [[DateSub]];
-   * 6. else turns it to [[Subtract]].
+   * 6. else turns it to stays the same.
    *
-   * For [[UnresolvedMultiply]]:
+   * For [[Multiply]]:
    * 1. If one side is interval, turns it to [[MultiplyInterval]];
-   * 2. otherwise, turns it to [[Multiply]].
+   * 2. otherwise, stays the same.
    *
-   * For [[UnresolvedDivide]]:
+   * For [[Divide]]:
    * 1. If the left side is interval, turns it to [[DivideInterval]];
-   * 2. otherwise, turns it to [[Divide]].
+   * 2. otherwise, stays the same.
    */
   case class ResolveBinaryArithmetic(conf: SQLConf) extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformExpressionsUp {
-        case u @ UnresolvedAdd(l, r) if u.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, CalendarIntervalType) => Add(l, r)
+        case a @ Add(l, r) if a.childrenResolved => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, CalendarIntervalType) => a
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
           case (DateType, _) => DateAdd(l, r)
           case (_, DateType) => DateAdd(r, l)
-          case _ => Add(l, r)
+          case _ => a
         }
-        case u @ UnresolvedSubtract(l, r) if u.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, CalendarIntervalType) => Subtract(l, r)
+        case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, CalendarIntervalType) => s
           case (_, CalendarIntervalType) => Cast(TimeSub(l, r), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
@@ -292,16 +292,16 @@ class Analyzer(
             SubtractDates(l, r)
           }
           case (DateType, _) => DateSub(l, r)
-          case _ => Subtract(l, r)
+          case _ => s
         }
-        case u @ UnresolvedMultiply(l, r) if u.childrenResolved => (l.dataType, r.dataType) match {
+        case m @ Multiply(l, r) if m.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _) => MultiplyInterval(l, r)
           case (_, CalendarIntervalType) => MultiplyInterval(r, l)
-          case _ => Multiply(l, r)
+          case _ => m
         }
-        case u @ UnresolvedDivide(l, r) if u.childrenResolved => (l.dataType, r.dataType) match {
+        case d @ Divide(l, r) if d.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _) => DivideInterval(l, r)
-          case _ => Divide(l, r)
+          case _ => d
         }
       }
     }
