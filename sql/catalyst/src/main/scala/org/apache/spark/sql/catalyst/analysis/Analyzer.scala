@@ -134,11 +134,11 @@ class Analyzer(
     this(
       new CatalogManager(conf, FakeV2SessionCatalog, catalog),
       conf,
-      conf.optimizerMaxIterations)
+      conf.analyzerMaxIterations)
   }
 
   def this(catalogManager: CatalogManager, conf: SQLConf) = {
-    this(catalogManager, conf, conf.optimizerMaxIterations)
+    this(catalogManager, conf, conf.analyzerMaxIterations)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
