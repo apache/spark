@@ -481,7 +481,7 @@ object  HadoopMapReduceCommitProtocol extends Logging {
           rename(fs, from, to)
         } else {
           fs.listStatus(from.getPath).foreach { fileToMove =>
-            rename(fs, fileToMove, new Path(to, fileToMove.getPath.getName))
+            doMergePaths(fs, fileToMove, new Path(to, fileToMove.getPath.getName))
           }
         }
       } else {
