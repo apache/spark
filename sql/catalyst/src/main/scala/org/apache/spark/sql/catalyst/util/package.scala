@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.UnresolvedBinaryExpression
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StringType}
@@ -142,7 +143,10 @@ package object util extends Logging {
     "`" + name.replace("`", "``") + "`"
   }
 
-  def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
+  def toPrettySQL(e: Expression): String = e match {
+    case u: UnresolvedBinaryExpression => u.sql
+    case _ => usePrettyExpression(e).sql
+  }
 
   def escapeSingleQuotedString(str: String): String = {
     val builder = StringBuilder.newBuilder
