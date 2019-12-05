@@ -17,14 +17,14 @@
 
 package org.apache.spark.internal.io
 
-import java.io.{File, IOException}
+import java.io.{File, FileNotFoundException, IOException}
 import java.util.{Date, UUID}
 
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configurable
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -269,8 +269,7 @@ class HadoopMapReduceCommitProtocol(
       } else if (supportConcurrent) {
         // For InsertIntoHadoopFsRelation operation, the result has been committed to staging
         // output path, merge it to destination path.
-        FileCommitProtocol.mergePaths(committer.asInstanceOf[FileOutputCommitter], fs,
-          fs.getFileStatus(stagingOutputPath), new Path(path), jobContext)
+        mergeStagingPath(fs, stagingOutputPath, new Path(path), jobContext)
       }
 
       if (supportConcurrent) {
@@ -405,5 +404,96 @@ object  HadoopMapReduceCommitProtocol extends Logging {
        case e: Exception =>
          logWarning(s"Exception occurred when deleting dir: $insertStagingDir.", e)
      }
+  }
+
+  /**
+   * Used to check whether there are some remaining files under staging output path.
+   */
+  private def checkHasRemainingFiles(
+      fs: FileSystem,
+      path: Path): Boolean = {
+    var statusList = Seq(fs.getFileStatus(path))
+    var found = false
+    while (!found && !statusList.isEmpty) {
+      if (statusList.exists(_.isFile)) {
+        found = true
+      } else {
+        statusList = statusList.flatMap(s => fs.listStatus(s.getPath))
+      }
+    }
+    found
+  }
+
+  /**
+   * Merge files under staging output path to destination path.
+   * Before merging, we need delete the success file under staging output path and
+   * regenerate it after merging completed.
+   */
+  private def mergeStagingPath(
+      fs: FileSystem,
+      stagingOutputPath: Path,
+      destPath: Path,
+      jobContext: JobContext): Unit = {
+    val SUCCEEDED_FILE_NAME = FileOutputCommitter.SUCCEEDED_FILE_NAME
+    val stagingSuccessFile = new Path(stagingOutputPath, SUCCEEDED_FILE_NAME)
+    fs.delete(stagingSuccessFile, true)
+
+    do {
+      doMergePaths(fs, fs.getFileStatus(stagingOutputPath), destPath)
+    } while (checkHasRemainingFiles(fs, stagingOutputPath))
+
+    val markerPath = new Path(destPath, SUCCEEDED_FILE_NAME)
+    if (jobContext.getConfiguration.get(
+      FileOutputCommitter.FILEOUTPUTCOMMITTER_ALGORITHM_VERSION) == "2") {
+      fs.create(markerPath, true).close()
+    } else {
+      fs.create(markerPath).close()
+    }
+  }
+
+  /**
+   * This is a reflection implementation of [[FileOutputCommitter]]'s mergePaths.
+   * We remove some unnecessary operation to improve performance.
+   */
+  @throws[IOException]
+  private def doMergePaths(fs: FileSystem, from: FileStatus, to: Path): Unit = {
+    logDebug(s"Merging data from $from to $to")
+
+    val toStat: FileStatus = Try {
+      fs.getFileStatus(to)
+    } match {
+      case Success(stat) => stat
+      case Failure(_: FileNotFoundException) => null
+      case Failure(e) => throw e
+    }
+
+    if (from.isFile) {
+      if (toStat != null && !fs.delete(to, true)) {
+        throw new IOException(s"Failed to delete $to" )
+      }
+      rename(fs, from, to)
+    } else if (from.isDirectory) {
+      if (toStat != null) {
+        if (!toStat.isDirectory) {
+          if (!fs.delete(to, true)) {
+            throw new IOException(s"Failed to delete $to")
+          }
+          rename(fs, from, to)
+        } else {
+          fs.listStatus(from.getPath).foreach { fileToMove =>
+            rename(fs, fileToMove, new Path(to, fileToMove.getPath.getName))
+          }
+        }
+      } else {
+        rename(fs, from, to)
+      }
+    }
+  }
+
+  @throws[IOException]
+  private def rename(fs: FileSystem, from: FileStatus, to: Path): Unit = {
+    if (!fs.rename(from.getPath, to)) {
+      throw new IOException(s"Failed to rename $from to $to")
+    }
   }
 }
