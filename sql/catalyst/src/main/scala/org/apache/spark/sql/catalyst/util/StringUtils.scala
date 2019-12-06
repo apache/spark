@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.regex.{Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
@@ -74,9 +73,9 @@ object StringUtils extends Logging {
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
 
   // scalastyle:off caselocale
-  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.toLowerCase)
+  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.trimAll().toLowerCase)
 
-  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.toLowerCase)
+  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.trimAll().toLowerCase)
   // scalastyle:on caselocale
 
   /**
