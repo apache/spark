@@ -72,13 +72,12 @@ case class CreateDatabaseCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val availablePros = props -- RESERVED_PROPERTIES.asScala
     catalog.createDatabase(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
         path.map(CatalogUtils.stringToURI).getOrElse(catalog.getDefaultDBPath(databaseName)),
-        availablePros),
+        props),
       ifNotExists)
     Seq.empty[Row]
   }
