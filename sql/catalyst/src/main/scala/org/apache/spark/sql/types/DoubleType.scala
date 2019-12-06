@@ -58,7 +58,7 @@ class DoubleType private() extends FractionalType {
 case object DoubleType extends DoubleType {
 
   // Traits below copied from Scala 2.12; not present in 2.13
-  // TODO revisit once Scala 2.12 support is dropped
+  // TODO: SPARK-30011 revisit once Scala 2.12 support is dropped
   trait DoubleIsConflicted extends Numeric[Double] {
     def plus(x: Double, y: Double): Double = x + y
     def minus(x: Double, y: Double): Double = x - y
