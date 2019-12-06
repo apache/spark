@@ -339,11 +339,30 @@ case class DataSource(
         dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
-      case (dataSource: RelationProvider, Some(schema)) =>
+      case (dataSource: RelationProvider, Some(specifiedSchema)) =>
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
-        if (baseRelation.schema != schema) {
-          throw new AnalysisException(s"$className does not allow user-specified schemas.")
+        val persistentSchema = baseRelation.schema
+        val persistentSize = persistentSchema.size
+        val specifiedSize = specifiedSchema.size
+        if (persistentSize == specifiedSize) {
+          val (persistentFields, specifiedFields) = persistentSchema.zip(specifiedSchema)
+            .filter { case (existedField, userField) => existedField != userField }
+            .unzip
+          if (persistentFields.nonEmpty) {
+            val errorMsg =
+              s"Mismatched fields detected between persistent schema and user specified schema: " +
+                s"persistentFields: ${persistentFields.map(_.toDDL).mkString(", ")}, " +
+                s"specifiedFields: ${specifiedFields.map(_.toDDL).mkString(", ")}. " +
+                s"Please either correct your specified schema or just remove the specified schema."
+            throw new AnalysisException(errorMsg)
+          }
+        } else {
+          val errorMsg =
+            s"The number of fields between persistent schema and user specified schema mismatch: " +
+              s"expect $persistentSize fields, but got $specifiedSize fields. " +
+              s"Please either correct your specified schema or just remove the specified schema."
+          throw new AnalysisException(errorMsg)
         }
         baseRelation
 

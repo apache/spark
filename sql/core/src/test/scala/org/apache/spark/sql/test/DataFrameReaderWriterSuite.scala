@@ -40,7 +40,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.TestJdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase
 import org.apache.spark.sql.internal.SQLConf
@@ -445,6 +446,24 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     Seq("jdbc", "does not support bucketBy and sortBy right now").foreach { s =>
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
+  }
+
+  test("Clarify mismatched fields between persistent & specified schema") {
+    // persistent: (a STRING, b INT)
+    val persistentSchema =
+      DataSource(spark, classOf[TestJdbcRelationProvider].getCanonicalName)
+        .resolveRelation()
+        .schema
+    // specified: (a STRING, c INT)
+    val specifiedSchema = new StructType()
+      .add(StructField("a", StringType))
+      .add(StructField("c", IntegerType))
+    val msg = intercept[AnalysisException] {
+      spark.read.format(classOf[TestJdbcRelationProvider].getCanonicalName)
+        .schema(specifiedSchema).load()
+    }.getMessage
+    assert(msg.contains(s"persistentFields: ${persistentSchema("b").toDDL}"))
+    assert(msg.contains(s"specifiedFields: ${specifiedSchema("c").toDDL}"))
   }
 
   test("prevent all column partitioning") {
