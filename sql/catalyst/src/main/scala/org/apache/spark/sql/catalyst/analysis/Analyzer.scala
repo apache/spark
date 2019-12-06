@@ -672,14 +672,14 @@ class Analyzer(
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case u @ UnresolvedRelation(ident) =>
-        lookupTempOrGlobalTempView(ident).getOrElse(u)
+        lookupTempView(ident).getOrElse(u)
       case i @ InsertIntoStatement(UnresolvedRelation(ident), _, _, _, _) =>
-        lookupTempOrGlobalTempView(ident)
+        lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
     }
 
-    def lookupTempOrGlobalTempView(identifier: Seq[String]): Option[LogicalPlan] =
+    def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] =
       identifier match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
         case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
