@@ -2580,6 +2580,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create an [[AlterNamespaceSetOwnerStatement]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) namespace SET OWNER (USER|ROLE|GROUP) identityName;
+   * }}}
+   */
+  override def visitSetNamespaceOwner(ctx: SetNamespaceOwnerContext): LogicalPlan = {
+    withOrigin(ctx) {
+      AlterNamespaceSetOwnerStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        ctx.IDENTIFIER.getText,
+        ctx.ownerType.getText)
+    }
+  }
+
+  /**
    * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {

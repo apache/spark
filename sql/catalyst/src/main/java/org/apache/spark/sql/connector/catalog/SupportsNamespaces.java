@@ -66,7 +66,8 @@ public interface SupportsNamespaces extends CatalogPlugin {
   /**
    * The list of reserved namespace properties.
    */
-  List<String> RESERVED_PROPERTIES = Arrays.asList(PROP_COMMENT, PROP_LOCATION);
+  List<String> RESERVED_PROPERTIES =
+    Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_OWNER_NAME, PROP_OWNER_TYPE);
 
   /**
    * Return a default namespace for the catalog.

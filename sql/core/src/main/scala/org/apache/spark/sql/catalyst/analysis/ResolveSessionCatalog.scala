@@ -181,6 +181,13 @@ class ResolveSessionCatalog(
       }
       AlterDatabaseSetLocationCommand(nameParts.head, location)
 
+    case AlterNamespaceSetOwnerStatement(SessionCatalog(_, nameParts), ownerName, ownerType) =>
+      if (nameParts.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${nameParts.quoted}")
+      }
+      AlterDatabaseSetOwnerCommand(nameParts.head, ownerName, ownerType)
+
     case RenameTableStatement(SessionCatalog(_, oldName), newNameParts, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newNameParts.asTableIdentifier, isView)
 

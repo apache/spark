@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -94,11 +97,18 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
           s"because view support in catalog has not been implemented yet")
 
     case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
-      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, properties)
+      val availableProps = properties -- RESERVED_PROPERTIES.asScala
+      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, availableProps)
 
     case AlterNamespaceSetLocationStatement(NonSessionCatalog(catalog, nameParts), location) =>
       AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts,
-        Map(SupportsNamespaces.PROP_LOCATION -> location))
+        Map(PROP_LOCATION -> location))
+
+    case AlterNamespaceSetOwnerStatement(NonSessionCatalog(catalog, nameParts), name, typ) =>
+      AlterNamespaceSetProperties(
+        catalog.asNamespaceCatalog,
+        nameParts,
+        Map(PROP_OWNER_NAME -> name, PROP_OWNER_TYPE -> typ))
 
     case RenameTableStatement(NonSessionCatalog(catalog, oldName), newNameParts, isView) =>
       if (isView) {
