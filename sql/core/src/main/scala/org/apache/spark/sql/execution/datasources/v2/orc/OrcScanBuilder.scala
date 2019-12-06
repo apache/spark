@@ -43,6 +43,8 @@ case class OrcScanBuilder(
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
+  override protected val supportsNestedSchemaPruning: Boolean = true
+
   override def build(): Scan = {
     OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,
       readDataSchema(), readPartitionSchema(), options, pushedFilters())
@@ -64,8 +66,4 @@ case class OrcScanBuilder(
   }
 
   override def pushedFilters(): Array[Filter] = _pushedFilters
-
-  override def pruneColumns(requiredSchema: StructType): Unit = {
-    this.requiredSchema = requiredSchema
-  }
 }

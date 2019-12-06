@@ -26,32 +26,29 @@ abstract class FileScanBuilder(
     fileIndex: PartitioningAwareFileIndex,
     dataSchema: StructType) extends ScanBuilder with SupportsPushDownRequiredColumns {
   private val partitionSchema = fileIndex.partitionSchema
-  private val partitionNameSet = toNameSet(partitionSchema)
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+  protected val supportsNestedSchemaPruning: Boolean = false
   protected var requiredSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
-    // the default implementation prunes only top-level columns
-    // file formats that support nested column pruning must override this
-    val fields = dataSchema.fields ++ partitionSchema.fields
-    val requiredNameSet = toNameSet(requiredSchema)
-    val requiredFields = fields.filter { field =>
-      val colName = PartitioningUtils.getColName(field, isCaseSensitive)
-      requiredNameSet.contains(colName)
-    }
-    this.requiredSchema = StructType(requiredFields)
+    // [SPARK-30107] While the passed `requiredSchema` always have pruned nested columns, the actual
+    // data schema of this scan is determined in `readDataSchema`. File formats that don't support
+    // nested schema pruning, use `requiredSchema` as a reference and perform the pruning partially.
+    this.requiredSchema = requiredSchema
   }
 
   protected def readDataSchema(): StructType = {
-    val fields = requiredSchema.fields.filter { field =>
+    val requiredNameSet = createRequiredNameSet()
+    val schema = if (supportsNestedSchemaPruning) requiredSchema else dataSchema
+    val fields = schema.fields.filter { field =>
       val colName = PartitioningUtils.getColName(field, isCaseSensitive)
-      !partitionNameSet.contains(colName)
+      requiredNameSet.contains(colName) && !partitionNameSet.contains(colName)
     }
     StructType(fields)
   }
 
   protected def readPartitionSchema(): StructType = {
-    val requiredNameSet = toNameSet(requiredSchema)
+    val requiredNameSet = createRequiredNameSet()
     val fields = partitionSchema.fields.filter { field =>
       val colName = PartitioningUtils.getColName(field, isCaseSensitive)
       requiredNameSet.contains(colName)
@@ -59,7 +56,9 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  private def toNameSet(schema: StructType): Set[String] = {
-    schema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
-  }
+  private def createRequiredNameSet(): Set[String] =
+    requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
+
+  private val partitionNameSet: Set[String] =
+    partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
 }

@@ -56,6 +56,8 @@ case class ParquetScanBuilder(
     parquetFilters.convertibleFilters(this.filters).toArray
   }
 
+  override protected val supportsNestedSchemaPruning: Boolean = true
+
   private var filters: Array[Filter] = Array.empty
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
@@ -68,9 +70,6 @@ case class ParquetScanBuilder(
   // All filters that can be converted to Parquet are pushed down.
   override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
-  override def pruneColumns(requiredSchema: StructType): Unit = {
-    this.requiredSchema = requiredSchema
-  }
 
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
