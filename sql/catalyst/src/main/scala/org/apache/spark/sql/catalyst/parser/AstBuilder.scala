@@ -2580,7 +2580,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create an [[AlterNamespaceSetOwnerStatement]] logical plan.
+   * Create an [[AlterNamespaceSetOwner]] logical plan.
    *
    * For example:
    * {{{
@@ -2589,9 +2589,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceOwner(ctx: SetNamespaceOwnerContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetOwnerStatement(
+      AlterNamespaceSetOwner(
         visitMultipartIdentifier(ctx.multipartIdentifier),
-        ctx.IDENTIFIER.getText,
+        ctx.identifier.getText,
         ctx.ownerType.getText)
     }
   }

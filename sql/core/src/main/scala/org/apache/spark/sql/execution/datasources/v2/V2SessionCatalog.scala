@@ -225,15 +225,6 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {
     namespace match {
       case Array(db) =>
-        // validate that this catalog's reserved properties are not removed
-        changes.foreach {
-          case remove: RemoveProperty
-            if SupportsNamespaces.RESERVED_PROPERTIES.contains(remove.property) =>
-            throw new UnsupportedOperationException(
-              s"Cannot remove reserved property: ${remove.property}")
-          case _ =>
-        }
-
         val metadata = catalog.getDatabaseMetadata(db).toMetadata
         catalog.alterDatabase(
           toCatalogDatabase(db, CatalogV2Util.applyNamespaceChanges(metadata, changes)))
@@ -263,6 +254,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 }
 
 private[sql] object V2SessionCatalog {
+  import SupportsNamespaces._
 
   /**
    * Convert v2 Transforms to v1 partition columns and an optional bucket spec.
@@ -292,12 +284,12 @@ private[sql] object V2SessionCatalog {
       defaultLocation: Option[URI] = None): CatalogDatabase = {
     CatalogDatabase(
       name = db,
-      description = metadata.getOrDefault(SupportsNamespaces.PROP_COMMENT, ""),
-      locationUri = Option(metadata.get(SupportsNamespaces.PROP_LOCATION))
+      description = metadata.getOrDefault(PROP_COMMENT, ""),
+      locationUri = Option(metadata.get(PROP_LOCATION))
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
           .getOrElse(throw new IllegalArgumentException("Missing database location")),
-      properties = metadata.asScala.toMap -- SupportsNamespaces.RESERVED_PROPERTIES.asScala)
+      properties = metadata.asScala.toMap -- Seq(PROP_COMMENT, PROP_LOCATION))
   }
 
   private implicit class CatalogDatabaseHelper(catalogDatabase: CatalogDatabase) {

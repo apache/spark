@@ -1218,14 +1218,14 @@ class DDLParserSuite extends AnalysisTest {
   test("set namespace owner") {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET OWNER USER user1"),
-      AlterNamespaceSetOwnerStatement(Seq("a", "b", "c"), "user1", "USER"))
+      AlterNamespaceSetOwner(Seq("a", "b", "c"), "user1", "USER"))
 
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET OWNER ROLE role1"),
-      AlterNamespaceSetOwnerStatement(Seq("a", "b", "c"), "role1", "ROLE"))
+      AlterNamespaceSetOwner(Seq("a", "b", "c"), "role1", "ROLE"))
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET OWNER GROUP group1"),
-      AlterNamespaceSetOwnerStatement(Seq("a", "b", "c"), "group1", "GROUP"))
+      AlterNamespaceSetOwner(Seq("a", "b", "c"), "group1", "GROUP"))
   }
 
   test("show databases: basic") {

@@ -97,17 +97,20 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
           s"because view support in catalog has not been implemented yet")
 
     case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
-      val availableProps = properties -- RESERVED_PROPERTIES.asScala
-      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, availableProps)
+      if (properties.keySet.intersect(REVERSED_PROPERTIES.asScala.toSet).nonEmpty) {
+        throw new AnalysisException(s"Cannot directly modify the reversed properties" +
+          s" ${REVERSED_PROPERTIES.asScala.mkString("[", ",", "]")}.")
+      }
+      AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, properties)
 
     case AlterNamespaceSetLocationStatement(NonSessionCatalog(catalog, nameParts), location) =>
       AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts,
         Map(PROP_LOCATION -> location))
 
-    case AlterNamespaceSetOwnerStatement(NonSessionCatalog(catalog, nameParts), name, typ) =>
+    case AlterNamespaceSetOwner(CatalogAndIdentifierParts(catalog, parts), name, typ) =>
       AlterNamespaceSetProperties(
         catalog.asNamespaceCatalog,
-        nameParts,
+        parts,
         Map(PROP_OWNER_NAME -> name, PROP_OWNER_TYPE -> typ))
 
     case RenameTableStatement(NonSessionCatalog(catalog, oldName), newNameParts, isView) =>
@@ -185,12 +188,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case c @ CreateNamespaceStatement(NonSessionCatalog(catalog, nameParts), _, _) =>
-      CreateNamespace(
-        catalog.asNamespaceCatalog,
-        nameParts,
-        c.ifNotExists,
-        c.properties)
+    case c @ CreateNamespaceStatement(NonSessionCatalog(catalog, nameParts), _, properties) =>
+      if (properties.keySet.intersect(OWNERSHIPS.asScala.toSet).nonEmpty) {
+        throw new AnalysisException("Cannot specify the ownership in CREATE NAMESPACE.")
+      }
+      CreateNamespace(catalog.asNamespaceCatalog, nameParts, c.ifNotExists, properties)
 
     case DropNamespaceStatement(NonSessionCatalog(catalog, nameParts), ifExists, cascade) =>
       DropNamespace(catalog, nameParts, ifExists, cascade)

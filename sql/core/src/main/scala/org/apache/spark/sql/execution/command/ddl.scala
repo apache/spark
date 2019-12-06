@@ -129,8 +129,7 @@ case class AlterDatabasePropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val db: CatalogDatabase = catalog.getDatabaseMetadata(databaseName)
-    val availableProps = props -- RESERVED_PROPERTIES.asScala
-    catalog.alterDatabase(db.copy(properties = db.properties ++ availableProps))
+    catalog.alterDatabase(db.copy(properties = db.properties ++ props))
 
     Seq.empty[Row]
   }
@@ -153,26 +152,6 @@ case class AlterDatabaseSetLocationCommand(databaseName: String, location: Strin
     val oldDb = catalog.getDatabaseMetadata(databaseName)
     catalog.alterDatabase(oldDb.copy(locationUri = CatalogUtils.stringToURI(location)))
 
-    Seq.empty[Row]
-  }
-}
-
-/**
- * A command for users to set ownership for a database
- * If the database does not exist, an error message will be issued to indicate the database
- * does not exist.
- * The syntax of using this command in SQL is:
- * {{{
- *    ALTER (DATABASE|SCHEMA) database_name SET OWNER [USER|ROLE|GROUP] identityName
- * }}}
- */
-case class AlterDatabaseSetOwnerCommand(databaseName: String, ownerName: String, ownerType: String)
-  extends RunnableCommand {
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-    val database = catalog.getDatabaseMetadata(databaseName)
-    val ownerships = Map(PROP_OWNER_NAME -> ownerName, PROP_OWNER_TYPE -> ownerType)
-    catalog.alterDatabase(database.copy(properties = database.properties ++ ownerships))
     Seq.empty[Row]
   }
 }
@@ -204,7 +183,7 @@ case class DescribeDatabaseCommand(
         Row("Owner Type", allDbProperties.getOrElse(PROP_OWNER_TYPE, "")) :: Nil
 
     if (extended) {
-      val properties = allDbProperties -- RESERVED_PROPERTIES.asScala
+      val properties = allDbProperties -- REVERSED_PROPERTIES.asScala
       val propertiesStr =
         if (properties.isEmpty) {
           ""

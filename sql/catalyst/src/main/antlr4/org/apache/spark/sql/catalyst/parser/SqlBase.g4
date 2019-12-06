@@ -98,7 +98,7 @@ statement
     | ALTER (database | NAMESPACE) multipartIdentifier
         SET locationSpec                                               #setNamespaceLocation
     | ALTER (database | NAMESPACE) multipartIdentifier
-        SET OWNER ownerType=(USER | ROLE | GROUP) IDENTIFIER           #setNamespaceOwner
+        SET OWNER ownerType=(USER | ROLE | GROUP) identifier           #setNamespaceOwner
     | DROP (database | NAMESPACE) (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?

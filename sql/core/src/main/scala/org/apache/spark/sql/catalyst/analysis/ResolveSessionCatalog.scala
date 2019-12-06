@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogT
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -172,6 +173,10 @@ class ResolveSessionCatalog(
         throw new AnalysisException(
           s"The database name is not valid: ${nameParts.quoted}")
       }
+      if (properties.keySet.intersect(REVERSED_PROPERTIES.asScala.toSet).nonEmpty) {
+        throw new AnalysisException(s"Cannot directly modify the reversed properties" +
+          s" ${REVERSED_PROPERTIES.asScala.mkString("[", ",", "]")}.")
+      }
       AlterDatabasePropertiesCommand(nameParts.head, properties)
 
     case AlterNamespaceSetLocationStatement(SessionCatalog(_, nameParts), location) =>
@@ -180,13 +185,6 @@ class ResolveSessionCatalog(
           s"The database name is not valid: ${nameParts.quoted}")
       }
       AlterDatabaseSetLocationCommand(nameParts.head, location)
-
-    case AlterNamespaceSetOwnerStatement(SessionCatalog(_, nameParts), ownerName, ownerType) =>
-      if (nameParts.length != 1) {
-        throw new AnalysisException(
-          s"The database name is not valid: ${nameParts.quoted}")
-      }
-      AlterDatabaseSetOwnerCommand(nameParts.head, ownerName, ownerType)
 
     case RenameTableStatement(SessionCatalog(_, oldName), newNameParts, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newNameParts.asTableIdentifier, isView)
@@ -309,10 +307,12 @@ class ResolveSessionCatalog(
         throw new AnalysisException(
           s"The database name is not valid: ${nameParts.quoted}")
       }
-
-      val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
-      val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
-      val newProperties = c.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala
+      if (c.properties.keySet.intersect(OWNERSHIPS.asScala.toSet).nonEmpty) {
+        throw new AnalysisException("Cannot specify the ownership in CREATE DATABASE.")
+      }
+      val comment = c.properties.get(PROP_COMMENT)
+      val location = c.properties.get(PROP_LOCATION)
+      val newProperties = c.properties -- REVERSED_PROPERTIES.asScala
       CreateDatabaseCommand(nameParts.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespaceStatement(SessionCatalog(_, nameParts), _, _) =>

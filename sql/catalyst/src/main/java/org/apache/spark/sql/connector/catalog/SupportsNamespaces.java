@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 
@@ -64,9 +65,26 @@ public interface SupportsNamespaces extends CatalogPlugin {
   String PROP_OWNER_TYPE = "ownerType";
 
   /**
-   * The list of reserved namespace properties.
+   * The list of namespace ownership properties, cannot be used in `CREATE` syntax.
+   *
+   * Only support in:
+   *
+   * {{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) SET OWNER ...
+   * }}
    */
-  List<String> RESERVED_PROPERTIES =
+  List<String> OWNERSHIPS = Arrays.asList(PROP_OWNER_NAME, PROP_OWNER_TYPE);
+
+  /**
+   * The list of immutable namespace properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) SET DBPROPERTIES(...)
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  List<String> REVERSED_PROPERTIES =
     Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_OWNER_NAME, PROP_OWNER_TYPE);
 
   /**

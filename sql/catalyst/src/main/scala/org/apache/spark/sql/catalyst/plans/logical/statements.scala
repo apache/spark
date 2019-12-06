@@ -385,7 +385,7 @@ case class AlterNamespaceSetLocationStatement(
 /**
  * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET OWNER command, as parsed from SQL.
  */
-case class AlterNamespaceSetOwnerStatement(
+case class AlterNamespaceSetOwner(
     namespace: Seq[String],
     ownerName: String,
     ownerType: String) extends ParsedStatement
