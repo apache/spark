@@ -22,17 +22,19 @@ import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.MapOutputTracker;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkEnv;
-import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
-import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
+import org.apache.spark.shuffle.api.*;
+import org.apache.spark.shuffle.io.LocalDiskShuffleReadSupport;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
-import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.storage.BlockManager;
 
 public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorComponents {
 
   private final SparkConf sparkConf;
+  private LocalDiskShuffleReadSupport shuffleReadSupport;
   private BlockManager blockManager;
   private IndexShuffleBlockResolver blockResolver;
 
@@ -57,6 +59,10 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
       throw new IllegalStateException("No blockManager available from the SparkEnv.");
     }
     blockResolver = new IndexShuffleBlockResolver(sparkConf, blockManager);
+    MapOutputTracker mapOutputTracker = SparkEnv.get().mapOutputTracker();
+    SerializerManager serializerManager = SparkEnv.get().serializerManager();
+    shuffleReadSupport = new LocalDiskShuffleReadSupport(
+      blockManager, mapOutputTracker, serializerManager, sparkConf);
   }
 
   @Override
@@ -81,5 +87,21 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
           "Executor components must be initialized before getting writers.");
     }
     return Optional.of(new LocalDiskSingleSpillMapOutputWriter(shuffleId, mapId, blockResolver));
+  }
+
+
+  @Override
+  public Iterable<ShuffleBlockInputStream> getPartitionReaders(
+      Iterable<ShuffleBlockInfo> blockMetadata, boolean doBatchRun) {
+    if (blockResolver == null) {
+      throw new IllegalStateException(
+          "Executor components must be initialized before getting readers.");
+    }
+    return shuffleReadSupport.getPartitionReaders(blockMetadata, doBatchRun);
+  }
+
+  @Override
+  public boolean shouldWrapPartitionReaderStream() {
+    return false;
   }
 }

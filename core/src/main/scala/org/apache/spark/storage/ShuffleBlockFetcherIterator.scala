@@ -687,6 +687,11 @@ final class ShuffleBlockFetcherIterator(
         detectCorrupt && streamCompressedOrEncrypted))
   }
 
+  // Testing
+  def getCurrentBlock(): ShuffleBlockId = {
+    currentResult.blockId.asInstanceOf[ShuffleBlockId]
+  }
+
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
     CompletionIterator[(BlockId, InputStream), this.type](this,
       onCompleteCallback.onComplete(context))

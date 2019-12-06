@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle
 
+import java.lang
 import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -26,7 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.config.SHUFFLE_IO_PLUGIN_CLASS
-import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, ShuffleExecutorComponents, ShuffleMapOutputWriter}
+import org.apache.spark.shuffle.api._
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 
 class ShuffleDriverComponentsSuite
@@ -91,5 +92,15 @@ class TestShuffleExecutorComponentsInitialized(delegate: ShuffleExecutorComponen
       mapTaskId: Long,
       numPartitions: Int): ShuffleMapOutputWriter = {
     delegate.createMapOutputWriter(shuffleId, mapTaskId, numPartitions)
+  }
+
+  override def getPartitionReaders(
+      blockMetadata: lang.Iterable[ShuffleBlockInfo],
+      doBatchFetch: Boolean): lang.Iterable[ShuffleBlockInputStream] = {
+    delegate.getPartitionReaders(blockMetadata, doBatchFetch)
+  }
+
+  override def shouldWrapPartitionReaderStream(): Boolean = {
+    delegate.shouldWrapPartitionReaderStream()
   }
 }

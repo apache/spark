@@ -58,6 +58,21 @@ public interface ShuffleExecutorComponents {
       int numPartitions) throws IOException;
 
   /**
+   * Returns an underlying {@link Iterable<java.io.InputStream>} that will iterate
+   * through shuffle data, given an iterable for the shuffle blocks to fetch.
+   *
+   * @param blockMetadata iterable of shuffle block metadata
+   * @param doBatchFetch boolean for continuous shuffle block fetching
+   */
+  Iterable<ShuffleBlockInputStream> getPartitionReaders(
+      Iterable<ShuffleBlockInfo> blockMetadata,
+      boolean doBatchFetch) throws IOException;
+
+  default boolean shouldWrapPartitionReaderStream() {
+    return true;
+  }
+
+  /**
    * An optional extension for creating a map output writer that can optimize the transfer of a
    * single partition file, as the entire result of a map task, to the backing store.
    * <p>

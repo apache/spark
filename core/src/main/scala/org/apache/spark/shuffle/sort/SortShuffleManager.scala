@@ -22,10 +22,9 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleExecutorComponents}
-import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -124,10 +123,9 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(
-      handle.shuffleId, startPartition, endPartition)
     new BlockStoreShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition,
+      context, metrics, shuffleExecutorComponents,
       shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
   }
 
@@ -138,11 +136,11 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByMapIndex(
-      handle.shuffleId, mapIndex, startPartition, endPartition)
     new BlockStoreShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
-      shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition,
+      context, metrics, shuffleExecutorComponents,
+      shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context),
+      mapIndex = Some(mapIndex))
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */

@@ -22,13 +22,12 @@ import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.{CompletableFuture, Semaphore}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
-
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.PrivateMethodTester
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.network._
@@ -555,7 +554,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     sem.acquire()
 
     // The first block should be returned without an exception
-    val (id1, _) = iterator.next()
+    iterator.next()
+    val id1 = iterator.getCurrentBlock()
     assert(id1 === ShuffleBlockId(0, 0, 0))
 
     when(transfer.fetchBlocks(any(), any(), any(), any(), any(), any()))
