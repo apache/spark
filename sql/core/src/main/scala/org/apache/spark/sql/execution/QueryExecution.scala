@@ -134,7 +134,6 @@ class QueryExecution(
 
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
     val (verbose, addSuffix) = (true, false)
-    var analysisException = ""
     append("== Parsed Logical Plan ==\n")
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
     append("\n== Analyzed Logical Plan ==\n")
@@ -144,21 +143,13 @@ class QueryExecution(
           analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
       )
       append("\n")
-    } catch {
-      case e: AnalysisException => analysisException = e.toString
-    }
-    if (analysisException.size > 0) {
       QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
       append("\n== Optimized Logical Plan ==\n")
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
       append("\n== Physical Plan ==\n")
       QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
-    } else {
-      append(analysisException)
-      append("\n== Optimized Logical Plan ==\n")
-      append(analysisException)
-      append("\n== Physical Plan ==\n")
-      append(analysisException)
+    } catch {
+      case e: AnalysisException => append(e.toString)
     }
   }
 
