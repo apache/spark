@@ -2072,7 +2072,7 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/repos/central/data/")
-  
+
   val SPARK_SQL_CLI_SHOW_CURRENT_DB = buildConf("spark.sql.cli.show.current.db")
     .doc("when true, current DB name will be displayed in the cli prompt")
     .booleanConf
