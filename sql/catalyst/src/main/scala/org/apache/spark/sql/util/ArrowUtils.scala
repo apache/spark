@@ -98,7 +98,7 @@ object ArrowUtils {
             new StructType()
               .add(MapVector.KEY_NAME, keyType, nullable = false)
               .add(MapVector.VALUE_NAME, valueType, nullable = valueContainsNull),
-            nullable = false,
+            nullable = valueContainsNull,
             timeZoneId)).asJava)
       case dataType =>
         val fieldType = new FieldType(nullable, toArrowType(dataType, timeZoneId), null)
@@ -112,7 +112,7 @@ object ArrowUtils {
         val elementField = field.getChildren.get(0)
         val keyType = fromArrowField(elementField.getChildren.get(0))
         val valueType = fromArrowField(elementField.getChildren.get(1))
-        MapType(keyType, valueType)
+        MapType(keyType, valueType, elementField.getChildren.get(1).isNullable)
       case ArrowType.List.INSTANCE =>
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)

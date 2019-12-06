@@ -361,10 +361,11 @@ private[arrow] class MapWriter(
     valueVector.startNewValue(count)
     val keys = map.keyArray()
     val values = map.valueArray()
-
-    for (i <- 0 until map.numElements()) {
+    var i = 0
+    while (i <  map.numElements()) {
       keyWriter.write(keys, i)
       valueWriter.write(values, i)
+      i += 1
     }
 
     valueVector.endValue(count, map.numElements())

@@ -282,10 +282,12 @@ class ArrowWriterSuite extends SparkFunSuite {
         UTF8String.fromString("v4")
       )
     )))
-
     writer.write(InternalRow(ArrayBasedMapData(Array(43),
       Array(UTF8String.fromString("v5"))
     )))
+    writer.write(InternalRow(ArrayBasedMapData(Array(43), Array(null))))
+    writer.write(InternalRow(null))
+
     writer.finish()
 
     val reader = new ArrowColumnVector(writer.root.getFieldVectors.get(0))
@@ -298,6 +300,14 @@ class ArrowWriterSuite extends SparkFunSuite {
     assert(map1.numElements() == 1)
     assert(map1.keyArray().array().mkString(",") == Array(43).mkString(","))
     assert(map1.valueArray().array().mkString(",") == Array("v5").mkString(","))
+
+    val map2 = reader.getMap(2)
+    assert(map2.numElements() == 1)
+    assert(map2.keyArray().array().mkString(",") == Array(43).mkString(","))
+    assert(map2.valueArray().array().mkString(",") == Array(null).mkString(","))
+
+    val map3 = reader.getMap(3)
+    assert(map3 == null)
     writer.root.close()
   }
 
