@@ -98,7 +98,7 @@ object ArrowUtils {
             new StructType()
               .add(MapVector.KEY_NAME, keyType, nullable = false)
               .add(MapVector.VALUE_NAME, valueType, nullable = valueContainsNull),
-            nullable = valueContainsNull,
+            nullable = false,
             timeZoneId)).asJava)
       case dataType =>
         val fieldType = new FieldType(nullable, toArrowType(dataType, timeZoneId), null)
