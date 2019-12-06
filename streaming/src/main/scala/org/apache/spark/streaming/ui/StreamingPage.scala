@@ -503,7 +503,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val completedBatchPage = Option(parameterCompletedBatchPage).map(_.toInt).getOrElse(1)
     val completedBatchSortColumn = Option(parameterCompletedBatchSortColumn).map { sortColumn =>
-      UIUtils.decodeURLParameter(sortColumn)
+      SparkUIUtils.decodeURLParameter(sortColumn)
     }.getOrElse("Batch Time")
     val completedBatchSortDesc = Option(parameterCompletedBatchSortDesc).map(_.toBoolean).getOrElse(
       completedBatchSortColumn == "Batch Time"
@@ -517,7 +517,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         batchInterval,
         listener.retainedCompletedBatches,
         completedBatchTag,
-        UIUtils.prependBaseUri(request, parent.basePath),
+        SparkUIUtils.prependBaseUri(request, parent.basePath),
         "streaming", // subPath
         parameterOtherTable,
         pageSize = completedBatchPageSize,

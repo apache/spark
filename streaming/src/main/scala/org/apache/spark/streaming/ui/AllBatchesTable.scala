@@ -160,15 +160,6 @@ private[ui] class ActiveBatchTable(
   }
 }
 
-private[ui] class CompletedBatchTableRow(
-    val batchData: BatchUIData,
-    val batchTime: Long,
-    val numRecords: Long,
-    val schedulingDelay: Option[Long],
-    val processingDelay: Option[Long],
-    val totalDelay: Option[Long])
-
-
 private[ui] class CompletedBatchPagedTable(
     request: HttpServletRequest,
     parent: StreamingTab,
@@ -180,7 +171,7 @@ private[ui] class CompletedBatchPagedTable(
     parameterOtherTable: Iterable[String],
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedTable[CompletedBatchTableRow] {
+    desc: Boolean) extends PagedTable[BatchUIData] {
 
   override val dataSource = new CompletedBatchTableDataSource(data, pageSize, sortColumn, desc)
 
@@ -278,33 +269,34 @@ private[ui] class CompletedBatchPagedTable(
     </thead>
   }
 
-  override def row(completedBatchRow: CompletedBatchTableRow): Seq[Node] = {
-    val batch = completedBatchRow.batchData
-    val batchTime = completedBatchRow.batchTime
+  override def row(batch: BatchUIData): Seq[Node] = {
+    val batchTime = batch.batchTime.milliseconds
     val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
-    val numRecords = completedBatchRow.numRecords
-    val schedulingDelay = completedBatchRow.schedulingDelay
+    val numRecords = batch.numRecords
+    val schedulingDelay = batch.schedulingDelay
     val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
-    val processingTime = completedBatchRow.processingDelay
+    val processingTime = batch.processingDelay
     val formattedProcessingTime = processingTime.map(SparkUIUtils.formatDuration).getOrElse("-")
     val batchTimeId = s"batch-$batchTime"
-    val totalDelay = completedBatchRow.totalDelay
+    val totalDelay = batch.totalDelay
     val formattedTotalDelay = totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
 
     <tr>
-      <td id={batchTimeId} sorttable_customkey={batchTime.toString}>
+      <td id={batchTimeId}>
         <a href={s"batch?id=$batchTime"}>
           {formattedBatchTime}
         </a>
       </td>
-      <td sorttable_customkey={numRecords.toString}>{numRecords.toString} records</td>
-      <td sorttable_customkey={schedulingDelay.getOrElse(Long.MaxValue).toString}>
+      <td>
+        {numRecords.toString} records
+      </td>
+      <td>
         {formattedSchedulingDelay}
       </td>
-      <td sorttable_customkey={processingTime.getOrElse(Long.MaxValue).toString}>
+      <td>
         {formattedProcessingTime}
       </td>
-      <td sorttable_customkey={totalDelay.getOrElse(Long.MaxValue).toString}>
+      <td>
         {formattedTotalDelay}
       </td>
       <td class="progress-cell">
@@ -334,48 +326,33 @@ private[ui] class CompletedBatchPagedTable(
         failureReasonForUI, rowspan = 1, includeFirstLineInExpandDetails = false)
     }.getOrElse(<td>-</td>)
   }
-
 }
-
 
 private[ui] class CompletedBatchTableDataSource(
     info: Seq[BatchUIData],
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedDataSource[CompletedBatchTableRow](pageSize) {
+    desc: Boolean) extends PagedDataSource[BatchUIData](pageSize) {
 
-  // Convert BatchUIData to CompletedBatchTableRow which contains the final contents to show in
-  // the table so that we can avoid creating duplicate contents during sorting the data
-  private val data = info.map(completedBatchTableRow).sorted(ordering(sortColumn, desc))
+  private val data = info.sorted(ordering(sortColumn, desc))
 
   private var _slicedStartTime: Set[Long] = null
 
   override def dataSize: Int = data.size
 
-  override def sliceData(from: Int, to: Int): Seq[CompletedBatchTableRow] = {
+  override def sliceData(from: Int, to: Int): Seq[BatchUIData] = {
     val r = data.slice(from, to)
-    _slicedStartTime = r.map(_.batchTime).toSet
+    _slicedStartTime = r.map(_.batchTime.milliseconds).toSet
     r
-  }
-
-  private def completedBatchTableRow(batch: BatchUIData): CompletedBatchTableRow = {
-    val batchTime = batch.batchTime.milliseconds
-    val records = batch.numRecords
-    val schedulingDelay = batch.schedulingDelay
-    val processingDelay = batch.processingDelay
-    val totalDelay = batch.totalDelay
-
-    new CompletedBatchTableRow(batch, batchTime, records, schedulingDelay, processingDelay,
-      totalDelay)
   }
 
   /**
    * Return Ordering according to sortColumn and desc.
    */
-  private def ordering(sortColumn: String, desc: Boolean): Ordering[CompletedBatchTableRow] = {
-    val ordering: Ordering[CompletedBatchTableRow] = sortColumn match {
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[BatchUIData] = {
+    val ordering: Ordering[BatchUIData] = sortColumn match {
       case "Batch Time" => Ordering.by(_.batchTime)
-      case "Records" => Ordering.by (_.numRecords)
+      case "Records" => Ordering.by(_.numRecords)
       case "Scheduling Delay" => Ordering.by(_.schedulingDelay)
       case "Processing Delay" => Ordering.by(_.processingDelay)
       case "Total Delay" => Ordering.by(_.totalDelay)
