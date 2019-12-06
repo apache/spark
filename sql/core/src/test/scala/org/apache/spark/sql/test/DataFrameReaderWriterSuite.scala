@@ -448,7 +448,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
-  test("Clarify mismatched fields between persistent & specified schema") {
+  test("SPARK-30151: user-specified schema not match relation schema") {
     // persistent: (a STRING, b INT)
     val persistentSchema =
       DataSource(spark, classOf[TestJdbcRelationProvider].getCanonicalName)
@@ -512,7 +512,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     val inputSchema = new StructType().add("s", IntegerType, nullable = false)
     val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
     assert(e.getMessage.contains(
-      "org.apache.spark.sql.sources.SimpleScanSource does not allow user-specified schemas"))
+      "a specified schema for org.apache.spark.sql.sources.SimpleScanSource is not necessary"))
   }
 
   test("read a data source that does not extend RelationProvider") {

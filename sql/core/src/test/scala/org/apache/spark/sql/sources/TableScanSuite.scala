@@ -369,7 +369,8 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
              |)
            """.stripMargin)
       }
-      assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas"))
+      assert(schemaNotAllowed.getMessage.contains(
+        "a specified schema for org.apache.spark.sql.sources.SimpleScanSource is not necessary"))
 
       val schemaNeeded = intercept[Exception] {
         sql(

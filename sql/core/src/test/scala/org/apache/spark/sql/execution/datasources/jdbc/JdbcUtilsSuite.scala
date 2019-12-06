@@ -81,7 +81,7 @@ class JdbcUtilsSuite extends SharedSparkSession {
     assert(mismatchedInput.getMessage.contains("mismatched input '.' expecting"))
   }
 
-  test("Clarify mismatched fields between persistent & specified schema - number mismatch") {
+  test("SPARK-30151: user-specified schema not match relation schema - number mismatch") {
     // persistent: (a STRING, b INT)
     val persistentSchema =
       DataSource(spark, classOf[TestJdbcRelationProvider].getCanonicalName)
@@ -101,7 +101,7 @@ class JdbcUtilsSuite extends SharedSparkSession {
       "The number of fields between persistent schema and user specified schema mismatch"))
   }
 
-  test("Clarify mismatched fields between persistent & specified schema - wrong name") {
+  test("SPARK-30151: user-specified schema not match relation schema - wrong name") {
     // persistent: (a STRING, b INT)
     val persistentSchema =
       DataSource(spark, classOf[TestJdbcRelationProvider].getCanonicalName)
@@ -122,7 +122,7 @@ class JdbcUtilsSuite extends SharedSparkSession {
     assert(msg.contains(s"specifiedFields: ${specifiedSchema("c").toDDL}"))
   }
 
-  test("Clarify mismatched fields between persistent & specified schema - wrong type") {
+  test("SPARK-30151: user-specified schema not match relation schema - wrong type") {
     // persistent: (a STRING, b INT)
     val persistentSchema =
       DataSource(spark, classOf[TestJdbcRelationProvider].getCanonicalName)
@@ -143,7 +143,7 @@ class JdbcUtilsSuite extends SharedSparkSession {
     assert(msg.contains(s"specifiedFields: ${specifiedSchema("b").toDDL}"))
   }
 
-  test("Clarify mismatched fields between persistent & specified schema - wrong name & type") {
+  test("SPARK-30151: user-specified schema not match relation schema - wrong name & type") {
     // persistent: (a STRING, b INT)
     val persistentSchema =
       DataSource(spark, classOf[TestJdbcRelationProvider].getCanonicalName)
@@ -164,7 +164,7 @@ class JdbcUtilsSuite extends SharedSparkSession {
     assert(msg.contains(s"specifiedFields: ${specifiedSchema("c").toDDL}"))
   }
 
-  test("Clarify mismatched fields between persistent & specified schema - wrong order") {
+  test("SPARK-30151: user-specified schema not match relation schema - wrong order") {
     // persistent: (a STRING, b INT)
     val persistentSchema =
       DataSource(spark, classOf[TestJdbcRelationProvider].getCanonicalName)
@@ -185,7 +185,7 @@ class JdbcUtilsSuite extends SharedSparkSession {
     assert(msg.contains(s"specifiedFields: ${specifiedSchema.map(_.toDDL).mkString(", ")}"))
   }
 
-  test("Clarify mismatched fields between persistent & specified schema - complex type") {
+  test("SPARK-30151: user-specified schema not match relation schema - complex type") {
     // persistent: (a STRING, b INT)
     val persistentSchema =
       DataSource(spark, classOf[TestJdbcRelationProvider].getCanonicalName)
