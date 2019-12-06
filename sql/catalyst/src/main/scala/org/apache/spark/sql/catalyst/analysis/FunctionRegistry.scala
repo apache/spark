@@ -639,8 +639,22 @@ object FunctionRegistry {
     val builder = (expressions: Seq[Expression]) => {
       val params = classOf[String] +: Seq.fill(expressions.size)(classOf[Expression])
       val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-        throw new AnalysisException(s"Invalid number of arguments for function $name. " +
-          s"Expected: 1; Found: ${expressions.size}")
+        val validParametersCount = constructors
+          .filter(_.getParameterTypes.tail.forall(_ == classOf[Expression]))
+          .map(_.getParameterCount - 1).distinct.sorted
+        val invalidArgumentsMsg = if (validParametersCount.length == 0) {
+          s"Invalid arguments for function $name"
+        } else {
+          val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+            validParametersCount.head.toString
+          } else {
+            validParametersCount.init.mkString("one of ", ", ", " and ") +
+              validParametersCount.last
+          }
+          s"Invalid number of arguments for function $name. " +
+            s"Expected: $expectedNumberOfParameters; Found: ${expressions.size}"
+        }
+        throw new AnalysisException(invalidArgumentsMsg)
       }
       try {
         f.newInstance(name.toString +: expressions: _*).asInstanceOf[Expression]
