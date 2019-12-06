@@ -30,10 +30,10 @@ import scala.reflect.ClassTag
 import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.roaringbitmap.RoaringBitmap
-
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
@@ -355,6 +355,26 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       mapTaskId += 1
       ser.serialize(HighlyCompressedMapStatus(
         BlockManagerId("exec-1", "host", 1234), blockSizes, mapTaskId))
+    }
+  }
+
+  test("registration of TaskCommitMessage") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+    // In HadoopMapReduceCommitProtocol#commitTask
+    val addedAbsPathFiles: mutable.Map[String, String] = mutable.Map()
+    addedAbsPathFiles.put("test1", "test1")
+    addedAbsPathFiles.put("test2", "test2")
+
+    val partitionPaths: mutable.Set[String] = mutable.Set()
+    partitionPaths.add("test3")
+
+    val taskCommitMessage1 = new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
+    val taskCommitMessage2 = new TaskCommitMessage(Map.empty -> Set.empty)
+    Seq(taskCommitMessage1, taskCommitMessage2).foreach { taskCommitMessage =>
+      ser.serialize(taskCommitMessage)
     }
   }
 
