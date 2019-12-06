@@ -357,7 +357,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val mayebePaths = remainder(ctx.identifier).trim
+    val mayebePaths = pathWrapper(remainder(ctx.identifier).trim)
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {

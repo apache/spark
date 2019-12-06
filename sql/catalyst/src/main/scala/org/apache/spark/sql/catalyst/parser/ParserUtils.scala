@@ -218,4 +218,12 @@ object ParserUtils {
       }
     }
   }
+
+  def pathWrapper(path: String): String = {
+    if (path.charAt(0) == '\'' || path.charAt(0) == '\"') {
+      path.slice(1, path.size - 1)
+    } else {
+      path
+    }
+  }
 }
