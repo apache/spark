@@ -459,21 +459,21 @@ abstract class HiveComparisonTest
       val savedSettings = new util.HashMap[String, String]
       savedSettings.putAll(TestHive.conf.settings)
       try {
-        try {
+//        try {
           if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
             doTest(reset = false, isSpeculative = true)
           } else {
             doTest(reset)
           }
-        } catch {
-          case tf: org.scalatest.exceptions.TestFailedException =>
-            if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
-              logWarning("Test failed without reset(); retrying with reset()")
-              doTest(reset = true)
-            } else {
-              throw tf
-            }
-        }
+//        } catch {
+//          case tf: org.scalatest.exceptions.TestFailedException =>
+//            if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
+//              logWarning("Test failed without reset(); retrying with reset()")
+//              doTest(reset = true)
+//            } else {
+//              throw tf
+//            }
+//        }
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
       } finally {
