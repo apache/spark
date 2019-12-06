@@ -46,7 +46,7 @@ class AvroOptions(
    * with - but not the same as - the one used to originally convert the data to Avro.
    * See SPARK-27506 for more details.
    */
-  val writerSchema: Option[String] = parameters.get("writerSchema")
+  val actualSchema: Option[String] = parameters.get("actualSchema")
 
   /**
    * Top level record name in write result, which is required in Avro spec.
