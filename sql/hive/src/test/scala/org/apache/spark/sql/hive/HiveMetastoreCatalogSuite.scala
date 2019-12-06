@@ -333,7 +333,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
            |SORTED BY (value)
            |INTO 2 BUCKETS
            |AS SELECT key, value, cast(key % 3 as string) as p FROM src
-      """.stripMargin)
+        """.stripMargin)
 
       val metadata = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
 
