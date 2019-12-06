@@ -168,11 +168,7 @@ class KafkaTestUtils(
     }
 
     kdc.getKrb5conf.delete()
-    val writer = new PrintWriter(kdc.getKrb5conf)
-    // scalastyle:off println
-    writer.println(krb5confStr)
-    // scalastyle:on println
-    writer.close()
+    Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
   }
 
   private def addedKrb5Config(key: String, value: String): String = {
