@@ -27,6 +27,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.BoundedPriorityQueue
 
 /**
  * Params for [[LSH]].
@@ -138,21 +139,31 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       // Limit the use of hashDist since it's controversial
       val hashDistUDF = udf((x: Seq[Vector]) => hashDistance(x, keyHash), DataTypes.DoubleType)
       val hashDistCol = hashDistUDF(col($(outputCol)))
-
-      // Compute threshold to get around k elements.
-      // To guarantee to have enough neighbors in one pass, we need (p - err) * N >= M
-      // so we pick quantile p = M / N + err
-      // M: the number of nearest neighbors; N: the number of elements in dataset
-      val relativeError = 0.05
-      val approxQuantile = numNearestNeighbors.toDouble / count + relativeError
       val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
-      if (approxQuantile >= 1) {
-        modelDatasetWithDist
+      // for a small dataset, use BoundedPriorityQueue
+      if (count < 1000) {
+        val queue = new BoundedPriorityQueue[Double](count.toInt)(Ordering[Double])
+        modelDatasetWithDist.collect().foreach { case Row(keys, values, distCol: Double) =>
+          queue += distCol
+        }
+        var sortedDistCol = queue.toArray.sorted(Ordering[Double])
+        queue.clear()
+        modelDatasetWithDist.filter(col(distCol) <= sortedDistCol(numNearestNeighbors - 1))
       } else {
-        val hashThreshold = modelDatasetWithDist.stat
-          .approxQuantile(distCol, Array(approxQuantile), relativeError)
-        // Filter the dataset where the hash value is less than the threshold.
-        modelDatasetWithDist.filter(hashDistCol <= hashThreshold(0))
+        // Compute threshold to get around k elements.
+        // To guarantee to have enough neighbors in one pass, we need (p - err) * N >= M
+        // so we pick quantile p = M / N + err
+        // M: the number of nearest neighbors; N: the number of elements in dataset
+        val relativeError = 0.05
+        val approxQuantile = numNearestNeighbors.toDouble / count + relativeError
+        if (approxQuantile >= 1) {
+          modelDatasetWithDist
+        } else {
+          val hashThreshold = modelDatasetWithDist.stat
+            .approxQuantile(distCol, Array(approxQuantile), relativeError)
+          // Filter the dataset where the hash value is less than the threshold.
+          modelDatasetWithDist.filter(col(distCol) <= hashThreshold(0))
+        }
       }
     }
 
