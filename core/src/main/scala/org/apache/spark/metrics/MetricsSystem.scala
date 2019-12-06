@@ -78,7 +78,6 @@ private[spark] class MetricsSystem private (
 
   private val sinks = new mutable.ArrayBuffer[Sink]
   private val sourceToListeners = new mutable.HashMap[Source, MetricRegistryListener]
-  private val defaultListener = new MetricsSystemListener("")
 
   private var running: Boolean = false
 
@@ -104,7 +103,6 @@ private[spark] class MetricsSystem private (
       StaticSources.allSources.foreach(registerSource)
       registerSources()
     }
-    SharedMetricRegistries.getDefault.addListener(defaultListener)
     registerSinks()
     sinks.foreach(_.start)
   }
@@ -114,7 +112,6 @@ private[spark] class MetricsSystem private (
       sinks.foreach(_.stop)
       registry.removeMatching((_: String, _: Metric) => true)
       sourceToListeners.keySet.foreach(removeSource)
-      SharedMetricRegistries.getDefault.removeListener(defaultListener)
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
     }
@@ -278,10 +275,6 @@ private[spark] object MetricsSystem {
 
   private[this] val MINIMAL_POLL_UNIT = TimeUnit.SECONDS
   private[this] val MINIMAL_POLL_PERIOD = 1
-
-  scala.util.control.Exception.ignoring(classOf[IllegalStateException]) {
-    SharedMetricRegistries.setDefault("spark", new MetricRegistry())
-  }
 
   def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int): Unit = {
     val period = MINIMAL_POLL_UNIT.convert(pollPeriod, pollUnit)
