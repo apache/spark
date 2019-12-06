@@ -159,7 +159,7 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("create table - schema") {
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)",
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile",
       createTable(
         table = "my_tab",
         schema = (new StructType)
@@ -179,7 +179,8 @@ class SparkSqlParserSuite extends AnalysisTest {
         partitionColumnNames = Seq("c", "d")
       )
     )
-    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>)",
+    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>) " +
+      "STORED AS textfile",
       createTable(
         table = "my_tab",
         schema = (new StructType)
