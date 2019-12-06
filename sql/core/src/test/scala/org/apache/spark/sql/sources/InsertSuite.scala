@@ -270,7 +270,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       "INSERT OVERWRITE to a table while querying it should not be allowed.")
   }
 
-  test("it is allowed to write to a table while querying it for dynamic partition overwrite.") {
+  test("SPARK-30112: it is allowed to write to a table while querying it for " +
+    "dynamic partition overwrite.") {
     Seq(PartitionOverwriteMode.DYNAMIC.toString,
         PartitionOverwriteMode.STATIC.toString).foreach { mode =>
       withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {

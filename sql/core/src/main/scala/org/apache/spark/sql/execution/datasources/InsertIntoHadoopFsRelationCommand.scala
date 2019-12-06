@@ -63,7 +63,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
-  private[sql] lazy val dynamicPartitionOverwriteEnabled: Boolean = {
+  private[sql] lazy val dynamicPartitionOverwrite: Boolean = {
     val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
       // scalastyle:off caselocale
       .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase))
@@ -105,8 +105,6 @@ case class InsertIntoHadoopFsRelationCommand(
       customPartitionLocations = getCustomPartitionLocations(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
     }
-
-    val dynamicPartitionOverwrite = dynamicPartitionOverwriteEnabled
 
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
