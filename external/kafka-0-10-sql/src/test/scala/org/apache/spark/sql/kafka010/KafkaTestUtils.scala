@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.io.{File, IOException, PrintWriter}
+import java.io.{File, IOException}
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
 import java.util.{Collections, Properties, UUID}
