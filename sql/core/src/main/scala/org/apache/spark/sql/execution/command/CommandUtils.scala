@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
 import org.apache.spark.sql.execution.datasources.orc.OrcUtils
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.{HiveSerDe, SessionState, SQLConf}
 import org.apache.spark.sql.types._
 
 case class SizeInBytesWithDeserFactor(sizeInBytes: BigInt, deserFactor: Option[Int])
@@ -54,6 +54,8 @@ class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serial
 }
 
 object CommandUtils extends Logging {
+
+  private val orcSerDeCanonicalClass = HiveSerDe.serdeMap("orc").serde.get
 
   /** Change statistics after changing data by commands. */
   def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
@@ -117,8 +119,7 @@ object CommandUtils extends Logging {
       serde: Option[String]): SizeInBytesWithDeserFactor = {
     assert(fStatus.isFile)
     val factor = if (calcDeserFact) {
-      val isOrc = serde.contains("org.apache.hadoop.hive.ql.io.orc.OrcSerde") ||
-        fStatus.getPath.getName.endsWith(".orc")
+      val isOrc = serde.contains(orcSerDeCanonicalClass) || fStatus.getPath.getName.endsWith(".orc")
       val rawSize = if (isOrc) Some(OrcUtils.rawSize(hadoopConf, fStatus.getPath)) else None
       rawSize.map { rawSize =>
         // deserialization factor is a ratio of the data size in memory to file size rounded up
