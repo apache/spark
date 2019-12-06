@@ -1323,7 +1323,7 @@ class GBTRegressor(JavaPredictor, _GBTRegressorParams, JavaMLWritable, JavaMLRea
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
+                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
                   weightCol=None)
         Sets params for Gradient Boosted Tree Regression.
         """
