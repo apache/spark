@@ -65,6 +65,16 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
+  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
+    try {
+      f
+    } finally {
+      tableNames.foreach { name =>
+        spark.sql(s"DROP TABLE IF EXISTS $name")
+      }
+    }
+  }
+
   private val NATIVE_ORC_FORMAT = classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
   private val HIVE_ORC_FORMAT = classOf[org.apache.spark.sql.hive.orc.OrcFileFormat].getCanonicalName
 
@@ -295,6 +305,37 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  def deserializationFactorBenchmark(values: Int, width: Int): Unit = {
+    val benchmark =
+      new Benchmark(s"DeserFactor calculation with $width columns", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1") {
+        withTable("nativeOrcTable") {
+          import spark.implicits._
+          val selectExpr = (1 to width).map(i => s"value as c$i")
+          spark.range(values).map(_ => Random.nextLong).toDF()
+            .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
+
+          spark.sql(s"CREATE TABLE nativeOrcTable USING `${NATIVE_ORC_FORMAT}` " +
+            s"LOCATION '${dir.getCanonicalPath}' AS SELECT * FROM t1")
+
+          benchmark.addCase("Native ORC (no deserFactor calc)") { _ =>
+            withSQLConf(SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "false") {
+              spark.sql(s"ANALYZE TABLE nativeOrcTable COMPUTE STATISTICS")
+            }
+          }
+          benchmark.addCase("Native ORC (with deserFactor calc)") { _ =>
+            withSQLConf(SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "true") {
+              spark.sql(s"ANALYZE TABLE nativeOrcTable COMPUTE STATISTICS")
+            }
+          }
+          benchmark.run()
+        }
+      }
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dataType =>
@@ -319,6 +360,11 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
       columnsBenchmark(1024 * 1024 * 1, 100)
       columnsBenchmark(1024 * 1024 * 1, 200)
       columnsBenchmark(1024 * 1024 * 1, 300)
+    }
+    runBenchmark("Deser Factor Calculation From Wide Columns") {
+      deserializationFactorBenchmark(1024 * 1024 * 10, 100)
+      deserializationFactorBenchmark(1024 * 1024 * 10, 200)
+      deserializationFactorBenchmark(1024 * 1024 * 10, 300)
     }
   }
 }
