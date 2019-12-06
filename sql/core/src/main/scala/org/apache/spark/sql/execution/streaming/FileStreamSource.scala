@@ -206,6 +206,17 @@ class FileStreamSource(
       CaseInsensitiveMap(options), None).allFiles()
   }
 
+  private def setSourceHasMetadata(newValue: Option[Boolean]): Unit = newValue match {
+    case Some(true) =>
+      if (sourceCleaner.isDefined) {
+        throw new UnsupportedOperationException("Clean up source files is not supported when" +
+          " reading from the output directory of FileStreamSink.")
+      }
+      sourceHasMetadata = Some(true)
+    case _ =>
+      sourceHasMetadata = newValue
+  }
+
   /**
    * Returns a list of files found, sorted by their timestamp.
    */
@@ -216,7 +227,7 @@ class FileStreamSource(
     sourceHasMetadata match {
       case None =>
         if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
-          sourceHasMetadata = Some(true)
+          setSourceHasMetadata(Some(true))
           allFiles = allFilesUsingMetadataLogFileIndex()
         } else {
           allFiles = allFilesUsingInMemoryFileIndex()
@@ -228,10 +239,10 @@ class FileStreamSource(
             // metadata log and data files are only generated after the previous
             // `FileStreamSink.hasMetadata` check
             if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
-              sourceHasMetadata = Some(true)
+              setSourceHasMetadata(Some(true))
               allFiles = allFilesUsingMetadataLogFileIndex()
             } else {
-              sourceHasMetadata = Some(false)
+              setSourceHasMetadata(Some(false))
               // `allFiles` have already been fetched using InMemoryFileIndex in this round
             }
           }
