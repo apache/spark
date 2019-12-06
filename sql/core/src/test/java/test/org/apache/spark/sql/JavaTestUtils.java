@@ -21,8 +21,6 @@ import java.util.Arrays;
 import java.util.List;
 import static java.util.stream.Collectors.toList;
 
-import scala.collection.mutable.WrappedArray;
-
 import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.sql.Dataset;
@@ -35,13 +33,13 @@ public class JavaTestUtils {
     }
 
     public static List<Row> toRows(Object... objs) {
-        return Arrays.asList(objs)
-            .stream()
+        return Arrays.stream(objs)
             .map(RowFactory::create)
             .collect(toList());
     }
 
-    public static <T> WrappedArray<T> makeArray(T... ts) {
-        return WrappedArray.make(ts);
+    @SafeVarargs
+    public static <T> T[] makeArray(T... ts) {
+        return ts;
     }
 }

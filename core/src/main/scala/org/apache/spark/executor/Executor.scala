@@ -27,7 +27,7 @@ import java.util.concurrent._
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map, WrappedArray}
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
@@ -566,7 +566,7 @@ private[spark] class Executor(
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
           // Here and below, put task metric peaks in a WrappedArray to expose them as a Seq
           // without requiring a copy.
-          val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+          val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId)
           val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates, accums, metricPeaks))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
@@ -576,7 +576,7 @@ private[spark] class Executor(
           logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-          val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+          val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId)
           val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates, accums, metricPeaks))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
@@ -617,7 +617,7 @@ private[spark] class Executor(
           // instead of an app issue).
           if (!ShutdownHookManager.inShutdown()) {
             val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-            val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+            val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId)
 
             val serializedTaskEndReason = {
               try {
