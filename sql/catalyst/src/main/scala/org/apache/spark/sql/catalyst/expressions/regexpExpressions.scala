@@ -89,7 +89,7 @@ abstract class StringRegexExpression extends BinaryExpression
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
-      * escape - an string added since Spark 3.0. The default escape character is the '\'.
+      * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
   """,
@@ -118,7 +118,10 @@ case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  override def toString: String = s"$left LIKE $right ESCAPE '$escapeChar'"
+  override def toString: String = escapeChar match {
+    case '\\' => s"$left LIKE $right"
+    case c => s"$left LIKE $right ESCAPE '$c'"
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
