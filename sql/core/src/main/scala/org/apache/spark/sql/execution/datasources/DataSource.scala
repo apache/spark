@@ -356,13 +356,15 @@ case class DataSource(
                 s"specifiedFields: ${specifiedFields.map(_.toDDL).mkString(", ")}. " +
                 s"This happens either you make a mistake in schema or type mapping between Spark " +
                 s"and external data sources have been updated while your specified schema still " +
-                s"using the old schema."
+                s"using the old schema. Please either correct the schema or just do not specify " +
+                s"the schema."
             throw new AnalysisException(errorMsg)
           }
         } else {
           val errorMsg =
-            s"The number of fields between persistent schema and user specified schema mismatch: " +
-              s"expect $persistentSize fields, but got $specifiedSize fields. "
+            s"The number of fields between persistent schema and user specified schema " +
+              s"mismatched: expect $persistentSize fields, but got $specifiedSize fields. " +
+              s"Please either correct the schema or just do not specify the schema."
           throw new AnalysisException(errorMsg)
         }
         baseRelation
