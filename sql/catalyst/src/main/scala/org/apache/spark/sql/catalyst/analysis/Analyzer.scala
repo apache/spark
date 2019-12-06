@@ -671,11 +671,20 @@ class Analyzer(
    */
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u @ UnresolvedRelation(Seq(part1)) =>
-        v1SessionCatalog.lookupTempView(part1).getOrElse(u)
-      case u @ UnresolvedRelation(Seq(part1, part2)) =>
-        v1SessionCatalog.lookupGlobalTempView(part1, part2).getOrElse(u)
+      case u @ UnresolvedRelation(ident) =>
+        lookupTempOrGlobalTempView(ident).getOrElse(u)
+      case i @ InsertIntoStatement(UnresolvedRelation(ident), _, _, _, _) =>
+        lookupTempOrGlobalTempView(ident)
+          .map(view => i.copy(table = view))
+          .getOrElse(i)
     }
+
+    def lookupTempOrGlobalTempView(identifier: Seq[String]): Option[LogicalPlan] =
+      identifier match {
+        case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
+        case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
+        case _ => None
+      }
   }
 
   /**
@@ -784,18 +793,16 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
-      case i @ InsertIntoStatement(
-          u @ UnresolvedRelation(SessionCatalogAndIdentifier(catalog, ident)), _, _, _, _)
-            if i.query.resolved =>
-        val relation = ResolveTempViews(u) match {
-          case unresolved: UnresolvedRelation =>
-            lookupRelation(catalog, ident, recurse = false).getOrElse(unresolved)
-          case tempView => tempView
+      case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
+        val relation = table match {
+          case u @ UnresolvedRelation(SessionCatalogAndIdentifier(catalog, ident)) =>
+            lookupRelation(catalog, ident, recurse = false).getOrElse(u)
+          case other => other
         }
 
         EliminateSubqueryAliases(relation) match {
           case v: View =>
-            u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+            table.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
           case other => i.copy(table = other)
         }
 
@@ -844,18 +851,6 @@ class Analyzer(
         }
         Identifier.of(defaultNamespace, ident.name)
       }
-    }
-
-    // If the database part is specified, and we support running SQL directly on files, and
-    // it's not a temporary view, and the table does not exist, then let's just return the
-    // original UnresolvedRelation. It is possible we are matching a query like "select *
-    // from parquet.`/path/to/query`". The plan will get resolved in the rule `ResolveDataSource`.
-    // Note that we are testing (!db_exists || !table_exists) because the catalog throws
-    // an exception from tableExists if the database does not exist.
-    private def isRunningDirectlyOnFiles(table: TableIdentifier): Boolean = {
-      table.database.isDefined && conf.runSQLonFile && !v1SessionCatalog.isTemporaryTable(table) &&
-        (!v1SessionCatalog.databaseExists(table.database.get)
-          || !v1SessionCatalog.tableExists(table))
     }
   }
 
