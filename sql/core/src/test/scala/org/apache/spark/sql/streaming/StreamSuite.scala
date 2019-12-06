@@ -755,7 +755,7 @@ class StreamSuite extends StreamTest {
         inputData.addData(9)
         streamingQuery.processAllAvailable()
 
-        QueryTest.checkAnswer(spark.table("counts").toDF(),
+        checkAnswer(spark.table("counts").toDF(),
           Row("1", 1) :: Row("2", 1) :: Row("3", 2) :: Row("4", 2) ::
           Row("5", 2) :: Row("6", 2) :: Row("7", 1) :: Row("8", 1) :: Row("9", 1) :: Nil)
       } finally {

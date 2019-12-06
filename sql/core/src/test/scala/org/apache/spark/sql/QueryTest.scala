@@ -21,6 +21,8 @@ import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
 
+import org.scalatest.Assertions
+
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
@@ -150,10 +152,7 @@ abstract class QueryTest extends PlanTest {
 
     assertEmptyMissingInput(analyzedDF)
 
-    QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
+    QueryTest.checkAnswer(analyzedDF, expectedAnswer)
   }
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
@@ -235,7 +234,21 @@ abstract class QueryTest extends PlanTest {
   }
 }
 
-object QueryTest {
+object QueryTest extends Assertions {
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   *
+   * @param df the [[DataFrame]] to be executed
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
+   */
+  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean = true): Unit = {
+    getErrorMessageInCheckAnswer(df, expectedAnswer, checkToRDD) match {
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
+    }
+  }
+
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * If there was exception during the execution or the contents of the DataFrame does not
@@ -246,7 +259,7 @@ object QueryTest {
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(
+  def getErrorMessageInCheckAnswer(
       df: DataFrame,
       expectedAnswer: Seq[Row],
       checkToRDD: Boolean = true): Option[String] = {
@@ -409,7 +422,7 @@ object QueryTest {
   }
 
   def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): String = {
-    checkAnswer(df, expectedAnswer.asScala) match {
+    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala) match {
       case Some(errorMessage) => errorMessage
       case None => null
     }
