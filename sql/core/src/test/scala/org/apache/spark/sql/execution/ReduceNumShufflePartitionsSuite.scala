@@ -259,10 +259,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
   val numInputPartitions: Int = 10
 
   def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    QueryTest.getErrorMessageInCheckAnswer(actual, expectedAnswer) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
+    QueryTest.checkAnswer(actual, expectedAnswer)
   }
 
   def withSparkSession(
