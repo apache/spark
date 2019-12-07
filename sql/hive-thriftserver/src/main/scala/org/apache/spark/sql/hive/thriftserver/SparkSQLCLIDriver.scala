@@ -45,6 +45,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -258,7 +259,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     var ret = 0
     var prefix = ""
-    def currentDB = if (SparkSQLEnv.sqlContext.conf.shouldShowDBName) {
+    def currentDB = if (SparkSQLEnv.sqlContext.conf
+      .getConf(StaticSQLConf.SPARK_SQL_CLI_SHOW_CURRENT_DB_ENABLED)) {
       val currDB = SparkSQLEnv.sqlContext.sessionState.catalog.getCurrentDatabase
       s" ($currDB)"
     } else {

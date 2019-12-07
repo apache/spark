@@ -168,4 +168,10 @@ object StaticSQLConf {
       .internal()
       .booleanConf
       .createWithDefault(true)
+
+  val SPARK_SQL_CLI_SHOW_CURRENT_DB_ENABLED =
+    buildStaticConf("spark.sql.cli.show.current.db.enabled")
+      .doc("when true, current DB name will be displayed in the cli prompt")
+      .booleanConf
+      .createWithDefault(false)
 }

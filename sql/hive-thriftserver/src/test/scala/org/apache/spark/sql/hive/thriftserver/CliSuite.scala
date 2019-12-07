@@ -32,6 +32,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.test.HiveTestJars
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -401,20 +402,18 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
-  test("SPARK-27667 test cli prompt using spark.cli.print.current.db") {
-    runCliWithin(1.minute, Seq("--conf", "spark.sql.cli.show.current.db=true"))(
+  test("SPARK-27667: test cli prompt using spark.cli.print.current.db.enabled") {
+    runCliWithin(1.minute, Seq("--conf", s"${StaticSQLConf.SPARK_SQL_CLI_SHOW_CURRENT_DB_ENABLED
+      .key}=true"))(
       "show tables;" -> "spark-sql (default)",
-      "CREATE DATABASE hive_test_db;"
-        -> "",
-      "USE hive_test_db;"
-        -> "spark-sql (hive_test_db)"
+      "CREATE DATABASE hive_test_db;" -> "",
+      "USE hive_test_db;" -> "spark-sql (hive_test_db)"
     )
     // test with false
-    runCliWithin(1.minute, Seq("--conf", "spark.sql.cli.show.current.db=false"))(
+    runCliWithin(1.minute, Seq("--conf", s"${StaticSQLConf.SPARK_SQL_CLI_SHOW_CURRENT_DB_ENABLED
+      .key}=false"))(
       "show tables;" -> "spark-sql> show tables",
-      "CREATE DATABASE hive_test_db;"
-        -> "spark-sql> CREATE DATABASE hive_test_db",
-      "USE hive_test_db;"
-        -> "spark-sql> USE hive_test_db")
+      "CREATE DATABASE hive_test_db;" -> "spark-sql> CREATE DATABASE hive_test_db",
+      "USE hive_test_db;" -> "spark-sql> USE hive_test_db")
   }
 }
