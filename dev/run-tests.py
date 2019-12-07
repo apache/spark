@@ -342,7 +342,7 @@ def build_spark_unidoc_sbt(extra_profiles):
     set_title_and_block("Building Unidoc API Documentation", "BLOCK_DOCUMENTATION")
     # Enable all of the profiles for the build:
     build_profiles = extra_profiles + modules.root.build_profile_flags
-    sbt_goals = ["unidoc"]
+    sbt_goals = ["clean", "unidoc"]
     profiles_and_goals = build_profiles + sbt_goals
 
     print("[info] Building Spark unidoc using SBT with these arguments: ",
