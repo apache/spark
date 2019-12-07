@@ -48,8 +48,7 @@ def _find_spark_home():
             # If we are installed in edit mode also look two dirs up
             paths.append(os.path.join(module_home, "../../"))
         except ImportError:
-            # Not pip installed no worries
-            pass
+            print("Import Error. Pip is not installed")
     else:
         from importlib.util import find_spec
         try:
@@ -58,8 +57,7 @@ def _find_spark_home():
             # If we are installed in edit mode also look two dirs up
             paths.append(os.path.join(module_home, "../../"))
         except ImportError:
-            # Not pip installed no worries
-            pass
+            print("Import Error. Pip is not installed")
 
     # Normalize the paths
     paths = [os.path.abspath(p) for p in paths]
