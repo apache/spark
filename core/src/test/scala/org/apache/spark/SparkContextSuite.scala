@@ -303,8 +303,21 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       // Invalid jar path will only print the error log, will not add to file server.
       sc.addJar("dummy.jar")
-      sc.addJar("")
       sc.addJar(tmpDir.getAbsolutePath)
+
+      assert(sc.listJars().size == 1)
+      assert(sc.listJars().head.contains(tmpJar.getName))
+    }
+  }
+
+  test("add jar when path contains spaces") {
+    withTempDir { dir =>
+      val sep = File.separator
+      val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+      val tmpJar = File.createTempFile("test", ".jar", tmpDir)
+
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(tmpJar.getAbsolutePath)
 
       assert(sc.listJars().size == 1)
       assert(sc.listJars().head.contains(tmpJar.getName))
