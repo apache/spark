@@ -136,7 +136,7 @@ class SparkSession(object):
         @since(2.0)
         def enableHiveSupport(self):
             """Enables Hive support, including connectivity to a persistent Hive metastore, support
-            for Hive serdes, and Hive user-defined functions.
+            for Hive SerDes, and Hive user-defined functions.
             """
             return self.config("spark.sql.catalogImplementation", "hive")
 
@@ -189,7 +189,7 @@ class SparkSession(object):
                 return session
 
     builder = Builder()
-    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
+    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances."""
 
     _instantiatedSession = None
     _activeSession = None
@@ -310,7 +310,7 @@ class SparkSession(object):
     @since(2.0)
     def catalog(self):
         """Interface through which the user may create, drop, alter or query underlying
-        databases, tables, functions etc.
+        databases, tables, functions, etc.
 
         :return: :class:`Catalog`
         """
@@ -624,20 +624,20 @@ class SparkSession(object):
         will be inferred from ``data``.
 
         When ``schema`` is ``None``, it will try to infer the schema (column names and types)
-        from ``data``, which should be an RDD of :class:`Row`,
-        or :class:`namedtuple`, or :class:`dict`.
+        from ``data``, which should be an RDD of either :class:`Row`,
+        :class:`namedtuple`, or :class:`dict`.
 
         When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must match
         the real data, or an exception will be thrown at runtime. If the given schema is not
         :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-        :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value",
-        each record will also be wrapped into a tuple, which can be converted to row later.
+        :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value".
+        Each record will also be wrapped into a tuple, which can be converted to row later.
 
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        :param data: an RDD of any kind of SQL data representation(e.g. row, tuple, int, boolean,
-            etc.), or :class:`list`, or :class:`pandas.DataFrame`.
+        :param data: an RDD of any kind of SQL data representation (e.g. row, tuple, int, boolean,
+            etc.), :class:`list`, or :class:`pandas.DataFrame`.
         :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is ``None``.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
@@ -846,7 +846,7 @@ class SparkSession(object):
     @since(2.0)
     def streams(self):
         """Returns a :class:`StreamingQueryManager` that allows managing all the
-        :class:`StreamingQuery` StreamingQueries active on `this` context.
+        :class:`StreamingQuery` instances active on `this` context.
 
         .. note:: Evolving.
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileInputStream, FileOutputStream}
+import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
 import java.net.URI
 import java.util.Properties
 
@@ -181,6 +181,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(MAX_APP_ATTEMPTS, 42)
       .set("spark.app.name", "foo-test-app")
       .set(QUEUE_NAME, "staging-queue")
+      .set(APPLICATION_PRIORITY, 1)
     val args = new ClientArguments(Array())
 
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
@@ -202,6 +203,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       tags.asScala.count(_.nonEmpty) should be (4)
     }
     appContext.getMaxAppAttempts should be (42)
+    appContext.getPriority.getPriority should be (1)
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
@@ -469,6 +471,18 @@ class ClientSuite extends SparkFunSuite with Matchers {
     assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 3)
     assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
     assert(allResourceInfo.get(yarnMadeupResource).get === 5)
+  }
+
+  test("test yarn jars path not exists") {
+    withTempDir { dir =>
+      val conf = new SparkConf().set(SPARK_JARS, Seq(dir.getAbsolutePath + "/test"))
+      val client = new Client(new ClientArguments(Array()), conf, null)
+      withTempDir { distDir =>
+        intercept[FileNotFoundException] {
+          client.prepareLocalResources(new Path(distDir.getAbsolutePath), Nil)
+        }
+      }
+    }
   }
 
   private val matching = Seq(

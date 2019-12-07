@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,7 +17,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
 import itertools
 from argparse import ArgumentParser
 import os
@@ -44,15 +43,20 @@ def determine_modules_for_files(filenames):
     """
     Given a list of filenames, return the set of modules that contain those files.
     If a file is not associated with a more specific submodule, then this method will consider that
-    file to belong to the 'root' module.
+    file to belong to the 'root' module. GitHub Action and Appveyor files are ignored.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
     ['pyspark-core', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
+    >>> [x.name for x in determine_modules_for_files( \
+            [".github/workflows/master.yml", "appveyor.yml"])]
+    []
     """
     changed_modules = set()
     for filename in filenames:
+        if filename in (".github/workflows/master.yml", "appveyor.yml"):
+            continue
         matched_at_least_one_module = False
         for module in modules.all_modules:
             if module.contains_file(filename):
@@ -175,7 +179,8 @@ def run_apache_rat_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "check-license")])
 
 
-def run_scala_style_checks(build_profiles):
+def run_scala_style_checks(extra_profiles):
+    build_profiles = extra_profiles + modules.root.build_profile_flags
     set_title_and_block("Running Scala style checks", "BLOCK_SCALA_STYLE")
     profiles = " ".join(build_profiles)
     print("[info] Checking Scala style using SBT with these profiles: ", profiles)
@@ -265,7 +270,7 @@ def exec_sbt(sbt_args=()):
     echo_proc.wait()
     for line in iter(sbt_proc.stdout.readline, b''):
         if not sbt_output_filter.match(line):
-            print(line, end='')
+            print(line.decode('utf-8'), end='')
     retcode = sbt_proc.wait()
 
     if retcode != 0:
@@ -291,9 +296,28 @@ def get_hadoop_profiles(hadoop_version):
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
-def build_spark_maven(hadoop_version):
+def get_hive_profiles(hive_version):
+    """
+    For the given Hive version tag, return a list of Maven/SBT profile flags for
+    building and testing against that Hive version.
+    """
+
+    sbt_maven_hive_profiles = {
+        "hive1.2": ["-Phive-1.2"],
+        "hive2.3": ["-Phive-2.3"],
+    }
+
+    if hive_version in sbt_maven_hive_profiles:
+        return sbt_maven_hive_profiles[hive_version]
+    else:
+        print("[error] Could not find", hive_version, "in the list. Valid options",
+              " are", sbt_maven_hive_profiles.keys())
+        sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
+
+
+def build_spark_maven(extra_profiles):
     # Enable all of the profiles for the build:
-    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    build_profiles = extra_profiles + modules.root.build_profile_flags
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
@@ -302,9 +326,9 @@ def build_spark_maven(hadoop_version):
     exec_maven(profiles_and_goals)
 
 
-def build_spark_sbt(hadoop_version):
+def build_spark_sbt(extra_profiles):
     # Enable all of the profiles for the build:
-    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = ["test:package",  # Build test jars as some tests depend on them
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
@@ -314,10 +338,10 @@ def build_spark_sbt(hadoop_version):
     exec_sbt(profiles_and_goals)
 
 
-def build_spark_unidoc_sbt(hadoop_version):
+def build_spark_unidoc_sbt(extra_profiles):
     set_title_and_block("Building Unidoc API Documentation", "BLOCK_DOCUMENTATION")
     # Enable all of the profiles for the build:
-    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = ["unidoc"]
     profiles_and_goals = build_profiles + sbt_goals
 
@@ -327,9 +351,9 @@ def build_spark_unidoc_sbt(hadoop_version):
     exec_sbt(profiles_and_goals)
 
 
-def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
+def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     # Enable all of the profiles for the build:
-    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = ["assembly/package"]
     profiles_and_goals = build_profiles + sbt_goals
     print("[info] Building Spark assembly using SBT with these arguments: ",
@@ -339,25 +363,25 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    build_spark_unidoc_sbt(hadoop_version)
+    build_spark_unidoc_sbt(extra_profiles)
 
 
-def build_apache_spark(build_tool, hadoop_version):
-    """Will build Spark against Hive v1.2.1 given the passed in build tool (either `sbt` or
-    `maven`). Defaults to using `sbt`."""
+def build_apache_spark(build_tool, extra_profiles):
+    """Will build Spark with the extra profiles and the passed in build tool
+    (either `sbt` or `maven`). Defaults to using `sbt`."""
 
     set_title_and_block("Building Spark", "BLOCK_BUILD")
 
     rm_r("lib_managed")
 
     if build_tool == "maven":
-        build_spark_maven(hadoop_version)
+        build_spark_maven(extra_profiles)
     else:
-        build_spark_sbt(hadoop_version)
+        build_spark_sbt(extra_profiles)
 
 
-def detect_binary_inop_with_mima(hadoop_version):
-    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+def detect_binary_inop_with_mima(extra_profiles):
+    build_profiles = extra_profiles + modules.root.build_profile_flags
     set_title_and_block("Detecting binary incompatibilities with MiMa", "BLOCK_MIMA")
     profiles = " ".join(build_profiles)
     print("[info] Detecting binary incompatibilities with MiMa using SBT with these profiles: ",
@@ -391,14 +415,14 @@ def run_scala_tests_sbt(test_modules, test_profiles):
     exec_sbt(profiles_and_goals)
 
 
-def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
+def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags):
     """Function to properly execute all tests passed in as a set from the
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
 
     test_modules = set(test_modules)
 
-    test_profiles = get_hadoop_profiles(hadoop_version) + \
+    test_profiles = extra_profiles + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
 
     if excluded_tags:
@@ -551,6 +575,7 @@ def main():
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
+        hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
@@ -560,10 +585,12 @@ def main():
         # else we're running locally and can use local settings
         build_tool = "sbt"
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
+        hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
-          "under environment", test_env)
+          "and Hive profile", hive_version, "under environment", test_env)
+    extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version)
 
     changed_modules = None
     changed_files = None
@@ -597,8 +624,7 @@ def main():
     if not changed_files or any(f.endswith(".scala")
                                 or f.endswith("scalastyle-config.xml")
                                 for f in changed_files):
-        build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
-        run_scala_style_checks(build_profiles)
+        run_scala_style_checks(extra_profiles)
     should_run_java_style_checks = False
     if not changed_files or any(f.endswith(".java")
                                 or f.endswith("checkstyle.xml")
@@ -626,18 +652,18 @@ def main():
         run_build_tests()
 
     # spark build
-    build_apache_spark(build_tool, hadoop_version)
+    build_apache_spark(build_tool, extra_profiles)
 
     # backwards compatibility checks
     if build_tool == "sbt":
         # Note: compatibility tests only supported in sbt for now
-        detect_binary_inop_with_mima(hadoop_version)
+        detect_binary_inop_with_mima(extra_profiles)
         # Since we did not build assembly/package before running dev/mima, we need to
         # do it here because the tests still rely on it; see SPARK-13294 for details.
-        build_spark_assembly_sbt(hadoop_version, should_run_java_style_checks)
+        build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
 
     # run the test suites
-    run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
+    run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:

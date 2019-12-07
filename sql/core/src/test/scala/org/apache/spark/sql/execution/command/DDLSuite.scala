@@ -22,7 +22,6 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -82,7 +82,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     val tabName = "tbl"
     withTable(tabName) {
       val e = intercept[AnalysisException] {
-        sql(s"CREATE TABLE $tabName (i INT, j STRING)")
+        sql(s"CREATE TABLE $tabName (i INT, j STRING) STORED AS parquet")
       }.getMessage
       assert(e.contains("Hive support is required to CREATE Hive TABLE"))
     }
@@ -110,13 +110,13 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     import testImplicits._
     withTable("t", "t1") {
       var e = intercept[AnalysisException] {
-        sql("CREATE TABLE t SELECT 1 as a, 1 as b")
+        sql("CREATE TABLE t STORED AS parquet SELECT 1 as a, 1 as b")
       }.getMessage
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
 
       spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
       e = intercept[AnalysisException] {
-        sql("CREATE TABLE t SELECT a, b from t1")
+        sql("CREATE TABLE t STORED AS parquet SELECT a, b from t1")
       }.getMessage
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
     }
@@ -168,9 +168,24 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       assert(e.message.contains("It doesn't match the specified format"))
     }
   }
+
+  test("throw exception if Create Table LIKE USING Hive built-in ORC in in-memory catalog") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t") {
+      sql("CREATE TABLE s(a INT, b INT) USING parquet")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.provider == Some("parquet"))
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t LIKE s USING org.apache.spark.sql.hive.orc")
+      }.getMessage
+      assert(e.contains("Hive built-in ORC data source must be used with Hive support enabled"))
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
+
+  protected val reversedProperties = Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
 
   protected def isUsingHiveMetastore: Boolean = {
     spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
@@ -315,7 +330,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     try {
       sql(s"CREATE DATABASE $dbName")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      assert(db1 == CatalogDatabase(
+      assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
         dbName,
         "",
         getDBPath(dbName),
@@ -338,7 +353,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
           val expPath = makeQualifiedPath(tmpDir.toString)
-          assert(db1 == CatalogDatabase(
+          assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
             expPath,
@@ -361,7 +376,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        assert(db1 == CatalogDatabase(
+        assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
           getDBPath(dbNameWithoutBackTicks),
@@ -734,7 +749,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"CREATE DATABASE $dbName")
 
         checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
+            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
@@ -743,7 +759,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
         checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
+            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
@@ -752,7 +769,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
 
         checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
+            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
@@ -1725,7 +1743,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       column.map(_.metadata).getOrElse(Metadata.empty)
     }
     // Ensure that change column will preserve other metadata fields.
-    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 TYPE INT COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
     assert(getMetadata("col1").getString("comment") == "this is col1")
   }
@@ -2064,7 +2082,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("show functions") {
     withUserDefinedFunction("add_one" -> true) {
-      val numFunctions = FunctionRegistry.functionSet.size.toLong
+      val numFunctions = FunctionRegistry.functionSet.size.toLong +
+        FunctionsCommand.virtualOperators.size.toLong
       assert(sql("show functions").count() === numFunctions)
       assert(sql("show system functions").count() === numFunctions)
       assert(sql("show all functions").count() === numFunctions)
@@ -2088,7 +2107,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           val message = intercept[AnalysisException] {
             sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
-          assert(message.contains("SHOW COLUMNS with conflicting databases"))
+          assert(message.contains(
+            s"SHOW COLUMNS with conflicting databases: " +
+              s"'${db.toUpperCase(Locale.ROOT)}' != '$db'"))
         }
       }
     }
@@ -2814,6 +2835,36 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql("SELECT * FROM foo.first")
           checkAnswer(spark.table("foo.first"), Row("second"))
         }
+      }
+    }
+  }
+
+  test("Create Table LIKE USING provider") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t1", "t2", "t3", "t4") {
+      sql("CREATE TABLE s(a INT, b INT) USING parquet")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.provider == Some("parquet"))
+
+      sql("CREATE TABLE t1 LIKE s USING orc")
+      val table1 = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table1.provider == Some("orc"))
+
+      sql("CREATE TABLE t2 LIKE s USING hive")
+      val table2 = catalog.getTableMetadata(TableIdentifier("t2"))
+      assert(table2.provider == Some("hive"))
+
+      val e1 = intercept[ClassNotFoundException] {
+        sql("CREATE TABLE t3 LIKE s USING unknown")
+      }.getMessage
+      assert(e1.contains("Failed to find data source"))
+
+      withGlobalTempView("src") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
+        sql(s"CREATE TABLE t4 LIKE $globalTempDB.src USING parquet")
+        val table = catalog.getTableMetadata(TableIdentifier("t4"))
+        assert(table.provider == Some("parquet"))
       }
     }
   }

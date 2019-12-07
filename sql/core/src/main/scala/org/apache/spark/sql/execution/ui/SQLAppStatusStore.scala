@@ -133,7 +133,7 @@ class SparkPlanGraphNodeWrapper(
     val cluster: SparkPlanGraphClusterWrapper) {
 
   def toSparkPlanGraphNode(): SparkPlanGraphNode = {
-    assert(node == null ^ cluster == null, "One and only of of nore or cluster must be set.")
+    assert(node == null ^ cluster == null, "Exactly one of node, cluster values to be set.")
     if (node != null) node else cluster.toSparkPlanGraphCluster()
   }
 

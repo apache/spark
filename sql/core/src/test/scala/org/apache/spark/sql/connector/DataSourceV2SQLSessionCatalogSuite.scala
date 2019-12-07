@@ -44,7 +44,7 @@ class DataSourceV2SQLSessionCatalogSuite
   }
 
   override def getTableMetadata(tableName: String): Table = {
-    val v2Catalog = spark.sessionState.catalogManager.v2SessionCatalog
+    val v2Catalog = spark.sessionState.catalogManager.currentCatalog
     val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     v2Catalog.asInstanceOf[TableCatalog]
       .loadTable(Identifier.of(Array.empty, nameParts.last))

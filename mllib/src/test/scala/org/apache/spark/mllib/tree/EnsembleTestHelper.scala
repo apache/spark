@@ -19,6 +19,8 @@ package org.apache.spark.mllib.tree
 
 import scala.collection.mutable
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel

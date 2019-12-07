@@ -98,3 +98,22 @@ MILLISECONDS of date                               1744           1749          
 MICROSECONDS of date                               1592           1594           1          6.3         159.2       0.6X
 EPOCH of date                                      2368           2371           3          4.2         236.8       0.4X
 
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.15
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Invoke date_part for interval:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to interval                                   1365           1395          31          7.3         136.5       1.0X
+MILLENNIUM of interval                             1620           1651          27          6.2         162.0       0.8X
+CENTURY of interval                                1469           1487          22          6.8         146.9       0.9X
+DECADE of interval                                 1462           1473          17          6.8         146.2       0.9X
+YEAR of interval                                   1438           1447           8          7.0         143.8       0.9X
+QUARTER of interval                                1456           1458           3          6.9         145.6       0.9X
+MONTH of interval                                  1440           1452          16          6.9         144.0       0.9X
+DAY of interval                                    1478           1485           6          6.8         147.8       0.9X
+HOUR of interval                                   1579           1580           3          6.3         157.9       0.9X
+MINUTE of interval                                 1598           1605          11          6.3         159.8       0.9X
+SECOND of interval                                 1571           1579          10          6.4         157.1       0.9X
+MILLISECONDS of interval                           1570           1577           6          6.4         157.0       0.9X
+MICROSECONDS of interval                           1484           1488           5          6.7         148.4       0.9X
+EPOCH of interval                                  1521           1522           1          6.6         152.1       0.9X
+

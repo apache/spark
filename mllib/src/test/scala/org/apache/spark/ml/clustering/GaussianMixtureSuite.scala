@@ -71,9 +71,14 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getK === 2)
     assert(gm.getFeaturesCol === "features")
     assert(gm.getPredictionCol === "prediction")
+    assert(gm.getProbabilityCol === "probability")
     assert(gm.getMaxIter === 100)
     assert(gm.getTol === 0.01)
     val model = gm.setMaxIter(1).fit(dataset)
+
+    val transformed = model.transform(dataset)
+    checkNominalOnDF(transformed, "prediction", model.weights.length)
+    checkVectorSizeOnDF(transformed, "probability", model.weights.length)
 
     MLTestingUtils.checkCopyAndUids(gm, model)
     assert(model.hasSummary)

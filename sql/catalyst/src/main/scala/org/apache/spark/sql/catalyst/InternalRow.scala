@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * An abstract class for row used internally in Spark SQL, which only contains the columns as
@@ -57,6 +57,8 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
    * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
    */
   def setDecimal(i: Int, value: Decimal, precision: Int): Unit = update(i, value)
+
+  def setInterval(i: Int, value: CalendarInterval): Unit = update(i, value)
 
   /**
    * Make a copy of the current [[InternalRow]] object.

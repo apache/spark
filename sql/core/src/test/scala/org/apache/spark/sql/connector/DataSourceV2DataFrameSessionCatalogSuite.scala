@@ -84,7 +84,7 @@ class DataSourceV2DataFrameSessionCatalogSuite
     val t1 = "prop_table"
     withTable(t1) {
       spark.range(20).write.format(v2Format).option("path", "abc").saveAsTable(t1)
-      val cat = spark.sessionState.catalogManager.v2SessionCatalog.asInstanceOf[TableCatalog]
+      val cat = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
       val tableInfo = cat.loadTable(Identifier.of(Array.empty, t1))
       assert(tableInfo.properties().get("location") === "abc")
       assert(tableInfo.properties().get("provider") === v2Format)

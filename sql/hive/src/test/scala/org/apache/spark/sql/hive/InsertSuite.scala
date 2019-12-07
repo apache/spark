@@ -461,7 +461,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         // Columns `c + 1` and `d + 1` are resolved by position, and thus mapped to partition
         // columns `b` and `c` of the target table.
         val df = Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d")
-        df.select('a + 1, 'b + 1, 'c + 1, 'd + 1).write.insertInto(tableName)
+        df.select($"a" + 1, $"b" + 1, $"c" + 1, $"d" + 1).write.insertInto(tableName)
 
         checkAnswer(
           sql(s"SELECT a, b, c, d FROM $tableName"),

@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasRelativeError}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
@@ -34,7 +34,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * Params for [[RobustScaler]] and [[RobustScalerModel]].
  */
-private[feature] trait RobustScalerParams extends Params with HasInputCol with HasOutputCol {
+private[feature] trait RobustScalerParams extends Params with HasInputCol with HasOutputCol
+  with HasRelativeError {
 
   /**
    * Lower quantile to calculate quantile range, shared by all features
@@ -141,8 +142,12 @@ class RobustScaler (override val uid: String)
   /** @group setParam */
   def setWithScaling(value: Boolean): this.type = set(withScaling, value)
 
+  /** @group expertSetParam */
+  def setRelativeError(value: Double): this.type = set(relativeError, value)
+
   override def fit(dataset: Dataset[_]): RobustScalerModel = {
     transformSchema(dataset.schema, logging = true)
+    val localRelativeError = $(relativeError)
 
     val summaries = dataset.select($(inputCol)).rdd.map {
       case Row(vec: Vector) => vec
@@ -152,7 +157,7 @@ class RobustScaler (override val uid: String)
         val vec = iter.next()
         if (agg == null) {
           agg = Array.fill(vec.size)(
-            new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, 0.001))
+            new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))
         }
         require(vec.size == agg.length,
           s"Number of dimensions must be ${agg.length} but got ${vec.size}")
@@ -222,7 +227,7 @@ class RobustScalerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val shift = if ($(withCentering)) median.toArray else Array.emptyDoubleArray
     val scale = if ($(withScaling)) {
@@ -233,11 +238,17 @@ class RobustScalerModel private[ml] (
       shift, scale, $(withCentering), $(withScaling))
     val transformer = udf(func)
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), median.size)
+    }
+    outputSchema
   }
 
   override def copy(extra: ParamMap): RobustScalerModel = {
@@ -246,6 +257,12 @@ class RobustScalerModel private[ml] (
   }
 
   override def write: MLWriter = new RobustScalerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"RobustScalerModel: uid=$uid, numFeatures=${median.size}, " +
+      s"withCentering=${$(withCentering)}, withScaling=${$(withScaling)}"
+  }
 }
 
 @Since("3.0.0")

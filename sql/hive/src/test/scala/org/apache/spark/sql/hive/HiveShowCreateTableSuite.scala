@@ -178,14 +178,14 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
 
   test("SPARK-24911: keep quotes for nested fields in hive") {
     withTable("t1") {
-      val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>)"
+      val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>) USING hive"
       sql(createTable)
       val shownDDL = sql(s"SHOW CREATE TABLE t1")
         .head()
         .getString(0)
         .split("\n")
         .head
-      assert(shownDDL == createTable)
+      assert(shownDDL == createTable.dropRight(" USING hive".length))
 
       checkCreateTable("t1")
     }

@@ -243,10 +243,10 @@ com.vlkan:flatbuffers
 com.ning:compress-lzf
 io.airlift:aircompressor
 io.dropwizard.metrics:metrics-core
-io.dropwizard.metrics:metrics-ganglia
 io.dropwizard.metrics:metrics-graphite
 io.dropwizard.metrics:metrics-json
 io.dropwizard.metrics:metrics-jvm
+io.dropwizard.metrics:metrics-jmx
 org.iq80.snappy:snappy
 com.clearspring.analytics:stream
 com.jamesmurty.utils:java-xmlbuilder
@@ -502,7 +502,7 @@ com.github.scopt:scopt_2.12
 core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
 core/src/main/resources/org/apache/spark/ui/static/*dataTables*
 core/src/main/resources/org/apache/spark/ui/static/graphlib-dot.min.js
-ore/src/main/resources/org/apache/spark/ui/static/jquery*
+core/src/main/resources/org/apache/spark/ui/static/jquery*
 core/src/main/resources/org/apache/spark/ui/static/sorttable.js
 docs/js/vendor/anchor.min.js
 docs/js/vendor/jquery*
@@ -544,6 +544,7 @@ Eclipse Distribution License (EDL) 1.0
 --------------------------------------
 
 org.glassfish.jaxb:jaxb-runtime
+jakarta.activation:jakarta.activation-api
 jakarta.xml.bind:jakarta.xml.bind-api
 com.sun.istack:istack-commons-runtime
 

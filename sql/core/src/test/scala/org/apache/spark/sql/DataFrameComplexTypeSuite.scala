@@ -18,8 +18,12 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.ArrayType
 
 /**
  * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
@@ -63,6 +67,24 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
   test("SPARK-15285 Generated SpecificSafeProjection.apply method grows beyond 64KB") {
     val ds100_5 = Seq(S100_5()).toDS()
     ds100_5.rdd.count
+  }
+
+  test("SPARK-29503 nest unsafe struct inside safe array") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val df = spark.sparkContext.parallelize(Seq(Seq(1, 2, 3))).toDF("items")
+
+      // items: Seq[Int] => items.map { item => Seq(Struct(item)) }
+      val result = df.select(
+        new Column(MapObjects(
+          (item: Expression) => array(struct(new Column(item))).expr,
+          $"items".expr,
+          df.schema("items").dataType.asInstanceOf[ArrayType].elementType
+        )) as "items"
+      ).collect()
+
+      assert(result.size === 1)
+      assert(result === Row(Seq(Seq(Row(1)), Seq(Row(2)), Seq(Row(3)))) :: Nil)
+    }
   }
 }
 

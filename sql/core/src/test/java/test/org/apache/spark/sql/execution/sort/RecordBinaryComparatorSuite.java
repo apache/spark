@@ -33,6 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.collection.unsafe.sort.*;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -81,14 +82,14 @@ public class RecordBinaryComparatorSuite {
     int recordLength = row.getSizeInBytes();
 
     Object baseObject = dataPage.getBaseObject();
-    assert(pageCursor + recordLength <= dataPage.getBaseOffset() + dataPage.size());
+    Assert.assertTrue(pageCursor + recordLength <= dataPage.getBaseOffset() + dataPage.size());
     long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, pageCursor);
     UnsafeAlignedOffset.putSize(baseObject, pageCursor, recordLength);
     pageCursor += uaoSize;
     Platform.copyMemory(recordBase, recordOffset, baseObject, pageCursor, recordLength);
     pageCursor += recordLength;
 
-    assert(pos < 2);
+    Assert.assertTrue(pos < 2);
     array.set(pos, recordAddress);
     pos++;
   }
@@ -141,8 +142,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) < 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -166,8 +167,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) < 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -193,8 +194,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) > 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -226,8 +227,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) > 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -252,8 +253,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 0) == 0);
-    assert(compare(0, 1) > 0);
+    Assert.assertEquals(0, compare(0, 0));
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -273,7 +274,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 1) < 0);
+    Assert.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -293,7 +294,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 1) < 0);
+    Assert.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -319,6 +320,50 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    assert(compare(0, 1) < 0);
+    Assert.assertTrue(compare(0, 1) < 0);
+  }
+
+  @Test
+  public void testCompareLongsAsLittleEndian() {
+    long arrayOffset = 12;
+
+    long[] arr1 = new long[2];
+    Platform.putLong(arr1, arrayOffset, 0x0100000000000000L);
+    long[] arr2 = new long[2];
+    Platform.putLong(arr2, arrayOffset + 4, 0x0000000000000001L);
+    // leftBaseOffset is not aligned while rightBaseOffset is aligned,
+    // it will start by comparing long
+    int result1 = binaryComparator.compare(arr1, arrayOffset, 8, arr2, arrayOffset + 4, 8);
+
+    long[] arr3 = new long[2];
+    Platform.putLong(arr3, arrayOffset, 0x0100000000000000L);
+    long[] arr4 = new long[2];
+    Platform.putLong(arr4, arrayOffset, 0x0000000000000001L);
+    // both left and right offset is not aligned, it will start with byte-by-byte comparison
+    int result2 = binaryComparator.compare(arr3, arrayOffset, 8, arr4, arrayOffset, 8);
+
+    Assert.assertEquals(result1, result2);
+  }
+
+  @Test
+  public void testCompareLongsAsUnsigned() {
+    long arrayOffset = 12;
+
+    long[] arr1 = new long[2];
+    Platform.putLong(arr1, arrayOffset + 4, 0xa000000000000000L);
+    long[] arr2 = new long[2];
+    Platform.putLong(arr2, arrayOffset + 4, 0x0000000000000000L);
+    // both leftBaseOffset and rightBaseOffset are aligned, so it will start by comparing long
+    int result1 = binaryComparator.compare(arr1, arrayOffset + 4, 8, arr2, arrayOffset + 4, 8);
+
+    long[] arr3 = new long[2];
+    Platform.putLong(arr3, arrayOffset, 0xa000000000000000L);
+    long[] arr4 = new long[2];
+    Platform.putLong(arr4, arrayOffset, 0x0000000000000000L);
+    // both leftBaseOffset and rightBaseOffset are not aligned,
+    // so it will start with byte-by-byte comparison
+    int result2 = binaryComparator.compare(arr3, arrayOffset, 8, arr4, arrayOffset, 8);
+
+    Assert.assertEquals(result1, result2);
   }
 }

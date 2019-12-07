@@ -24,9 +24,8 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -69,14 +68,13 @@ class MaxAbsScaler @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MaxAbsScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map {
-      case Row(v: Vector) => OldVectors.fromML(v)
-    }
-    val summary = Statistics.colStats(input)
-    val minVals = summary.min.toArray
-    val maxVals = summary.max.toArray
-    val n = minVals.length
-    val maxAbs = Array.tabulate(n) { i => math.max(math.abs(minVals(i)), math.abs(maxVals(i))) }
+
+    val Row(max: Vector, min: Vector) = dataset
+      .select(Summarizer.metrics("max", "min").summary(col($(inputCol))).as("summary"))
+      .select("summary.max", "summary.min")
+      .first()
+
+    val maxAbs = Array.tabulate(max.size) { i => math.max(math.abs(min(i)), math.abs(max(i))) }
 
     copyValues(new MaxAbsScalerModel(uid, Vectors.dense(maxAbs).compressed).setParent(this))
   }
@@ -119,19 +117,25 @@ class MaxAbsScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val scale = maxAbs.toArray.map { v => if (v == 0) 1.0 else 1 / v }
     val func = StandardScalerModel.getTransformFunc(
       Array.empty, scale, false, true)
     val transformer = udf(func)
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), maxAbs.size)
+    }
+    outputSchema
   }
 
   @Since("2.0.0")
@@ -142,6 +146,11 @@ class MaxAbsScalerModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new MaxAbsScalerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"MaxAbsScalerModel: uid=$uid, numFeatures=${maxAbs.size}"
+  }
 }
 
 @Since("2.0.0")

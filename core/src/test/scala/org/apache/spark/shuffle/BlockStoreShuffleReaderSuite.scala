@@ -20,6 +20,7 @@ package org.apache.spark.shuffle
 import java.io.{ByteArrayOutputStream, InputStream}
 import java.nio.ByteBuffer
 
+import org.mockito.ArgumentMatchers.{eq => meq}
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark._
@@ -95,7 +96,7 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
       // Setup the blockManager mock so the buffer gets returned when the shuffle code tries to
       // fetch shuffle data.
       val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
-      when(blockManager.getBlockData(shuffleBlockId)).thenReturn(managedBuffer)
+      when(blockManager.getLocalBlockData(meq(shuffleBlockId))).thenReturn(managedBuffer)
       managedBuffer
     }
 
@@ -130,15 +131,15 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
 
     val taskContext = TaskContext.empty()
     val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val blocksByAddress = mapOutputTracker.getMapSizesByExecutorId(
+      shuffleId, reduceId, reduceId + 1)
     val shuffleReader = new BlockStoreShuffleReader(
       shuffleHandle,
-      reduceId,
-      reduceId + 1,
+      blocksByAddress,
       taskContext,
       metrics,
       serializerManager,
-      blockManager,
-      mapOutputTracker)
+      blockManager)
 
     assert(shuffleReader.read().length === keyValuePairsPerMap * numMaps)
 
