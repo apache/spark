@@ -143,14 +143,14 @@ class QueryExecution(
           analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
       )
       append("\n")
+      QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
+      append("\n== Optimized Logical Plan ==\n")
+      QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
+      append("\n== Physical Plan ==\n")
+      QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
     } catch {
-      case _: AnalysisException =>
+      case e: AnalysisException => append(e.toString)
     }
-    QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
-    append("\n== Optimized Logical Plan ==\n")
-    QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
-    append("\n== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
   }
 
   override def toString: String = withRedaction {
