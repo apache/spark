@@ -604,7 +604,12 @@ class SparkSession private(
     val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
       sessionState.sqlParser.parsePlan(sqlText)
     }
-    Dataset.ofRows(self, plan, tracker)
+    try {
+      Dataset.ofRows(self, plan, tracker)
+    } catch {
+      case e: AnalysisException =>
+        throw new AnalysisException("Error in query: " + e.getMessage)
+    }
   }
 
   /**
