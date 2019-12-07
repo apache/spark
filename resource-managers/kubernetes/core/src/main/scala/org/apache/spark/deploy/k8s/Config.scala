@@ -324,6 +324,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val EXECUTOR_POD_CONTROLLER_CLASS =
+    ConfigBuilder("spark.kubernetes.executor.podController.class")
+      .doc("Experimental. Specify a class that can handle the creation " +
+        "and deletion of pods")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

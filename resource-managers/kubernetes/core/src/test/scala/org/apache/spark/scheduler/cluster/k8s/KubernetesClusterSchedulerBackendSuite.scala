@@ -24,7 +24,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
-import org.mockito.Mockito.{mock, never, spy, verify, when}
+import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
@@ -66,6 +66,11 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var labeledPods: LABELED_PODS = _
 
   @Mock
+  private var podList: PodList = _
+  @Mock
+  private var pods: java.util.List[Pod] = _
+
+  @Mock
   private var taskScheduler: TaskSchedulerImpl = _
 
   @Mock
@@ -76,6 +81,9 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   @Mock
   private var lifecycleEventHandler: ExecutorPodsLifecycleManager = _
+
+  @Mock
+  private var executorPodController: ExecutorPodController = _
 
   @Mock
   private var watchEvents: ExecutorPodsWatchSnapshotSource = _
@@ -107,6 +115,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       eventQueue,
       podAllocator,
       lifecycleEventHandler,
+      executorPodController,
       watchEvents,
       pollEvents)
   }
@@ -114,20 +123,23 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   test("Start all components") {
     schedulerBackendUnderTest.start()
     verify(podAllocator).setTotalExpectedExecutors(3)
-    verify(podAllocator).start(TEST_SPARK_APP_ID)
-    verify(lifecycleEventHandler).start(schedulerBackendUnderTest)
+    verify(podAllocator).start(TEST_SPARK_APP_ID, executorPodController)
+    verify(lifecycleEventHandler).start(schedulerBackendUnderTest, executorPodController)
     verify(watchEvents).start(TEST_SPARK_APP_ID)
     verify(pollEvents).start(TEST_SPARK_APP_ID)
+    verify(executorPodController).initialize(kubernetesClient, TEST_SPARK_APP_ID)
   }
 
   test("Stop all components") {
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(labeledPods.list()).thenReturn(podList)
+    when(podList.getItems).thenReturn(pods)
     schedulerBackendUnderTest.stop()
     verify(eventQueue).stop()
     verify(watchEvents).stop()
     verify(pollEvents).stop()
-    verify(labeledPods).delete()
+    verify(executorPodController).stop()
     verify(kubernetesClient).close()
   }
 
@@ -158,16 +170,9 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
     verify(driverEndpointRef).send(RemoveExecutor("1", ExecutorKilled))
     verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
-    verify(labeledPods, never()).delete()
+    verify(executorPodController, never()).removePods(Seq(1L, 2L), Some("Running"))
     schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
       TimeUnit.MILLISECONDS)
-    verify(labeledPods, never()).delete()
-
-    when(podList.getItems()).thenReturn(Arrays.asList(mock(classOf[Pod])))
-    schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
-    verify(labeledPods, never()).delete()
-    schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
-      TimeUnit.MILLISECONDS)
-    verify(labeledPods).delete()
+    verify(executorPodController, times(1)).removePods(Seq(1L, 2L), Some("Running"))
   }
 }

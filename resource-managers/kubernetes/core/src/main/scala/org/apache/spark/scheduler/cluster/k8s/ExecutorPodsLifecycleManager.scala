@@ -27,7 +27,6 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorExited
-import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsLifecycleManager(
     val conf: SparkConf,
@@ -42,10 +41,13 @@ private[spark] class ExecutorPodsLifecycleManager(
   import ExecutorPodsLifecycleManager._
 
   private val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
+  private var executorPodController: ExecutorPodController = _
 
   private lazy val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
-  def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
+  def start(schedulerBackend: KubernetesClusterSchedulerBackend,
+      epc: ExecutorPodController): Unit = {
+    executorPodController = epc
     snapshotsStore.addSubscriber(eventProcessingInterval) {
       onNewSnapshots(schedulerBackend, _)
     }
@@ -87,6 +89,9 @@ private[spark] class ExecutorPodsLifecycleManager(
     // snapshot for this, and we don't do this for executors in the deleted executors cache or
     // that we just removed in this round.
     if (snapshots.nonEmpty) {
+      val numDeleted = executorPodController.commitAndGetTotalDeleted()
+      logInfo(s"Deleted $numDeleted executors," +
+        s"should be same as expected: ${execIdsRemovedInThisRound.size}")
       val latestSnapshot = snapshots.last
       (schedulerBackend.getExecutorIds().map(_.toLong).toSet
         -- latestSnapshot.executorPods.keySet
@@ -119,22 +124,9 @@ private[spark] class ExecutorPodsLifecycleManager(
       execIdsRemovedInRound: mutable.Set[Long]): Unit = {
     removeExecutorFromSpark(schedulerBackend, podState, execId)
     if (shouldDeleteExecutors) {
-      removeExecutorFromK8s(podState.pod)
+      executorPodController.removePodById(execId.toString)
     }
     execIdsRemovedInRound += execId
-  }
-
-  private def removeExecutorFromK8s(updatedPod: Pod): Unit = {
-    // If deletion failed on a previous try, we can try again if resync informs us the pod
-    // is still around.
-    // Delete as best attempt - duplicate deletes will throw an exception but the end state
-    // of getting rid of the pod is what matters.
-    Utils.tryLogNonFatalError {
-      kubernetesClient
-        .pods()
-        .withName(updatedPod.getMetadata.getName)
-        .delete()
-    }
   }
 
   private def removeExecutorFromSpark(

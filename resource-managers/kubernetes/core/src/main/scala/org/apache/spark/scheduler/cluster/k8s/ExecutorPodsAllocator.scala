@@ -72,7 +72,10 @@ private[spark] class ExecutorPodsAllocator(
 
   private var lastSnapshot = ExecutorPodsSnapshot(Nil)
 
-  def start(applicationId: String): Unit = {
+  private var executorPodController: ExecutorPodController = _
+
+  def start(applicationId: String, epc: ExecutorPodController): Unit = {
+    executorPodController = epc
     snapshotsStore.addSubscriber(podAllocationDelay) {
       onNewSnapshots(applicationId, _)
     }
@@ -98,6 +101,7 @@ private[spark] class ExecutorPodsAllocator(
     val currentTime = clock.getTimeMillis()
     val timedOut = newlyCreatedExecutors.flatMap { case (execId, timeCreated) =>
       if (currentTime - timeCreated > podCreationTimeout) {
+        executorPodController.removePodById(execId.toString)
         Some(execId)
       } else {
         logDebug(s"Executor with id $execId was not found in the Kubernetes cluster since it" +
@@ -115,12 +119,8 @@ private[spark] class ExecutorPodsAllocator(
       newlyCreatedExecutors --= timedOut
       if (shouldDeleteExecutors) {
         Utils.tryLogNonFatalError {
-          kubernetesClient
-            .pods()
-            .withLabel(SPARK_APP_ID_LABEL, applicationId)
-            .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-            .withLabelIn(SPARK_EXECUTOR_ID_LABEL, timedOut.toSeq.map(_.toString): _*)
-            .delete()
+          val numDeleted = executorPodController.commitAndGetTotalDeleted()
+          logInfo(s"Deleted $numDeleted executors since they were not detected after timeout")
         }
       }
     }
@@ -170,14 +170,9 @@ private[spark] class ExecutorPodsAllocator(
       if (toDelete.nonEmpty) {
         logInfo(s"Deleting ${toDelete.size} excess pod requests (${toDelete.mkString(",")}).")
         Utils.tryLogNonFatalError {
-          kubernetesClient
-            .pods()
-            .withField("status.phase", "Pending")
-            .withLabel(SPARK_APP_ID_LABEL, applicationId)
-            .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-            .withLabelIn(SPARK_EXECUTOR_ID_LABEL, toDelete.sorted.map(_.toString): _*)
-            .delete()
-          newlyCreatedExecutors --= toDelete
+          val removedIds =
+            executorPodController.removePods(toDelete, Some("Pending"))
+          newlyCreatedExecutors --= removedIds
           knownPendingCount -= knownPendingToDelete.size
         }
       }
@@ -203,9 +198,13 @@ private[spark] class ExecutorPodsAllocator(
           .addToContainers(executorPod.container)
           .endSpec()
           .build()
-        kubernetesClient.pods().create(podWithAttachedContainer)
+        executorPodController.addPod(podWithAttachedContainer)
         newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+      }
+      val numAllocated = executorPodController.commitAndGetTotalAllocated()
+      if (numAllocated != numExecutorsToAllocate) {
+        logDebug(s"Request for $numExecutorsToAllocate executors only added $numAllocated")
       }
     }
 

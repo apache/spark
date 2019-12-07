@@ -40,6 +40,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: ExecutorPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
+    executorPodController: ExecutorPodController,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
@@ -76,8 +77,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
   override def start(): Unit = {
     super.start()
     podAllocator.setTotalExpectedExecutors(initialExecutors)
-    lifecycleEventHandler.start(this)
-    podAllocator.start(applicationId())
+    executorPodController.initialize(kubernetesClient, applicationId())
+    lifecycleEventHandler.start(this, executorPodController)
+    podAllocator.start(applicationId(), executorPodController)
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
   }
@@ -99,20 +101,16 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     if (shouldDeleteExecutors) {
       Utils.tryLogNonFatalError {
-        kubernetesClient
-          .pods()
-          .withLabel(SPARK_APP_ID_LABEL, applicationId())
-          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-          .delete()
+        executorPodController.stop()
       }
-    }
 
-    Utils.tryLogNonFatalError {
-      ThreadUtils.shutdown(executorService)
-    }
+      Utils.tryLogNonFatalError {
+        ThreadUtils.shutdown(executorService)
+      }
 
-    Utils.tryLogNonFatalError {
-      kubernetesClient.close()
+      Utils.tryLogNonFatalError {
+        kubernetesClient.close()
+      }
     }
   }
 
@@ -140,18 +138,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     // by the ExecutorPodsLifecycleManager) will respect that configuration.
     val killTask = new Runnable() {
       override def run(): Unit = Utils.tryLogNonFatalError {
-        val running = kubernetesClient
-          .pods()
-          .withField("status.phase", "Running")
-          .withLabel(SPARK_APP_ID_LABEL, applicationId())
-          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-          .withLabelIn(SPARK_EXECUTOR_ID_LABEL, executorIds: _*)
-
-        if (!running.list().getItems().isEmpty()) {
-          logInfo(s"Forcefully deleting ${running.list().getItems().size()} pods " +
-            s"(out of ${executorIds.size}) that are still running after graceful shutdown period.")
-          running.delete()
-        }
+        val ids = executorPodController.removePods(executorIds.map(_.toLong), Some("Running"))
+        logInfo(s"Forcefully deleting ${ids.size} pods " +
+          s"(out of ${executorIds.size}) that are still running after graceful shutdown period.")
       }
     }
     executorService.schedule(killTask, conf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD),
