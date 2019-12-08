@@ -25,7 +25,7 @@ import static java.util.stream.Collectors.toList;
 import static scala.collection.JavaConverters.mapAsScalaMap;
 
 import org.junit.After;
-import static org.junit.Assert.assertEquals;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -44,18 +44,20 @@ public class JavaHigherOrderFunctionsSuite {
 
     private void checkAnswer(Dataset<Row> actualDS, List<Row> expected) throws Exception {
         List<Row> actual = actualDS.collectAsList();
-        assertEquals(expected.size(), actual.size());
+        Assert.assertEquals(expected.size(), actual.size());
         for (int i = 0; i < expected.size(); i++) {
             Row expectedRow = expected.get(i);
             Row actualRow = actual.get(i);
-            assertEquals(expectedRow.size(), actualRow.size());
+            Assert.assertEquals(expectedRow.size(), actualRow.size());
             for (int j = 0; j < expectedRow.size(); j++) {
                 Object expectedValue = expectedRow.get(j);
                 Object actualValue = actualRow.get(j);
-                if (expectedValue.getClass().isArray()) {
+                if (expectedValue != null && expectedValue.getClass().isArray()) {
                     actualValue = actualValue.getClass().getMethod("array").invoke(actualValue);
+                    Assert.assertArrayEquals((Object[]) expectedValue, (Object[]) actualValue);
+                } else {
+                    Assert.assertEquals(expectedValue, actualValue);
                 }
-                assertEquals(expectedValue, actualValue);
             }
         }
     }
