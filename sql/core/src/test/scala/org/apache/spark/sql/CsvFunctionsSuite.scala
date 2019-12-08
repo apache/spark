@@ -153,7 +153,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   test("infers schemas of a CSV string and pass to to from_csv") {
     val in = Seq("""0.123456789,987654321,"San Francisco"""").toDS()
     val options = Map.empty[String, String].asJava
-    val out = in.select(from_csv('value, schema_of_csv("0.1,1,a"), options) as "parsed")
+    val out = in.select(from_csv($"value", schema_of_csv("0.1,1,a"), options) as "parsed")
     val expected = StructType(Seq(StructField(
       "parsed",
       StructType(Seq(

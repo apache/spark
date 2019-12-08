@@ -685,8 +685,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("y", true)
     checkCast("yes", true)
     checkCast("1", true)
+    checkCast("1 ", true)
 
     checkCast("f", false)
+    checkCast("f\t", false)
     checkCast("false", false)
     checkCast("FAlsE", false)
     checkCast("n", false)

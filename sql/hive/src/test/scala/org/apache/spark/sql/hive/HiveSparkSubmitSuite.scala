@@ -700,7 +700,7 @@ object SPARK_9757 extends QueryTest {
         val df =
           hiveContext
             .range(10)
-            .select(('id + 0.1) cast DecimalType(10, 3) as 'dec)
+            .select(($"id" + 0.1) cast DecimalType(10, 3) as "dec")
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
       }
@@ -709,7 +709,7 @@ object SPARK_9757 extends QueryTest {
         val df =
           hiveContext
             .range(10)
-            .select(callUDF("struct", ('id + 0.2) cast DecimalType(10, 3)) as 'dec_struct)
+            .select(callUDF("struct", ($"id" + 0.2) cast DecimalType(10, 3)) as "dec_struct")
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
       }
@@ -771,8 +771,8 @@ object SPARK_14244 extends QueryTest {
     import hiveContext.implicits._
 
     try {
-      val window = Window.orderBy('id)
-      val df = spark.range(2).select(cume_dist().over(window).as('cdist)).orderBy('cdist)
+      val window = Window.orderBy("id")
+      val df = spark.range(2).select(cume_dist().over(window).as("cdist")).orderBy("cdist")
       checkAnswer(df, Seq(Row(0.5D), Row(1.0D)))
     } finally {
       sparkContext.stop()

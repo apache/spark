@@ -1386,7 +1386,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
-        invertIfNotDefined(Like(e, expression(ctx.pattern)))
+        val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
+          if (str.length != 1) {
+            throw new ParseException("Invalid escape string." +
+              "Escape string must contains only one character.", ctx)
+          }
+          str.charAt(0)
+        }.getOrElse('\\')
+        invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
       case SqlBaseParser.NULL if ctx.NOT != null =>
@@ -1461,7 +1468,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val value = expression(ctx.valueExpression)
     ctx.operator.getType match {
       case SqlBaseParser.PLUS =>
-        value
+        UnaryPositive(value)
       case SqlBaseParser.MINUS =>
         UnaryMinus(value)
       case SqlBaseParser.TILDE =>
@@ -2373,6 +2380,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   type TableHeader = (Seq[String], Boolean, Boolean, Boolean)
 
   /**
+   * Type to keep track of table clauses:
+   * (partitioning, bucketSpec, options, locationSpec, properties, comment).
+   */
+  type TableClauses = (Seq[Transform], Option[BucketSpec], Map[String, String],
+    Map[String, String], Option[String], Option[String])
+
+  /**
    * Validate a create table statement and return the [[TableIdentifier]].
    */
   override def visitCreateTableHeader(
@@ -2607,6 +2621,24 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         ctx.EXTENDED != null)
     }
 
+  override def visitCreateTableClauses(ctx: CreateTableClausesContext): TableClauses = {
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
+    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+
+    val partitioning: Seq[Transform] =
+      Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
+    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
+    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val comment = Option(ctx.comment).map(string)
+    (partitioning, bucketSpec, properties, options, location, comment)
+  }
+
   /**
    * Create a table, returning a [[CreateTableStatement]] logical plan.
    *
@@ -2632,26 +2664,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     if (external) {
-      operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
+      operationNotAllowed("CREATE EXTERNAL TABLE ...", ctx)
     }
-
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-    checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
-    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
-    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
-
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val partitioning: Seq[Transform] =
-      Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
-    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
-    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-
-    val provider = ctx.tableProvider.multipartIdentifier.getText
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
-    val comment = Option(ctx.comment).map(string)
+    val defaultProvider = conf.defaultDataSourceName
+    val provider =
+      Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(defaultProvider)
+    val (partitioning, bucketSpec, properties, options, location, comment) =
+      visitCreateTableClauses(ctx.createTableClauses())
 
     Option(ctx.query).map(plan) match {
       case Some(_) if temp =>
@@ -2706,23 +2726,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed("REPLACE EXTERNAL TABLE ... USING", ctx)
     }
 
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-    checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
-    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
-    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
-
+    val (partitioning, bucketSpec, properties, options, location, comment) =
+      visitCreateTableClauses(ctx.createTableClauses())
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val partitioning: Seq[Transform] =
-      Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
-    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
-    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-
     val provider = ctx.tableProvider.multipartIdentifier.getText
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
-    val comment = Option(ctx.comment).map(string)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
 
     Option(ctx.query).map(plan) match {

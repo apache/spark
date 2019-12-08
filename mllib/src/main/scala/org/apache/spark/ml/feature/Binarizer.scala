@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.attribute.BinaryAttribute
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -193,7 +193,12 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case DoubleType =>
           BinaryAttribute.defaultAttr.withName(outputColName).toStructField()
         case _: VectorUDT =>
-          StructField(outputColName, new VectorUDT)
+          val size = AttributeGroup.fromStructField(schema(inputColName)).size
+          if (size < 0) {
+            StructField(outputColName, new VectorUDT)
+          } else {
+            new AttributeGroup(outputColName, numAttributes = size).toStructField()
+          }
         case _ =>
           throw new IllegalArgumentException(s"Data type $inputType is not supported.")
       }

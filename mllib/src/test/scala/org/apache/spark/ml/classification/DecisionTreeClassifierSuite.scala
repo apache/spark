@@ -249,6 +249,13 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
+    newTree.setLeafCol("predictedLeafId")
+
+    val transformed = newTree.transform(newData)
+    checkNominalOnDF(transformed, "prediction", newTree.numClasses)
+    checkNominalOnDF(transformed, "predictedLeafId", newTree.numLeave)
+    checkVectorSizeOnDF(transformed, "rawPrediction", newTree.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", newTree.numClasses)
 
     MLTestingUtils.checkCopyAndUids(dt, newTree)
 

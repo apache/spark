@@ -66,6 +66,28 @@ private[sql] trait LookupCatalog extends Logging {
   }
 
   /**
+   * Extract session catalog and identifier from a multi-part identifier.
+   */
+  object SessionCatalogAndIdentifier {
+    def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = parts match {
+      case CatalogObjectIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
+        Some(catalog, ident)
+      case _ => None
+    }
+  }
+
+  /**
+   * Extract non-session catalog and identifier from a multi-part identifier.
+   */
+  object NonSessionCatalogAndIdentifier {
+    def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = parts match {
+      case CatalogObjectIdentifier(catalog, ident) if !CatalogV2Util.isSessionCatalog(catalog) =>
+        Some(catalog, ident)
+      case _ => None
+    }
+  }
+
+  /**
    * Extract catalog and namespace from a multi-part identifier with the current catalog if needed.
    * Catalog name takes precedence over namespaces.
    */

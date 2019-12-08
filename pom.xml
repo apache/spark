@@ -118,7 +118,7 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.6.2</maven.version>
+    <maven.version>3.6.3</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -158,7 +158,7 @@
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.6</commons.httpclient.version>
-    <commons.httpcore.version>4.4.10</commons.httpcore.version>
+    <commons.httpcore.version>4.4.12</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -183,7 +183,7 @@
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <janino.version>3.0.15</janino.version>
-    <jersey.version>2.29</jersey.version>
+    <jersey.version>2.29.1</jersey.version>
     <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
@@ -403,6 +403,12 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-webapp</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -1029,6 +1035,10 @@
           <exclusion>
             <groupId>javax.ws.rs</groupId>
             <artifactId>jsr311-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-webapp</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
