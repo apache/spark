@@ -19,6 +19,8 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import org.apache.spark.resource.ResourceProfile
+
 /**
  * A set of tasks submitted together to the low-level TaskScheduler, usually representing
  * missing partitions of a particular stage.
@@ -28,7 +30,8 @@ private[spark] class TaskSet(
     val stageId: Int,
     val stageAttemptId: Int,
     val priority: Int,
-    val properties: Properties) {
+    val properties: Properties,
+    val resources: Option[ResourceProfile] = None) {
   val id: String = stageId + "." + stageAttemptId
 
   override def toString: String = "TaskSet " + id

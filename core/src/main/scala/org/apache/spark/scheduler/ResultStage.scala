@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.CallSite
 
 /**
@@ -34,8 +35,9 @@ private[spark] class ResultStage(
     val partitions: Array[Int],
     parents: List[Stage],
     firstJobId: Int,
-    callSite: CallSite)
-  extends Stage(id, rdd, partitions.length, parents, firstJobId, callSite) {
+    callSite: CallSite,
+    resourceProfile: Option[ResourceProfile])
+  extends Stage(id, rdd, partitions.length, parents, firstJobId, callSite, resourceProfile) {
 
   /**
    * The active job for this result stage. Will be empty if the job has already finished

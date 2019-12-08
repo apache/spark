@@ -31,7 +31,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceUtils
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceUtils}
 import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
@@ -340,10 +340,12 @@ private[spark] class TaskSchedulerImpl(
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
-      if (availableCpus(i) >= CPUS_PER_TASK &&
-        resourcesMeetTaskRequirements(availableResources(i))) {
+      // the specific resource assignments that would be given to a task
+      val taskResAssignments = HashMap[String, ResourceInformation]()
+      if (resourcesMeetTaskRequirements(taskSet, availableCpus(i), availableResources(i),
+        taskResAssignments)) {
         try {
-          for (task <- taskSet.resourceOffer(execId, host, maxLocality, availableResources(i))) {
+          for (task <- taskSet.resourceOffer(execId, host, maxLocality, taskResAssignments.toMap)) {
             tasks(i) += task
             val tid = task.taskId
             taskIdToTaskSetManager.put(tid, taskSet)
@@ -353,7 +355,7 @@ private[spark] class TaskSchedulerImpl(
             assert(availableCpus(i) >= 0)
             task.resources.foreach { case (rName, rInfo) =>
               // Remove the first n elements from availableResources addresses, these removed
-              // addresses are the same as that we allocated in taskSet.resourceOffer() since it's
+              // addresses are the same as that we allocated in taskResourceAssignments since it's
               // synchronized. We don't remove the exact addresses allocated because the current
               // approach produces the identical result with less time complexity.
               availableResources(i).getOrElse(rName,
@@ -381,10 +383,67 @@ private[spark] class TaskSchedulerImpl(
 
   /**
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
+   * The only task resources we look at from global confs are CPUs if not specified in the
+   * ResourceProfile, otherwise global task resources are ignored if a ResourceProfile is
+   * specified.
    */
-  private def resourcesMeetTaskRequirements(resources: Map[String, Buffer[String]]): Boolean = {
-    val resourcesFree = resources.map(r => r._1 -> r._2.length)
-    ResourceUtils.resourcesMeetRequirements(resourcesFree, resourcesReqsPerTask)
+  private def resourcesMeetTaskRequirements(
+      taskSet: TaskSetManager,
+      availCpus: Int,
+      availWorkerResources: Map[String, Buffer[String]],
+      taskResourceAssignments: HashMap[String, ResourceInformation]): Boolean = {
+
+    val defaultProf = ResourceProfile.getOrCreateDefaultProfile(conf)
+    val taskSetProf = taskSet.taskSet.resources.getOrElse(defaultProf)
+
+    logInfo("task set resources is: " + taskSetProf)
+
+    val taskCpus = taskSetProf.taskResources.get(ResourceProfile.CPUS)
+      .map(_.amount.toInt).getOrElse(CPUS_PER_TASK)
+
+    // check is ResourceProfile has cpus first since that is common case
+    if (availCpus < taskCpus) {
+      return false
+    }
+
+    val localTaskReqAssign = HashMap[String, ResourceInformation]()
+    // SPARK internal scheduler will only base it off the counts, if
+    // user is trying to use something else they will have to write their own plugin
+
+    if (taskSetProf.taskResources.isEmpty) {
+      return true
+    }
+
+    val tsResources = taskSetProf.taskResources
+    logInfo("task resources are: " + tsResources)
+
+    for (rName <- tsResources.keys) {
+      val resourceReqs = tsResources.get(rName).get
+      val taskReqAmount = resourceReqs.amount
+      logInfo("actualCount is: " + taskReqAmount + " " + resourceReqs)
+
+      // TODO - for debugging - perhaps remove
+      if (!availWorkerResources.contains(rName)) {
+        logInfo(s"worker doesn't contain resource: $rName")
+        return false
+      }
+      val rInfo = availWorkerResources.get(rName).get
+      val workerAv = rInfo.size
+      logInfo(s"available type is: $rName, count is: $workerAv")
+      // TODO - end debugging
+
+      val numWorkerResourceAvail = availWorkerResources.get(rName).map(_.size).getOrElse(0)
+      if (numWorkerResourceAvail >= taskReqAmount) {
+        logInfo(s"good to go for $rName")
+        localTaskReqAssign.put(rName, new ResourceInformation(rName,
+          rInfo.take(taskReqAmount.toInt).toArray))
+      } else {
+        return false
+      }
+    }
+
+    taskResourceAssignments ++= localTaskReqAssign
+    true
   }
 
   /**

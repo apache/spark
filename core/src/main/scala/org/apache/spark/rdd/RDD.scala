@@ -42,6 +42,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
@@ -1714,11 +1715,24 @@ abstract class RDD[T: ClassTag](
   @Since("2.4.0")
   def barrier(): RDDBarrier[T] = withScope(new RDDBarrier[T](this))
 
+  // @Experimental
+  // @Since("3.0.0")
+  def withResources(stageResources: ResourceProfile): this.type = {
+    resourceProfile = Some(stageResources)
+    logInfo("adding resource profile to rdd: " + resourceProfile)
+    this
+  }
+
+  def getResourceProfile(): Option[ResourceProfile] = resourceProfile
+
   // =======================================================================
   // Other internal methods and fields
   // =======================================================================
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
+
+  // TODO - or default?
+  private var resourceProfile: Option[ResourceProfile] = None
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = sc.getCallSite()
@@ -1838,7 +1852,9 @@ abstract class RDD[T: ClassTag](
           info.numCachedPartitions, bytesToString(info.memSize),
           bytesToString(info.externalBlockStoreSize), bytesToString(info.diskSize)))
 
-      s"$rdd [$persistence]" +: storageInfo
+      val resourceProfileInfo = rdd.getResourceProfile().map(x => x.toString()).getOrElse("")
+
+      s"$rdd [$persistence][$resourceProfileInfo][isBarrier = $isBarrier()]" +: storageInfo
     }
 
     // Apply a different rule to the last child

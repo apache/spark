@@ -22,6 +22,7 @@ import scala.collection.mutable.HashSet
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.CallSite
 
 /**
@@ -52,6 +53,7 @@ import org.apache.spark.util.CallSite
  * @param firstJobId ID of the first job this stage was part of, for FIFO scheduling.
  * @param callSite Location in the user program associated with this stage: either where the target
  *   RDD was created, for a shuffle map stage, or where the action for a result stage was called.
+ * @param resourceProfile The ResourceProfile to use with this Stage
  */
 private[scheduler] abstract class Stage(
     val id: Int,
@@ -59,7 +61,8 @@ private[scheduler] abstract class Stage(
     val numTasks: Int,
     val parents: List[Stage],
     val firstJobId: Int,
-    val callSite: CallSite)
+    val callSite: CallSite,
+    val resourceProfile: Option[ResourceProfile])
   extends Logging {
 
   val numPartitions = rdd.partitions.length
@@ -79,7 +82,8 @@ private[scheduler] abstract class Stage(
    * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
    * have been created).
    */
-  private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
+  private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId,
+    resourceProfile = resourceProfile)
 
   /**
    * Set of stage attempt IDs that have failed. We keep track of these failures in order to avoid
@@ -100,7 +104,8 @@ private[scheduler] abstract class Stage(
     val metrics = new TaskMetrics
     metrics.register(rdd.sparkContext)
     _latestInfo = StageInfo.fromStage(
-      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences)
+      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
+      resourceProfile = resourceProfile)
     nextAttemptId += 1
   }
 

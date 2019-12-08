@@ -1450,6 +1450,12 @@ package object config {
       .stringConf
       .createWithDefault(SchedulingMode.FIFO.toString)
 
+  private[spark] val RESOURCE_PROFILE_MERGE_CONFLICTS =
+    ConfigBuilder("spark.scheduler.resourceProfile.mergeConflicts")
+      .booleanConf
+      .createWithDefault(false)
+
+
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
       .timeConf(TimeUnit.MILLISECONDS)

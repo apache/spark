@@ -31,6 +31,7 @@ import org.scalatest.Assertions._
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.SerializerInstance
@@ -1646,7 +1647,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(FakeRackUtil.numBatchInvocation === 1)
   }
 
-  test("TaskSetManager allocate resource addresses from available resources") {
+  test("TaskSetManager passes task resource along") {
     import TestUtils._
 
     sc = new SparkContext("local", "test")
@@ -1655,15 +1656,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(1)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
-    val availableResources = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
-    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF, availableResources)
+    val taskResourceAssignments = Map(GPU -> new ResourceInformation(GPU, Array("0", "1")))
+    val taskOption =
+      manager.resourceOffer("exec1", "host1", NO_PREF, taskResourceAssignments)
     assert(taskOption.isDefined)
     val allocatedResources = taskOption.get.resources
     assert(allocatedResources.size == 1)
     assert(allocatedResources(GPU).addresses sameElements Array("0", "1"))
-    // Allocated resource addresses should still present in `availableResources`, they will only
-    // get removed inside TaskSchedulerImpl later.
-    assert(availableResources(GPU) sameElements Array("0", "1", "2", "3"))
   }
 
   test("SPARK-26755 Ensure that a speculative task is submitted only once for execution") {

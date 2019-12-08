@@ -379,7 +379,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      availableResources: Map[String, Seq[String]] = Map.empty)
+      taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -444,6 +444,7 @@ private[spark] class TaskSetManager(
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
+        /*
         val extraResources = sched.resourcesReqsPerTask.map { taskReq =>
           val rName = taskReq.resourceName
           val count = taskReq.amount
@@ -454,6 +455,7 @@ private[spark] class TaskSetManager(
           val allocatedAddresses = rAddresses.take(count)
           (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
         }.toMap
+        */
 
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(
@@ -466,7 +468,7 @@ private[spark] class TaskSetManager(
           addedFiles,
           addedJars,
           task.localProperties,
-          extraResources,
+          taskResourceAssignments,
           serializedTask)
       }
     } else {
