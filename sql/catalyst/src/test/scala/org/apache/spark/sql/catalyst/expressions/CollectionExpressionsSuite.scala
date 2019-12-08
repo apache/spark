@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
 import scala.util.Random
+import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
