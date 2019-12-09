@@ -2520,6 +2520,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitCreateNamespace(ctx: CreateNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    import SupportsNamespaces._
     checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.PROPERTIES, "WITH PROPERTIES", ctx)
@@ -2532,11 +2533,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     var properties = ctx.tablePropertyList.asScala.headOption
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
-    Option(ctx.comment).map(string).map {
-      properties += SupportsNamespaces.PROP_COMMENT -> _
+
+    if (properties.keySet.intersect(RESERVED_PROPERTIES.asScala.toSet).nonEmpty) {
+      throw new ParseException(s"Disallow to specify reserved properties, including" +
+        s" ${RESERVED_PROPERTIES.asScala.mkString("(", ",", ")")}.", ctx)
     }
-    ctx.locationSpec.asScala.headOption.map(visitLocationSpec).map {
-      properties += SupportsNamespaces.PROP_LOCATION -> _
+
+    Option(ctx.comment).map(string).foreach {
+      properties += PROP_COMMENT -> _
+    }
+    ctx.locationSpec.asScala.headOption.map(visitLocationSpec).foreach {
+      properties += PROP_LOCATION -> _
     }
 
     CreateNamespaceStatement(

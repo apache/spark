@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -853,6 +854,15 @@ class DataSourceV2SQLSuite
 
       // The following will be no-op since the namespace already exists.
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
+    }
+  }
+
+  test("CreateNameSpace: reserved properties") {
+    withNamespace("testcat.ns1") {
+      val exception = intercept[ParseException] {
+        sql("CREATE NAMESPACE testcat.ns1 WITH DBPROPERTIES('location'='/dummy/path')")
+      }
+      assert(exception.getMessage.contains("Disallow to specify reserved properties"))
     }
   }
 
