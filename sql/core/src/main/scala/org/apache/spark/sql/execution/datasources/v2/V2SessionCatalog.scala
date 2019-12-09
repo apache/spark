@@ -229,7 +229,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
         // validate that this catalog's reserved properties are not removed
         changes.foreach {
           case remove: RemoveProperty
-            if SupportsNamespaces.REVERSED_PROPERTIES.contains(remove.property) =>
+            if SupportsNamespaces.RESERVED_PROPERTIES.contains(remove.property) =>
             throw new UnsupportedOperationException(
               s"Cannot remove reserved property: ${remove.property}")
           case _ =>

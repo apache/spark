@@ -757,7 +757,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
       actual: scala.collection.Map[String, String]): Unit = {
     // remove location and comment that are automatically added by HMS unless they are expected
     val toRemove =
-      SupportsNamespaces.REVERSED_PROPERTIES.asScala.filter(expected.contains)
+      SupportsNamespaces.RESERVED_PROPERTIES.asScala.filter(expected.contains)
     assert(expected -- toRemove === actual)
   }
 
@@ -1015,7 +1015,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     catalog.createNamespace(testNs, emptyProps)
 
-    SupportsNamespaces.REVERSED_PROPERTIES.asScala.foreach { p =>
+    SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { p =>
       val exc = intercept[UnsupportedOperationException] {
         catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
       }

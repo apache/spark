@@ -82,20 +82,8 @@ public interface SupportsNamespaces extends CatalogPlugin {
    *
    * They need specific syntax to modify
    */
-  List<String> REVERSED_PROPERTIES =
+  List<String> RESERVED_PROPERTIES =
     Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_OWNER_NAME, PROP_OWNER_TYPE);
-
-  /**
-   * Specify the default owner name for `CREATE` namespace.
-   *
-   */
-  default String defaultOwner() { return Utils.getCurrentUserName(); }
-
-  /**
-   *
-   * Specify the default owner type for `CREATE` namespace.
-   */
-  default String defaultOwnerType() { return PrincipalType.USER.name(); }
 
   /**
    * Return a default namespace for the catalog.

@@ -97,9 +97,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
           s"because view support in catalog has not been implemented yet")
 
     case AlterNamespaceSetPropertiesStatement(NonSessionCatalog(catalog, nameParts), properties) =>
-      if (properties.keySet.intersect(REVERSED_PROPERTIES.asScala.toSet).nonEmpty) {
-        throw new AnalysisException(s"Cannot directly modify the reversed properties" +
-          s" ${REVERSED_PROPERTIES.asScala.mkString("[", ",", "]")}.")
+      if (properties.keySet.intersect(RESERVED_PROPERTIES.asScala.toSet).nonEmpty) {
+        throw new AnalysisException("Cannot directly modify the reserved properties" +
+          s" ${RESERVED_PROPERTIES.asScala.mkString("[", ",", "]")}.")
       }
       AlterNamespaceSetProperties(catalog.asNamespaceCatalog, nameParts, properties)
 

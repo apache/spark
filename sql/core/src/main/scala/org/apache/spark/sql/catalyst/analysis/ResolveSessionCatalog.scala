@@ -173,9 +173,9 @@ class ResolveSessionCatalog(
         throw new AnalysisException(
           s"The database name is not valid: ${nameParts.quoted}")
       }
-      if (properties.keySet.intersect(REVERSED_PROPERTIES.asScala.toSet).nonEmpty) {
-        throw new AnalysisException(s"Cannot directly modify the reversed properties" +
-          s" ${REVERSED_PROPERTIES.asScala.mkString("[", ",", "]")}.")
+      if (properties.keySet.intersect(RESERVED_PROPERTIES.asScala.toSet).nonEmpty) {
+        throw new AnalysisException("Cannot directly modify the reserved properties" +
+          s" ${RESERVED_PROPERTIES.asScala.mkString("[", ",", "]")}.")
       }
       AlterDatabasePropertiesCommand(nameParts.head, properties)
 
@@ -312,7 +312,7 @@ class ResolveSessionCatalog(
       }
       val comment = c.properties.get(PROP_COMMENT)
       val location = c.properties.get(PROP_LOCATION)
-      val newProperties = c.properties -- REVERSED_PROPERTIES.asScala
+      val newProperties = c.properties -- RESERVED_PROPERTIES.asScala
       CreateDatabaseCommand(nameParts.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespaceStatement(SessionCatalog(_, nameParts), _, _) =>

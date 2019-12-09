@@ -49,7 +49,7 @@ case class DescribeNamespaceExec(
     rows += toCatalystRow("Owner Type", metadata.getOrDefault(PROP_OWNER_TYPE, ""))
 
     if (isExtended) {
-      val properties = metadata.asScala -- REVERSED_PROPERTIES.asScala
+      val properties = metadata.asScala -- RESERVED_PROPERTIES.asScala
       if (properties.nonEmpty) {
         rows += toCatalystRow("Properties", properties.toSeq.mkString("(", ",", ")"))
       }
