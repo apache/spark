@@ -448,24 +448,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
-  test("SPARK-30151: user-specified schema not match relation schema") {
-    // persistent: (a STRING, b INT)
-    val persistentSchema =
-      DataSource(spark, classOf[TestJdbcRelationProvider].getCanonicalName)
-        .resolveRelation()
-        .schema
-    // specified: (a STRING, c INT)
-    val specifiedSchema = new StructType()
-      .add(StructField("a", StringType))
-      .add(StructField("c", IntegerType))
-    val msg = intercept[AnalysisException] {
-      spark.read.format(classOf[TestJdbcRelationProvider].getCanonicalName)
-        .schema(specifiedSchema).load()
-    }.getMessage
-    assert(msg.contains(s"persistentFields: ${persistentSchema("b").toDDL}"))
-    assert(msg.contains(s"specifiedFields: ${specifiedSchema("c").toDDL}"))
-  }
-
   test("prevent all column partitioning") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
@@ -508,11 +490,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     // when users do not specify the schema
     checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
 
-    // when users specify the schema
+    // when users specify a wrong schema
     val inputSchema = new StructType().add("s", IntegerType, nullable = false)
     val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
-    assert(e.getMessage.contains(
-      "a specified schema for org.apache.spark.sql.sources.SimpleScanSource is not necessary"))
+    assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
   }
 
   test("read a data source that does not extend RelationProvider") {
