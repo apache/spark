@@ -39,7 +39,7 @@ SELECT boolean('   f           ') AS `false`
 -- !query 4 schema
 struct<false:boolean>
 -- !query 4 output
-NULL
+false
 
 
 -- !query 5
@@ -296,7 +296,7 @@ SELECT boolean(string('    true   ')) AS true,
 -- !query 36 schema
 struct<true:boolean,false:boolean>
 -- !query 36 output
-NULL	NULL
+true	false
 
 
 -- !query 37

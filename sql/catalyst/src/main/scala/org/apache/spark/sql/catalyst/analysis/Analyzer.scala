@@ -286,7 +286,11 @@ class Analyzer(
           case (_, CalendarIntervalType) => Cast(TimeSub(l, r), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
-          case (_, DateType) => SubtractDates(l, r)
+          case (_, DateType) => if (conf.ansiEnabled) {
+            DateDiff(l, r)
+          } else {
+            SubtractDates(l, r)
+          }
           case (DateType, _) => DateSub(l, r)
           case _ => s
         }

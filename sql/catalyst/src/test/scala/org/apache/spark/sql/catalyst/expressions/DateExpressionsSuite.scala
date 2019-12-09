@@ -1122,7 +1122,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("subtract dates") {
     val end = LocalDate.of(2019, 10, 5)
     checkEvaluation(SubtractDates(Literal(end), Literal(end)),
-      new CalendarInterval(0, 0))
+      new CalendarInterval(0, 0, 0))
     checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
       IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 days")))
     checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),

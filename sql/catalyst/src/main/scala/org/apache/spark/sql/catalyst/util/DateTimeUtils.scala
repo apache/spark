@@ -952,7 +952,7 @@ object DateTimeUtils {
       LocalDate.ofEpochDay(startDate),
       LocalDate.ofEpochDay(endDate))
     val months = period.getMonths + 12 * period.getYears
-    val microseconds = period.getDays * MICROS_PER_DAY
-    new CalendarInterval(months, microseconds)
+    val days = period.getDays
+    new CalendarInterval(months, days, 0)
   }
 }

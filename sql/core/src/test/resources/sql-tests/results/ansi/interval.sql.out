@@ -183,7 +183,7 @@ struct<min(CAST(v AS INTERVAL)):interval>
 -- !query 22
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15')
 -- !query 22 schema
-struct<multiply_interval(timestampdiff(TIMESTAMP '2019-10-15 10:11:12.001002', CAST(DATE '2019-10-15' AS TIMESTAMP)), CAST(3 AS DOUBLE)):interval>
+struct<multiply_interval(subtracttimestamps(TIMESTAMP '2019-10-15 10:11:12.001002', CAST(DATE '2019-10-15' AS TIMESTAMP)), CAST(3 AS DOUBLE)):interval>
 -- !query 22 output
 30 hours 33 minutes 36.003006 seconds
 
@@ -199,7 +199,7 @@ struct<multiply_interval(INTERVAL '4 months 14 days 0.000003 seconds', CAST(1.5 
 -- !query 24
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5
 -- !query 24 schema
-struct<divide_interval(timestampdiff(TIMESTAMP '2019-10-15 00:00:00', TIMESTAMP '2019-10-14 00:00:00'), CAST(1.5 AS DOUBLE)):interval>
+struct<divide_interval(subtracttimestamps(TIMESTAMP '2019-10-15 00:00:00', TIMESTAMP '2019-10-14 00:00:00'), CAST(1.5 AS DOUBLE)):interval>
 -- !query 24 output
 16 hours
 
