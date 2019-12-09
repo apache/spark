@@ -115,14 +115,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
               rowWriter.write($index, (Decimal) null, $p, $s);
             }
            """
-        case CalendarIntervalType =>
-          // For CalendarInterval, it should have 16 bytes to store months(Int), days(Int),
-          // microseconds(Long) for future update even it's null now.
-          s"""
-            if (mutableRow.isNullAt($index)) {
-              rowWriter.write($index, (CalendarInterval) null);
-            }
-           """
         case other => ""
       }
       (createCode, extract + patch)

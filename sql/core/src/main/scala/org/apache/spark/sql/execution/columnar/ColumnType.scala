@@ -706,7 +706,7 @@ private[columnar] case class MAP(dataType: MapType)
 }
 
 private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval]
-  with DirectCopyColumnType[CalendarInterval]{
+  with DirectCopyColumnType[CalendarInterval] {
 
   override def dataType: DataType = CalendarIntervalType
 

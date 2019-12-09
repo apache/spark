@@ -296,10 +296,8 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
 }
 
 private[columnar] final class IntervalColumnStats extends ColumnStats {
-  protected var upper: CalendarInterval =
-    new CalendarInterval(Int.MinValue, Int.MinValue, Long.MinValue)
-  protected var lower: CalendarInterval =
-    new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MaxValue)
+  protected var upper: CalendarInterval = CalendarInterval.MIN_VALUE
+  protected var lower: CalendarInterval = CalendarInterval.MAX_VALUE
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
