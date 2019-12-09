@@ -151,7 +151,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }
 
       // Setup unique distinct aggregate children.
-      val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
+      val distinctAggFunChildren = distinctAggGroups.keySet.flatten.toSeq
+      val distinctAggFilterChildren = distinctAggGroups.values.flatten.toSeq
+        .flatMap(ae => ae.filter.map(_.children.filter(!_.foldable)))
+        .flatten
+      val distinctAggChildren = (distinctAggFunChildren ++ distinctAggFilterChildren).distinct
       val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
 
@@ -163,7 +167,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
           // Expand projection
           val projection = distinctAggChildren.map {
-            case e if group.contains(e) => e
+            case e if group.contains(e) || distinctAggFilterChildren.contains(e) => e
             case e => nullify(e)
           } :+ id
 
@@ -173,7 +177,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val naf = patchAggregateFunctionChildren(af) { x =>
               distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _))
             }
-            (e, e.copy(aggregateFunction = naf, isDistinct = false))
+            val filterOpt = e.filter.map { fe =>
+              val newChildren = fe.children.map(c => distinctAggChildAttrLookup.getOrElse(c, c))
+              fe.withNewChildren(newChildren)
+            }
+            (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = filterOpt))
           }
 
           (projection, operators)
@@ -183,9 +191,12 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       // only expand unfoldable children
       val regularAggExprs = aggExpressions
         .filter(e => !e.isDistinct && e.children.exists(!_.foldable))
-      val regularAggChildren = regularAggExprs
+      val regularAggFunChildren = regularAggExprs
         .flatMap(_.aggregateFunction.children.filter(!_.foldable))
-        .distinct
+      val regularAggFilterChildren = regularAggExprs
+        .flatMap(ae => ae.filter.map(_.children.filter(!_.foldable)))
+        .flatten
+      val regularAggChildren = (regularAggFunChildren ++ regularAggFilterChildren).distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
 
       // Setup aggregates for 'regular' aggregate expressions.
@@ -194,7 +205,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
         val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrLookup.get)
-        val operator = Alias(e.copy(aggregateFunction = af), e.sql)()
+        val filterOpt = e.filter.map { fe =>
+          val newChildren = fe.children.map(c => regularAggChildAttrLookup.getOrElse(c, c))
+          fe.withNewChildren(newChildren)
+        }
+        val operator = Alias(e.copy(aggregateFunction = af, filter = filterOpt), e.sql)()
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(
