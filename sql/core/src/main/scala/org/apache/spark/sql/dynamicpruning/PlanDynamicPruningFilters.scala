@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, Dynamic
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan, SubqueryBroadcastExec}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, BroadcastQueryStageExec}
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
@@ -62,9 +63,9 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
         val canReuseExchange = reuseBroadcast && buildKeys.nonEmpty &&
           plan.find {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _) =>
-              left.sameResult(sparkPlan)
+              sameResult(left, sparkPlan)
             case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right) =>
-              right.sameResult(sparkPlan)
+              sameResult(right, sparkPlan)
             case _ => false
           }.isDefined
 
@@ -72,7 +73,11 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
           val mode = broadcastMode(buildKeys, buildPlan)
           val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, sparkPlan)
           // plan a broadcast exchange of the build side of the join
-          val exchange = BroadcastExchangeExec(mode, executedPlan)
+          val subPlan = executedPlan match {
+            case adaptive: AdaptiveSparkPlanExec => adaptive.initialPlan
+            case self => self
+          }
+          val exchange = BroadcastExchangeExec(mode, subPlan)
           val name = s"dynamicpruning#${exprId.id}"
           // place the broadcast adaptor for reusing the broadcast results on the probe side
           val broadcastValues =
@@ -88,6 +93,17 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
           DynamicPruningExpression(expressions.InSubquery(
             Seq(value), ListQuery(aggregate, childOutputs = aggregate.output)))
         }
+    }
+  }
+
+  private def sameResult(buildPlan: SparkPlan, subPlan: SparkPlan): Boolean = {
+    buildPlan match {
+      case BroadcastQueryStageExec(_, BroadcastExchangeExec(_, WholeStageCodegenExec(child))) =>
+        child.sameResult(subPlan)
+      case BroadcastQueryStageExec(_, BroadcastExchangeExec(_, child)) =>
+        child.sameResult(subPlan)
+      case self =>
+        self.sameResult(subPlan)
     }
   }
 }

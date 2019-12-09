@@ -1305,4 +1305,65 @@ class DynamicPartitionPruningSuite
       )
     }
   }
+
+  test("DPP + adaptive execution: dpp in nested subquery") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "1.5",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      withTable("df1", "df2") {
+        spark.range(100)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df1")
+
+        spark.range(10)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df2")
+
+        val df = sql(s"SELECT * FROM df2 WHERE df2.k = " +
+          s" (SELECT max(df2.k) FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2)")
+
+          checkAnswer(df, Row(1, 1) :: Nil)
+      }
+    }
+  }
+
+  test("DPP + adaptive execution: dpp in nested subquery + reuse broadcast") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "1.5",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTable("df1", "df2") {
+        spark.range(100)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df1")
+
+        spark.range(10)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df2")
+
+        val df = sql(s"SELECT * FROM df2 WHERE df2.k = " +
+          s" (SELECT max(df2.k) FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2)")
+
+        checkAnswer(df, Row(1, 1) :: Nil)
+      }
+    }
+  }
 }

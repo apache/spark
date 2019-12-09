@@ -787,8 +787,11 @@ case class SubqueryExec(name: String, child: SparkPlan)
 }
 
 object SubqueryExec {
+
+  val poolName = "subquery"
+
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+    ThreadUtils.newDaemonCachedThreadPool(poolName, 16))
 }
 
 /**

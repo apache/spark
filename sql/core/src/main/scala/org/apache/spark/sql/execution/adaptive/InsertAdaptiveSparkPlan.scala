@@ -22,9 +22,10 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{execution, SparkSession}
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningSubquery
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.internal.SQLConf
@@ -35,7 +36,8 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * Note that this rule is stateful and thus should not be reused across query executions.
  */
-case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan] {
+case class InsertAdaptiveSparkPlan(
+    session: SparkSession) extends Rule[SparkPlan] {
 
   private val conf = session.sessionState.conf
 
@@ -45,7 +47,13 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
   // Exchange-reuse is shared across the entire query, including sub-queries.
   private val stageCache = new TrieMap[SparkPlan, QueryStageExec]()
 
-  override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
+  override def apply(plan: SparkPlan): SparkPlan = {
+    // This rule can be called in a subquery sub-thread too
+    // isSubquery cannot always be false, need to check if current is subquery
+    // TODO a better way to check if it's called from subquery execution
+    val isSubquery = Thread.currentThread().getName.contains(SubqueryExec.poolName)
+    applyInternal(plan, isSubquery)
+  }
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
@@ -53,12 +61,13 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
       try {
         // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse. Fall
         // back to non-adaptive mode if adaptive execution is supported in any of the sub-queries.
-        val subqueryMap = buildSubqueryMap(plan)
+        val planDynamicPruningRule = PlanDynamicPruningFilters(session)
+        val prePlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, Seq(planDynamicPruningRule))
+        val subqueryMap = buildSubqueryMap(prePlan)
         val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
-        val preprocessingRules = Seq(
-          planSubqueriesRule)
+        val preprocessingRules = Seq(planSubqueriesRule)
         // Run pre-processing rules.
-        val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preprocessingRules)
+        val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(prePlan, preprocessingRules)
         logDebug(s"Adaptive execution enabled for plan: $plan")
         AdaptiveSparkPlanExec(newPlan, session, preprocessingRules,
           subqueryCache, stageCache, isSubquery)
@@ -77,10 +86,8 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
   }
 
   private def supportAdaptive(plan: SparkPlan): Boolean = {
-    // TODO migrate dynamic-partition-pruning onto adaptive execution.
     sanityCheck(plan) &&
       !plan.logicalLink.exists(_.isStreaming) &&
-      !plan.expressions.exists(_.find(_.isInstanceOf[DynamicPruningSubquery]).isDefined) &&
     plan.children.forall(supportAdaptive)
   }
 
@@ -102,6 +109,21 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
         val scalarSubquery = execution.ScalarSubquery(
           SubqueryExec(s"subquery${exprId.id}", executedPlan), exprId)
         subqueryMap.put(exprId.id, scalarSubquery)
+      case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
+        val expr = if (values.length == 1) {
+          values.head
+        } else {
+          CreateNamedStruct(
+            values.zipWithIndex.flatMap { case (v, index) =>
+              Seq(Literal(s"col_$index"), v)
+            }
+          )
+        }
+        val executedPlan = compileSubquery(query)
+        verifyAdaptivePlan(executedPlan, query)
+        val inSubquery = InSubqueryExec(expr,
+          SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
+        subqueryMap.put(exprId.id, inSubquery)
       case _ =>
     }))
 
