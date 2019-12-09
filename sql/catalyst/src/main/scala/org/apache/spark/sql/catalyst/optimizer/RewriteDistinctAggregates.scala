@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.IntegerType
  * aggregation in which the regular aggregation expressions and every distinct clause is aggregated
  * in a separate group. The results are then combined in a second aggregate.
  *
- * Example one queried without filter clauses (in scala):
+ * First example: queried without filter clauses (in scala):
  * {{{
  *   val data = Seq(
  *     (1, "a", "ca1", "cb1", 10),
@@ -75,7 +75,7 @@ import org.apache.spark.sql.types.IntegerType
  *       LocalTableScan [...]
  * }}}
  *
- * Example two aggregate function without distinct and with filter clauses (in sql):
+ * Second example: aggregate function without distinct and with filter clauses (in sql):
  * {{{
  *   select count(distinct cat1) as cat1_cnt, count(distinct cat2) as cat2_cnt,
  *     sum(value) filter (where id > 1) as total
@@ -113,7 +113,7 @@ import org.apache.spark.sql.types.IntegerType
  *       LocalTableScan [...]
  * }}}
  *
- * Example three aggregate function with distinct and filter clauses (in sql):
+ * Third example: aggregate function with distinct and filter clauses (in sql):
  * {{{
  *   select count(distinct cat1) filter (where id > 1) as cat1_cnt,
  *     count(distinct cat2) as cat2_cnt, sum(value) as total
