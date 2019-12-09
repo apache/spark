@@ -1785,12 +1785,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       numSlots: Int): (TaskSetManager, ManualClock) = {
     sc = new SparkContext("local", "test")
     sc.conf.set(config.SPECULATION_ENABLED, true)
-    // Set the quantile to be 1.0 so that regular speculation would not be triggered
     sc.conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
     // Set the number of slots per executor
     sc.conf.set(config.EXECUTOR_CORES.key, numSlots.toString)
     sc.conf.set(config.CPUS_PER_TASK.key, "1")
-    // Set the threshold to be 60 minutes
     if (speculationThresholdOpt.isDefined) {
       sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
     }
@@ -1801,6 +1799,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     manager.isZombie = false
 
+    // Offer resources for the task to start
+    for (i <- 1 to numTasks) {
+      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF)
+    }
     (manager, clock)
   }
 
@@ -1809,16 +1811,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       numTasks: Int,
       numSlots: Int): Unit = {
     val (manager, clock) = testSpeculationDurationSetup(
+      // Set the threshold to be 60 minutes
       if (speculationThresholdProvided) Some("60min") else None,
+      // Set the quantile to be 1.0 so that regular speculation would not be triggered
       1.0,
       numTasks,
       numSlots
     )
-
-    // Offer resources for the task to start
-    for (i <- 1 to numTasks) {
-      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF)
-    }
 
     // if the time threshold has not been exceeded, no speculative run should be triggered
     clock.advance(1000*60*60)
@@ -1855,6 +1854,26 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   test("SPARK-29976 when a speculation time threshold is provided, should not speculative " +
       "if there are too many tasks in the stage even though time threshold is provided") {
     testSpeculationDurationThreshold(true, 2, 1)
+  }
+
+  test("SPARK-29976 Regular speculation configs should still take effect even when a " +
+      "threshold is provided") {
+    val (manager, clock) = testSpeculationDurationSetup(
+      Some("60min"),
+      speculationQuantile = 0.5,
+      numTasks = 2,
+      numSlots = 2
+    )
+
+    // Task duration can't be 0, advance 1 sec
+    clock.advance(1000)
+    // Mark one of the task succeeded, which should satisfy the quantile
+    manager.handleSuccessfulTask(0, createTaskResult(0))
+    // Advance 1 more second so the remaining task takes longer than medium but doesn't satisfy the
+    // duration threshold yet
+    clock.advance(1000)
+    assert(manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.size == 1)
   }
 
   test("TaskOutputFileAlreadyExistException lead to task set abortion") {
