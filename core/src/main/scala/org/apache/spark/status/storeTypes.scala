@@ -19,6 +19,9 @@ package org.apache.spark.status
 
 import java.lang.{Long => JLong}
 import java.util.Date
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.mutable
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
@@ -443,6 +446,24 @@ private[spark] class PoolData(
     @KVIndexParam val name: String,
     val stageIds: Set[Int])
 
+private[spark] class AppStatusListenerData(
+    val appId: String,
+    val attemptId: Option[String],
+    val liveStages: ConcurrentHashMap[(Int, Int), LiveStage],
+    val liveJobs: mutable.HashMap[Int, LiveJob],
+    val liveExecutors: mutable.HashMap[String, LiveExecutor],
+    val deadExecutors: mutable.HashMap[String, LiveExecutor],
+    val liveTasks: mutable.HashMap[Long, LiveTask],
+    val liveRDDs: mutable.HashMap[Int, LiveRDD],
+    val pools: mutable.HashMap[String, SchedulerPool],
+    val appInfo: ApplicationInfo,
+    val coresPerTask: Int,
+    val appSummary: AppSummary,
+    val activeExecutorCount: Int) {
+
+  @KVIndex @JsonIgnore
+  def key: Array[Option[String]] = Array(Some(appId), attemptId)
+}
 /**
  * A class with information about an app, to be used by the UI. There's only one instance of
  * this summary per application, so its ID in the store is the class name.

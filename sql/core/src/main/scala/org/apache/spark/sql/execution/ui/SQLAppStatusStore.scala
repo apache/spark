@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.ui
 
 import java.lang.{Long => JLong}
 import java.util.Date
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -143,3 +144,13 @@ case class SQLPlanMetric(
     name: String,
     accumulatorId: Long,
     metricType: String)
+
+class SQLAppStatusListenerData(
+    val appId: String,
+    val attemptId: Option[String],
+    val liveExecutions: ConcurrentHashMap[Long, LiveExecutionData],
+    val stageMetrics: ConcurrentHashMap[Int, LiveStageMetrics]) {
+
+  @KVIndex @JsonIgnore
+  def key: Array[Option[String]] = Array(Some(appId), attemptId)
+}

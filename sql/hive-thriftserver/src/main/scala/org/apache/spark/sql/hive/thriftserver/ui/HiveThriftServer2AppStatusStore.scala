@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
+import java.util.concurrent.ConcurrentHashMap
+
 import com.fasterxml.jackson.annotation.JsonIgnore
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -129,4 +131,13 @@ private[thriftserver] class ExecutionInfo(
       endTime - startTimestamp
     }
   }
+}
+
+class HiveThriftserver2ListenerData(
+    val appId: String,
+    val attemptId: Option[String],
+    val sessionList: ConcurrentHashMap[String, LiveSessionData],
+    val executionList: ConcurrentHashMap[String, LiveExecutionData]) {
+  @KVIndex @JsonIgnore
+  def key: Array[Option[String]] = Array(Some(appId), attemptId)
 }

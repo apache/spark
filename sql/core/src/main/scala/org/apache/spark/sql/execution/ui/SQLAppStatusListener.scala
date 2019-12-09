@@ -42,11 +42,13 @@ class SQLAppStatusListener(
   // never flush (only do the very last write).
   private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
 
+  private var appId: String = _
+  private var attemptId: Option[String] = None
   // Live tracked data is needed by the SQL status store to calculate metrics for in-flight
   // executions; that means arbitrary threads may be querying these maps, so they need to be
   // thread-safe.
-  private val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
-  private val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
+  private[ui] val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
+  private[ui] val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
 
   // Returns true if this listener has no live data. Exposed for tests only.
   private[sql] def noLiveData(): Boolean = {
@@ -66,6 +68,29 @@ class SQLAppStatusListener(
         // away.
         exec.metricsValues = aggregateMetrics(exec)
         exec.write(kvstore, now)
+        if (appId != null) {
+          kvstore.write(new SQLAppStatusListenerData(appId, attemptId,
+            liveExecutions, stageMetrics))
+        }
+      }
+    }
+  }
+
+  def initialize(appId: String, attemptId: Option[String]): Unit = {
+    if (!live) {
+      this.appId = appId
+      this.attemptId = attemptId
+      try {
+        val listenerData = kvstore.read(classOf[SQLAppStatusListenerData],
+          Array(Some(appId), attemptId))
+        listenerData.liveExecutions.entrySet().asScala.foreach { entry =>
+          liveExecutions.put(entry.getKey, entry.getValue)
+        }
+        listenerData.stageMetrics.entrySet().asScala.foreach { entry =>
+          stageMetrics.put(entry.getKey, entry.getValue)
+        }
+      } catch {
+        case _: NoSuchElementException =>
       }
     }
   }
@@ -404,7 +429,7 @@ class SQLAppStatusListener(
 
 }
 
-private class LiveExecutionData(val executionId: Long) extends LiveEntity {
+private[ui] class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
   var description: String = null
   var details: String = null
@@ -439,7 +464,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
 }
 
-private class LiveStageMetrics(
+private[ui] class LiveStageMetrics(
     val attemptId: Int,
     val numTasks: Int,
     val accumulatorIds: Set[Long]) {

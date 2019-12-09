@@ -46,10 +46,11 @@ import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
-import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.{AppStatusListenerData, AppStatusStore}
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
+import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
 class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
@@ -188,6 +189,54 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
 
     provider.mergeApplicationListingCall should be (1)
+  }
+
+  test("support incremental parsing of the event logs") {
+    val provider = new FsHistoryProvider(createTestConf(true))
+
+    var store: InMemoryStore = null
+    val logFile1 = newLogFile("app1", None, inProgress = true)
+    writeFile(logFile1, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
+      SparkListenerJobStart(0, 2L, Seq())
+    )
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+      provider.getAttempt("app1", None).logPath should endWith(EventLogFileWriter.IN_PROGRESS)
+      val appUi = provider.getAppUI("app1", None)
+      appUi should not be null
+      store = appUi.get.ui.store.store.asInstanceOf[InMemoryStore]
+    }
+
+    writeFile(logFile1, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
+      SparkListenerJobStart(0, 2L, Seq()),
+      SparkListenerJobEnd(0, 3L, JobSucceeded)
+    )
+
+    updateAndCheck(provider) { list =>
+      store should not be null
+      store.read(classOf[AppStatusListenerData], Array(Some("app1"), None)) should not be null
+      list.size should be (1)
+      provider.getAttempt("app1", None).logPath should endWith(EventLogFileWriter.IN_PROGRESS)
+      val appUi = provider.getAppUI("app1", None)
+      appUi should not be null
+    }
+
+    writeFile(logFile1, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
+      SparkListenerJobStart(0, 2L, Seq()),
+      SparkListenerJobEnd(0, 3L, JobSucceeded),
+      SparkListenerApplicationEnd(4L)
+    )
+
+    logFile1.renameTo(newLogFile("app1", None, inProgress = false))
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+      provider.getAttempt("app1", None).logPath should not endWith(EventLogFileWriter.IN_PROGRESS)
+      val appUi = provider.getAppUI("app1", None)
+      appUi should not be null
+    }
   }
 
   test("history file is renamed from inprogress to completed") {

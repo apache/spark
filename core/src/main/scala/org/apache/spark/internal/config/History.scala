@@ -107,6 +107,10 @@ private[spark] object History {
     .toSequence
     .createWithDefault(Nil)
 
+  val INCREMENTAL_PARSING_ENABLED = ConfigBuilder("spark.history.incremental.parsing.enabled")
+    .booleanConf
+    .createWithDefault(true)
+
   val NUM_REPLAY_THREADS = ConfigBuilder("spark.history.fs.numReplayThreads")
     .intConf
     .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)

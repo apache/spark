@@ -43,6 +43,9 @@ private[thriftserver] class HiveThriftServer2Listener(
   private val sessionList = new ConcurrentHashMap[String, LiveSessionData]()
   private val executionList = new ConcurrentHashMap[String, LiveExecutionData]()
 
+  private var appId: String = _
+  private var attemptId: Option[String] = None
+
   private val (retainedStatements: Int, retainedSessions: Int) = {
     (sparkConf.get(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT),
       sparkConf.get(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT))
@@ -69,6 +72,29 @@ private[thriftserver] class HiveThriftServer2Listener(
   kvstore.onFlush {
     if (!live) {
       flush((entity: LiveEntity) => updateStoreWithTriggerEnabled(entity))
+      if (appId != null) {
+        kvstore.write(new HiveThriftserver2ListenerData(
+          appId, attemptId, sessionList, executionList))
+      }
+    }
+  }
+
+  def initialize(appId: String, attemptId: Option[String]): Unit = {
+    if (!live) {
+      this.appId = appId
+      this.attemptId = attemptId
+      try {
+        val listenerData = kvstore.read(classOf[HiveThriftserver2ListenerData],
+          Array(Some(appId), attemptId))
+        listenerData.executionList.entrySet().asScala.foreach { entry =>
+          executionList.put(entry.getKey, entry.getValue)
+        }
+        listenerData.sessionList.entrySet().asScala.foreach { entry =>
+          sessionList.put(entry.getKey, entry.getValue)
+        }
+      } catch {
+        case _: NoSuchElementException =>
+      }
     }
   }
 

@@ -52,6 +52,8 @@ private[spark] class AppStatusListener(
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
   private var coresPerTask: Int = 1
+  private var appId: String = _
+  private var attemptId: Option[String] = None
 
   // How often to update live entities. -1 means "never update" when replaying applications,
   // meaning only the last write will happen. For live applications, this avoids a few
@@ -100,6 +102,41 @@ private[spark] class AppStatusListener(
     if (!live) {
       val now = System.nanoTime()
       flush(update(_, now))
+      if (appId != null) {
+        // If incremental parsing is enabled, write the listener data to the store
+        val data = new AppStatusListenerData(appId, attemptId, liveStages, liveJobs,
+          liveExecutors, deadExecutors, liveTasks, liveRDDs,
+          pools, appInfo, coresPerTask, appSummary, activeExecutorCount)
+        kvstore.write(data)
+      }
+    }
+  }
+
+  def initialize(appId: String, attemptId: Option[String]): Unit = {
+    if (!live) {
+      // If incremental parsing is enabled, read and update the listener data
+      // from store
+      this.appId = appId
+      this.attemptId = attemptId
+      try {
+        val listenerData = kvstore.read(classOf[AppStatusListenerData],
+          Array(Some(appId), attemptId))
+        listenerData.liveStages.entrySet().asScala.foreach { entry =>
+          liveStages.put(entry.getKey, entry.getValue)
+        }
+        listenerData.liveJobs.map{entry => liveJobs.put(entry._1, entry._2)}
+        listenerData.liveExecutors.map{entry => liveExecutors.put(entry._1, entry._2)}
+        listenerData.deadExecutors.map{entry => deadExecutors.put(entry._1, entry._2)}
+        listenerData.liveTasks.map{entry => liveTasks.put(entry._1, entry._2)}
+        listenerData.liveRDDs.map{entry => liveRDDs.put(entry._1, entry._2)}
+        listenerData.pools.map{entry => pools.put(entry._1, entry._2)}
+        appInfo = listenerData.appInfo
+        appSummary = listenerData.appSummary
+        coresPerTask = listenerData.coresPerTask
+        activeExecutorCount = listenerData.activeExecutorCount
+      } catch {
+        case _: NoSuchElementException =>
+      }
     }
   }
 
