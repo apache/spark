@@ -218,12 +218,4 @@ object ParserUtils {
       }
     }
   }
-
-  def pathWrapper(path: String): String = {
-    if (path.charAt(0) == '\'' || path.charAt(0) == '\"') {
-      unescapeSQLString(path)
-    } else {
-      path
-    }
-  }
 }
