@@ -44,10 +44,10 @@ import org.apache.spark.sql.types._
        5
   """,
   since = "2.0.0")
-case class First(child: Expression, ignoreNullsExpr: Expression)
+case class First(funcName: String, child: Expression, ignoreNullsExpr: Expression)
   extends DeclarativeAggregate with ExpectsInputTypes {
 
-  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+  def this(child: Expression) = this("first", child, Literal.create(false, BooleanType))
 
   override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
@@ -113,5 +113,5 @@ case class First(child: Expression, ignoreNullsExpr: Expression)
 
   override lazy val evaluateExpression: AttributeReference = first
 
-  override def toString: String = s"first($child)${if (ignoreNulls) " ignore nulls"}"
+  override def toString: String = s"$funcName($child)${if (ignoreNulls) " ignore nulls"}"
 }

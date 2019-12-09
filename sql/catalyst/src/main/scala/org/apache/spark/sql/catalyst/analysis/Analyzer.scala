@@ -692,10 +692,10 @@ class Analyzer(
                 // Assumption is the aggregate function ignores nulls. This is true for all current
                 // AggregateFunction's with the exception of First and Last in their default mode
                 // (which we handle) and possibly some Hive UDAF's.
-                case First(expr, _) =>
-                  First(ifExpr(expr), Literal(true))
-                case Last(expr, _) =>
-                  Last(ifExpr(expr), Literal(true))
+                case First(funcName, expr, _) =>
+                  First(funcName, ifExpr(expr), Literal(true))
+                case Last(funcName, expr, _) =>
+                  Last(funcName, ifExpr(expr), Literal(true))
                 case a: AggregateFunction =>
                   a.withNewChildren(a.children.map(ifExpr))
               }.transform {
