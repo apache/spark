@@ -44,14 +44,6 @@ public class JavaAvroFunctionsSuite {
     spark.stop();
   }
 
-  private static void checkAnswer(Dataset<Row> actual, Dataset<Row> expected) {
-    String errorMessage =
-      QueryTest$.MODULE$.getErrorMessageInCheckAnswer(actual, expected.collectAsList());
-    if (errorMessage != null) {
-      Assert.fail(errorMessage);
-    }
-  }
-
   @Test
   public void testToAvroFromAvro() {
     Dataset<Long> rangeDf = spark.range(10);
@@ -70,6 +62,6 @@ public class JavaAvroFunctionsSuite {
       from_avro(avroDF.col("a"), avroTypeLong),
       from_avro(avroDF.col("b"), avroTypeStr));
 
-    checkAnswer(actual, df);
+    QueryTest$.MODULE$.checkAnswer(actual, df);
   }
 }

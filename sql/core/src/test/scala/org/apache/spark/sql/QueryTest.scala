@@ -21,6 +21,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
 
+import org.junit.Assert
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.catalyst.plans._
@@ -421,10 +422,10 @@ object QueryTest extends Assertions {
     }
   }
 
-  def getErrorMessageInCheckAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): String = {
+  def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
     getErrorMessageInCheckAnswer(df, expectedAnswer.asScala) match {
-      case Some(errorMessage) => errorMessage
-      case None => null
+      case Some(errorMessage) => Assert.fail(errorMessage)
+      case None =>
     }
   }
 }

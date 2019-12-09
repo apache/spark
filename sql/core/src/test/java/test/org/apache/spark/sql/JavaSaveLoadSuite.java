@@ -43,10 +43,7 @@ public class JavaSaveLoadSuite {
   Dataset<Row> df;
 
   private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
-    String errorMessage = QueryTest$.MODULE$.getErrorMessageInCheckAnswer(actual, expected);
-    if (errorMessage != null) {
-      Assert.fail(errorMessage);
-    }
+    QueryTest$.MODULE$.checkAnswer(actual, expected);
   }
 
   @Before

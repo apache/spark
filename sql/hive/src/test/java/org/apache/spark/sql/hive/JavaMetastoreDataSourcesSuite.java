@@ -51,13 +51,6 @@ public class JavaMetastoreDataSourcesSuite {
   FileSystem fs;
   Dataset<Row> df;
 
-  private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
-    String errorMessage = QueryTest$.MODULE$.getErrorMessageInCheckAnswer(actual, expected);
-    if (errorMessage != null) {
-      Assert.fail(errorMessage);
-    }
-  }
-
   @Before
   public void setUp() throws IOException {
     sqlContext = TestHive$.MODULE$;
@@ -100,7 +93,7 @@ public class JavaMetastoreDataSourcesSuite {
       .options(options)
       .saveAsTable("javaSavedTable");
 
-    checkAnswer(
+    QueryTest$.MODULE$.checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
       df.collectAsList());
   }
