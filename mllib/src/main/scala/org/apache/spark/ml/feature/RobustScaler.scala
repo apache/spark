@@ -29,7 +29,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Params for [[RobustScaler]] and [[RobustScalerModel]].
@@ -99,8 +99,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT, false)
   }
 }
 
@@ -169,14 +168,22 @@ class RobustScaler (override val uid: String)
       seqOp = (s, v) => s.insert(v),
       combOp = (s1, s2) => s1.compress.merge(s2.compress)
     ).map { case (i, s) =>
+      // confirm compression before query
       val s2 = s.compress
       val range = s2.query(localUpper).get - s2.query(localLower).get
       val median = s2.query(0.5).get
       (i, (range, median))
     }.collectAsMap()
 
-    val ranges = Array.tabulate(numFeatures)(i => collected(i)._1)
-    val medians = Array.tabulate(numFeatures)(i => collected(i)._2)
+    val ranges = Array.ofDim[Double](numFeatures)
+    val medians = Array.ofDim[Double](numFeatures)
+    var i = 0
+    while (i < numFeatures) {
+      val (range, median) = collected(i)
+      ranges(i) = range
+      medians(i) = median
+      i += 1
+    }
 
     copyValues(new RobustScalerModel(uid, Vectors.dense(ranges).compressed,
       Vectors.dense(medians).compressed).setParent(this))
