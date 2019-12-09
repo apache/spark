@@ -62,6 +62,6 @@ public class JavaAvroFunctionsSuite {
       from_avro(avroDF.col("a"), avroTypeLong),
       from_avro(avroDF.col("b"), avroTypeStr));
 
-    QueryTest$.MODULE$.checkAnswer(actual, df);
+    QueryTest$.MODULE$.checkAnswer(actual, df.collectAsList());
   }
 }
