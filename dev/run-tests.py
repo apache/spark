@@ -340,7 +340,7 @@ def build_spark_sbt(extra_profiles):
 
 def build_spark_unidoc_sbt(build_profiles):
     set_title_and_block("Building Unidoc API Documentation", "BLOCK_DOCUMENTATION")
-    sbt_goals = ["unidoc"]
+    sbt_goals = ["clean", "unidoc"]
     profiles_and_goals = build_profiles + sbt_goals
 
     print("[info] Building Spark unidoc using SBT with these arguments: ",
