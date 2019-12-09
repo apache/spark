@@ -39,3 +39,25 @@ export SPARK_DIST_CLASSPATH=$(/path/to/hadoop/bin/hadoop classpath)
 export SPARK_DIST_CLASSPATH=$(hadoop --config /path/to/configs classpath)
 
 {% endhighlight %}
+
+# Hadoop Free Build Setup for Spark on Kubernetes  
+To run the Hadoop free build of Spark on Kubernetes, the executor image must have the appropriate version of Hadoop binaries and the correct `SPARK_DIST_CLASSPATH` value set. See the example below for the relevant changes needed in the executor Dockerfile:
+
+{% highlight bash %}
+### Set environment variables in the executor dockerfile ###
+
+ENV SPARK_HOME="/opt/spark"  
+ENV HADOOP_HOME="/opt/hadoop"  
+ENV PATH="$SPARK_HOME/bin:$HADOOP_HOME/bin:$PATH"  
+...  
+
+#Copy your target hadoop binaries to the executor hadoop home   
+
+COPY /opt/hadoop3  $HADOOP_HOME  
+...
+
+#Set your SPARK_DIST_CLASSPATH. Note it uses the hadoop executable to get the jars path and cannot be used with an ENV statement. You may need to add additional paths manually to SPARK_DIST_CLASSPATH if you have other dependencies for example in /hadoop/tools/lib/*  
+
+RUN export SPARK_DIST_CLASSPATH=$(hadoop classpath)  
+...  
+{% endhighlight %}
