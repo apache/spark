@@ -198,7 +198,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(
-          aggregate.First(evalWithinGroup(regularGroupId, operator.toAttribute), Literal(true)),
+          aggregate.First("first",
+            evalWithinGroup(regularGroupId, operator.toAttribute), Literal(true)),
           mode = Complete,
           isDistinct = false)
 
