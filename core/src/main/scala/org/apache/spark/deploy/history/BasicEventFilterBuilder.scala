@@ -147,16 +147,16 @@ private[spark] class BasicEventFilter(
 
   logDebug(s"live executors : $liveExecutors")
 
-  override def accept(event: SparkListenerEvent): Option[Boolean] = {
-    val fn: PartialFunction[SparkListenerEvent, Boolean] = {
-      case e: SparkListenerExecutorAdded => liveExecutors.contains(e.executorId)
-      case e: SparkListenerExecutorRemoved => liveExecutors.contains(e.executorId)
-      case e: SparkListenerExecutorBlacklisted => liveExecutors.contains(e.executorId)
-      case e: SparkListenerExecutorUnblacklisted => liveExecutors.contains(e.executorId)
-      case e: SparkListenerStageExecutorMetrics => liveExecutors.contains(e.execId)
-    }
+  private val _acceptFn: PartialFunction[SparkListenerEvent, Boolean] = {
+    case e: SparkListenerExecutorAdded => liveExecutors.contains(e.executorId)
+    case e: SparkListenerExecutorRemoved => liveExecutors.contains(e.executorId)
+    case e: SparkListenerExecutorBlacklisted => liveExecutors.contains(e.executorId)
+    case e: SparkListenerExecutorUnblacklisted => liveExecutors.contains(e.executorId)
+    case e: SparkListenerStageExecutorMetrics => liveExecutors.contains(e.execId)
+  }
 
-    fn.orElse(acceptFnForJobEvents).lift.apply(event)
+  override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {
+    _acceptFn.orElse(acceptFnForJobEvents)
   }
 }
 

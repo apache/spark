@@ -82,23 +82,21 @@ object EventLogTestHelper {
   }
 
   class TestEventFilter1 extends EventFilter {
-    override def accept(event: SparkListenerEvent): Option[Boolean] = event match {
-      case _: SparkListenerApplicationEnd => Some(true)
-      case _: SparkListenerBlockManagerAdded => Some(true)
-      case _: SparkListenerApplicationStart => Some(false)
-      case _ => None
+    override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {
+      case _: SparkListenerApplicationEnd => true
+      case _: SparkListenerBlockManagerAdded => true
+      case _: SparkListenerApplicationStart => false
     }
   }
 
   class TestEventFilter2 extends EventFilter {
-    override def accept(event: SparkListenerEvent): Option[Boolean] = event match {
-      case _: SparkListenerApplicationEnd => Some(true)
-      case _: SparkListenerEnvironmentUpdate => Some(true)
-      case _: SparkListenerNodeBlacklisted => Some(true)
-      case _: SparkListenerBlockManagerAdded => Some(false)
-      case _: SparkListenerApplicationStart => Some(false)
-      case _: SparkListenerNodeUnblacklisted => Some(false)
-      case _ => None
+    override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {
+      case _: SparkListenerApplicationEnd => true
+      case _: SparkListenerEnvironmentUpdate => true
+      case _: SparkListenerNodeBlacklisted => true
+      case _: SparkListenerBlockManagerAdded => false
+      case _: SparkListenerApplicationStart => false
+      case _: SparkListenerNodeUnblacklisted => false
     }
   }
 }

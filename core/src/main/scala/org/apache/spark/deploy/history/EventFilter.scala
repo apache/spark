@@ -61,25 +61,21 @@ object EventFilterBuilder {
   }
 }
 
-/**
- * [[EventFilter]] decides whether the given event should be accepted or rejected.
- *
- * Please refer [[FilteredEventLogFileRewriter]] for more details on how the filter will be used.
- */
+/** [[EventFilter]] decides whether the given event should be accepted or rejected. */
 private[spark] trait EventFilter {
   /**
    * Classify whether the event is accepted or rejected by this filter.
    *
-   * Note that the method signature requires to return Option[Boolean] instead of Boolean:
-   * if the filter is able to decide with event whether it should be accepted or rejected,
-   * it can return either Some(true) or Some(false). Otherwise it should return None.
+   * The method should return the partial function which matches the events where the filter can
+   * decide whether the event should be accepted or rejected. Otherwise it should leave the events
+   * be unmatched.
    */
-  def accept(event: SparkListenerEvent): Option[Boolean]
+  def acceptFn(): PartialFunction[SparkListenerEvent, Boolean]
 }
 
 object EventFilter extends Logging {
   def checkFilters(filters: Seq[EventFilter], event: SparkListenerEvent): Boolean = {
-    val results = filters.flatMap(_.accept(event))
+    val results = filters.flatMap(_.acceptFn().lift.apply(event))
     results.isEmpty || results.forall(_ == true)
   }
 

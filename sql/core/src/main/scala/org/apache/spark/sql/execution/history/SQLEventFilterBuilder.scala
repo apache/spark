@@ -126,33 +126,25 @@ private[spark] class SQLLiveEntitiesEventFilter(
   logDebug(s"live executions : ${liveExecutionToJobs.keySet}")
   logDebug(s"jobs in live executions : ${liveExecutionToJobs.values.flatten}")
 
-  override def accept(event: SparkListenerEvent): Option[Boolean] = {
-    val fn: PartialFunction[SparkListenerEvent, Boolean] = {
-      case e: SparkListenerSQLExecutionStart =>
-        liveExecutionToJobs.contains(e.executionId)
-      case e: SparkListenerSQLAdaptiveExecutionUpdate =>
-        liveExecutionToJobs.contains(e.executionId)
-      case e: SparkListenerSQLExecutionEnd =>
-        liveExecutionToJobs.contains(e.executionId)
-      case e: SparkListenerDriverAccumUpdates =>
-        liveExecutionToJobs.contains(e.executionId)
+  private val _acceptFn: PartialFunction[SparkListenerEvent, Boolean] = {
+    case e: SparkListenerSQLExecutionStart =>
+      liveExecutionToJobs.contains(e.executionId)
+    case e: SparkListenerSQLAdaptiveExecutionUpdate =>
+      liveExecutionToJobs.contains(e.executionId)
+    case e: SparkListenerSQLExecutionEnd =>
+      liveExecutionToJobs.contains(e.executionId)
+    case e: SparkListenerDriverAccumUpdates =>
+      liveExecutionToJobs.contains(e.executionId)
 
-      // these events are for finished batches so safer to ignore
-      case _: StreamingQueryListener.QueryProgressEvent => false
-    }
-    val optFn = fn.andThen { bool => Some(bool) }
-    val trueOrNoneJobEventFn = acceptFnForJobEvents.andThen { bool => trueOrNone(Some(bool)) }
+    case e if acceptFnForJobEvents.isDefinedAt(e) && acceptFnForJobEvents(e) =>
+      // if acceptFnForJobEvents(e) returns false, we should leave it to "unmatched"
+      true
 
-    optFn.orElse(trueOrNoneJobEventFn).apply(event)
+    // these events are for finished batches so safer to ignore
+    case _: StreamingQueryListener.QueryProgressEvent => false
   }
 
-  private def trueOrNone(booleanValue: Option[Boolean]): Option[Boolean] = {
-    booleanValue match {
-      case Some(true) => Some(true)
-      case Some(false) => None
-      case None => None
-    }
-  }
+  override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = _acceptFn
 }
 
 private[spark] object SQLLiveEntitiesEventFilter {

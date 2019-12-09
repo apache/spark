@@ -35,6 +35,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val liveExecutors: Set[String] = Set("1", "2")
 
     val filter = new BasicEventFilter(liveJobToStages, stageToTasks, stageToRDDs, liveExecutors)
+    val acceptFn = filter.acceptFn().lift
 
     // Verifying with finished job 1
     val rddsForStage1 = createRddsWithId(1 to 2)
@@ -49,12 +50,12 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val unpersistRDDEventsForJob1 = (1 to 2).map(SparkListenerUnpersistRDD)
 
     // job events for finished job should be filtered out
-    assertFilterJobEvents(filter, jobStartEventForJob1, jobEndEventForJob1, Some(false))
+    assertFilterJobEvents(acceptFn, jobStartEventForJob1, jobEndEventForJob1, Some(false))
 
     // stage events for finished job should be filtered out
     // NOTE: it doesn't filter out stage events which are also related to the executor
     assertFilterStageEvents(
-      filter,
+      acceptFn,
       stageSubmittedEventsForJob1,
       stageCompletedEventsForJob1,
       unpersistRDDEventsForJob1,
@@ -62,7 +63,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
       Some(false))
 
     // task events for finished job should be filtered out
-    assertFilterTaskEvents(filter, tasksForStage1, stage1, Some(false))
+    assertFilterTaskEvents(acceptFn, tasksForStage1, stage1, Some(false))
 
     // Verifying with live job 2
     val rddsForStage2 = createRddsWithId(3 to 4)
@@ -76,11 +77,11 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val unpersistRDDEventsForJob2 = rddsForStage2.map { rdd => SparkListenerUnpersistRDD(rdd.id) }
 
     // job events for live job should be filtered in
-    assert(filter.accept(jobStartEventForJob2) === Some(true))
+    assert(acceptFn(jobStartEventForJob2) === Some(true))
 
     // stage events for live job should be filtered in
     assertFilterStageEvents(
-      filter,
+      acceptFn,
       stageSubmittedEventsForJob2,
       stageCompletedEventsForJob2,
       unpersistRDDEventsForJob2,
@@ -88,7 +89,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
       Some(true))
 
     // task events for live job should be filtered in
-    assertFilterTaskEvents(filter, tasksForStage2, stage2, Some(true))
+    assertFilterTaskEvents(acceptFn, tasksForStage2, stage2, Some(true))
   }
 
   test("filter out events for dead executors") {
@@ -96,26 +97,31 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val liveExecutors: Set[String] = Set("2")
 
     val filter = new BasicEventFilter(Map.empty, Map.empty, Map.empty, liveExecutors)
+    val acceptFn = filter.acceptFn().lift
 
     // events for dead executor should be filtered out
-    assert(filter.accept(createExecutorAddedEvent(1)) === Some(false))
+    assert(acceptFn(createExecutorAddedEvent(1)) === Some(false))
     // though the name of event is stage executor metrics, AppStatusListener only deals with
     // live executors
-    assert(filter.accept(
+    assert(acceptFn(
       SparkListenerStageExecutorMetrics(1.toString, 0, 0, new ExecutorMetrics)) ===
       Some(false))
-    assert(filter.accept(SparkListenerExecutorBlacklisted(0, 1.toString, 1)) === Some(false))
-    assert(filter.accept(SparkListenerExecutorUnblacklisted(0, 1.toString)) === Some(false))
-    assert(filter.accept(createExecutorRemovedEvent(1)) === Some(false))
+    assert(acceptFn(SparkListenerExecutorBlacklisted(0, 1.toString, 1)) ===
+      Some(false))
+    assert(acceptFn(SparkListenerExecutorUnblacklisted(0, 1.toString)) ===
+      Some(false))
+    assert(acceptFn(createExecutorRemovedEvent(1)) === Some(false))
 
     // events for live executor should be filtered in
-    assert(filter.accept(createExecutorAddedEvent(2)) === Some(true))
-    assert(filter.accept(
+    assert(acceptFn(createExecutorAddedEvent(2)) === Some(true))
+    assert(acceptFn(
       SparkListenerStageExecutorMetrics(2.toString, 0, 0, new ExecutorMetrics)) ===
       Some(true))
-    assert(filter.accept(SparkListenerExecutorBlacklisted(0, 2.toString, 1)) === Some(true))
-    assert(filter.accept(SparkListenerExecutorUnblacklisted(0, 2.toString)) === Some(true))
-    assert(filter.accept(createExecutorRemovedEvent(2)) === Some(true))
+    assert(acceptFn(SparkListenerExecutorBlacklisted(0, 2.toString, 1)) ===
+      Some(true))
+    assert(acceptFn(SparkListenerExecutorUnblacklisted(0, 2.toString)) ===
+      Some(true))
+    assert(acceptFn(createExecutorRemovedEvent(2)) === Some(true))
   }
 
   test("other events should be left to other filters") {
@@ -124,59 +130,60 @@ class BasicEventFilterSuite extends SparkFunSuite {
     }
 
     val filter = new BasicEventFilter(Map.empty, Map.empty, Map.empty, Set.empty)
+    val acceptFn = filter.acceptFn().lift
 
-    assertNone(filter.accept(SparkListenerEnvironmentUpdate(Map.empty)))
-    assertNone(filter.accept(SparkListenerApplicationStart("1", Some("1"), 0, "user", None)))
-    assertNone(filter.accept(SparkListenerApplicationEnd(1)))
+    assertNone(acceptFn(SparkListenerEnvironmentUpdate(Map.empty)))
+    assertNone(acceptFn(SparkListenerApplicationStart("1", Some("1"), 0, "user", None)))
+    assertNone(acceptFn(SparkListenerApplicationEnd(1)))
     val bmId = BlockManagerId("1", "host1", 1)
-    assertNone(filter.accept(SparkListenerBlockManagerAdded(0, bmId, 1)))
-    assertNone(filter.accept(SparkListenerBlockManagerRemoved(1, bmId)))
-    assertNone(filter.accept(SparkListenerBlockUpdated(
+    assertNone(acceptFn(SparkListenerBlockManagerAdded(0, bmId, 1)))
+    assertNone(acceptFn(SparkListenerBlockManagerRemoved(1, bmId)))
+    assertNone(acceptFn(SparkListenerBlockUpdated(
       storage.BlockUpdatedInfo(bmId, RDDBlockId(1, 1), StorageLevel.DISK_ONLY, 0, 10))))
-    assertNone(filter.accept(SparkListenerNodeBlacklisted(0, "host1", 1)))
-    assertNone(filter.accept(SparkListenerNodeUnblacklisted(0, "host1")))
-    assertNone(filter.accept(SparkListenerLogStart("testVersion")))
+    assertNone(acceptFn(SparkListenerNodeBlacklisted(0, "host1", 1)))
+    assertNone(acceptFn(SparkListenerNodeUnblacklisted(0, "host1")))
+    assertNone(acceptFn(SparkListenerLogStart("testVersion")))
   }
 
   private def assertFilterJobEvents(
-      filter: BasicEventFilter,
+      acceptFn: SparkListenerEvent => Option[Boolean],
       jobStart: SparkListenerJobStart,
       jobEnd: SparkListenerJobEnd,
       expectedVal: Option[Boolean]): Unit = {
-    assert(filter.accept(jobStart) === expectedVal)
-    assert(filter.accept(jobEnd) === expectedVal)
+    assert(acceptFn(jobStart) === expectedVal)
+    assert(acceptFn(jobEnd) === expectedVal)
   }
 
   private def assertFilterStageEvents(
-      filter: BasicEventFilter,
+      acceptFn: SparkListenerEvent => Option[Boolean],
       stageSubmitted: SparkListenerStageSubmitted,
       stageCompleted: SparkListenerStageCompleted,
       unpersistRDDs: Seq[SparkListenerUnpersistRDD],
       taskSpeculativeSubmitted: SparkListenerSpeculativeTaskSubmitted,
       expectedVal: Option[Boolean]): Unit = {
-    assert(filter.accept(stageSubmitted) === expectedVal)
-    assert(filter.accept(stageCompleted) === expectedVal)
+    assert(acceptFn(stageSubmitted) === expectedVal)
+    assert(acceptFn(stageCompleted) === expectedVal)
     unpersistRDDs.foreach { event =>
-      assert(filter.accept(event) === expectedVal)
+      assert(acceptFn(event) === expectedVal)
     }
-    assert(filter.accept(taskSpeculativeSubmitted) === expectedVal)
+    assert(acceptFn(taskSpeculativeSubmitted) === expectedVal)
   }
 
   private def assertFilterTaskEvents(
-      filter: BasicEventFilter,
+      acceptFn: SparkListenerEvent => Option[Boolean],
       taskInfos: Seq[TaskInfo],
       stageInfo: StageInfo,
       expectedVal: Option[Boolean]): Unit = {
     taskInfos.foreach { task =>
       val taskStartEvent = SparkListenerTaskStart(stageInfo.stageId, 0, task)
-      assert(filter.accept(taskStartEvent) === expectedVal)
+      assert(acceptFn(taskStartEvent) === expectedVal)
 
       val taskGettingResultEvent = SparkListenerTaskGettingResult(task)
-      assert(filter.accept(taskGettingResultEvent) === expectedVal)
+      assert(acceptFn(taskGettingResultEvent) === expectedVal)
 
       val taskEndEvent = SparkListenerTaskEnd(stageInfo.stageId, 0, "taskType",
         Success, task, new ExecutorMetrics, null)
-      assert(filter.accept(taskEndEvent) === expectedVal)
+      assert(acceptFn(taskEndEvent) === expectedVal)
     }
   }
 }
