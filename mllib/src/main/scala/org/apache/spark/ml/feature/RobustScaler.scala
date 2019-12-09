@@ -147,49 +147,38 @@ class RobustScaler (override val uid: String)
 
   override def fit(dataset: Dataset[_]): RobustScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val localRelativeError = $(relativeError)
 
-    val summaries = dataset.select($(inputCol)).rdd.map {
+    val vectors = dataset.select($(inputCol)).rdd.map {
       case Row(vec: Vector) => vec
-    }.mapPartitions { iter =>
-      var agg: Array[QuantileSummaries] = null
-      while (iter.hasNext) {
-        val vec = iter.next()
-        if (agg == null) {
-          agg = Array.fill(vec.size)(
-            new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))
-        }
-        require(vec.size == agg.length,
-          s"Number of dimensions must be ${agg.length} but got ${vec.size}")
-        var i = 0
-        while (i < vec.size) {
-          agg(i) = agg(i).insert(vec(i))
-          i += 1
-        }
-      }
-
-      if (agg == null) {
-        Iterator.empty
-      } else {
-        Iterator.single(agg.map(_.compress))
-      }
-    }.treeReduce { (agg1, agg2) =>
-      require(agg1.length == agg2.length)
-      var i = 0
-      while (i < agg1.length) {
-        agg1(i) = agg1(i).merge(agg2(i))
-        i += 1
-      }
-      agg1
     }
+    val numFeatures = vectors.first().size
 
-    val (range, median) = summaries.map { s =>
-      (s.query($(upper)).get - s.query($(lower)).get,
-        s.query(0.5).get)
-    }.unzip
+    val localRelativeError = $(relativeError)
+    val localUpper = $(upper)
+    val localLower = $(lower)
 
-    copyValues(new RobustScalerModel(uid, Vectors.dense(range).compressed,
-      Vectors.dense(median).compressed).setParent(this))
+    val collected = vectors.flatMap { vec =>
+      require(vec.size == numFeatures,
+        s"Number of dimensions must be $numFeatures but got ${vec.size}")
+
+      Iterator.range(0, numFeatures).map { i =>
+        (i, vec(i))
+      }
+    }.aggregateByKey(
+      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))(
+      seqOp = (s, v) => s.insert(v),
+      combOp = (s1, s2) => s1.compress.merge(s2.compress)
+    ).map { case (i, s) =>
+      val range = s.query(localUpper).get - s.query(localLower).get
+      val median = s.query(0.5).get
+      (i, (range, median))
+    }.collectAsMap()
+
+    val ranges = Array.tabulate(numFeatures)(i => collected(i)._1)
+    val medians = Array.tabulate(numFeatures)(i => collected(i)._2)
+
+    copyValues(new RobustScalerModel(uid, Vectors.dense(ranges).compressed,
+      Vectors.dense(medians).compressed).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
