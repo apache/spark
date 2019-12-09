@@ -34,6 +34,7 @@ class HiveThriftServer2HistoryServerPlugin extends AppHistoryServerPlugin {
       attemptId: Option[String]): Unit = {
     sparkListener.asInstanceOf[HiveThriftServer2Listener].initialize(appId, attemptId)
   }
+
   override def setupUI(ui: SparkUI): Unit = {
     val store = new HiveThriftServer2AppStatusStore(ui.store.store)
     if (store.getSessionCount > 0) {

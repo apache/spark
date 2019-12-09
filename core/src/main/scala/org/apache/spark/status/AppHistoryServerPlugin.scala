@@ -31,7 +31,11 @@ private[spark] trait AppHistoryServerPlugin {
    */
   def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener]
 
+  /**
+   * Initialize the listener parameters for incremental parsing of the event logs.
+   */
   def initialize(sparkListener: SparkListener, appId: String, attemptId: Option[String]): Unit = {}
+
   /**
    * Sets up UI of this plugin to rebuild the history UI.
    */
