@@ -83,11 +83,11 @@ private[spark] class TaskSetManager(
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
   // User provided threshold for speculation regardless of whether the quantile has been reached
   val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
-  // Only when the total number of tasks in the stage is less than this threshold, we would try
-  // speculative run based on the time threshold. SPARK-29976: We set this value to be the number
-  // of slots on a single executor so that we wouldn't speculate too aggressively but still
-  // handle basic cases.
-  val speculationTaskNumThres = conf.get(EXECUTOR_CORES) / conf.get(CPUS_PER_TASK)
+  // SPARK-29976: Only when the total number of tasks in the stage is less than or equal to the
+  // number of slots on a single executor, would the task manager speculative run the tasks if
+  // their duration is longer than the given threshold. In this way, we wouldn't speculate too
+  // aggressively but still handle basic cases.
+  val speculationTasksLessEqToSlots = numTasks <= (sched.CPUS_PER_TASK / conf.get(CPUS_PER_TASK))
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -1018,7 +1018,7 @@ private[spark] class TaskSetManager(
       for (tid <- runningTasksSet) {
         foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
       }
-    } else if (speculationTaskDurationThresOpt.isDefined && numTasks <= speculationTaskNumThres) {
+    } else if (speculationTaskDurationThresOpt.isDefined && speculationTasksLessEqToSlots) {
       val time = clock.getTimeMillis()
       val threshold = speculationTaskDurationThresOpt.get
       logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")

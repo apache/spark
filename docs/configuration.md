@@ -2036,9 +2036,12 @@ Apart from these, the following properties are also available, and may be useful
   <td>None</td>
   <td>
     Task duration after which scheduler would try to speculative run the task. If provided, tasks
-    would be speculatively run if current stage contains less tasks than the number of slots on a
-    single executor and the task is taking longer time than the threshold. This config helps
-    speculate stage with very few tasks.
+    would be speculatively run if current stage contains less tasks than or equal to the number of
+    slots on a single executor and the task is taking longer time than the threshold. This config
+    helps speculate stage with very few tasks. Regular speculation configs may also apply if the
+    executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
+    runs even though the threshold hasn't been reached.
+    Default unit is bytes, unless otherwise specified.
   </td>
 </tr>
 <tr>

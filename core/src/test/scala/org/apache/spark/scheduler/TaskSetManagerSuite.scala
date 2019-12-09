@@ -1794,7 +1794,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, "60min")
     }
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
-    // Create a task set with only one task
+    // Create a task set with the given number of tasks
     val taskSet = FakeTask.createTaskSet(numTasks)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
@@ -1819,7 +1819,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       assert(!manager.checkSpeculatableTasks(0))
       assert(sched.speculativeTasks.size == numTasks)
     } else {
-      // If the feature flag is turned off, or the stage contains too few tasks
+      // If the feature flag is turned off, or the stage contains too many tasks
       assert(!manager.checkSpeculatableTasks(0))
       assert(sched.speculativeTasks.size == 0)
     }
