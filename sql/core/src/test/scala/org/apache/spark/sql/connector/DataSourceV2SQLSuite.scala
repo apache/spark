@@ -29,6 +29,7 @@ import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
@@ -933,7 +934,9 @@ class DataSourceV2SQLSuite
       assert(description === Seq(
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test")
+        Row("Location", "/tmp/ns_test"),
+        Row("Owner Name", Utils.getCurrentUserName()),
+        Row("Owner Type", PrincipalType.USER.name())
       ))
     }
   }
@@ -948,6 +951,8 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test"),
+        Row("Owner Name", Utils.getCurrentUserName()),
+        Row("Owner Type", PrincipalType.USER.name()),
         Row("Properties", "((a,b),(b,a),(c,c))")
       ))
     }
@@ -962,7 +967,25 @@ class DataSourceV2SQLSuite
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
         Row("Description", "test namespace"),
-        Row("Location", "/tmp/ns_test_2")
+        Row("Location", "/tmp/ns_test_2"),
+        Row("Owner Name", Utils.getCurrentUserName()),
+        Row("Owner Type", PrincipalType.USER.name())
+      ))
+    }
+  }
+
+  test("AlterNamespaceSetOwner using v2 catalog") {
+    withNamespace("testcat.ns1.ns2") {
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
+        "'test namespace' LOCATION '/tmp/ns_test_3'")
+      sql("ALTER NAMESPACE testcat.ns1.ns2 SET OWNER ROLE adminRole")
+      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
+      assert(descriptionDf.collect() === Seq(
+        Row("Namespace Name", "ns2"),
+        Row("Description", "test namespace"),
+        Row("Location", "/tmp/ns_test_3"),
+        Row("Owner Name", "adminRole"),
+        Row("Owner Type", PrincipalType.ROLE.name())
       ))
     }
   }

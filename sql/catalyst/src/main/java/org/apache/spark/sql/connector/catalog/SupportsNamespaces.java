@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
+import org.apache.spark.util.Utils;
 
 import java.util.Arrays;
 import java.util.List;
@@ -64,9 +65,7 @@ public interface SupportsNamespaces extends CatalogPlugin {
   String PROP_OWNER_TYPE = "ownerType";
 
   /**
-   * The list of namespace ownership properties, cannot be used in `CREATE` syntax.
-   *
-   * Only support in:
+   * The list of namespace ownership properties, which can be used in `ALTER` syntax:
    *
    * {{
    *   ALTER (DATABASE|SCHEMA|NAMESPACE) SET OWNER ...
@@ -85,6 +84,18 @@ public interface SupportsNamespaces extends CatalogPlugin {
    */
   List<String> REVERSED_PROPERTIES =
     Arrays.asList(PROP_COMMENT, PROP_LOCATION, PROP_OWNER_NAME, PROP_OWNER_TYPE);
+
+  /**
+   * Specify the default owner name for `CREATE` namespace.
+   *
+   */
+  default String defaultOwner() { return Utils.getCurrentUserName(); }
+
+  /**
+   *
+   * Specify the default owner type for `CREATE` namespace.
+   */
+  default String defaultOwnerType() { return PrincipalType.USER.name(); }
 
   /**
    * Return a default namespace for the catalog.

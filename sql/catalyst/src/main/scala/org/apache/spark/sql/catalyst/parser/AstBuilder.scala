@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.sql.connector.catalog.{PrincipalType, SupportsNamespaces}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2589,10 +2589,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceOwner(ctx: SetNamespaceOwnerContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetOwner(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
-        ctx.identifier.getText,
-        ctx.ownerType.getText)
+      val ownerType = ctx.ownerType.getText
+      try {
+        AlterNamespaceSetOwner(
+          visitMultipartIdentifier(ctx.multipartIdentifier),
+          ctx.identifier.getText,
+          PrincipalType.valueOf(ownerType).name)
+      } catch {
+        case _: IllegalArgumentException =>
+          throw new ParseException(s"$ownerType is not supported, need to be one of" +
+            s" ${PrincipalType.values().mkString("[", ",", "]")}", ctx)
+      }
     }
   }
 

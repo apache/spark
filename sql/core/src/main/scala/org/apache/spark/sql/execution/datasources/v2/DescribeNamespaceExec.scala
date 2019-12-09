@@ -45,13 +45,13 @@ case class DescribeNamespaceExec(
     rows += toCatalystRow("Namespace Name", ns.last)
     rows += toCatalystRow("Description", metadata.get(PROP_COMMENT))
     rows += toCatalystRow("Location", metadata.get(PROP_LOCATION))
-    rows += toCatalystRow("Owner Name", metadata.get(PROP_OWNER_NAME))
-    rows += toCatalystRow("Owner Type", metadata.get(PROP_OWNER_TYPE))
+    rows += toCatalystRow("Owner Name", metadata.getOrDefault(PROP_OWNER_NAME, ""))
+    rows += toCatalystRow("Owner Type", metadata.getOrDefault(PROP_OWNER_TYPE, ""))
 
     if (isExtended) {
       val properties = metadata.asScala -- REVERSED_PROPERTIES.asScala
       if (properties.nonEmpty) {
-        rows += toCatalystRow("Properties", properties.mkString("(", ",", ")"))
+        rows += toCatalystRow("Properties", properties.toSeq.mkString("(", ",", ")"))
       }
     }
     rows
