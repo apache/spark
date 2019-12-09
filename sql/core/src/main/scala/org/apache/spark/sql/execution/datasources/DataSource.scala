@@ -345,9 +345,9 @@ case class DataSource(
         if (baseRelation.schema != schema) {
           val errorMsg = "The user-specified schema doesn't match the actual schema: " +
             s"user-specified: ${schema.toDDL}, actual: ${baseRelation.schema.toDDL}. If " +
-            s"you're using DataFrameReader.schema API or creating a table, please do not " +
-            s"specify the schema. Or if you're scanning an existed table, please drop " +
-            s"it and re-create it."
+            "you're using DataFrameReader.schema API or creating a table, please do not " +
+            "specify the schema. Or if you're scanning an existed table, please drop " +
+            "it and re-create it."
           throw new AnalysisException(errorMsg)
         }
         baseRelation
