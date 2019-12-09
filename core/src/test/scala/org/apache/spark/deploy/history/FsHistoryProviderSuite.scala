@@ -1449,11 +1449,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       provider.getOrUpdateCompactible(reader1)
 
       assert(1 === provider.checkEligibilityForCompactionCall)
-      // All events in log file are expected to be filtered in - so 'compactible' should be true,
+      // All events in log file are expected to be accepted - so 'compactible' should be true,
       // but we don't decide if there's only one file given the file might be updated later.
       assertCompactibleInLogInfo(provider, reader1, None)
 
-      // 10 of 11 events will be filtered out which meets the condition of compaction
+      // 10 of 11 events will be rejected which meets the condition of compaction
       val logPath2 = EventLogTestHelper.writeEventLogFile(conf, hadoopConf, dir, 2,
         (1 to 5).flatMap { idx =>
           Seq(SparkListenerJobStart(idx, 1L, Seq.empty, null),
@@ -1468,7 +1468,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       provider.getOrUpdateCompactible(reader2)
 
       assert(1 === provider.checkEligibilityForCompactionCall)
-      // All events in log file are expected to be filtered in - so 'compactible' should be false.
+      // All events in log file are expected to be accepted - so 'compactible' should be false.
       assertCompactibleInLogInfo(provider, reader2, Some(false))
 
       val logPath3 = EventLogTestHelper.writeEventLogFile(conf, hadoopConf, dir, 3, Seq(
@@ -1482,7 +1482,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       provider.getOrUpdateCompactible(reader3)
 
       assert(1 === provider.checkEligibilityForCompactionCall)
-      // Most of events in log file are expected to be filtered out - so 'compactible' should
+      // Most of events in log file are expected to be rejected - so 'compactible' should
       // be true.
       assertCompactibleInLogInfo(provider, reader3, Some(true))
     }

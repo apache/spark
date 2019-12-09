@@ -104,10 +104,10 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
     val stageCompletedEventsForJob2 = SparkListenerStageCompleted(stage2)
     val unpersistRDDEventsForJob2 = rddsForStage2.map { rdd => SparkListenerUnpersistRDD(rdd.id) }
 
-    // job events for live job should be filtered in
+    // job events for live job should be accepted
     assert(acceptFn(jobStartEventForJob2) === Some(true))
 
-    // stage events for live job should be filtered in
+    // stage events for live job should be accepted
     assert(acceptFn(stageSubmittedEventsForJob2) === Some(true))
     assert(acceptFn(stageCompletedEventsForJob2) === Some(true))
     unpersistRDDEventsForJob2.foreach { event =>
@@ -118,7 +118,7 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
       stageAttemptId = 1)
     assert(acceptFn(taskSpeculativeTaskSubmittedEvent2) === Some(true))
 
-    // task events for live job should be filtered in
+    // task events for live job should be accepted
     tasksForStage2.foreach { task =>
       val taskStartEvent = SparkListenerTaskStart(stage2.stageId, 0, task)
       assert(acceptFn(taskStartEvent) === Some(true))

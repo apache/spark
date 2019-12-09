@@ -24,8 +24,8 @@ import org.apache.spark.scheduler._
 
 /**
  * This class tracks both live jobs and live executors, and pass the list to the
- * [[BasicEventFilter]] to help BasicEventFilter to filter out finished jobs
- * (+ stages/tasks/RDDs) and dead executors.
+ * [[BasicEventFilter]] to help BasicEventFilter to reject finished jobs (+ stages/tasks/RDDs)
+ * and dead executors.
  */
 private[spark] class BasicEventFilterBuilder extends SparkListener with EventFilterBuilder {
   private val _liveJobToStages = new mutable.HashMap[Int, Seq[Int]]
@@ -72,10 +72,10 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
 }
 
 /**
- * This class provides the functionality to filter out events which are related to the finished
- * jobs based on the given information. This class only deals with job related events, and returns
- * either Some(true) or Some(false) - successors should override the methods if they don't want to
- * return Some(false) for finished jobs and related events.
+ * This class provides the functionality to reject events which are related to the finished
+ * jobs based on the given information. This class only deals with job related events, and provides
+ * a PartialFunction which returns false for rejected events for finished jobs, returns true
+ * otherwise.
  */
 private[spark] abstract class JobEventFilter(
     jobToStages: Map[Int, Seq[Int]],
@@ -134,7 +134,7 @@ private[spark] abstract class JobEventFilter(
 }
 
 /**
- * This class filters out events which are related to the finished jobs or dead executors,
+ * This class rejects events which are related to the finished jobs or dead executors,
  * based on the given information. The events which are not related to the job and executor
  * will be considered as "Don't mind".
  */

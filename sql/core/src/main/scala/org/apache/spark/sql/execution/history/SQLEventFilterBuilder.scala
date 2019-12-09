@@ -28,7 +28,7 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
 
 /**
  * This class tracks live SQL executions, and pass the list to the [[SQLLiveEntitiesEventFilter]]
- * to help SQLLiveEntitiesEventFilter to filter out finished SQL executions as well as relevant
+ * to help SQLLiveEntitiesEventFilter to reject finished SQL executions as well as relevant
  * jobs (+ stages/tasks/RDDs). Unlike BasicEventFilterBuilder, it doesn't concern about the status
  * of individual job - it only concerns whether SQL execution is finished or not.
  */
@@ -105,12 +105,12 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
 }
 
 /**
- * This class filters out events which are related to the finished SQL executions based on the
+ * This class rejects events which are related to the finished SQL executions based on the
  * given information.
  *
- * Note that filterXXX methods will return None instead of Some(false) if the event is related to
- * job but not coupled with live SQL executions, because the instance has the information about
- * jobs for live SQL executions which should be filtered in, but don't know whether the job is
+ * Note that acceptFn will not match the event instead of returning false if the event is related
+ * to job but not coupled with live SQL executions, because the instance has the information about
+ * jobs for live SQL executions which should be accepted, but don't know whether the job is
  * related to the finished SQL executions, or job is NOT related to the SQL executions. For this
  * case, it just gives up the decision and let other filters decide it.
  *
@@ -137,7 +137,7 @@ private[spark] class SQLLiveEntitiesEventFilter(
       liveExecutionToJobs.contains(e.executionId)
 
     case e if acceptFnForJobEvents.isDefinedAt(e) && acceptFnForJobEvents(e) =>
-      // if acceptFnForJobEvents(e) returns false, we should leave it to "unmatched"
+      // NOTE: if acceptFnForJobEvents(e) returns false, we should leave it to "unmatched"
       true
 
     // these events are for finished batches so safer to ignore

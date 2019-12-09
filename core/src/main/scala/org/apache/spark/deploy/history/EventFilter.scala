@@ -33,7 +33,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
 /**
  * EventFilterBuilder provides the interface to gather the information from events being received
  * by [[SparkListenerInterface]], and create a new [[EventFilter]] instance which leverages
- * information gathered to decide whether the event should be filtered or not.
+ * information gathered to decide whether the event should be accepted or not.
  */
 private[spark] trait EventFilterBuilder extends SparkListenerInterface {
   def createFilter(): EventFilter
@@ -104,7 +104,6 @@ object EventFilter extends Logging {
             Some(JsonProtocol.sparkEventFromJson(parse(currentLine)))
           } catch {
             // ignore any exception occurred from unidentified json
-            // just skip handling and write the line
             case NonFatal(_) =>
               fnUnidentified(currentLine)
               None

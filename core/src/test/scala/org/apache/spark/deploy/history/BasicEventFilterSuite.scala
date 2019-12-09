@@ -49,10 +49,10 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val stageCompletedEventsForJob1 = SparkListenerStageCompleted(stage1)
     val unpersistRDDEventsForJob1 = (1 to 2).map(SparkListenerUnpersistRDD)
 
-    // job events for finished job should be filtered out
+    // job events for finished job should be rejected
     assertFilterJobEvents(acceptFn, jobStartEventForJob1, jobEndEventForJob1, Some(false))
 
-    // stage events for finished job should be filtered out
+    // stage events for finished job should be rejected
     // NOTE: it doesn't filter out stage events which are also related to the executor
     assertFilterStageEvents(
       acceptFn,
@@ -62,7 +62,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
       SparkListenerSpeculativeTaskSubmitted(stage1.stageId, stageAttemptId = 1),
       Some(false))
 
-    // task events for finished job should be filtered out
+    // task events for finished job should be rejected
     assertFilterTaskEvents(acceptFn, tasksForStage1, stage1, Some(false))
 
     // Verifying with live job 2
@@ -76,10 +76,10 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val stageCompletedEventsForJob2 = SparkListenerStageCompleted(stage2)
     val unpersistRDDEventsForJob2 = rddsForStage2.map { rdd => SparkListenerUnpersistRDD(rdd.id) }
 
-    // job events for live job should be filtered in
+    // job events for live job should be accepted
     assert(acceptFn(jobStartEventForJob2) === Some(true))
 
-    // stage events for live job should be filtered in
+    // stage events for live job should be accepted
     assertFilterStageEvents(
       acceptFn,
       stageSubmittedEventsForJob2,
@@ -88,7 +88,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
       SparkListenerSpeculativeTaskSubmitted(stage2.stageId, stageAttemptId = 1),
       Some(true))
 
-    // task events for live job should be filtered in
+    // task events for live job should be accepted
     assertFilterTaskEvents(acceptFn, tasksForStage2, stage2, Some(true))
   }
 
@@ -99,7 +99,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val filter = new BasicEventFilter(Map.empty, Map.empty, Map.empty, liveExecutors)
     val acceptFn = filter.acceptFn().lift
 
-    // events for dead executor should be filtered out
+    // events for dead executor should be rejected
     assert(acceptFn(createExecutorAddedEvent(1)) === Some(false))
     // though the name of event is stage executor metrics, AppStatusListener only deals with
     // live executors
@@ -112,7 +112,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
       Some(false))
     assert(acceptFn(createExecutorRemovedEvent(1)) === Some(false))
 
-    // events for live executor should be filtered in
+    // events for live executor should be accepted
     assert(acceptFn(createExecutorAddedEvent(2)) === Some(true))
     assert(acceptFn(
       SparkListenerStageExecutorMetrics(2.toString, 0, 0, new ExecutorMetrics)) ===

@@ -31,28 +31,28 @@ class EventLogFilterRateCalculatorSuite extends SparkFunSuite {
   private val sparkConf = new SparkConf()
   private val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
-  test("calculate filter-in rate") {
+  test("calculate accept rate") {
     withTempDir { dir =>
       val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
 
       val events = new mutable.ArrayBuffer[SparkListenerEvent]
 
-      // filterApplicationEnd: Some(true) & Some(true) => filter in
+      // filterApplicationEnd: Some(true) & Some(true) => accepted
       events += SparkListenerApplicationEnd(0)
 
-      // filterBlockManagerAdded: Some(true) & Some(false) => filter out
+      // filterBlockManagerAdded: Some(true) & Some(false) => rejected
       events += SparkListenerBlockManagerAdded(0, BlockManagerId("1", "host1", 1), 10)
 
-      // filterApplicationStart: Some(false) & Some(false) => filter out
+      // filterApplicationStart: Some(false) & Some(false) => rejected
       events += SparkListenerApplicationStart("app", None, 0, "user", None)
 
-      // filterNodeBlacklisted: None & Some(true) => filter in
+      // filterNodeBlacklisted: None & Some(true) => accepted
       events += SparkListenerNodeBlacklisted(0, "host1", 1)
 
-      // filterNodeUnblacklisted: None & Some(false) => filter out
+      // filterNodeUnblacklisted: None & Some(false) => rejected
       events += SparkListenerNodeUnblacklisted(0, "host1")
 
-      // other events: None & None => filter in
+      // other events: None & None => accepted
       events += SparkListenerUnpersistRDD(0)
 
       val logPath = EventLogTestHelper.writeEventLogFile(sparkConf, hadoopConf, dir, 1, events)
@@ -61,7 +61,7 @@ class EventLogFilterRateCalculatorSuite extends SparkFunSuite {
 
       val filters = Seq(new TestEventFilter1, new TestEventFilter2)
       val calculator = new EventLogFilterRateCalculator(fs)
-      // 6 filtered in, 6 filtered out
+      // 6 accepted, 6 rejected
       assert(0.5d === calculator.doCalculate(logs, filters))
     }
   }

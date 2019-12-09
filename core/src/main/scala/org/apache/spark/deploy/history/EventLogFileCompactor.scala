@@ -34,8 +34,8 @@ import org.apache.spark.scheduler._
  * 1) Initialize available [[EventFilterBuilder]] instances, and replay the old event log files with
  * builders, so that these builders can gather the information to create [[EventFilter]] instances.
  * 2) Initialize [[EventFilter]] instances from [[EventFilterBuilder]] instances, and replay the
- * old event log files with filters. Rewrite the content to the compact file if the filters decide
- * to filter in.
+ * old event log files with filters. Rewrite the events to the compact file which the filters decide
+ * to accept.
  *
  * This class assumes caller will provide the sorted list of files which are sorted by the index of
  * event log file - caller should keep in mind that this class doesn't care about the semantic of
@@ -106,8 +106,8 @@ class EventLogFileCompactor(
 
 /**
  * This class rewrites the event log files into one compact file: the compact file will only
- * contain the events which pass the filters. Events will be filtered out only when all filters
- * decide to filter out the event or don't mind about the event. Otherwise, the original line for
+ * contain the events which pass the filters. Events will be dropped only when all filters
+ * decide to reject the event or don't mind about the event. Otherwise, the original line for
  * the event is written to the compact file as it is.
  */
 class FilteredEventLogFileRewriter(
@@ -140,7 +140,7 @@ class FilteredEventLogFileRewriter(
 }
 
 /**
- * This class helps to write compact file; to avoid reimplement everything, it extends
+ * This class helps to write compact file; to avoid reimplementing everything, it extends
  * [[SingleEventLogFileWriter]], but only `originalFilePath` is used to determine the
  * path of compact file.
  */

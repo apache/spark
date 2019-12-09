@@ -117,7 +117,7 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
     }
   }
 
-  test("events for finished job are filtered out in new compact file") {
+  test("events for finished job are dropped in new compact file") {
     withTempDir { dir =>
       val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
 
@@ -142,7 +142,7 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
 
       Utils.tryWithResource(EventLogFileReader.openEventLog(compactFilePath, fs)) { is =>
         val lines = Source.fromInputStream(is)(Codec.UTF8).getLines().toList
-        assert(lines.length === 2, "Compacted file should have only two events being filtered in")
+        assert(lines.length === 2, "Compacted file should have only two events being accepted")
         lines.foreach { line =>
           val event = JsonProtocol.sparkEventFromJson(parse(line))
           assert(!event.isInstanceOf[SparkListenerJobStart] &&
