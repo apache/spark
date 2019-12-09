@@ -17,27 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.sources.{BaseRelation, RelationProvider}
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-/* A test JdbcRelationProvider used to provide persistent schema */
-class TestJdbcRelationProvider extends RelationProvider {
-  override def createRelation(sqlCtx: SQLContext, parameters: Map[String, String])
-  : BaseRelation = {
-    new BaseRelation {
-      override def sqlContext: SQLContext = sqlCtx
-      override def schema: StructType = {
-        new StructType().add(StructField("a", StringType)).add(StructField("b", IntegerType))
-      }
-    }
-  }
-}
-
-class JdbcUtilsSuite extends SharedSparkSession {
+class JdbcUtilsSuite extends SparkFunSuite {
 
   val tableSchema = StructType(Seq(
     StructField("C1", StringType, false), StructField("C2", IntegerType, false)))
