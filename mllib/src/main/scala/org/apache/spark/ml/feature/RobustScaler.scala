@@ -147,10 +147,9 @@ class RobustScaler (override val uid: String)
   override def fit(dataset: Dataset[_]): RobustScalerModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val vectors = dataset.select($(inputCol)).rdd.map {
-      case Row(vec: Vector) => vec
-    }
-    val numFeatures = vectors.first().size
+    val vectors = dataset.select($(inputCol)).rdd.map { case Row(vec: Vector) => vec }
+    val numFeatures = MetadataUtils.getNumFeatures(dataset.schema($(inputCol)))
+      .getOrElse(vectors.first().size)
 
     val localRelativeError = $(relativeError)
     val localUpper = $(upper)
@@ -159,10 +158,7 @@ class RobustScaler (override val uid: String)
     val collected = vectors.flatMap { vec =>
       require(vec.size == numFeatures,
         s"Number of dimensions must be $numFeatures but got ${vec.size}")
-
-      Iterator.range(0, numFeatures).map { i =>
-        (i, vec(i))
-      }
+      Iterator.range(0, numFeatures).map { i => (i, vec(i)) }
     }.aggregateByKey(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))(
       seqOp = (s, v) => s.insert(v),

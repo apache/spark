@@ -42,6 +42,24 @@ private[spark] object MetadataUtils {
   }
 
   /**
+   * Examine a schema to identify the number of features in a vector column.
+   * Returns None if the number of features is not specified.
+   */
+  def getNumFeatures(vectorSchema: StructField): Option[Int] = {
+    if (vectorSchema.dataType == new VectorUDT) {
+      val group = AttributeGroup.fromStructField(vectorSchema)
+      val size = group.size
+      if (size >= 0) {
+        Some(size)
+      } else {
+        None
+      }
+    } else {
+      None
+    }
+  }
+
+  /**
    * Examine a schema to identify categorical (Binary and Nominal) features.
    *
    * @param featuresSchema  Schema of the features column.
