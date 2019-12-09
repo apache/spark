@@ -70,3 +70,6 @@
 # You might get better performance to enable these options if using native BLAS (see SPARK-21305).
 # - MKL_NUM_THREADS=1        Disable multi-threading of Intel MKL
 # - OPENBLAS_NUM_THREADS=1   Disable multi-threading of OpenBLAS
+# If you use native BLAS on the executor, you need to set the following options in spark.conf to get better performance (see SPARK-29553).
+# - spark.executorEnv.OPENBLAS_NUM_THREADS=1
+# - spark.executorEnv.MKL_NUM_THREADS=1

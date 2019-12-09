@@ -25,3 +25,8 @@
 # spark.serializer                 org.apache.spark.serializer.KryoSerializer
 # spark.driver.memory              5g
 # spark.executor.extraJavaOptions  -XX:+PrintGCDetails -Dkey=value -Dnumbers="one two three"
+
+# Options for native BLAS, like Intel MKL, OpenBLAS, and so on.
+# # You might get better performance to enable these options if using native BLAS on the executors (see SPARK-29553)
+# # - spark.executorEnv.OPENBLAS_NUM_THREADS=1
+# # - spark.executorEnv.MKL_NUM_THREADS=1
