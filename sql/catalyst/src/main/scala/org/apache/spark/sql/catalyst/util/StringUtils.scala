@@ -38,7 +38,7 @@ object StringUtils extends Logging {
    * throw an [[AnalysisException]].
    *
    * @param pattern the SQL pattern to convert
-   * @param escapeStr the escape string contains one character.
+   * @param escapeChar the escape string contains one character.
    * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
@@ -66,8 +66,11 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
-  private[this] val trueStrings = Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
-  private[this] val falseStrings = Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
+  private[this] val trueStrings =
+    Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
+
+  private[this] val falseStrings =
+    Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
 
   // scalastyle:off caselocale
   def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.trimAll().toLowerCase)
