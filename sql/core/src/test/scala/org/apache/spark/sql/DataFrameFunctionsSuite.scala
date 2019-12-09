@@ -860,8 +860,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
-      sql("select array_contains(array(1.0, 2.02), 1.0)"),
+      sql("select array_contains(array(1.10), 1.1)"),
       Seq(Row(true))
+    )
+
+    checkAnswer(
+      sql("SELECT array_contains(array(1.1), 1.10)"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      sql("SELECT array_contains(array(1.11), 1.1)"),
+      Seq(Row(false))
     )
   }
 

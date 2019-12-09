@@ -256,6 +256,52 @@ license: |
 
   - Since Spark 3.0, the unary arithmetic operator plus(`+`) only accepts string, numeric and interval type values as inputs. Besides, `+` with a integral string representation will be coerced to double value, e.g. `+'1'` results `1.0`. In Spark version 2.4 and earlier, this operator is ignored. There is no type checking for it, thus, all type values with a `+` prefix are valid, e.g. `+ array(1, 2)` is valid and results `[1, 2]`. Besides, there is no type coercion for it at all, e.g. in Spark 2.4, the result of `+'1'` is string `1`.
 
+  - Since Spark 3.0, the parameter(first or second) to array_contains function is implicitly promoted to the wider type parameter.
+    <table class="table">
+        <tr>
+            <th>
+                <b>Query</b>
+            </th>
+            <th>
+                <b>Spark 2.4</b>
+            </th>
+            <th>
+                <b>Spark 3.0</b>
+            </th>
+            <th>
+                <b>Remarks</b>
+            </th>
+        </tr>
+        <tr>
+            <td>
+                <code>select array_contains(array(1.10), 1.1);</code>
+            </td>
+            <td>
+                <code>AnalysisException</code> is thrown.
+            </td>
+            <td>
+                <code>True</code>
+            </td>
+            <td>
+                In spark 2.4, left parameter is of <code>array(decimal(3,2))</code> where as right parameter is of <code>decimal(2,1)</code>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <code>select array_contains(array(1.1), 1.10);</code>
+            </td>
+            <td>
+                <code>AnalysisException</code> is thrown.
+            </td>
+            <td>
+                <code>True</code>
+            </td>
+            <td>
+                In spark 2.4, left parameter is of <code>array(decimal(2,1))</code> where as right parameter is of <code>decimal(3,2)</code>
+            </td>
+        </tr>
+    </table>
+    
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was
