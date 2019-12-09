@@ -158,7 +158,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
   }
 
   test("KMeans using cosine distance") {
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(1.0, 1.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5),
@@ -191,7 +191,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
 
   test("KMeans with cosine distance is not supported for 0-length vectors") {
     val model = new KMeans().setDistanceMeasure(DistanceMeasure.COSINE).setK(2)
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(0.0, 0.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5)
