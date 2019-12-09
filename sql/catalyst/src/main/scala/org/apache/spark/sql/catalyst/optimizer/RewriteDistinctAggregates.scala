@@ -112,11 +112,11 @@ import org.apache.spark.sql.types.IntegerType
  *        output = ['key, 'cat1, 'cat2, 'gid, 'value, 'id])
  *       LocalTableScan [...]
  * }}}
- * 
+ *
  * Example three aggregate function with distinct and filter clauses (in sql):
  * {{{
- *   select count(distinct cat1) filter (where id > 1) as cat1_cnt, count(distinct cat2) as cat2_cnt,
- *     sum(value) as total
+ *   select count(distinct cat1) filter (where id > 1) as cat1_cnt,
+ *     count(distinct cat2) as cat2_cnt, sum(value) as total
  *   from data group by key
  * }}}
  *
