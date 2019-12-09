@@ -47,9 +47,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
   extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency
-  
   private val compressionCodec = CompressionCodec.createCodec(sparkConf)
-
   private val compressShuffle = sparkConf.get(config.SHUFFLE_COMPRESS)
 
   private def fetchContinuousBlocksInBatch: Boolean = {
