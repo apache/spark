@@ -126,7 +126,9 @@ private[spark] class TaskSchedulerImpl(
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
-  protected  val executorIdToCores = new HashMap[String, Int]
+  protected val executorIdToCores = new HashMap[String, Int]
+  protected var totalSlots = 0
+
   protected val executorIdToHost = new HashMap[String, String]
 
   private val abortTimer = new Timer(true)
@@ -405,6 +407,7 @@ private[spark] class TaskSchedulerImpl(
         hostToExecutors(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
         executorIdToCores(o.executorId) = o.cores
+        totalSlots += o.cores / CPUS_PER_TASK
         executorIdToHost(o.executorId) = o.host
         executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
         newExecAvail = true
@@ -441,8 +444,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    val availableSlots = executorIdToCores.values.map(c => c / CPUS_PER_TASK).sum
-    rootPool.updateAvailableSlots(availableSlots)
+    rootPool.updateAvailableSlots(totalSlots)
 
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
@@ -813,7 +815,7 @@ private[spark] class TaskSchedulerImpl(
       // happen below in the rootPool.executorLost() call.
       taskIds.foreach(cleanupTaskState)
     }
-    executorIdToCores.remove(executorId)
+    executorIdToCores.remove(executorId).foreach(totalSlots -= _ / CPUS_PER_TASK)
 
     val host = executorIdToHost(executorId)
     val execs = hostToExecutors.getOrElse(host, new HashSet)

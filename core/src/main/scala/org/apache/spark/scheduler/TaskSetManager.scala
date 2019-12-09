@@ -201,10 +201,13 @@ private[spark] class TaskSetManager(
   private[scheduler] var localityWaits = myLocalityLevels.map(getLocalityWait)
 
   // Delay scheduling variables: we keep track of our current locality level and the time we
-  // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
+  // last launched a task at that level and were also fully utilizing all slots
+  // Move up a level when localityWaits[curLevel] expires.
   // We then move down if we manage to launch a "more local" task.
   private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels
-  private var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
+  // Time we last launched a task at this level
+  // and number of running tasks was greater than or equal to numAvailableSlot
+  private var lastFullUtilizationTime = clock.getTimeMillis()
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
@@ -411,12 +414,13 @@ private[spark] class TaskSetManager(
           execId, host, taskLocality, speculative)
         taskInfos(taskId) = info
         taskAttempts(index) = info :: taskAttempts(index)
-        // Update our locality level for delay scheduling
+        // Update our locality level for delay scheduling if all allocated slots are being utilized
         // NO_PREF will not affect the variables related to delay scheduling
+        // Adding 1 to runningTasks, since runningTasks doesn't include this task yet
         val utilizingAllSlots = runningTasks + 1 >= numAvailableSlot
         if (maxLocality != TaskLocality.NO_PREF && utilizingAllSlots) {
           currentLocalityIndex = getLocalityIndex(taskLocality)
-          lastLaunchTime = curTime
+          lastFullUtilizationTime = curTime
         }
         // Serialize and return the task
         val serializedTask: ByteBuffer = try {
@@ -536,14 +540,14 @@ private[spark] class TaskSetManager(
         // This is a performance optimization: if there are no more tasks that can
         // be scheduled at a particular locality level, there is no point in waiting
         // for the locality wait timeout (SPARK-4939).
-        lastLaunchTime = curTime
+        lastFullUtilizationTime = curTime
         logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
           s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
-      } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
-        // Jump to the next locality level, and reset lastLaunchTime so that the next locality
-        // wait timer doesn't immediately expire
-        lastLaunchTime += localityWaits(currentLocalityIndex)
+      } else if (curTime - lastFullUtilizationTime >= localityWaits(currentLocalityIndex)) {
+        // Jump to the next locality level, and reset lastFullUtilizationTime
+        // so that the next locality wait timer doesn't immediately expire
+        lastFullUtilizationTime += localityWaits(currentLocalityIndex)
         logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1

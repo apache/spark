@@ -50,6 +50,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     nextTaskSetToSchedule.get.addRunningTask(taskId)
     assert(nextTaskSetToSchedule.get.stageId === expectedStageId)
   }
+
   test("validate FIFO slot distributions") {
     sc = new SparkContext(LOCAL, APP_NAME)
     val taskScheduler = new TaskSchedulerImpl(sc)

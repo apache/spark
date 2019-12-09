@@ -126,10 +126,11 @@ private[spark] class Pool(
         val usableWeights = schedulableQueue.asScala
           .map(s => if (s.getSortedTaskSetQueue.nonEmpty) (s, s.weight) else (s, 0))
         val totalWeights = usableWeights.map(_._2).sum
-        usableWeights.foreach({case (schedulable, usableWeight) =>
+        usableWeights.foreach { case (schedulable, usableWeight) =>
           schedulable.updateAvailableSlots(
             Math.max(numSlots * usableWeight / totalWeights, schedulable.minShare))
-        })
+        }
+      // for FIFO, allocate all slots to the first taskset in the queue
       case SchedulingMode.FIFO =>
         val sortedSchedulableQueue =
           schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)

@@ -200,9 +200,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val clock = new ManualClock
     val conf = new SparkConf()
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
-    // import org.slf4j.{Logger, LoggerFactory}
-    import org.apache.log4j.{Logger, Level}
-    Logger.getLogger("org.apache.spark.scheduler.TaskSetManager").setLevel(Level.DEBUG)
     val taskScheduler = new TaskSchedulerImpl(sc,
       sc.conf.get(config.TASK_MAX_FAILURES),
       clock = clock) {
@@ -249,7 +246,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       .flatten.head
     assert(task2.index === 2)
     taskScheduler.statusUpdate(task1.taskId, TaskState.FINISHED, ByteBuffer.allocate(0))
-    assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host2", 1)))
+    assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
       .flatten.head.index === 3)
     assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1)))
       .flatten.isEmpty)
