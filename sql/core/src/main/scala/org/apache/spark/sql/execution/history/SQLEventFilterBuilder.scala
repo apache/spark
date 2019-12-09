@@ -126,74 +126,24 @@ private[spark] class SQLLiveEntitiesEventFilter(
   logDebug(s"live executions : ${liveExecutionToJobs.keySet}")
   logDebug(s"jobs in live executions : ${liveExecutionToJobs.values.flatten}")
 
-  override def filterStageCompleted(event: SparkListenerStageCompleted): Option[Boolean] = {
-    trueOrNone(super.filterStageCompleted(event))
-  }
+  override def accept(event: SparkListenerEvent): Option[Boolean] = {
+    val fn: PartialFunction[SparkListenerEvent, Boolean] = {
+      case e: SparkListenerSQLExecutionStart =>
+        liveExecutionToJobs.contains(e.executionId)
+      case e: SparkListenerSQLAdaptiveExecutionUpdate =>
+        liveExecutionToJobs.contains(e.executionId)
+      case e: SparkListenerSQLExecutionEnd =>
+        liveExecutionToJobs.contains(e.executionId)
+      case e: SparkListenerDriverAccumUpdates =>
+        liveExecutionToJobs.contains(e.executionId)
 
-  override def filterStageSubmitted(event: SparkListenerStageSubmitted): Option[Boolean] = {
-    trueOrNone(super.filterStageSubmitted(event))
-  }
+      // these events are for finished batches so safer to ignore
+      case _: StreamingQueryListener.QueryProgressEvent => false
+    }
+    val optFn = fn.andThen { bool => Some(bool) }
+    val trueOrNoneJobEventFn = acceptFnForJobEvents.andThen { bool => trueOrNone(Some(bool)) }
 
-  override def filterTaskStart(event: SparkListenerTaskStart): Option[Boolean] = {
-    trueOrNone(super.filterTaskStart(event))
-  }
-
-  override def filterTaskGettingResult(event: SparkListenerTaskGettingResult): Option[Boolean] = {
-    trueOrNone(super.filterTaskGettingResult(event))
-  }
-
-  override def filterTaskEnd(event: SparkListenerTaskEnd): Option[Boolean] = {
-    trueOrNone(super.filterTaskEnd(event))
-  }
-
-  override def filterJobStart(event: SparkListenerJobStart): Option[Boolean] = {
-    trueOrNone(super.filterJobStart(event))
-  }
-
-  override def filterJobEnd(event: SparkListenerJobEnd): Option[Boolean] = {
-    trueOrNone(super.filterJobEnd(event))
-  }
-
-  override def filterUnpersistRDD(event: SparkListenerUnpersistRDD): Option[Boolean] = {
-    trueOrNone(super.filterUnpersistRDD(event))
-  }
-
-  override def filterExecutorMetricsUpdate(
-      event: SparkListenerExecutorMetricsUpdate): Option[Boolean] = {
-    trueOrNone(super.filterExecutorMetricsUpdate(event))
-  }
-
-  override def filterSpeculativeTaskSubmitted(
-      event: SparkListenerSpeculativeTaskSubmitted): Option[Boolean] = {
-    trueOrNone(super.filterSpeculativeTaskSubmitted(event))
-  }
-
-  override def filterOtherEvent(event: SparkListenerEvent): Option[Boolean] = event match {
-    case e: SparkListenerSQLExecutionStart => filterExecutionStart(e)
-    case e: SparkListenerSQLAdaptiveExecutionUpdate => filterAdaptiveExecutionUpdate(e)
-    case e: SparkListenerSQLExecutionEnd => filterExecutionEnd(e)
-    case e: SparkListenerDriverAccumUpdates => filterDriverAccumUpdates(e)
-
-    // these events are for finished batches so safer to ignore
-    case _: StreamingQueryListener.QueryProgressEvent => Some(false)
-    case _ => None
-  }
-
-  def filterExecutionStart(event: SparkListenerSQLExecutionStart): Option[Boolean] = {
-    Some(liveExecutionToJobs.contains(event.executionId))
-  }
-
-  def filterAdaptiveExecutionUpdate(
-      event: SparkListenerSQLAdaptiveExecutionUpdate): Option[Boolean] = {
-    Some(liveExecutionToJobs.contains(event.executionId))
-  }
-
-  def filterExecutionEnd(event: SparkListenerSQLExecutionEnd): Option[Boolean] = {
-    Some(liveExecutionToJobs.contains(event.executionId))
-  }
-
-  def filterDriverAccumUpdates(event: SparkListenerDriverAccumUpdates): Option[Boolean] = {
-    Some(liveExecutionToJobs.contains(event.executionId))
+    optFn.orElse(trueOrNoneJobEventFn).apply(event)
   }
 
   private def trueOrNone(booleanValue: Option[Boolean]): Option[Boolean] = {

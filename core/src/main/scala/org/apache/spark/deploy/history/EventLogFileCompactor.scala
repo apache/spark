@@ -113,34 +113,29 @@ class EventLogFileCompactor(
 class FilteredEventLogFileRewriter(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    override val fs: FileSystem,
-    override val filters: Seq[EventFilter]) extends EventFilterApplier {
-
-  private var logWriter: Option[CompactedEventLogFileWriter] = None
+    fs: FileSystem,
+    filters: Seq[EventFilter]) {
 
   def rewrite(eventLogFiles: Seq[FileStatus]): String = {
     require(eventLogFiles.nonEmpty)
 
     val targetEventLogFilePath = eventLogFiles.last.getPath
-    logWriter = Some(new CompactedEventLogFileWriter(targetEventLogFilePath, "dummy", None,
-      targetEventLogFilePath.getParent.toUri, sparkConf, hadoopConf))
+    val logWriter = new CompactedEventLogFileWriter(targetEventLogFilePath, "dummy", None,
+      targetEventLogFilePath.getParent.toUri, sparkConf, hadoopConf)
 
-    val writer = logWriter.get
-    writer.start()
-    eventLogFiles.foreach { file => applyFilter(file.getPath) }
-    writer.stop()
+    logWriter.start()
+    eventLogFiles.foreach { file =>
+      EventFilter.applyFilterToFile(fs, filters, file.getPath) { case (line, _) =>
+        logWriter.writeEvent(line, flushLogger = true)
+      } { case (_, _) =>
+        // no-op
+      } { line =>
+        logWriter.writeEvent(line, flushLogger = true)
+      }
+    }
+    logWriter.stop()
 
-    writer.logPath
-  }
-
-  override protected def handleFilteredInEvent(line: String, event: SparkListenerEvent): Unit = {
-    logWriter.foreach { writer => writer.writeEvent(line, flushLogger = true) }
-  }
-
-  override protected def handleFilteredOutEvent(line: String, event: SparkListenerEvent): Unit = {}
-
-  override protected def handleUnidentifiedLine(line: String): Unit = {
-    logWriter.foreach { writer => writer.writeEvent(line, flushLogger = true) }
+    logWriter.logPath
   }
 }
 

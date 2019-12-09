@@ -39,12 +39,11 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
       stageToTasks, stageToRDDs)
 
     // Verifying with finished SQL execution 1
-    assert(filter.filterOtherEvent(SparkListenerSQLExecutionStart(1, "description1", "details1",
+    assert(filter.accept(SparkListenerSQLExecutionStart(1, "description1", "details1",
       "plan", null, 0)) === Some(false))
-    assert(filter.filterOtherEvent(SparkListenerSQLExecutionEnd(1, 0)) === Some(false))
-    assert(filter.filterOtherEvent(SparkListenerSQLAdaptiveExecutionUpdate(1, "plan", null))
-      === Some(false))
-    assert(filter.filterOtherEvent(SparkListenerDriverAccumUpdates(1, Seq.empty)) === Some(false))
+    assert(filter.accept(SparkListenerSQLExecutionEnd(1, 0)) === Some(false))
+    assert(filter.accept(SparkListenerSQLAdaptiveExecutionUpdate(1, "plan", null)) === Some(false))
+    assert(filter.accept(SparkListenerDriverAccumUpdates(1, Seq.empty)) === Some(false))
 
     // Verifying with finished job 1
     val rddsForStage1 = createRddsWithId(1 to 2)
@@ -59,40 +58,39 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
     val unpersistRDDEventsForJob1 = (1 to 2).map(SparkListenerUnpersistRDD)
 
     // job events for finished job should be considered as "don't know"
-    assert(filter.filterJobStart(jobStartEventForJob1) === None)
-    assert(filter.filterJobEnd(jobEndEventForJob1) === None)
+    assert(filter.accept(jobStartEventForJob1) === None)
+    assert(filter.accept(jobEndEventForJob1) === None)
 
     // stage events for finished job should be considered as "don't know"
-    assert(filter.filterStageSubmitted(stageSubmittedEventsForJob1) === None)
-    assert(filter.filterStageCompleted(stageCompletedEventsForJob1) === None)
+    assert(filter.accept(stageSubmittedEventsForJob1) === None)
+    assert(filter.accept(stageCompletedEventsForJob1) === None)
     unpersistRDDEventsForJob1.foreach { event =>
-      assert(filter.filterUnpersistRDD(event) === None)
+      assert(filter.accept(event) === None)
     }
 
     val taskSpeculativeTaskSubmittedEvent = SparkListenerSpeculativeTaskSubmitted(stage1.stageId,
       stageAttemptId = 1)
-    assert(filter.filterSpeculativeTaskSubmitted(taskSpeculativeTaskSubmittedEvent) === None)
+    assert(filter.accept(taskSpeculativeTaskSubmittedEvent) === None)
 
     // task events for finished job should be considered as "don't know"
     tasksForStage1.foreach { task =>
       val taskStartEvent = SparkListenerTaskStart(stage1.stageId, 0, task)
-      assert(filter.filterTaskStart(taskStartEvent) === None)
+      assert(filter.accept(taskStartEvent) === None)
 
       val taskGettingResultEvent = SparkListenerTaskGettingResult(task)
-      assert(filter.filterTaskGettingResult(taskGettingResultEvent) === None)
+      assert(filter.accept(taskGettingResultEvent) === None)
 
       val taskEndEvent = SparkListenerTaskEnd(stage1.stageId, 0, "taskType",
         Success, task, new ExecutorMetrics, null)
-      assert(filter.filterTaskEnd(taskEndEvent) === None)
+      assert(filter.accept(taskEndEvent) === None)
     }
 
     // Verifying with live SQL execution 2
-    assert(filter.filterOtherEvent(SparkListenerSQLExecutionStart(2, "description2", "details2",
+    assert(filter.accept(SparkListenerSQLExecutionStart(2, "description2", "details2",
       "plan", null, 0)) === Some(true))
-    assert(filter.filterOtherEvent(SparkListenerSQLExecutionEnd(2, 0)) === Some(true))
-    assert(filter.filterOtherEvent(SparkListenerSQLAdaptiveExecutionUpdate(2, "plan", null))
-      === Some(true))
-    assert(filter.filterOtherEvent(SparkListenerDriverAccumUpdates(2, Seq.empty)) === Some(true))
+    assert(filter.accept(SparkListenerSQLExecutionEnd(2, 0)) === Some(true))
+    assert(filter.accept(SparkListenerSQLAdaptiveExecutionUpdate(2, "plan", null)) === Some(true))
+    assert(filter.accept(SparkListenerDriverAccumUpdates(2, Seq.empty)) === Some(true))
 
     // Verifying with live job 2
     val rddsForStage2 = createRddsWithId(3 to 4)
@@ -106,30 +104,30 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
     val unpersistRDDEventsForJob2 = rddsForStage2.map { rdd => SparkListenerUnpersistRDD(rdd.id) }
 
     // job events for live job should be filtered in
-    assert(filter.filterJobStart(jobStartEventForJob2) === Some(true))
+    assert(filter.accept(jobStartEventForJob2) === Some(true))
 
     // stage events for live job should be filtered in
-    assert(filter.filterStageSubmitted(stageSubmittedEventsForJob2) === Some(true))
-    assert(filter.filterStageCompleted(stageCompletedEventsForJob2) === Some(true))
+    assert(filter.accept(stageSubmittedEventsForJob2) === Some(true))
+    assert(filter.accept(stageCompletedEventsForJob2) === Some(true))
     unpersistRDDEventsForJob2.foreach { event =>
-      assert(filter.filterUnpersistRDD(event) === Some(true))
+      assert(filter.accept(event) === Some(true))
     }
 
     val taskSpeculativeTaskSubmittedEvent2 = SparkListenerSpeculativeTaskSubmitted(stage2.stageId,
       stageAttemptId = 1)
-    assert(filter.filterSpeculativeTaskSubmitted(taskSpeculativeTaskSubmittedEvent2) === Some(true))
+    assert(filter.accept(taskSpeculativeTaskSubmittedEvent2) === Some(true))
 
     // task events for live job should be filtered in
     tasksForStage2.foreach { task =>
       val taskStartEvent = SparkListenerTaskStart(stage2.stageId, 0, task)
-      assert(filter.filterTaskStart(taskStartEvent) === Some(true))
+      assert(filter.accept(taskStartEvent) === Some(true))
 
       val taskGettingResultEvent = SparkListenerTaskGettingResult(task)
-      assert(filter.filterTaskGettingResult(taskGettingResultEvent) === Some(true))
+      assert(filter.accept(taskGettingResultEvent) === Some(true))
 
       val taskEndEvent = SparkListenerTaskEnd(stage1.stageId, 0, "taskType",
         Success, task, new ExecutorMetrics, null)
-      assert(filter.filterTaskEnd(taskEndEvent) === Some(true))
+      assert(filter.accept(taskEndEvent) === Some(true))
     }
   }
 }

@@ -82,42 +82,23 @@ object EventLogTestHelper {
   }
 
   class TestEventFilter1 extends EventFilter {
-    override def filterApplicationEnd(event: SparkListenerApplicationEnd): Option[Boolean] = {
-      Some(true)
-    }
-
-    override def filterBlockManagerAdded(event: SparkListenerBlockManagerAdded): Option[Boolean] = {
-      Some(true)
-    }
-
-    override def filterApplicationStart(event: SparkListenerApplicationStart): Option[Boolean] = {
-      Some(false)
+    override def accept(event: SparkListenerEvent): Option[Boolean] = event match {
+      case _: SparkListenerApplicationEnd => Some(true)
+      case _: SparkListenerBlockManagerAdded => Some(true)
+      case _: SparkListenerApplicationStart => Some(false)
+      case _ => None
     }
   }
 
   class TestEventFilter2 extends EventFilter {
-    override def filterApplicationEnd(event: SparkListenerApplicationEnd): Option[Boolean] = {
-      Some(true)
-    }
-
-    override def filterEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Option[Boolean] = {
-      Some(true)
-    }
-
-    override def filterBlockManagerAdded(event: SparkListenerBlockManagerAdded): Option[Boolean] = {
-      Some(false)
-    }
-
-    override def filterApplicationStart(event: SparkListenerApplicationStart): Option[Boolean] = {
-      Some(false)
-    }
-
-    override def filterNodeBlacklisted(event: SparkListenerNodeBlacklisted): Option[Boolean] = {
-      Some(true)
-    }
-
-    override def filterNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Option[Boolean] = {
-      Some(false)
+    override def accept(event: SparkListenerEvent): Option[Boolean] = event match {
+      case _: SparkListenerApplicationEnd => Some(true)
+      case _: SparkListenerEnvironmentUpdate => Some(true)
+      case _: SparkListenerNodeBlacklisted => Some(true)
+      case _: SparkListenerBlockManagerAdded => Some(false)
+      case _: SparkListenerApplicationStart => Some(false)
+      case _: SparkListenerNodeUnblacklisted => Some(false)
+      case _ => None
     }
   }
 }

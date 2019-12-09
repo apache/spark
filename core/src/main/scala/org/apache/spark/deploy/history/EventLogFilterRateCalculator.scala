@@ -22,12 +22,12 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
- * This class calculates the rate of events being filtered-in, via two phases reading:
+ * This class calculates the rate of events being accepted, via two phases reading:
  *
  * 1) Initialize available [[EventFilterBuilder]] instances, and replay the event log files with
  * builders, so that these builders can gather the information to create [[EventFilter]] instances.
  * 2) Initialize [[EventFilter]] instances from [[EventFilterBuilder]] instances, and replay the
- * event log files with filters. Counts the number of events vs filtered-in events and calculate
+ * event log files with filters. Counts the number of events vs accepted events and calculate
  * the rate.
  */
 class EventLogFilterRateCalculator(fs: FileSystem) {
@@ -45,35 +45,24 @@ class EventLogFilterRateCalculator(fs: FileSystem) {
     calc.calculate(eventLogPaths)
   }
 
-  private class Calculator(
-      override val fs: FileSystem,
-      override val filters: Seq[EventFilter]) extends EventFilterApplier {
-    private var allEvents = 0L
-    private var filteredInEvents = 0L
-
+  private class Calculator(fs: FileSystem, filters: Seq[EventFilter]) {
     def calculate(eventLogPaths: Seq[Path]): Double = {
-      clearValues()
-      eventLogPaths.foreach { path => applyFilter(path) }
+      var allEvents = 0L
+      var filteredInEvents = 0L
+
+      eventLogPaths.foreach { path =>
+        EventFilter.applyFilterToFile(fs, filters, path) { case (_, _) =>
+          allEvents += 1
+          filteredInEvents += 1
+        } { case (_, _) =>
+          allEvents += 1
+        } { _ =>
+          allEvents += 1
+          filteredInEvents += 1
+        }
+      }
+
       filteredInEvents.toDouble / allEvents
-    }
-
-    protected def handleFilteredInEvent(line: String, event: SparkListenerEvent): Unit = {
-      allEvents += 1
-      filteredInEvents += 1
-    }
-
-    protected def handleFilteredOutEvent(line: String, event: SparkListenerEvent): Unit = {
-      allEvents += 1
-    }
-
-    protected def handleUnidentifiedLine(line: String): Unit = {
-      allEvents += 1
-      filteredInEvents += 1
-    }
-
-    private def clearValues(): Unit = {
-      allEvents = 0L
-      filteredInEvents = 0L
     }
   }
 }

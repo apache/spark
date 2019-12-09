@@ -62,121 +62,34 @@ object EventFilterBuilder {
 }
 
 /**
- * [[EventFilter]] decides whether the given event should be filtered in, or filtered out when
- * compacting event log files.
- *
- * The meaning of return values of each filterXXX method are following:
- * - Some(true): Filter in this event.
- * - Some(false): Filter out this event.
- * - None: Don't mind about this event. No problem even other filters decide to filter out.
+ * [[EventFilter]] decides whether the given event should be accepted or rejected.
  *
  * Please refer [[FilteredEventLogFileRewriter]] for more details on how the filter will be used.
  */
 private[spark] trait EventFilter {
-  def filterStageCompleted(event: SparkListenerStageCompleted): Option[Boolean] = None
-
-  def filterStageSubmitted(event: SparkListenerStageSubmitted): Option[Boolean] = None
-
-  def filterTaskStart(event: SparkListenerTaskStart): Option[Boolean] = None
-
-  def filterTaskGettingResult(event: SparkListenerTaskGettingResult): Option[Boolean] = None
-
-  def filterTaskEnd(event: SparkListenerTaskEnd): Option[Boolean] = None
-
-  def filterJobStart(event: SparkListenerJobStart): Option[Boolean] = None
-
-  def filterJobEnd(event: SparkListenerJobEnd): Option[Boolean] = None
-
-  def filterEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Option[Boolean] = None
-
-  def filterBlockManagerAdded(event: SparkListenerBlockManagerAdded): Option[Boolean] = None
-
-  def filterBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Option[Boolean] = None
-
-  def filterUnpersistRDD(event: SparkListenerUnpersistRDD): Option[Boolean] = None
-
-  def filterApplicationStart(event: SparkListenerApplicationStart): Option[Boolean] = None
-
-  def filterApplicationEnd(event: SparkListenerApplicationEnd): Option[Boolean] = None
-
-  def filterExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Option[Boolean] = None
-
-  def filterStageExecutorMetrics(event: SparkListenerStageExecutorMetrics): Option[Boolean] = None
-
-  def filterExecutorAdded(event: SparkListenerExecutorAdded): Option[Boolean] = None
-
-  def filterExecutorRemoved(event: SparkListenerExecutorRemoved): Option[Boolean] = None
-
-  def filterExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Option[Boolean] = None
-
-  def filterExecutorBlacklistedForStage(
-      event: SparkListenerExecutorBlacklistedForStage): Option[Boolean] = None
-
-  def filterNodeBlacklistedForStage(
-      event: SparkListenerNodeBlacklistedForStage): Option[Boolean] = None
-
-  def filterExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Option[Boolean] = None
-
-  def filterNodeBlacklisted(event: SparkListenerNodeBlacklisted): Option[Boolean] = None
-
-  def filterNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Option[Boolean] = None
-
-  def filterBlockUpdated(event: SparkListenerBlockUpdated): Option[Boolean] = None
-
-  def filterSpeculativeTaskSubmitted(
-      event: SparkListenerSpeculativeTaskSubmitted): Option[Boolean] = None
-
-  def filterOtherEvent(event: SparkListenerEvent): Option[Boolean] = None
+  /**
+   * Classify whether the event is accepted or rejected by this filter.
+   *
+   * Note that the method signature requires to return Option[Boolean] instead of Boolean:
+   * if the filter is able to decide with event whether it should be accepted or rejected,
+   * it can return either Some(true) or Some(false). Otherwise it should return None.
+   */
+  def accept(event: SparkListenerEvent): Option[Boolean]
 }
 
-object EventFilter {
+object EventFilter extends Logging {
   def checkFilters(filters: Seq[EventFilter], event: SparkListenerEvent): Boolean = {
-    val results = filters.flatMap(filter => applyFilter(filter, event))
+    val results = filters.flatMap(_.accept(event))
     results.isEmpty || results.forall(_ == true)
   }
 
-  private def applyFilter(filter: EventFilter, event: SparkListenerEvent): Option[Boolean] = {
-    // This pattern match should have same list of event types, but it would be safe even if
-    // it's out of sync, once filter doesn't mark events to filter out for unknown event types.
-    event match {
-      case event: SparkListenerStageSubmitted => filter.filterStageSubmitted(event)
-      case event: SparkListenerStageCompleted => filter.filterStageCompleted(event)
-      case event: SparkListenerJobStart => filter.filterJobStart(event)
-      case event: SparkListenerJobEnd => filter.filterJobEnd(event)
-      case event: SparkListenerTaskStart => filter.filterTaskStart(event)
-      case event: SparkListenerTaskGettingResult => filter.filterTaskGettingResult(event)
-      case event: SparkListenerTaskEnd => filter.filterTaskEnd(event)
-      case event: SparkListenerEnvironmentUpdate => filter.filterEnvironmentUpdate(event)
-      case event: SparkListenerBlockManagerAdded => filter.filterBlockManagerAdded(event)
-      case event: SparkListenerBlockManagerRemoved => filter.filterBlockManagerRemoved(event)
-      case event: SparkListenerUnpersistRDD => filter.filterUnpersistRDD(event)
-      case event: SparkListenerApplicationStart => filter.filterApplicationStart(event)
-      case event: SparkListenerApplicationEnd => filter.filterApplicationEnd(event)
-      case event: SparkListenerExecutorMetricsUpdate => filter.filterExecutorMetricsUpdate(event)
-      case event: SparkListenerStageExecutorMetrics => filter.filterStageExecutorMetrics(event)
-      case event: SparkListenerExecutorAdded => filter.filterExecutorAdded(event)
-      case event: SparkListenerExecutorRemoved => filter.filterExecutorRemoved(event)
-      case event: SparkListenerExecutorBlacklistedForStage =>
-        filter.filterExecutorBlacklistedForStage(event)
-      case event: SparkListenerNodeBlacklistedForStage =>
-        filter.filterNodeBlacklistedForStage(event)
-      case event: SparkListenerExecutorBlacklisted => filter.filterExecutorBlacklisted(event)
-      case event: SparkListenerExecutorUnblacklisted => filter.filterExecutorUnblacklisted(event)
-      case event: SparkListenerNodeBlacklisted => filter.filterNodeBlacklisted(event)
-      case event: SparkListenerNodeUnblacklisted => filter.filterNodeUnblacklisted(event)
-      case event: SparkListenerBlockUpdated => filter.filterBlockUpdated(event)
-      case event: SparkListenerSpeculativeTaskSubmitted =>
-        filter.filterSpeculativeTaskSubmitted(event)
-      case _ => filter.filterOtherEvent(event)
-    }
-  }
-}
-
-trait EventFilterApplier extends Logging {
-  val fs: FileSystem
-  val filters: Seq[EventFilter]
-
-  def applyFilter(path: Path): Unit = {
+  def applyFilterToFile(
+      fs: FileSystem,
+      filters: Seq[EventFilter],
+      path: Path)(
+      fnAccepted: (String, SparkListenerEvent) => Unit)(
+      fnRejected: (String, SparkListenerEvent) => Unit)(
+      fnUnidentified: String => Unit): Unit = {
     Utils.tryWithResource(EventLogFileReader.openEventLog(path, fs)) { in =>
       val lines = Source.fromInputStream(in)(Codec.UTF8).getLines()
 
@@ -197,15 +110,15 @@ trait EventFilterApplier extends Logging {
             // ignore any exception occurred from unidentified json
             // just skip handling and write the line
             case NonFatal(_) =>
-              handleUnidentifiedLine(currentLine)
+              fnUnidentified(currentLine)
               None
           }
 
           event.foreach { e =>
             if (EventFilter.checkFilters(filters, e)) {
-              handleFilteredInEvent(currentLine, e)
+              fnAccepted(currentLine, e)
             } else {
-              handleFilteredOutEvent(currentLine, e)
+              fnRejected(currentLine, e)
             }
           }
         }
@@ -217,10 +130,4 @@ trait EventFilterApplier extends Logging {
       }
     }
   }
-
-  protected def handleFilteredInEvent(line: String, event: SparkListenerEvent): Unit
-
-  protected def handleFilteredOutEvent(line: String, event: SparkListenerEvent): Unit
-
-  protected def handleUnidentifiedLine(line: String): Unit
 }

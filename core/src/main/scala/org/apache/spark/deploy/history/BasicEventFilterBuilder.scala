@@ -98,48 +98,38 @@ private[spark] abstract class JobEventFilter(
   logDebug(s"tasks in stages : ${stageToTasks.values.flatten}")
   logDebug(s"RDDs in stages : ${stageToRDDs.values.flatten}")
 
-  override def filterStageCompleted(event: SparkListenerStageCompleted): Option[Boolean] = {
-    Some(stageToTasks.contains(event.stageInfo.stageId))
-  }
+  protected val acceptFnForJobEvents: PartialFunction[SparkListenerEvent, Boolean] = {
+    case e: SparkListenerStageCompleted =>
+      stageToTasks.contains(e.stageInfo.stageId)
 
-  override def filterStageSubmitted(event: SparkListenerStageSubmitted): Option[Boolean] = {
-    Some(stageToTasks.contains(event.stageInfo.stageId))
-  }
+    case e: SparkListenerStageSubmitted =>
+      stageToTasks.contains(e.stageInfo.stageId)
 
-  override def filterTaskStart(event: SparkListenerTaskStart): Option[Boolean] = {
-    Some(liveTasks.contains(event.taskInfo.taskId))
-  }
+    case e: SparkListenerTaskStart =>
+      liveTasks.contains(e.taskInfo.taskId)
 
-  override def filterTaskGettingResult(event: SparkListenerTaskGettingResult): Option[Boolean] = {
-    Some(liveTasks.contains(event.taskInfo.taskId))
-  }
+    case e: SparkListenerTaskGettingResult =>
+      liveTasks.contains(e.taskInfo.taskId)
 
-  override def filterTaskEnd(event: SparkListenerTaskEnd): Option[Boolean] = {
-    Some(liveTasks.contains(event.taskInfo.taskId))
-  }
+    case e: SparkListenerTaskEnd =>
+      liveTasks.contains(e.taskInfo.taskId)
 
-  override def filterJobStart(event: SparkListenerJobStart): Option[Boolean] = {
-    Some(jobToStages.contains(event.jobId))
-  }
+    case e: SparkListenerJobStart =>
+      jobToStages.contains(e.jobId)
 
-  override def filterJobEnd(event: SparkListenerJobEnd): Option[Boolean] = {
-    Some(jobToStages.contains(event.jobId))
-  }
+    case e: SparkListenerJobEnd =>
+      jobToStages.contains(e.jobId)
 
-  override def filterUnpersistRDD(event: SparkListenerUnpersistRDD): Option[Boolean] = {
-    Some(liveRDDs.contains(event.rddId))
-  }
+    case e: SparkListenerUnpersistRDD =>
+      liveRDDs.contains(e.rddId)
 
-  override def filterExecutorMetricsUpdate(
-      event: SparkListenerExecutorMetricsUpdate): Option[Boolean] = {
-    Some(event.accumUpdates.exists { case (_, stageId, _, _) =>
-      stageToTasks.contains(stageId)
-    })
-  }
+    case e: SparkListenerExecutorMetricsUpdate =>
+      e.accumUpdates.exists { case (_, stageId, _, _) =>
+        stageToTasks.contains(stageId)
+      }
 
-  override def filterSpeculativeTaskSubmitted(
-      event: SparkListenerSpeculativeTaskSubmitted): Option[Boolean] = {
-    Some(stageToTasks.contains(event.stageId))
+    case e: SparkListenerSpeculativeTaskSubmitted =>
+      stageToTasks.contains(e.stageId)
   }
 }
 
@@ -157,27 +147,16 @@ private[spark] class BasicEventFilter(
 
   logDebug(s"live executors : $liveExecutors")
 
-  override def filterExecutorAdded(event: SparkListenerExecutorAdded): Option[Boolean] = {
-    Some(liveExecutors.contains(event.executorId))
-  }
+  override def accept(event: SparkListenerEvent): Option[Boolean] = {
+    val fn: PartialFunction[SparkListenerEvent, Boolean] = {
+      case e: SparkListenerExecutorAdded => liveExecutors.contains(e.executorId)
+      case e: SparkListenerExecutorRemoved => liveExecutors.contains(e.executorId)
+      case e: SparkListenerExecutorBlacklisted => liveExecutors.contains(e.executorId)
+      case e: SparkListenerExecutorUnblacklisted => liveExecutors.contains(e.executorId)
+      case e: SparkListenerStageExecutorMetrics => liveExecutors.contains(e.execId)
+    }
 
-  override def filterExecutorRemoved(event: SparkListenerExecutorRemoved): Option[Boolean] = {
-    Some(liveExecutors.contains(event.executorId))
-  }
-
-  override def filterExecutorBlacklisted(
-      event: SparkListenerExecutorBlacklisted): Option[Boolean] = {
-    Some(liveExecutors.contains(event.executorId))
-  }
-
-  override def filterExecutorUnblacklisted(
-      event: SparkListenerExecutorUnblacklisted): Option[Boolean] = {
-    Some(liveExecutors.contains(event.executorId))
-  }
-
-  override def filterStageExecutorMetrics(
-      event: SparkListenerStageExecutorMetrics): Option[Boolean] = {
-    Some(liveExecutors.contains(event.execId))
+    fn.orElse(acceptFnForJobEvents).lift.apply(event)
   }
 }
 
