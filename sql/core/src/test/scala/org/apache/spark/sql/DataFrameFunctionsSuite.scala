@@ -850,19 +850,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val errorMsg1 =
       s"""
          |Input to function array_contains should have been array followed by a
-         |value with same element type, but it's [array<int>, decimal(29,29)].
+         |value with same element type, but it's [array<int>, decimal(38,29)].
        """.stripMargin.replace("\n", " ").trim()
     assert(e1.message.contains(errorMsg1))
 
-    val e2 = intercept[AnalysisException] {
-      OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
-    }
-    val errorMsg2 =
-      s"""
-         |Input to function array_contains should have been array followed by a
-         |value with same element type, but it's [array<int>, string].
-       """.stripMargin.replace("\n", " ").trim()
-    assert(e2.message.contains(errorMsg2))
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1), 'foo')"),
+      Seq(Row(false))
+    )
+
+    checkAnswer(
+      sql("select array_contains(array(1.0, 2.02), 1.0)"),
+      Seq(Row(true))
+    )
   }
 
   test("arrays_overlap function") {
