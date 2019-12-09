@@ -87,7 +87,7 @@ private[spark] class TaskSetManager(
   // number of slots on a single executor, would the task manager speculative run the tasks if
   // their duration is longer than the given threshold. In this way, we wouldn't speculate too
   // aggressively but still handle basic cases.
-  val speculationTasksLessEqToSlots = numTasks <= (sched.CPUS_PER_TASK / conf.get(CPUS_PER_TASK))
+  val speculationTasksLessEqToSlots = numTasks <= (conf.get(EXECUTOR_CORES) / sched.CPUS_PER_TASK)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not

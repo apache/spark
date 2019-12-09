@@ -1778,20 +1778,21 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
   }
 
-  private def testSpeculationDurationThreshold(
-      speculationThresholdProvided: Boolean,
+  private def testSpeculationDurationSetup(
+      speculationThresholdOpt: Option[String],
+      speculationQuantile: Double,
       numTasks: Int,
-      numSlots: Int): Unit = {
+      numSlots: Int): (TaskSetManager, ManualClock) = {
     sc = new SparkContext("local", "test")
     sc.conf.set(config.SPECULATION_ENABLED, true)
     // Set the quantile to be 1.0 so that regular speculation would not be triggered
-    sc.conf.set(config.SPECULATION_QUANTILE.key, "1.0")
+    sc.conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
     // Set the number of slots per executor
     sc.conf.set(config.EXECUTOR_CORES.key, numSlots.toString)
     sc.conf.set(config.CPUS_PER_TASK.key, "1")
     // Set the threshold to be 60 minutes
-    if (speculationThresholdProvided) {
-      sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, "60min")
+    if (speculationThresholdOpt.isDefined) {
+      sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
     }
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     // Create a task set with the given number of tasks
@@ -1799,6 +1800,20 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     manager.isZombie = false
+
+    (manager, clock)
+  }
+
+  private def testSpeculationDurationThreshold(
+      speculationThresholdProvided: Boolean,
+      numTasks: Int,
+      numSlots: Int): Unit = {
+    val (manager, clock) = testSpeculationDurationSetup(
+      if (speculationThresholdProvided) Some("60min") else None,
+      1.0,
+      numTasks,
+      numSlots
+    )
 
     // Offer resources for the task to start
     for (i <- 1 to numTasks) {
