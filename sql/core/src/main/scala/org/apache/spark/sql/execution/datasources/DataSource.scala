@@ -339,33 +339,15 @@ case class DataSource(
         dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
-      case (dataSource: RelationProvider, Some(specifiedSchema)) =>
+      case (dataSource: RelationProvider, Some(schema)) =>
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
-        val persistentSchema = baseRelation.schema
-        val persistentSize = persistentSchema.size
-        val specifiedSize = specifiedSchema.size
-        if (persistentSize == specifiedSize) {
-          val (persistentFields, specifiedFields) = persistentSchema.zip(specifiedSchema)
-            .filter { case (existedField, userField) => existedField != userField }
-            .unzip
-          if (persistentFields.nonEmpty) {
-            val errorMsg =
-              s"Mismatched fields detected between persistent schema and user specified schema: " +
-                s"persistentFields: ${persistentFields.map(_.toDDL).mkString(", ")}, " +
-                s"specifiedFields: ${specifiedFields.map(_.toDDL).mkString(", ")}. " +
-                s"This happens either you make a mistake in schema or type mapping between Spark " +
-                s"and external data sources have been updated while your specified schema still " +
-                s"using the old schema. Please either correct the schema or just do not specify " +
-                s"the schema since a specified schema for $className is not necessary."
-            throw new AnalysisException(errorMsg)
-          }
-        } else {
-          val errorMsg =
-            s"The number of fields between persistent schema and user specified schema " +
-              s"mismatched: expect $persistentSize fields, but got $specifiedSize fields. " +
-              s"Please either correct the schema or just do not specify the schema since " +
-              s"a specified schema for $className is not necessary."
+        if (baseRelation.schema != schema) {
+          val errorMsg = "The user-specified schema doesn't match the actual schema: " +
+            s"user-specified: ${schema.toDDL}, actual: ${baseRelation.schema.toDDL}. If " +
+            s"you're using DataFrameReader.schema API or creating a table, please do not " +
+            s"specify the schema. Or if you're scanning an existed table, please drop " +
+            s"it and re-create it."
           throw new AnalysisException(errorMsg)
         }
         baseRelation
