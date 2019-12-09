@@ -169,8 +169,9 @@ class RobustScaler (override val uid: String)
       seqOp = (s, v) => s.insert(v),
       combOp = (s1, s2) => s1.compress.merge(s2.compress)
     ).map { case (i, s) =>
-      val range = s.query(localUpper).get - s.query(localLower).get
-      val median = s.query(0.5).get
+      val s2 = s.compress
+      val range = s2.query(localUpper).get - s2.query(localLower).get
+      val median = s2.query(0.5).get
       (i, (range, median))
     }.collectAsMap()
 
