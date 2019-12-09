@@ -790,7 +790,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
         Seq(
           "SET foo=bar",
           s"ADD JAR $jarURL",
-          s"CREATE TABLE test_udtf(key INT, value STRING) USING hive",
+          "CREATE TABLE test_udtf(key INT, value STRING) USING hive",
           s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_udtf",
           s"""CREATE TEMPORARY FUNCTION udtf_count2
               |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
