@@ -383,18 +383,18 @@ object  HadoopMapReduceCommitProtocol extends Logging {
      }
 
      // Firstly, delete the staging output dir with recursive, because it is unique.
-     deletePath(fs, stagingOutputDir, true)
+     deleteSilently(fs, stagingOutputDir, true)
 
      var currentLevelPath = stagingOutputDir.getParent
      while (currentLevelPath != insertStagingDir) {
-       deletePath(fs, currentLevelPath, false)
+       deleteSilently(fs, currentLevelPath, false)
        currentLevelPath = currentLevelPath.getParent
      }
 
-     deletePath(fs, insertStagingDir, false)
+     deleteSilently(fs, insertStagingDir, false)
   }
 
-  private def deletePath(fs: FileSystem, path: Path, recursive: Boolean): Unit = {
+  private def deleteSilently(fs: FileSystem, path: Path, recursive: Boolean): Unit = {
     try {
       if (!fs.delete(path, recursive)) {
         logWarning(s"Failed to delete path:$path with recursive:$recursive")
@@ -406,24 +406,6 @@ object  HadoopMapReduceCommitProtocol extends Logging {
   }
 
   /**
-   * Used to check whether there are some remaining files under staging output path.
-   */
-  private def checkHasRemainingFiles(
-      fs: FileSystem,
-      path: Path): Boolean = {
-    var statusList = Seq(fs.getFileStatus(path))
-    var found = false
-    while (!found && !statusList.isEmpty) {
-      if (statusList.exists(_.isFile)) {
-        found = true
-      } else {
-        statusList = statusList.flatMap(s => fs.listStatus(s.getPath))
-      }
-    }
-    found
-  }
-
-  /**
    * Merge files under staging output path to destination path. Before merging, we need delete the
    * succeeded file under staging output path and regenerate it after merging completed.
    */
@@ -431,21 +413,18 @@ object  HadoopMapReduceCommitProtocol extends Logging {
       fs: FileSystem,
       stagingOutputPath: Path,
       destPath: Path): Unit = {
-    val SUCCEEDED_FILE_NAME = FileOutputCommitter.SUCCEEDED_FILE_NAME
-    val stagingMarkerPath = new Path(stagingOutputPath, SUCCEEDED_FILE_NAME)
+    val stagingMarkerPath = new Path(stagingOutputPath, FileOutputCommitter.SUCCEEDED_FILE_NAME)
     fs.delete(stagingMarkerPath, true)
 
-    do {
-      doMergePaths(fs, fs.getFileStatus(stagingOutputPath), destPath)
-    } while (checkHasRemainingFiles(fs, stagingOutputPath))
+    doMergePaths(fs, fs.getFileStatus(stagingOutputPath), destPath)
 
-    val markerPath = new Path(destPath, SUCCEEDED_FILE_NAME)
-    fs.create(markerPath).close()
+    val markerPath = new Path(destPath, FileOutputCommitter.SUCCEEDED_FILE_NAME)
+    fs.create(markerPath, true).close()
   }
 
   /**
    * This is a reflected implementation of [[FileOutputCommitter]]'s mergePaths.
-   * Just remove some unnecessary operation to improve performance.
+   * Just remove some unnecessary operations to improve performance.
    */
   @throws[IOException]
   private def doMergePaths(fs: FileSystem, from: FileStatus, to: Path): Unit = {
