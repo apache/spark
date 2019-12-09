@@ -114,6 +114,7 @@ class SparkSessionTests3(unittest.TestCase):
             self.assertEqual(spark.table("table1").columns, ['name', 'age'])
             self.assertEqual(spark.range(3).count(), 3)
         finally:
+            spark.sql("DROP DATABASE test_db CASCADE")
             spark.stop()
 
     def test_global_default_session(self):
@@ -315,7 +316,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

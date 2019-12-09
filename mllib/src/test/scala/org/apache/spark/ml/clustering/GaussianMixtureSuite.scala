@@ -17,15 +17,13 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.language.existentials
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
 
 class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
@@ -35,11 +33,11 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
   final val k = 5
   private val seed = 538009335
-  @transient var dataset: Dataset[_] = _
-  @transient var denseDataset: Dataset[_] = _
-  @transient var sparseDataset: Dataset[_] = _
-  @transient var decompositionDataset: Dataset[_] = _
-  @transient var rDataset: Dataset[_] = _
+  @transient var dataset: DataFrame = _
+  @transient var denseDataset: DataFrame = _
+  @transient var sparseDataset: DataFrame = _
+  @transient var decompositionDataset: DataFrame = _
+  @transient var rDataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -73,9 +71,14 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getK === 2)
     assert(gm.getFeaturesCol === "features")
     assert(gm.getPredictionCol === "prediction")
+    assert(gm.getProbabilityCol === "probability")
     assert(gm.getMaxIter === 100)
     assert(gm.getTol === 0.01)
     val model = gm.setMaxIter(1).fit(dataset)
+
+    val transformed = model.transform(dataset)
+    checkNominalOnDF(transformed, "prediction", model.weights.length)
+    checkVectorSizeOnDF(transformed, "probability", model.weights.length)
 
     MLTestingUtils.checkCopyAndUids(gm, model)
     assert(model.hasSummary)
@@ -267,6 +270,16 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     // checking the cost is fine enough as a sanity check
     assert(trueLikelihood ~== doubleLikelihood absTol 1e-6)
     assert(trueLikelihood ~== floatLikelihood absTol 1e-6)
+  }
+
+  test("prediction on single instance") {
+    val gmm = new GaussianMixture().setSeed(123L)
+    val model = gmm.fit(dataset)
+    testClusteringModelSinglePrediction(model, model.predict, dataset,
+      model.getFeaturesCol, model.getPredictionCol)
+
+    testClusteringModelSingleProbabilisticPrediction(model, model.predictProbability, dataset,
+      model.getFeaturesCol, model.getProbabilityCol)
   }
 }
 

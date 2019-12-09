@@ -17,19 +17,16 @@
 
 package org.apache.spark.rpc.netty
 
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, CountDownLatch}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Promise
-import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Network.RPC_NETTY_DISPATCHER_NUM_THREADS
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
-import org.apache.spark.util.ThreadUtils
 
 /**
  * A message dispatcher, responsible for routing RPC messages to the appropriate endpoint(s).
@@ -39,20 +36,23 @@ import org.apache.spark.util.ThreadUtils
  */
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
 
-  private class EndpointData(
-      val name: String,
-      val endpoint: RpcEndpoint,
-      val ref: NettyRpcEndpointRef) {
-    val inbox = new Inbox(ref, endpoint)
-  }
-
-  private val endpoints: ConcurrentMap[String, EndpointData] =
-    new ConcurrentHashMap[String, EndpointData]
+  private val endpoints: ConcurrentMap[String, MessageLoop] =
+    new ConcurrentHashMap[String, MessageLoop]
   private val endpointRefs: ConcurrentMap[RpcEndpoint, RpcEndpointRef] =
     new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
 
-  // Track the receivers whose inboxes may contain messages.
-  private val receivers = new LinkedBlockingQueue[EndpointData]
+  private val shutdownLatch = new CountDownLatch(1)
+  private lazy val sharedLoop = new SharedMessageLoop(nettyEnv.conf, this, numUsableCores)
+
+  private def getMessageLoop(name: String, endpoint: RpcEndpoint): MessageLoop = {
+    endpoint match {
+      case e: IsolatedRpcEndpoint =>
+        new DedicatedMessageLoop(name, e, this)
+      case _ =>
+        sharedLoop.register(name, endpoint)
+        sharedLoop
+    }
+  }
 
   /**
    * True if the dispatcher has been stopped. Once stopped, all messages posted will be bounced
@@ -68,13 +68,11 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
       if (stopped) {
         throw new IllegalStateException("RpcEnv has been stopped")
       }
-      if (endpoints.putIfAbsent(name, new EndpointData(name, endpoint, endpointRef)) != null) {
+      if (endpoints.putIfAbsent(name, getMessageLoop(name, endpoint)) != null) {
         throw new IllegalArgumentException(s"There is already an RpcEndpoint called $name")
       }
-      val data = endpoints.get(name)
-      endpointRefs.put(data.endpoint, data.ref)
-      receivers.offer(data)  // for the OnStart message
     }
+    endpointRefs.put(endpoint, endpointRef)
     endpointRef
   }
 
@@ -84,10 +82,9 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
 
   // Should be idempotent
   private def unregisterRpcEndpoint(name: String): Unit = {
-    val data = endpoints.remove(name)
-    if (data != null) {
-      data.inbox.stop()
-      receivers.offer(data)  // for the OnStop message
+    val loop = endpoints.remove(name)
+    if (loop != null) {
+      loop.unregister(name)
     }
     // Don't clean `endpointRefs` here because it's possible that some messages are being processed
     // now and they can use `getRpcEndpointRef`. So `endpointRefs` will be cleaned in Inbox via
@@ -154,14 +151,13 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
       message: InboxMessage,
       callbackIfStopped: (Exception) => Unit): Unit = {
     val error = synchronized {
-      val data = endpoints.get(endpointName)
+      val loop = endpoints.get(endpointName)
       if (stopped) {
         Some(new RpcEnvStoppedException())
-      } else if (data == null) {
+      } else if (loop == null) {
         Some(new SparkException(s"Could not find $endpointName."))
       } else {
-        data.inbox.post(message)
-        receivers.offer(data)
+        loop.post(endpointName, message)
         None
       }
     }
@@ -176,15 +172,23 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
       }
       stopped = true
     }
-    // Stop all endpoints. This will queue all endpoints for processing by the message loops.
-    endpoints.keySet().asScala.foreach(unregisterRpcEndpoint)
-    // Enqueue a message that tells the message loops to stop.
-    receivers.offer(PoisonPill)
-    threadpool.shutdown()
+    var stopSharedLoop = false
+    endpoints.asScala.foreach { case (name, loop) =>
+      unregisterRpcEndpoint(name)
+      if (!loop.isInstanceOf[SharedMessageLoop]) {
+        loop.stop()
+      } else {
+        stopSharedLoop = true
+      }
+    }
+    if (stopSharedLoop) {
+      sharedLoop.stop()
+    }
+    shutdownLatch.countDown()
   }
 
   def awaitTermination(): Unit = {
-    threadpool.awaitTermination(Long.MaxValue, TimeUnit.MILLISECONDS)
+    shutdownLatch.await()
   }
 
   /**
@@ -193,43 +197,4 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   def verify(name: String): Boolean = {
     endpoints.containsKey(name)
   }
-
-  /** Thread pool used for dispatching messages. */
-  private val threadpool: ThreadPoolExecutor = {
-    val availableCores =
-      if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
-    val numThreads = nettyEnv.conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
-      .getOrElse(math.max(2, availableCores))
-    val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop")
-    for (i <- 0 until numThreads) {
-      pool.execute(new MessageLoop)
-    }
-    pool
-  }
-
-  /** Message loop used for dispatching messages. */
-  private class MessageLoop extends Runnable {
-    override def run(): Unit = {
-      try {
-        while (true) {
-          try {
-            val data = receivers.take()
-            if (data == PoisonPill) {
-              // Put PoisonPill back so that other MessageLoops can see it.
-              receivers.offer(PoisonPill)
-              return
-            }
-            data.inbox.process(Dispatcher.this)
-          } catch {
-            case NonFatal(e) => logError(e.getMessage, e)
-          }
-        }
-      } catch {
-        case ie: InterruptedException => // exit
-      }
-    }
-  }
-
-  /** A poison endpoint that indicates MessageLoop should exit its message loop. */
-  private val PoisonPill = new EndpointData(null, null, null)
 }

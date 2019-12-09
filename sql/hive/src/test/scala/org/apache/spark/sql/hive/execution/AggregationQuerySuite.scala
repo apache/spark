@@ -24,7 +24,7 @@ import test.org.apache.spark.sql.MyDoubleAvg
 import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, UnsafeRow}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -1018,6 +1018,31 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     val agg2 = agg1.groupBy($"text").agg(sum($"avg_res"))
     checkAnswer(agg2, Row("a", BigDecimal("11.9999999994857142860000")))
   }
+
+  test("SPARK-29122: hash-based aggregates for unfixed-length decimals in the interpreter mode") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+      withTempView("t") {
+        spark.range(3).selectExpr("CAST(id AS decimal(38, 0)) a").createOrReplaceTempView("t")
+        checkAnswer(sql("SELECT SUM(a) FROM t"), Row(java.math.BigDecimal.valueOf(3)))
+      }
+    }
+  }
+
+  test("SPARK-29140: HashAggregateExec aggregating binary type doesn't break codegen compilation") {
+    val schema = new StructType().add("id", IntegerType, nullable = false)
+      .add("c1", BinaryType, nullable = true)
+
+    withSQLConf(
+      SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
+      SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val emptyRows = spark.sparkContext.parallelize(Seq.empty[Row], 1)
+      val aggDf = spark.createDataFrame(emptyRows, schema)
+        .groupBy($"id" % 10 as "group")
+        .agg(countDistinct($"c1"))
+      checkAnswer(aggDf, Seq.empty[Row])
+    }
+  }
 }
 
 
@@ -1028,7 +1053,7 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     Seq("true", "false").foreach { enableTwoLevelMaps =>
-      withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enabled" ->
+      withSQLConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key ->
         enableTwoLevelMaps) {
         (1 to 3).foreach { fallbackStartsAt =>
           withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->

@@ -286,7 +286,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
-    def isPropagated = server.apis.metadataCache.getPartitionInfo(topic, partition) match {
+    def isPropagated = server.dataPlaneRequestProcessor.metadataCache
+        .getPartitionInfo(topic, partition) match {
       case Some(partitionState) =>
         val leader = partitionState.basePartitionState.leader
         val isr = partitionState.basePartitionState.isr
@@ -315,7 +316,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
     val actualPort = factory.getLocalPort
 
-    def shutdown() {
+    def shutdown(): Unit = {
       factory.shutdown()
       // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures

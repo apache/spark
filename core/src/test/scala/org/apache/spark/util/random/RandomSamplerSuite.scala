@@ -59,7 +59,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
   // will always fail with some nonzero probability, so I'll fix the seed to prevent these
   // tests from generating random failure noise in CI testing, etc.
   val rngSeed: Random = RandomSampler.newDefaultRNG
-  rngSeed.setSeed(235711)
+  rngSeed.setSeed(235711345678901011L)
 
   // Reference implementation of sampling without replacement (bernoulli)
   def sample[T](data: Iterator[T], f: Double): Iterator[T] = {
@@ -333,7 +333,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
 
     // ArrayBuffer iterator (indexable type)
     d = medianKSD(
-      gaps(sampler.sample(Iterator.from(0).take(20*sampleSize).to[ArrayBuffer].iterator)),
+      gaps(sampler.sample(ArrayBuffer(Iterator.from(0).take(20*sampleSize).toSeq: _*).iterator)),
       gaps(sample(Iterator.from(0), 0.1)))
     d should be < D
 
@@ -557,7 +557,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
 
     // ArrayBuffer iterator (indexable type)
     d = medianKSD(
-      gaps(sampler.sample(Iterator.from(0).take(20*sampleSize).to[ArrayBuffer].iterator)),
+      gaps(sampler.sample(ArrayBuffer(Iterator.from(0).take(20*sampleSize).toSeq: _*).iterator)),
       gaps(sampleWR(Iterator.from(0), 0.1)))
     d should be < D
 

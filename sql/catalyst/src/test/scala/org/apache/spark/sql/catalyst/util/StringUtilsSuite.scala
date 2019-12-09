@@ -23,13 +23,34 @@ import org.apache.spark.sql.catalyst.util.StringUtils._
 class StringUtilsSuite extends SparkFunSuite {
 
   test("escapeLikeRegex") {
-    assert(escapeLikeRegex("abdef") === "(?s)\\Qa\\E\\Qb\\E\\Qd\\E\\Qe\\E\\Qf\\E")
-    assert(escapeLikeRegex("a\\__b") === "(?s)\\Qa\\E\\Q_\\E.\\Qb\\E")
-    assert(escapeLikeRegex("a_%b") === "(?s)\\Qa\\E..*\\Qb\\E")
-    assert(escapeLikeRegex("a%\\%b") === "(?s)\\Qa\\E.*\\Q%\\E\\Qb\\E")
-    assert(escapeLikeRegex("a%") === "(?s)\\Qa\\E.*")
-    assert(escapeLikeRegex("**") === "(?s)\\Q*\\E\\Q*\\E")
-    assert(escapeLikeRegex("a_b") === "(?s)\\Qa\\E.\\Qb\\E")
+    val expectedEscapedStrOne = "(?s)\\Qa\\E\\Qb\\E\\Qd\\E\\Qe\\E\\Qf\\E"
+    val expectedEscapedStrTwo = "(?s)\\Qa\\E\\Q_\\E.\\Qb\\E"
+    val expectedEscapedStrThree = "(?s)\\Qa\\E..*\\Qb\\E"
+    val expectedEscapedStrFour = "(?s)\\Qa\\E.*\\Q%\\E\\Qb\\E"
+    val expectedEscapedStrFive = "(?s)\\Qa\\E.*"
+    val expectedEscapedStrSix = "(?s)\\Q*\\E\\Q*\\E"
+    val expectedEscapedStrSeven = "(?s)\\Qa\\E.\\Qb\\E"
+    assert(escapeLikeRegex("abdef", '\\') === expectedEscapedStrOne)
+    assert(escapeLikeRegex("abdef", '/') === expectedEscapedStrOne)
+    assert(escapeLikeRegex("abdef", '\"') === expectedEscapedStrOne)
+    assert(escapeLikeRegex("a\\__b", '\\') === expectedEscapedStrTwo)
+    assert(escapeLikeRegex("a/__b", '/') === expectedEscapedStrTwo)
+    assert(escapeLikeRegex("a\"__b", '\"') === expectedEscapedStrTwo)
+    assert(escapeLikeRegex("a_%b", '\\') === expectedEscapedStrThree)
+    assert(escapeLikeRegex("a_%b", '/') === expectedEscapedStrThree)
+    assert(escapeLikeRegex("a_%b", '\"') === expectedEscapedStrThree)
+    assert(escapeLikeRegex("a%\\%b", '\\') === expectedEscapedStrFour)
+    assert(escapeLikeRegex("a%/%b", '/') === expectedEscapedStrFour)
+    assert(escapeLikeRegex("a%\"%b", '\"') === expectedEscapedStrFour)
+    assert(escapeLikeRegex("a%", '\\') === expectedEscapedStrFive)
+    assert(escapeLikeRegex("a%", '/') === expectedEscapedStrFive)
+    assert(escapeLikeRegex("a%", '\"') === expectedEscapedStrFive)
+    assert(escapeLikeRegex("**", '\\') === expectedEscapedStrSix)
+    assert(escapeLikeRegex("**", '/') === expectedEscapedStrSix)
+    assert(escapeLikeRegex("**", '\"') === expectedEscapedStrSix)
+    assert(escapeLikeRegex("a_b", '\\') === expectedEscapedStrSeven)
+    assert(escapeLikeRegex("a_b", '/') === expectedEscapedStrSeven)
+    assert(escapeLikeRegex("a_b", '\"') === expectedEscapedStrSeven)
   }
 
   test("filter pattern") {
@@ -46,14 +67,35 @@ class StringUtilsSuite extends SparkFunSuite {
 
   test("string concatenation") {
     def concat(seq: String*): String = {
-      seq.foldLeft(new StringConcat())((acc, s) => {acc.append(s); acc}).toString
+      seq.foldLeft(new StringConcat()) { (acc, s) => acc.append(s); acc }.toString
     }
 
     assert(new StringConcat().toString == "")
-    assert(concat("") == "")
-    assert(concat(null) == "")
-    assert(concat("a") == "a")
-    assert(concat("1", "2") == "12")
-    assert(concat("abc", "\n", "123") == "abc\n123")
+    assert(concat("") === "")
+    assert(concat(null) === "")
+    assert(concat("a") === "a")
+    assert(concat("1", "2") === "12")
+    assert(concat("abc", "\n", "123") === "abc\n123")
+  }
+
+  test("string concatenation with limit") {
+    def concat(seq: String*): String = {
+      seq.foldLeft(new StringConcat(7)) { (acc, s) => acc.append(s); acc }.toString
+    }
+    assert(concat("under") === "under")
+    assert(concat("under", "over", "extra") === "underov")
+    assert(concat("underover") === "underov")
+    assert(concat("under", "ov") === "underov")
+  }
+
+  test("string concatenation return value") {
+    def checkLimit(s: String): Boolean = {
+      val sc = new StringConcat(7)
+      sc.append(s)
+      sc.atLimit
+    }
+    assert(!checkLimit("under"))
+    assert(checkLimit("1234567"))
+    assert(checkLimit("1234567890"))
   }
 }

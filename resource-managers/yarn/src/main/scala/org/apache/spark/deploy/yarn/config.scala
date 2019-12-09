@@ -33,6 +33,13 @@ package object config {
     .toSequence
     .createOptional
 
+  private[spark] val APPLICATION_PRIORITY = ConfigBuilder("spark.yarn.priority")
+    .doc("Application priority for YARN to define pending applications ordering policy, those" +
+      " with higher value have a better opportunity to be activated. Currently, YARN only" +
+      " supports application priority when using FIFO ordering policy.")
+    .intConf
+    .createOptional
+
   private[spark] val AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.am.attemptFailuresValidityInterval")
       .doc("Interval after which AM failures will be considered independent and " +
@@ -181,12 +188,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("200ms")
 
-  private[spark] val SCHEDULER_SERVICES = ConfigBuilder("spark.yarn.services")
-    .doc("A comma-separated list of class names of services to add to the scheduler.")
-    .stringConf
-    .toSequence
-    .createWithDefault(Nil)
-
   private[spark] val AM_FINAL_MSG_LIMIT = ConfigBuilder("spark.yarn.am.finalMessageLimit")
     .doc("The limit size of final diagnostic message for our ApplicationMaster to unregister from" +
       " the ResourceManager.")
@@ -315,6 +316,12 @@ package object config {
     ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
       .booleanConf
       .createWithDefault(false)
+
+  /* Initially blacklisted YARN nodes. */
+  private[spark] val YARN_EXCLUDE_NODES = ConfigBuilder("spark.yarn.exclude.nodes")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."

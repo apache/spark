@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: Boolean = true)
   extends Thread.UncaughtExceptionHandler with Logging {
 
-  override def uncaughtException(thread: Thread, exception: Throwable) {
+  override def uncaughtException(thread: Thread, exception: Throwable): Unit = {
     try {
       // Make it explicit that uncaught exceptions are thrown when container is shutting down.
       // It will help users when they analyze the executor logs
@@ -56,7 +56,7 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
     }
   }
 
-  def uncaughtException(exception: Throwable) {
+  def uncaughtException(exception: Throwable): Unit = {
     uncaughtException(Thread.currentThread(), exception)
   }
 }

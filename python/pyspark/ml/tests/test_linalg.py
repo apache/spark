@@ -112,11 +112,17 @@ class VectorTests(MLlibTestCase):
         v4 = SparseVector(6, [(1, 1.0), (3, 5.5)])
         v5 = DenseVector([0.0, 1.0, 0.0, 2.5])
         v6 = SparseVector(4, [(1, 1.0), (3, 2.5)])
+        dm1 = DenseMatrix(2, 2, [2, 0, 0, 0])
+        sm1 = SparseMatrix(2, 2, [0, 2, 3], [0], [2])
         self.assertEqual(v1, v2)
         self.assertEqual(v1, v3)
         self.assertFalse(v2 == v4)
         self.assertFalse(v1 == v5)
         self.assertFalse(v1 == v6)
+        # this is done as Dense and Sparse matrices can be semantically
+        # equal while still implementing a different __eq__ method
+        self.assertEqual(dm1, sm1)
+        self.assertEqual(sm1, dm1)
 
     def test_equals(self):
         indices = [1, 2, 4]
@@ -376,7 +382,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

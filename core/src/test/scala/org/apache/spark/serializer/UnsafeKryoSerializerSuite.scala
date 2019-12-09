@@ -23,12 +23,12 @@ class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
 
   // This test suite should run all tests in KryoSerializerSuite with kryo unsafe.
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     conf.set(KRYO_USE_UNSAFE, true)
     super.beforeAll()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     conf.set(KRYO_USE_UNSAFE, false)
     super.afterAll()
   }

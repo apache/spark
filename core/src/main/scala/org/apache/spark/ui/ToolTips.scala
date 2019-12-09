@@ -31,9 +31,9 @@ private[spark] object ToolTips {
   val SHUFFLE_READ_BLOCKED_TIME =
     "Time that the task spent blocked waiting for shuffle data to be read from remote machines."
 
-  val INPUT = "Bytes and records read from Hadoop or from Spark storage."
+  val INPUT = "Bytes read from Hadoop or from Spark storage."
 
-  val OUTPUT = "Bytes and records written to Hadoop."
+  val OUTPUT = "Bytes written to Hadoop."
 
   val STORAGE_MEMORY =
     "Memory used / total available memory for storage of data " +

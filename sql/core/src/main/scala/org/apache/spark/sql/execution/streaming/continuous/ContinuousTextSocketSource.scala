@@ -32,11 +32,13 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.connector.read.InputPartition
+import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
 import org.apache.spark.sql.execution.streaming.{Offset => _, _}
 import org.apache.spark.sql.execution.streaming.sources.TextSocketReader
-import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.RpcUtils
 
 
@@ -49,10 +51,13 @@ import org.apache.spark.util.RpcUtils
  * buckets and serves the messages to the executors via a RPC endpoint.
  */
 class TextSocketContinuousStream(
-    host: String, port: Int, numPartitions: Int, options: DataSourceOptions)
+    host: String, port: Int, numPartitions: Int, options: CaseInsensitiveStringMap)
   extends ContinuousStream with Logging {
 
   implicit val defaultFormats: DefaultFormats = DefaultFormats
+
+  private val encoder = ExpressionEncoder.tuple(ExpressionEncoder[String],
+    ExpressionEncoder[Timestamp])
 
   @GuardedBy("this")
   private var socket: Socket = _
@@ -61,7 +66,7 @@ class TextSocketContinuousStream(
   private var readThread: Thread = _
 
   @GuardedBy("this")
-  private val buckets = Seq.fill(numPartitions)(new ListBuffer[(String, Timestamp)])
+  private val buckets = Seq.fill(numPartitions)(new ListBuffer[UnsafeRow])
 
   @GuardedBy("this")
   private var currentOffset: Int = -1
@@ -182,7 +187,8 @@ class TextSocketContinuousStream(
                 Timestamp.valueOf(
                   TextSocketReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
               )
-              buckets(currentOffset % numPartitions) += newData
+              buckets(currentOffset % numPartitions) += encoder.toRow(newData)
+                .copy().asInstanceOf[UnsafeRow]
             }
           }
         } catch {
@@ -240,6 +246,8 @@ class TextSocketContinuousPartitionReader(
   private var currentOffset = startOffset
   private var current: Option[InternalRow] = None
 
+  private val projectWithoutTimestamp = UnsafeProjection.create(TextSocketReader.SCHEMA_REGULAR)
+
   override def next(): Boolean = {
     try {
       current = getRecord
@@ -271,8 +279,7 @@ class TextSocketContinuousPartitionReader(
       if (includeTimestamp) {
         rec
       } else {
-        InternalRow(rec.get(0, TextSocketReader.SCHEMA_TIMESTAMP)
-          .asInstanceOf[(String, Timestamp)]._1)
+        projectWithoutTimestamp(rec)
       }
     )
 }

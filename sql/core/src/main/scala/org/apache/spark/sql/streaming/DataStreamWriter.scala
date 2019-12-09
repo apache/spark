@@ -25,13 +25,14 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, TableProvider}
+import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.sources._
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, SupportsStreamingWrite, TableProvider}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -252,16 +253,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
-      val (sink, resultDf) = trigger match {
-        case _: ContinuousTrigger =>
-          val s = new MemorySinkV2()
-          val r = Dataset.ofRows(df.sparkSession, new MemoryPlanV2(s, df.schema.toAttributes))
-          (s, r)
-        case _ =>
-          val s = new MemorySink(df.schema, outputMode)
-          val r = Dataset.ofRows(df.sparkSession, new MemoryPlan(s))
-          (s, r)
-      }
+      val sink = new MemorySink()
+      val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink, df.schema.toAttributes))
       val chkpointLoc = extraOptions.get("checkpointLocation")
       val recoverFromChkpoint = outputMode == OutputMode.Complete()
       val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
@@ -313,9 +306,11 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = df.sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
-        val dsOptions = new DataSourceOptions(options.asJava)
+        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         provider.getTable(dsOptions) match {
-          case s: SupportsStreamingWrite => s
+          case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
+            table
           case _ => createV1Sink()
         }
       } else {
@@ -335,7 +330,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def createV1Sink(): BaseStreamingSink = {
+  private def createV1Sink(): Sink = {
     val ds = DataSource(
       df.sparkSession,
       className = source,

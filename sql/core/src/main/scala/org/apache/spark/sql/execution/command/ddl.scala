@@ -18,22 +18,27 @@
 package org.apache.spark.sql.execution.command
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit._
 
 import scala.collection.{GenMap, GenSeq}
+import scala.collection.JavaConverters._
 import scala.collection.parallel.ForkJoinTaskSupport
+import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
@@ -71,7 +76,7 @@ case class CreateDatabaseCommand(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        path.map(CatalogUtils.stringToURI(_)).getOrElse(catalog.getDefaultDBPath(databaseName)),
+        path.map(CatalogUtils.stringToURI).getOrElse(catalog.getDefaultDBPath(databaseName)),
         props),
       ifNotExists)
     Seq.empty[Row]
@@ -131,6 +136,27 @@ case class AlterDatabasePropertiesCommand(
 }
 
 /**
+ * A command for users to set new location path for a database
+ * If the database does not exist, an error message will be issued to indicate the database
+ * does not exist.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    ALTER (DATABASE|SCHEMA) database_name SET LOCATION path
+ * }}}
+ */
+case class AlterDatabaseSetLocationCommand(databaseName: String, location: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val oldDb = catalog.getDatabaseMetadata(databaseName)
+    catalog.alterDatabase(oldDb.copy(locationUri = CatalogUtils.stringToURI(location)))
+
+    Seq.empty[Row]
+  }
+}
+
+/**
  * A command for users to show the name of the database, its comment (if one has been set), and its
  * root location on the filesystem. When extended is true, it also shows the database's properties
  * If the database does not exist, an error message will be issued to indicate the database
@@ -148,19 +174,23 @@ case class DescribeDatabaseCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbMetadata: CatalogDatabase =
       sparkSession.sessionState.catalog.getDatabaseMetadata(databaseName)
+    val allDbProperties = dbMetadata.properties
     val result =
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
-        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri)) :: Nil
+        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
+        Row("Owner Name", allDbProperties.getOrElse(PROP_OWNER_NAME, "")) ::
+        Row("Owner Type", allDbProperties.getOrElse(PROP_OWNER_TYPE, "")) :: Nil
 
     if (extended) {
-      val properties =
-        if (dbMetadata.properties.isEmpty) {
+      val properties = allDbProperties -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
+      val propertiesStr =
+        if (properties.isEmpty) {
           ""
         } else {
-          dbMetadata.properties.toSeq.mkString("(", ", ", ")")
+          properties.toSeq.mkString("(", ", ", ")")
         }
-      result :+ Row("Properties", properties)
+      result :+ Row("Properties", propertiesStr)
     } else {
       result
     }
@@ -351,9 +381,8 @@ case class AlterTableChangeColumnCommand(
   }
 
   // Add the comment to a column, if comment is empty, return the original column.
-  private def addComment(column: StructField, comment: Option[String]): StructField = {
-    comment.map(column.withComment(_)).getOrElse(column)
-  }
+  private def addComment(column: StructField, comment: Option[String]): StructField =
+    comment.map(column.withComment).getOrElse(column)
 
   // Compare a [[StructField]] to another, return true if they have the same column
   // name(by resolver) and dataType.
@@ -583,14 +612,12 @@ case class AlterTableRecoverPartitionsCommand(
     // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
     val jobConf = new JobConf(hadoopConf, this.getClass)
     val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-    new PathFilter {
-      override def accept(path: Path): Boolean = {
-        val name = path.getName
-        if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
-          pathFilter == null || pathFilter.accept(path)
-        } else {
-          false
-        }
+    path: Path => {
+      val name = path.getName
+      if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
+        pathFilter == null || pathFilter.accept(path)
+      } else {
+        false
       }
     }
   }
@@ -615,7 +642,7 @@ case class AlterTableRecoverPartitionsCommand(
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
-    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
     val pathFilter = getPathFilter(hadoopConf)
 
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
@@ -664,7 +691,7 @@ case class AlterTableRecoverPartitionsCommand(
     val statusPar: GenSeq[FileStatus] =
       if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
         // parallelize the list of partitions here, then we can have better parallelism later.
-        val parArray = statuses.par
+        val parArray = new ParVector(statuses.toVector)
         parArray.tasksupport = evalTaskSupport
         parArray
       } else {
@@ -739,7 +766,7 @@ case class AlterTableRecoverPartitionsCommand(
     // do this in parallel.
     val batchSize = 100
     partitionSpecsAndLocs.toIterator.grouped(batchSize).foreach { batch =>
-      val now = System.currentTimeMillis() / 1000
+      val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>
         val params = partitionStats.get(location.toString).map {
           case PartitionStatistics(numFiles, totalSize) =>
@@ -885,7 +912,8 @@ object DDLUtils {
           if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             OrcFileFormat.checkFieldNames(colNames)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
-              serde == Some("parquet.hive.serde.ParquetHiveSerDe")) {
+            serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
+            serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
             ParquetSchemaConverter.checkFieldNames(colNames)
           }
         case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)

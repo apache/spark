@@ -83,9 +83,9 @@ def createContext(host, port, outputPath):
         def filterFunc(wordCount):
             if wordCount[0] in blacklist.value:
                 droppedWordsCounter.add(wordCount[1])
-                False
+                return False
             else:
-                True
+                return True
 
         counts = "Counts at time %s %s" % (time, rdd.filter(filterFunc).collect())
         print(counts)

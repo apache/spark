@@ -1,0 +1,810 @@
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q1                                                 1661           1738         109          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q2                                                 2517           2601         119          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q3                                                  544            566          36          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q4                                                15391          15676         403          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q5                                                 3347           3709         512          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q6                                                 2461           2469          11          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q7                                                 1195           1216          30          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q8                                                 1164           1207          60          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q9                                                 2893           2932          54          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q10                                                3685           3840         219          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q11                                                3791           3820          41          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q12                                                 553            575          18          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q13                                                2960           3157         278          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q14a                                              26682          27183         709          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q14b                                              20780          21353         811          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q15                                                 867            883          20          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q16                                                1448           1484          52          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q17                                                3104           3147          60          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q18                                                2299           2555         362          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q19                                                 881            897          17          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q20                                                 539            583          41          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q21                                                1257           1268          15          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q22                                                4142           4340         281          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q23a                                              15861          16068         292          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q23b                                              19762          19835         103          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q24a                                               3686           3808         173          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q24b                                               3364           3396          46          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q25                                                3004           3294         410          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q26                                                 886            917          28          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q27                                                1382           1382           0          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q28                                                3329           3354          35          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q29                                                2949           3048         141          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q30                                                1443           1443           0          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q31                                                2658           2859         285          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q32                                                 707            733          23          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q33                                                1790           1798          12          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q34                                                 880            886           6          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q35                                                3152           3277         177          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q36                                                1211           1229          26          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q37                                                1495           1500           7          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q38                                                2017           2073          79          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q39a                                               2575           2603          39          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q39b                                               2388           2507         168          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q40                                                 872            920          81          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q41                                                 453            518          48          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q42                                                 442            480          30          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q43                                                 683            691           7          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q44                                                1301           1307           8          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q45                                                 700            717          26          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q46                                                1198           1224          38          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q47                                                4915           5163         350          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q48                                                2569           2585          22          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q49                                                2193           2277         119          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q50                                                1558           1564           9          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q51                                                4375           4515         198          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q52                                                 441            454          15          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q53                                                 719            751          29          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q54                                                3141           3182          58          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q55                                                 433            471          24          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q56                                                1766           1811          65          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q57                                                3203           3378         248          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q58                                                2170           2236          94          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q59                                                2318           2322           6          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q60                                                1806           1842          51          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q61                                                1635           1643          10          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q62                                                 629            648          29          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q63                                                 708            730          21          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q64                                                8943           9106         231          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q65                                                1384           1432          68          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q66                                                2225           2334         154          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q67                                                9937           9994          80          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q68                                                1152           1155           4          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q69                                                3333           3393          86          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q70                                                1472           1498          36          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q71                                                1301           1328          38          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q72                                              131085         131881        1126          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q73                                                 844            859          26          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q74                                                3230           3269          55          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q75                                                5169           5503         472          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q76                                                1149           1170          30          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q77                                                2225           2534         437          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q78                                                5088           5280         272          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q79                                                1065           1069           6          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q80                                                3555           3754         282          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q81                                                1249           1253           6          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q82                                                2167           2186          26          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q83                                                1379           1445          94          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q84                                                1375           1397          31          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q85                                                4318           4621         427          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q86                                                 715            726          16          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q87                                                2486           2520          49          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q88                                                3302           3430         182          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q89                                                 854            914          93          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q90                                                 622            635          10          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q91                                                1033           1052          26          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q92                                                 649            684          31          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q93                                                1331           1366          49          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q94                                                1033           1042          13          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q95                                                5701           5709          12          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q96                                                 438            462          20          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q97                                                1882           1956         104          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q98                                                 728            765          46          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q99                                                 728            736           8          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q5a-v2.7                                           5933           6010         108          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q6-v2.7                                            2322           2379          80          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q10a-v2.7                                          3946           3947           2          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q11-v2.7                                           3784           3837          75          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q12-v2.7                                            475            541          75          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q14-v2.7                                          19842          20008         235          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q14a-v2.7                                        127135         127517         539          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q18a-v2.7                                          5413           6082         946          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q20-v2.7                                            535            552          18          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q22-v2.7                                          20164          20228          91          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q22a-v2.7                                          9719           9961         342          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q24-v2.7                                           3210           3278          97          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q27a-v2.7                                          2729           2862         188          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q34-v2.7                                            877            901          30          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q35-v2.7                                           2976           3126         212          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q35a-v2.7                                          3449           3544         134          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q36a-v2.7                                          2814           2850          51          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q47-v2.7                                           4699           5077         534          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q49-v2.7                                           2202           2330         182          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q51a-v2.7                                         28603          28823         311          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q57-v2.7                                           3007           3239         329          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q64-v2.7                                           8686           9350         940          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q67a-v2.7                                         18643          18876         330          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q70a-v2.7                                          2990           3028          54          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q72-v2.7                                         127577         127803         319          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q74-v2.7                                           3086           3144          82          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q75-v2.7                                           5158           5431         386          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q77a-v2.7                                          5109           5406         420          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q78-v2.7                                           4743           5234         694          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q80a-v2.7                                          6636           7007         525          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q86a-v2.7                                          1651           1661          14          0.0      Infinity       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+TPCDS Snappy:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+q98-v2.7                                            637            699          93          0.0      Infinity       1.0X
+

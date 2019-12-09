@@ -53,44 +53,44 @@ trait Logging {
   }
 
   // Log methods that take only a String
-  protected def logInfo(msg: => String) {
+  protected def logInfo(msg: => String): Unit = {
     if (log.isInfoEnabled) log.info(msg)
   }
 
-  protected def logDebug(msg: => String) {
+  protected def logDebug(msg: => String): Unit = {
     if (log.isDebugEnabled) log.debug(msg)
   }
 
-  protected def logTrace(msg: => String) {
+  protected def logTrace(msg: => String): Unit = {
     if (log.isTraceEnabled) log.trace(msg)
   }
 
-  protected def logWarning(msg: => String) {
+  protected def logWarning(msg: => String): Unit = {
     if (log.isWarnEnabled) log.warn(msg)
   }
 
-  protected def logError(msg: => String) {
+  protected def logError(msg: => String): Unit = {
     if (log.isErrorEnabled) log.error(msg)
   }
 
   // Log methods that take Throwables (Exceptions/Errors) too
-  protected def logInfo(msg: => String, throwable: Throwable) {
+  protected def logInfo(msg: => String, throwable: Throwable): Unit = {
     if (log.isInfoEnabled) log.info(msg, throwable)
   }
 
-  protected def logDebug(msg: => String, throwable: Throwable) {
+  protected def logDebug(msg: => String, throwable: Throwable): Unit = {
     if (log.isDebugEnabled) log.debug(msg, throwable)
   }
 
-  protected def logTrace(msg: => String, throwable: Throwable) {
+  protected def logTrace(msg: => String, throwable: Throwable): Unit = {
     if (log.isTraceEnabled) log.trace(msg, throwable)
   }
 
-  protected def logWarning(msg: => String, throwable: Throwable) {
+  protected def logWarning(msg: => String, throwable: Throwable): Unit = {
     if (log.isWarnEnabled) log.warn(msg, throwable)
   }
 
-  protected def logError(msg: => String, throwable: Throwable) {
+  protected def logError(msg: => String, throwable: Throwable): Unit = {
     if (log.isErrorEnabled) log.error(msg, throwable)
   }
 

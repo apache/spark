@@ -207,6 +207,8 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * as Text and input format as TextInputFormat). Files must be written to the
    * monitored directory by "moving" them from another location within the same
    * file system. File names starting with . are ignored.
+   * The text files must be encoded as UTF-8.
+   *
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): JavaDStream[String] = {
@@ -503,7 +505,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * fault-tolerance. The graph will be checkpointed every batch interval.
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
    */
-  def checkpoint(directory: String) {
+  def checkpoint(directory: String): Unit = {
     ssc.checkpoint(directory)
   }
 
@@ -514,7 +516,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
-  def remember(duration: Duration) {
+  def remember(duration: Duration): Unit = {
     ssc.remember(duration)
   }
 
@@ -522,7 +524,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
    * receiving system events related to streaming.
    */
-  def addStreamingListener(streamingListener: StreamingListener) {
+  def addStreamingListener(streamingListener: StreamingListener): Unit = {
     ssc.addStreamingListener(streamingListener)
   }
 

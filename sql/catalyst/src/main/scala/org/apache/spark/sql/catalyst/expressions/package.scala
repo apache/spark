@@ -177,7 +177,7 @@ package object expressions  {
             a => (resolver(dbPart, a.qualifier.head) && resolver(tblPart, a.qualifier.last))
           }
           (attributes, nestedFields)
-        case all =>
+        case _ =>
           (Seq.empty, Seq.empty)
       }
 
@@ -197,7 +197,7 @@ package object expressions  {
               resolver(qualifier, a.qualifier.last)
             }
             (attributes, nestedFields)
-          case all =>
+          case _ =>
             (Seq.empty[Attribute], Seq.empty[String])
         }
       }

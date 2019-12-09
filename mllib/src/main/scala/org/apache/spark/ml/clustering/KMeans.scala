@@ -21,8 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
@@ -32,8 +31,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -110,6 +108,9 @@ class KMeansModel private[ml] (
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
     with HasTrainingSummary[KMeansSummary] {
 
+  @Since("3.0.0")
+  lazy val numFeatures: Int = parentModel.clusterCenters.head.size
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
     val copied = copyValues(new KMeansModel(uid, parentModel), extra)
@@ -126,20 +127,27 @@ class KMeansModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val predictUDF = udf((vector: Vector) => predict(vector))
 
     dataset.withColumn($(predictionCol),
-      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
+      outputSchema($(predictionCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), parentModel.k)
+    }
+    outputSchema
   }
 
-  private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
+  @Since("3.0.0")
+  def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
@@ -153,6 +161,12 @@ class KMeansModel private[ml] (
    */
   @Since("1.6.0")
   override def write: GeneralMLWriter = new GeneralMLWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"KMeansModel: uid=$uid, k=${parentModel.k}, distanceMeasure=${$(distanceMeasure)}, " +
+      s"numFeatures=$numFeatures"
+  }
 
   /**
    * Gets summary of model on training set. An exception is
@@ -360,7 +374,6 @@ object KMeans extends DefaultParamsReadable[KMeans] {
 }
 
 /**
- * :: Experimental ::
  * Summary of KMeans.
  *
  * @param predictions  `DataFrame` produced by `KMeansModel.transform()`.
@@ -372,7 +385,6 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  *                     points in the training dataset). This is equivalent to sklearn's inertia.
  */
 @Since("2.0.0")
-@Experimental
 class KMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,

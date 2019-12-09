@@ -17,17 +17,30 @@
 
 import datetime
 import unittest
+import sys
 
 from collections import OrderedDict
 from decimal import Decimal
-from distutils.version import LooseVersion
 
 from pyspark.sql import Row
-from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType
+from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType, \
+    window
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
+
+if have_pandas:
+    import pandas as pd
+    from pandas.util.testing import assert_frame_equal
+
+if have_pyarrow:
+    import pyarrow as pa
+
+
+# Tests below use pd.DataFrame.assign that will infer mixed types (unicode/str) for column names
+# from kwargs w/ Python 2, so need to set check_column_type=False and avoid this check
+_check_column_type = sys.version >= '3'
 
 
 @unittest.skipIf(
@@ -42,25 +55,21 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             .withColumn("v", explode(col('vs'))).drop('vs')
 
     def test_supported_types(self):
-        import pyarrow as pa
 
         values = [
             1, 2, 3,
             4, 5, 1.1,
             2.2, Decimal(1.123),
-            [1, 2, 2], True, 'hello'
+            [1, 2, 2], True, 'hello',
+            bytearray([0x01, 0x02])
         ]
         output_fields = [
             ('id', IntegerType()), ('byte', ByteType()), ('short', ShortType()),
             ('int', IntegerType()), ('long', LongType()), ('float', FloatType()),
             ('double', DoubleType()), ('decim', DecimalType(10, 3)),
-            ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType())
+            ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType()),
+            ('bin', BinaryType())
         ]
-
-        # TODO: Add BinaryType to variables above once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) >= LooseVersion("0.10.0"):
-            values.append(bytearray([0x01, 0x02]))
-            output_fields.append(('bin', BinaryType()))
 
         output_schema = StructType([StructField(*x) for x in output_fields])
         df = self.spark.createDataFrame([values], schema=output_schema)
@@ -78,6 +87,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
+                bin=pdf.bin
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -95,6 +105,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
+                bin=pdf.bin
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -113,6 +124,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
+                bin=pdf.bin
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -127,9 +139,9 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         result3 = df.groupby('id').apply(udf3).sort('id').toPandas()
         expected3 = expected1
 
-        self.assertPandasEqual(expected1, result1)
-        self.assertPandasEqual(expected2, result2)
-        self.assertPandasEqual(expected3, result3)
+        assert_frame_equal(expected1, result1, check_column_type=_check_column_type)
+        assert_frame_equal(expected2, result2, check_column_type=_check_column_type)
+        assert_frame_equal(expected3, result3, check_column_type=_check_column_type)
 
     def test_array_type_correct(self):
         df = self.data.withColumn("arr", array(col("id"))).repartition(1, "id")
@@ -147,7 +159,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         result = df.groupby('id').apply(udf).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(udf.func).reset_index(drop=True)
-        self.assertPandasEqual(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_register_grouped_map_udf(self):
         foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
@@ -169,7 +181,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         result = df.groupby('id').apply(foo).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(foo.func).reset_index(drop=True)
-        self.assertPandasEqual(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_coerce(self):
         df = self.data
@@ -183,7 +195,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         result = df.groupby('id').apply(foo).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(foo.func).reset_index(drop=True)
         expected = expected.assign(v=expected.v.astype('float64'))
-        self.assertPandasEqual(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_complex_groupby(self):
         df = self.data
@@ -201,7 +213,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         expected = pdf.groupby(pdf['id'] % 2 == 0, as_index=False).apply(normalize.func)
         expected = expected.sort_values(['id', 'v']).reset_index(drop=True)
         expected = expected.assign(norm=expected.norm.astype('float64'))
-        self.assertPandasEqual(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_empty_groupby(self):
         df = self.data
@@ -219,7 +231,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         expected = normalize.func(pdf)
         expected = expected.sort_values(['id', 'v']).reset_index(drop=True)
         expected = expected.assign(norm=expected.norm.astype('float64'))
-        self.assertPandasEqual(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_datatype_string(self):
         df = self.data
@@ -232,7 +244,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(foo_udf.func).reset_index(drop=True)
-        self.assertPandasEqual(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_wrong_return_type(self):
         with QuietTest(self.sc):
@@ -266,18 +278,13 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                     pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
-        import pyarrow as pa
-
         common_err_msg = 'Invalid returnType.*grouped map Pandas UDF.*'
         unsupported_types = [
             StructField('map', MapType(StringType(), IntegerType())),
             StructField('arr_ts', ArrayType(TimestampType())),
             StructField('null', NullType()),
+            StructField('struct', StructType([StructField('l', LongType())])),
         ]
-
-        # TODO: Remove this if-statement once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            unsupported_types.append(StructField('bin', BinaryType()))
 
         for unsupported_type in unsupported_types:
             schema = StructType([StructField('id', LongType(), True), unsupported_type])
@@ -294,7 +301,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(dt, 'timestamp').toDF('time')
         foo_udf = pandas_udf(lambda pdf: pdf, 'time timestamp', PandasUDFType.GROUPED_MAP)
         result = df.groupby('time').apply(foo_udf).sort('time')
-        self.assertPandasEqual(df.toPandas(), result.toPandas())
+        assert_frame_equal(df.toPandas(), result.toPandas(), check_column_type=_check_column_type)
 
     def test_udf_with_key(self):
         import numpy as np
@@ -348,29 +355,28 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         expected1 = pdf.groupby('id', as_index=False)\
             .apply(lambda x: udf1.func((x.id.iloc[0],), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
-        self.assertPandasEqual(expected1, result1)
+        assert_frame_equal(expected1, result1, check_column_type=_check_column_type)
 
         # Test groupby expression
         result2 = df.groupby(df.id % 2).apply(udf1).sort('id', 'v').toPandas()
         expected2 = pdf.groupby(pdf.id % 2, as_index=False)\
             .apply(lambda x: udf1.func((x.id.iloc[0] % 2,), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
-        self.assertPandasEqual(expected2, result2)
+        assert_frame_equal(expected2, result2, check_column_type=_check_column_type)
 
         # Test complex groupby
         result3 = df.groupby(df.id, df.v % 2).apply(udf2).sort('id', 'v').toPandas()
         expected3 = pdf.groupby([pdf.id, pdf.v % 2], as_index=False)\
             .apply(lambda x: udf2.func((x.id.iloc[0], (x.v % 2).iloc[0],), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
-        self.assertPandasEqual(expected3, result3)
+        assert_frame_equal(expected3, result3, check_column_type=_check_column_type)
 
         # Test empty groupby
         result4 = df.groupby().apply(udf3).sort('id', 'v').toPandas()
         expected4 = udf3.func((), pdf)
-        self.assertPandasEqual(expected4, result4)
+        assert_frame_equal(expected4, result4, check_column_type=_check_column_type)
 
     def test_column_order(self):
-        import pandas as pd
 
         # Helper function to set column names from a list
         def rename_pdf(pdf, names):
@@ -401,7 +407,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             .select('id', 'u', 'v').toPandas()
         pd_result = grouped_pdf.apply(change_col_order)
         expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
-        self.assertPandasEqual(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
         # Function returns a pdf with positional columns, indexed by range
         def range_col_order(pdf):
@@ -420,7 +426,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         pd_result = grouped_pdf.apply(range_col_order)
         rename_pdf(pd_result, ['id', 'u', 'v'])
         expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
-        self.assertPandasEqual(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
         # Function returns a pdf with columns indexed with integers
         def int_index(pdf):
@@ -438,7 +444,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         pd_result = grouped_pdf.apply(int_index)
         rename_pdf(pd_result, ['id', 'u', 'v'])
         expected = pd_result.sort_values(['id', 'v']).reset_index(drop=True)
-        self.assertPandasEqual(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
         @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
         def column_name_typo(pdf):
@@ -451,18 +457,10 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
                 grouped_df.apply(column_name_typo).collect()
-            import pyarrow as pa
-            if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
-                # TODO: see ARROW-1949. Remove when the minimum PyArrow version becomes 0.11.0.
-                with self.assertRaisesRegexp(Exception, "No cast implemented"):
-                    grouped_df.apply(invalid_positional_types).collect()
-            else:
-                with self.assertRaisesRegexp(Exception, "an integer is required"):
-                    grouped_df.apply(invalid_positional_types).collect()
+            with self.assertRaisesRegexp(Exception, "an integer is required"):
+                grouped_df.apply(invalid_positional_types).collect()
 
     def test_positional_assignment_conf(self):
-        import pandas as pd
-
         with self.sql_conf({
                 "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}):
 
@@ -491,8 +489,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(res.count(), 5)
 
     def test_mixed_scalar_udfs_followed_by_grouby_apply(self):
-        import pandas as pd
-
         df = self.spark.range(0, 10).toDF('v1')
         df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1'])) \
             .withColumn('v3', pandas_udf(lambda x: x + 2, 'int')(df['v1']))
@@ -504,13 +500,101 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         self.assertEquals(result.collect()[0]['sum'], 165)
 
+    def test_grouped_with_empty_partition(self):
+        data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
+        expected = [Row(id=1, x=5), Row(id=1, x=5), Row(id=2, x=4)]
+        num_parts = len(data) + 1
+        df = self.spark.createDataFrame(self.sc.parallelize(data, numSlices=num_parts))
+
+        f = pandas_udf(lambda pdf: pdf.assign(x=pdf['x'].sum()),
+                       'id long, x int', PandasUDFType.GROUPED_MAP)
+
+        result = df.groupBy('id').apply(f).collect()
+        self.assertEqual(result, expected)
+
+    def test_grouped_over_window(self):
+
+        data = [(0, 1, "2018-03-10T00:00:00+00:00", [0]),
+                (1, 2, "2018-03-11T00:00:00+00:00", [0]),
+                (2, 2, "2018-03-12T00:00:00+00:00", [0]),
+                (3, 3, "2018-03-15T00:00:00+00:00", [0]),
+                (4, 3, "2018-03-16T00:00:00+00:00", [0]),
+                (5, 3, "2018-03-17T00:00:00+00:00", [0]),
+                (6, 3, "2018-03-21T00:00:00+00:00", [0])]
+
+        expected = {0: [0],
+                    1: [1, 2],
+                    2: [1, 2],
+                    3: [3, 4, 5],
+                    4: [3, 4, 5],
+                    5: [3, 4, 5],
+                    6: [6]}
+
+        df = self.spark.createDataFrame(data, ['id', 'group', 'ts', 'result'])
+        df = df.select(col('id'), col('group'), col('ts').cast('timestamp'), col('result'))
+
+        @pandas_udf(df.schema, PandasUDFType.GROUPED_MAP)
+        def f(pdf):
+            # Assign each result element the ids of the windowed group
+            pdf['result'] = [pdf['id']] * len(pdf)
+            return pdf
+
+        result = df.groupby('group', window('ts', '5 days')).apply(f)\
+            .select('id', 'result').collect()
+        for r in result:
+            self.assertListEqual(expected[r[0]], r[1])
+
+    def test_grouped_over_window_with_key(self):
+
+        data = [(0, 1, "2018-03-10T00:00:00+00:00", False),
+                (1, 2, "2018-03-11T00:00:00+00:00", False),
+                (2, 2, "2018-03-12T00:00:00+00:00", False),
+                (3, 3, "2018-03-15T00:00:00+00:00", False),
+                (4, 3, "2018-03-16T00:00:00+00:00", False),
+                (5, 3, "2018-03-17T00:00:00+00:00", False),
+                (6, 3, "2018-03-21T00:00:00+00:00", False)]
+
+        expected_window = [
+            {'start': datetime.datetime(2018, 3, 10, 0, 0),
+             'end': datetime.datetime(2018, 3, 15, 0, 0)},
+            {'start': datetime.datetime(2018, 3, 15, 0, 0),
+             'end': datetime.datetime(2018, 3, 20, 0, 0)},
+            {'start': datetime.datetime(2018, 3, 20, 0, 0),
+             'end': datetime.datetime(2018, 3, 25, 0, 0)},
+        ]
+
+        expected = {0: (1, expected_window[0]),
+                    1: (2, expected_window[0]),
+                    2: (2, expected_window[0]),
+                    3: (3, expected_window[1]),
+                    4: (3, expected_window[1]),
+                    5: (3, expected_window[1]),
+                    6: (3, expected_window[2])}
+
+        df = self.spark.createDataFrame(data, ['id', 'group', 'ts', 'result'])
+        df = df.select(col('id'), col('group'), col('ts').cast('timestamp'), col('result'))
+
+        @pandas_udf(df.schema, PandasUDFType.GROUPED_MAP)
+        def f(key, pdf):
+            group = key[0]
+            window_range = key[1]
+            # Result will be True if group and window range equal to expected
+            is_expected = pdf.id.apply(lambda id: (expected[id][0] == group and
+                                                   expected[id][1] == window_range))
+            return pdf.assign(result=is_expected)
+
+        result = df.groupby('group', window('ts', '5 days')).apply(f).select('result').collect()
+
+        # Check that all group and window_range values from udf matched expected
+        self.assertTrue(all([r[0] for r in result]))
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_udf_grouped_map import *
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

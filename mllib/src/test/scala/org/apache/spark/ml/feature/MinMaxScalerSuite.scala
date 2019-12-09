@@ -46,6 +46,9 @@ class MinMaxScalerSuite extends MLTest with DefaultReadWriteTest {
       .setMax(5)
 
     val model = scaler.fit(df)
+    val transformed = model.transform(df)
+    checkVectorSizeOnDF(transformed, "scaled", model.originalMin.size)
+
     testTransformer[(Vector, Vector)](df, model, "expected", "scaled") {
       case Row(vector1: Vector, vector2: Vector) =>
         assert(vector1 === vector2, "Transformed vector is different with expected.")

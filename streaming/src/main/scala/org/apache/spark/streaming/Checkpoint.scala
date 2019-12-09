@@ -90,7 +90,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
     newSparkConf
   }
 
-  def validate() {
+  def validate(): Unit = {
     assert(master != null, "Checkpoint.master is null")
     assert(framework != null, "Checkpoint.framework is null")
     assert(graph != null, "Checkpoint.graph is null")
@@ -131,8 +131,8 @@ object Checkpoint extends Logging {
     try {
       val statuses = fs.listStatus(path)
       if (statuses != null) {
-        val paths = statuses.map(_.getPath)
-        val filtered = paths.filter(p => REGEX.findFirstIn(p.toString).nonEmpty)
+        val paths = statuses.filterNot(_.isDirectory).map(_.getPath)
+        val filtered = paths.filter(p => REGEX.findFirstIn(p.getName).nonEmpty)
         filtered.sortWith(sortFunc)
       } else {
         logWarning(s"Listing $path returned null")
@@ -213,7 +213,7 @@ class CheckpointWriter(
       checkpointTime: Time,
       bytes: Array[Byte],
       clearCheckpointDataLater: Boolean) extends Runnable {
-    def run() {
+    def run(): Unit = {
       if (latestCheckpointTime == null || latestCheckpointTime < checkpointTime) {
         latestCheckpointTime = checkpointTime
       }
@@ -288,7 +288,7 @@ class CheckpointWriter(
     }
   }
 
-  def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean) {
+  def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean): Unit = {
     try {
       val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(

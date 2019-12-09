@@ -99,6 +99,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
   /**
    * Returns information of all known executors, including host, port, cacheSize, numRunningTasks
    * and memory metrics.
+   * Note this include information for both the driver and executors.
    */
   def getExecutorInfos: Array[SparkExecutorInfo] = {
     store.executorList(true).map { exec =>

@@ -408,6 +408,7 @@ exportMethods("%<=>%",
               "weekofyear",
               "when",
               "window",
+              "xxhash64",
               "year")
 
 exportClasses("GroupedData")

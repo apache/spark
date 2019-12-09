@@ -22,7 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.util.collection.BitSet
@@ -137,7 +137,7 @@ object FileSourceStrategy extends Strategy with Logging {
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters,
+    case ScanOperation(projects, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
@@ -159,9 +159,14 @@ object FileSourceStrategy extends Strategy with Logging {
 
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
+      // subquery expressions are filtered out because they can't be used to prune buckets or pushed
+      // down as data filters, yet they would be executed
+      val normalizedFiltersWithoutSubqueries =
+        normalizedFilters.filterNot(SubqueryExpression.hasSubquery)
+
       val bucketSpec: Option[BucketSpec] = fsRelation.bucketSpec
       val bucketSet = if (shouldPruneBuckets(bucketSpec)) {
-        genBucketSet(normalizedFilters, bucketSpec.get)
+        genBucketSet(normalizedFiltersWithoutSubqueries, bucketSpec.get)
       } else {
         None
       }
@@ -170,7 +175,10 @@ object FileSourceStrategy extends Strategy with Logging {
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
-      val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
+      val dataFilters =
+        normalizedFiltersWithoutSubqueries.filter(_.references.intersect(partitionSet).isEmpty)
+      logInfo(s"Pushed Filters: " +
+        s"${dataFilters.flatMap(DataSourceStrategy.translateFilter).mkString(",")}")
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)

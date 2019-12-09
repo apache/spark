@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.{implicitConversions, postfixOps}
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
@@ -184,7 +184,7 @@ class ReceivedBlockTrackerSuite
     // Set the time increment level to twice the rotation interval so that every increment creates
     // a new log file
 
-    def incrementTime() {
+    def incrementTime(): Unit = {
       val timeIncrementMillis = 2000L
       manualClock.advance(timeIncrementMillis)
     }
@@ -197,7 +197,7 @@ class ReceivedBlockTrackerSuite
     }
 
     // Print the data present in the log ahead files in the log directory
-    def printLogFiles(message: String) {
+    def printLogFiles(message: String): Unit = {
       val fileContents = getWriteAheadLogFiles().map { file =>
         (s"\n>>>>> $file: <<<<<\n${getWrittenLogData(file).mkString("\n")}")
       }.mkString("\n")
@@ -276,7 +276,7 @@ class ReceivedBlockTrackerSuite
     getWrittenLogData(getWriteAheadLogFiles().last) should contain(createBatchCleanup(batchTime1))
 
     // Verify that at least one log file gets deleted
-    eventually(timeout(10 seconds), interval(10 millisecond)) {
+    eventually(timeout(10.seconds), interval(10.millisecond)) {
       getWriteAheadLogFiles() should not contain oldestLogFile
     }
     printLogFiles("After clean")

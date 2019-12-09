@@ -88,7 +88,7 @@ abstract class PersistenceEngine {
     }
   }
 
-  def close() {}
+  def close(): Unit = {}
 }
 
 private[master] class BlackHolePersistenceEngine extends PersistenceEngine {

@@ -83,7 +83,7 @@ class HadoopTableReader(
       sparkSession.sparkContext.defaultMinPartitions)
   }
 
-  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(
+  SparkHadoopUtil.get.appendS3AndSparkHadoopHiveConfigurations(
     sparkSession.sparkContext.conf, hadoopConf)
 
   private val _broadcastedHadoopConf =
@@ -94,7 +94,7 @@ class HadoopTableReader(
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(
       hiveTable,
-      Utils.classForName(tableDesc.getSerdeClassName).asInstanceOf[Class[Deserializer]],
+      Utils.classForName[Deserializer](tableDesc.getSerdeClassName),
       filterOpt = None)
 
   /**
@@ -170,7 +170,7 @@ class HadoopTableReader(
         val pathPatternSet = collection.mutable.Set[String]()
         partitionToDeserializer.filter {
           case (partition, partDeserializer) =>
-            def updateExistPathSetByPathPattern(pathPatternStr: String) {
+            def updateExistPathSetByPathPattern(pathPatternStr: String): Unit = {
               val pathPattern = new Path(pathPatternStr)
               val fs = pathPattern.getFileSystem(hadoopConf)
               val matches = fs.globStatus(pathPattern)
@@ -352,7 +352,7 @@ private[hive] object HiveTableUtil {
   // that calls Hive.get() which tries to access metastore, but it's not valid in runtime
   // it would be fixed in next version of hive but till then, we should use this instead
   def configureJobPropertiesForStorageHandler(
-      tableDesc: TableDesc, conf: Configuration, input: Boolean) {
+      tableDesc: TableDesc, conf: Configuration, input: Boolean): Unit = {
     val property = tableDesc.getProperties.getProperty(META_TABLE_STORAGE)
     val storageHandler =
       org.apache.hadoop.hive.ql.metadata.HiveUtils.getStorageHandler(conf, property)
@@ -375,7 +375,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
    * instantiate a HadoopRDD.
    */
-  def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
+  def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf): Unit = {
     FileInputFormat.setInputPaths(jobConf, Seq[Path](new Path(path)): _*)
     if (tableDesc != null) {
       HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, true)

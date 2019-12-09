@@ -15,9 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.benchmark
 
-import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
+import java.sql.Timestamp
+
+import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.SaveMode.Overwrite
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Synthetic benchmark for date and timestamp functions.
@@ -33,7 +37,12 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
  */
 object DateTimeBenchmark extends SqlBasedBenchmark {
   private def doBenchmark(cardinality: Int, exprs: String*): Unit = {
-    spark.range(cardinality).selectExpr(exprs: _*).write.format("noop").save()
+    spark.range(cardinality)
+      .selectExpr(exprs: _*)
+      .write
+      .format("noop")
+      .mode(Overwrite)
+      .save()
   }
 
   private def run(cardinality: Int, name: String, exprs: String*): Unit = {
@@ -86,9 +95,11 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       run(N, "from_unixtime", "from_unixtime(id, 'yyyy-MM-dd HH:mm:ss.SSSSSS')")
     }
     runBenchmark("Convert timestamps") {
-      val timestampExpr = "cast(id as timestamp)"
-      run(N, "from_utc_timestamp", s"from_utc_timestamp($timestampExpr, 'CET')")
-      run(N, "to_utc_timestamp", s"to_utc_timestamp($timestampExpr, 'CET')")
+      withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+        val timestampExpr = "cast(id as timestamp)"
+        run(N, "from_utc_timestamp", s"from_utc_timestamp($timestampExpr, 'CET')")
+        run(N, "to_utc_timestamp", s"to_utc_timestamp($timestampExpr, 'CET')")
+      }
     }
     runBenchmark("Intervals") {
       val (start, end) = ("cast(id as timestamp)", "cast((id+8640000) as timestamp)")
@@ -118,6 +129,30 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       val dateStrExpr = "concat('2019-01-', cast(mod(id, 25) as string))"
       run(n, "to date str", dateStrExpr)
       run(n, "to_date", s"to_date($dateStrExpr, 'yyyy-MM-dd')")
+    }
+    runBenchmark("Conversion from/to external types") {
+      import spark.implicits._
+      val rowsNum = 5000000
+      val numIters = 3
+      val benchmark = new Benchmark("To/from java.sql.Timestamp", rowsNum, output = output)
+      benchmark.addCase("From java.sql.Timestamp", numIters) { _ =>
+        spark.range(rowsNum)
+          .map(millis => new Timestamp(millis))
+          .write
+          .format("noop")
+          .mode(Overwrite)
+          .save()
+      }
+      benchmark.addCase("Collect longs", numIters) { _ =>
+        spark.range(0, rowsNum, 1, 1)
+          .collect()
+      }
+      benchmark.addCase("Collect timestamps", numIters) { _ =>
+        spark.range(0, rowsNum, 1, 1)
+          .map(millis => new Timestamp(millis))
+          .collect()
+      }
+      benchmark.run()
     }
   }
 }

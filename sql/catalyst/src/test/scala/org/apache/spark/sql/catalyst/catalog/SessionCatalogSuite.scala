@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -87,7 +88,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  def testInvalidName(func: (String) => Unit) {
+  def testInvalidName(func: (String) => Unit): Unit = {
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
     val name = "砖"
@@ -207,8 +208,9 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       // Note: alter properties here because Hive does not support altering other fields
       catalog.alterDatabase(db1.copy(properties = Map("k" -> "v3", "good" -> "true")))
       val newDb1 = catalog.getDatabaseMetadata("db1")
-      assert(db1.properties.isEmpty)
-      assert(newDb1.properties.size == 2)
+      val reversedProperties = Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
+      assert((db1.properties -- reversedProperties).isEmpty)
+      assert((newDb1.properties -- reversedProperties).size == 2)
       assert(newDb1.properties.get("k") == Some("v3"))
       assert(newDb1.properties.get("good") == Some("true"))
     }
@@ -509,6 +511,96 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
+  test("get tables by name") {
+    withBasicCatalog { catalog =>
+      assert(catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1", Some("db2")),
+          TableIdentifier("tbl2", Some("db2"))
+        )
+      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1", "tbl2")))
+      // Get table without explicitly specifying database
+      catalog.setCurrentDatabase("db2")
+      assert(catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1"),
+          TableIdentifier("tbl2")
+        )
+      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1", "tbl2")))
+    }
+  }
+
+  test("get tables by name when some tables do not exist") {
+    withBasicCatalog { catalog =>
+      assert(catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1", Some("db2")),
+          TableIdentifier("tblnotexit", Some("db2"))
+        )
+      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+      // Get table without explicitly specifying database
+      catalog.setCurrentDatabase("db2")
+      assert(catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1"),
+          TableIdentifier("tblnotexit")
+        )
+      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+    }
+  }
+
+  test("get tables by name when contains invalid name") {
+    // scalastyle:off
+    val name = "砖"
+    // scalastyle:on
+    withBasicCatalog { catalog =>
+      assert(catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1", Some("db2")),
+          TableIdentifier(name, Some("db2"))
+        )
+      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+      // Get table without explicitly specifying database
+      catalog.setCurrentDatabase("db2")
+      assert(catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1"),
+          TableIdentifier(name)
+        )
+      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+    }
+  }
+
+  test("get tables by name when empty") {
+    withBasicCatalog { catalog =>
+      assert(catalog.getTablesByName(Seq.empty)
+        == catalog.externalCatalog.getTablesByName("db2", Seq.empty))
+      // Get table without explicitly specifying database
+      catalog.setCurrentDatabase("db2")
+      assert(catalog.getTablesByName(Seq.empty)
+        == catalog.externalCatalog.getTablesByName("db2", Seq.empty))
+    }
+  }
+
+  test("get tables by name when tables belong to different databases") {
+    withBasicCatalog { catalog =>
+      intercept[AnalysisException](catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1", Some("db1")),
+          TableIdentifier("tbl2", Some("db2"))
+        )
+      ))
+      // Get table without explicitly specifying database
+      catalog.setCurrentDatabase("db2")
+      intercept[AnalysisException](catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1", Some("db1")),
+          TableIdentifier("tbl2")
+        )
+      ))
+    }
+  }
+
   test("lookup table relation") {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
@@ -624,6 +716,71 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       intercept[NoSuchDatabaseException] {
         catalog.listTables("unknown_db", "*")
       }
+    }
+  }
+
+  test("list tables with pattern and includeLocalTempViews") {
+    withEmptyCatalog { catalog =>
+      catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
+      catalog.createTable(newTable("tbl1", "mydb"), ignoreIfExists = false)
+      catalog.createTable(newTable("tbl2", "mydb"), ignoreIfExists = false)
+      val tempTable = Range(1, 10, 2, 10)
+      catalog.createTempView("temp_view1", tempTable, overrideIfExists = false)
+      catalog.createTempView("temp_view4", tempTable, overrideIfExists = false)
+
+      assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "*").toSet)
+      assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "*", true).toSet)
+      assert(catalog.listTables("mydb").toSet ==
+        catalog.listTables("mydb", "*", false).toSet ++ catalog.listLocalTempViews("*"))
+      assert(catalog.listTables("mydb", "*", true).toSet ==
+        Set(TableIdentifier("tbl1", Some("mydb")),
+          TableIdentifier("tbl2", Some("mydb")),
+          TableIdentifier("temp_view1"),
+          TableIdentifier("temp_view4")))
+      assert(catalog.listTables("mydb", "*", false).toSet ==
+        Set(TableIdentifier("tbl1", Some("mydb")), TableIdentifier("tbl2", Some("mydb"))))
+      assert(catalog.listTables("mydb", "tbl*", true).toSet ==
+        Set(TableIdentifier("tbl1", Some("mydb")), TableIdentifier("tbl2", Some("mydb"))))
+      assert(catalog.listTables("mydb", "tbl*", false).toSet ==
+        Set(TableIdentifier("tbl1", Some("mydb")), TableIdentifier("tbl2", Some("mydb"))))
+      assert(catalog.listTables("mydb", "temp_view*", true).toSet ==
+        Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
+      assert(catalog.listTables("mydb", "temp_view*", false).toSet == Set.empty)
+    }
+  }
+
+  test("list temporary view with pattern") {
+    withBasicCatalog { catalog =>
+      val tempTable = Range(1, 10, 2, 10)
+      catalog.createTempView("temp_view1", tempTable, overrideIfExists = false)
+      catalog.createTempView("temp_view4", tempTable, overrideIfExists = false)
+      assert(catalog.listLocalTempViews("*").toSet ==
+        Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
+      assert(catalog.listLocalTempViews("temp_view*").toSet ==
+        Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
+      assert(catalog.listLocalTempViews("*1").toSet == Set(TableIdentifier("temp_view1")))
+      assert(catalog.listLocalTempViews("does_not_exist").toSet == Set.empty)
+    }
+  }
+
+  test("list global temporary view and local temporary view with pattern") {
+    withBasicCatalog { catalog =>
+      val tempTable = Range(1, 10, 2, 10)
+      catalog.createTempView("temp_view1", tempTable, overrideIfExists = false)
+      catalog.createTempView("temp_view4", tempTable, overrideIfExists = false)
+      catalog.globalTempViewManager.create("global_temp_view1", tempTable, overrideIfExists = false)
+      catalog.globalTempViewManager.create("global_temp_view2", tempTable, overrideIfExists = false)
+      assert(catalog.listTables(catalog.globalTempViewManager.database, "*").toSet ==
+        Set(TableIdentifier("temp_view1"),
+          TableIdentifier("temp_view4"),
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
+      assert(catalog.listTables(catalog.globalTempViewManager.database, "*temp_view1").toSet ==
+        Set(TableIdentifier("temp_view1"),
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database))))
+      assert(catalog.listTables(catalog.globalTempViewManager.database, "global*").toSet ==
+        Set(TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
     }
   }
 
@@ -1274,7 +1431,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
         catalog.dropFunction(
           FunctionIdentifier("something", Some("unknown_db")), ignoreIfNotExists = false)
       }
-      intercept[NoSuchFunctionException] {
+      intercept[NoSuchPermanentFunctionException] {
         catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = false)
       }
       catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = true)

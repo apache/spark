@@ -25,6 +25,7 @@ import scala.collection.immutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
@@ -40,7 +41,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager}
+import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -207,6 +208,20 @@ class HadoopRDD[K, V](
       } else {
         allInputSplits
       }
+      if (inputSplits.length == 1 && inputSplits(0).isInstanceOf[FileSplit]) {
+        val fileSplit = inputSplits(0).asInstanceOf[FileSplit]
+        val path = fileSplit.getPath
+        if (fileSplit.getLength > conf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
+          val codecFactory = new CompressionCodecFactory(jobConf)
+          if (Utils.isFileSplittable(path, codecFactory)) {
+            logWarning(s"Loading one large file ${path.toString} with only one partition, " +
+              s"we can increase partition numbers for improving performance.")
+          } else {
+            logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
+              s"partition, because the file is compressed by unsplittable compression codec.")
+          }
+        }
+      }
       val array = new Array[Partition](inputSplits.size)
       for (i <- 0 until inputSplits.size) {
         array(i) = new HadoopPartition(id, i, inputSplits(i))
@@ -360,7 +375,7 @@ class HadoopRDD[K, V](
     locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
   }
 
-  override def checkpoint() {
+  override def checkpoint(): Unit = {
     // Do nothing. Hadoop RDD should not be checkpointed.
   }
 
@@ -397,7 +412,7 @@ private[spark] object HadoopRDD extends Logging {
 
   /** Add Hadoop configuration specific to a single partition and attempt. */
   def addLocalConfiguration(jobTrackerId: String, jobId: Int, splitId: Int, attemptId: Int,
-                            conf: JobConf) {
+                            conf: JobConf): Unit = {
     val jobID = new JobID(jobTrackerId, jobId)
     val taId = new TaskAttemptID(new TaskID(jobID, TaskType.MAP, splitId), attemptId)
 

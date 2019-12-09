@@ -2,6 +2,21 @@
 layout: global
 title: Classification and regression
 displayTitle: Classification and regression
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 
@@ -463,16 +478,18 @@ it computes the conditional probability distribution of each feature given each 
 For prediction, it applies Bayes' theorem to compute the conditional probability distribution
 of each label given an observation.
 
-MLlib supports both [multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
-and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
+MLlib supports [Multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes),
+[Complement naive Bayes](https://people.csail.mit.edu/jrennie/papers/icml03-nb.pdf),
+[Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html)
+and [Gaussian naive Bayes](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes).
 
 *Input data*:
-These models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+These Multinomial, Complement and Bernoulli models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
 Within that context, each observation is a document and each feature represents a term.
-A feature's value is the frequency of the term (in multinomial Naive Bayes) or
+A feature's value is the frequency of the term (in Multinomial or Complement Naive Bayes) or
 a zero or one indicating whether the term was found in the document (in Bernoulli Naive Bayes).
-Feature values must be *non-negative*. The model type is selected with an optional parameter
-"multinomial" or "bernoulli" with "multinomial" as the default.
+Feature values for Multinomial and Bernoulli models must be *non-negative*. The model type is selected with an optional parameter
+"multinomial", "complement", "bernoulli" or "gaussian", with "multinomial" as the default.
 For document classification, the input feature vectors should usually be sparse vectors.
 Since the training data is only used once, it is not necessary to cache it.
 

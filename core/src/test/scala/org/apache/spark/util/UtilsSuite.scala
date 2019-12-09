@@ -18,11 +18,12 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, PrintStream}
+  FileOutputStream, InputStream, PrintStream, SequenceInputStream}
 import java.lang.{Double => JDouble, Float => JFloat}
+import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
-import java.nio.charset.StandardCharsets
+import java.nio.charset.StandardCharsets.UTF_8
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -43,6 +44,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -211,6 +213,56 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(os.toByteArray.toList.equals(bytes.toList))
   }
 
+  test("copyStreamUpTo") {
+    // input array initialization
+    val bytes = Array.ofDim[Byte](1200)
+    Random.nextBytes(bytes)
+
+    val limit = 1000
+    // testing for inputLength less than, equal to and greater than limit
+    (limit - 2 to limit + 2).foreach { inputLength =>
+      val in = new ByteArrayInputStream(bytes.take(inputLength))
+      val mergedStream = Utils.copyStreamUpTo(in, limit)
+      try {
+        // Get a handle on the buffered data, to make sure memory gets freed once we read past the
+        // end of it. Need to use reflection to get handle on inner structures for this check
+        val byteBufferInputStream = if (mergedStream.isInstanceOf[ChunkedByteBufferInputStream]) {
+          assert(inputLength < limit)
+          mergedStream.asInstanceOf[ChunkedByteBufferInputStream]
+        } else {
+          assert(inputLength >= limit)
+          val sequenceStream = mergedStream.asInstanceOf[SequenceInputStream]
+          val fieldValue = getFieldValue(sequenceStream, "in")
+          assert(fieldValue.isInstanceOf[ChunkedByteBufferInputStream])
+          fieldValue.asInstanceOf[ChunkedByteBufferInputStream]
+        }
+        (0 until inputLength).foreach { idx =>
+          assert(bytes(idx) === mergedStream.read().asInstanceOf[Byte])
+          if (idx == limit) {
+            assert(byteBufferInputStream.chunkedByteBuffer === null)
+          }
+        }
+        assert(mergedStream.read() === -1)
+        assert(byteBufferInputStream.chunkedByteBuffer === null)
+      } finally {
+        IOUtils.closeQuietly(mergedStream)
+        IOUtils.closeQuietly(in)
+      }
+    }
+  }
+
+  private def getFieldValue(obj: AnyRef, fieldName: String): Any = {
+    val field: Field = obj.getClass().getDeclaredField(fieldName)
+    if (field.isAccessible()) {
+      field.get(obj)
+    } else {
+      field.setAccessible(true)
+      val result = field.get(obj)
+      field.setAccessible(false)
+      result
+    }
+  }
+
   test("memoryStringToMb") {
     assert(Utils.memoryStringToMb("1") === 0)
     assert(Utils.memoryStringToMb("1048575") === 0)
@@ -299,7 +351,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     withTempDir { tmpDir2 =>
       val suffix = getSuffix(isCompressed)
       val f1Path = tmpDir2 + "/f1" + suffix
-      writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
+      writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
       val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 
       // Read first few bytes
@@ -335,10 +387,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       val suffix = getSuffix(isCompressed)
       val files = (1 to 3).map(i =>
         new File(tmpDir, i.toString + suffix)) :+ new File(tmpDir, "4")
-      writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
-      writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
-      writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8))
-      writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(StandardCharsets.UTF_8))
+      writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(UTF_8))
+      writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(UTF_8))
+      writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(UTF_8))
+      writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(UTF_8))
       val fileLengths = files.map(Utils.getFileLength(_, workerConf))
 
       // Read first few bytes in the 1st file
@@ -613,13 +665,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
-        "spark.test.fileNameLoadB 1\n", outFile, StandardCharsets.UTF_8)
+        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
         .filter { case (k, v) => k.startsWith("spark.")}
         .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
       val sparkConf = new SparkConf
-      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
+      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false))
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
     }
   }
@@ -642,7 +694,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
       val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
       val targetDir = new File(tempDir, "target-dir")
-      Files.write("some text", sourceFile, StandardCharsets.UTF_8)
+      Files.write("some text", sourceFile, UTF_8)
 
       val path =
         if (Utils.isWindows) {
@@ -771,14 +823,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("circular buffer: if the buffer isn't full, print only the contents written") {
     val buffer = new CircularBuffer(10)
-    val stream = new PrintStream(buffer, true, "UTF-8")
+    val stream = new PrintStream(buffer, true, UTF_8.name())
     stream.print("test")
     assert(buffer.toString === "test")
   }
 
   test("circular buffer: data written == size of the buffer") {
     val buffer = new CircularBuffer(4)
-    val stream = new PrintStream(buffer, true, "UTF-8")
+    val stream = new PrintStream(buffer, true, UTF_8.name())
 
     // fill the buffer to its exact size so that it just hits overflow
     stream.print("test")
@@ -791,40 +843,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("circular buffer: multiple overflow") {
     val buffer = new CircularBuffer(25)
-    val stream = new PrintStream(buffer, true, "UTF-8")
+    val stream = new PrintStream(buffer, true, UTF_8.name())
 
     stream.print("test circular test circular test circular test circular test circular")
     assert(buffer.toString === "st circular test circular")
-  }
-
-  test("nanSafeCompareDoubles") {
-    def shouldMatchDefaultOrder(a: Double, b: Double): Unit = {
-      assert(Utils.nanSafeCompareDoubles(a, b) === JDouble.compare(a, b))
-      assert(Utils.nanSafeCompareDoubles(b, a) === JDouble.compare(b, a))
-    }
-    shouldMatchDefaultOrder(0d, 0d)
-    shouldMatchDefaultOrder(0d, 1d)
-    shouldMatchDefaultOrder(Double.MinValue, Double.MaxValue)
-    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NaN) === 0)
-    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.PositiveInfinity) === 1)
-    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NegativeInfinity) === 1)
-    assert(Utils.nanSafeCompareDoubles(Double.PositiveInfinity, Double.NaN) === -1)
-    assert(Utils.nanSafeCompareDoubles(Double.NegativeInfinity, Double.NaN) === -1)
-  }
-
-  test("nanSafeCompareFloats") {
-    def shouldMatchDefaultOrder(a: Float, b: Float): Unit = {
-      assert(Utils.nanSafeCompareFloats(a, b) === JFloat.compare(a, b))
-      assert(Utils.nanSafeCompareFloats(b, a) === JFloat.compare(b, a))
-    }
-    shouldMatchDefaultOrder(0f, 0f)
-    shouldMatchDefaultOrder(1f, 1f)
-    shouldMatchDefaultOrder(Float.MinValue, Float.MaxValue)
-    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NaN) === 0)
-    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.PositiveInfinity) === 1)
-    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NegativeInfinity) === 1)
-    assert(Utils.nanSafeCompareFloats(Float.PositiveInfinity, Float.NaN) === -1)
-    assert(Utils.nanSafeCompareFloats(Float.NegativeInfinity, Float.NaN) === -1)
   }
 
   test("isDynamicAllocationEnabled") {
@@ -835,11 +857,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.isDynamicAllocationEnabled(
       conf.set(DYN_ALLOCATION_ENABLED, false)) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set(DYN_ALLOCATION_ENABLED, true)) === true)
+      conf.set(DYN_ALLOCATION_ENABLED, true)))
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "1")) === true)
+      conf.set("spark.executor.instances", "1")))
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "0")) === true)
+      conf.set("spark.executor.instances", "0")))
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_TESTING, true)))
   }
@@ -935,7 +957,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
              |trap "" SIGTERM
              |sleep 10
            """.stripMargin
-        Files.write(cmd.getBytes(StandardCharsets.UTF_8), file)
+        Files.write(cmd.getBytes(UTF_8), file)
         file.getAbsoluteFile.setExecutable(true)
 
         val process = new ProcessBuilder(file.getAbsolutePath).start()
@@ -1014,6 +1036,71 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(redactedConf("spark.regular.property") === "regular_value")
     assert(redactedConf("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
 
+  }
+
+  test("redact sensitive information in command line args") {
+    val sparkConf = new SparkConf
+
+    // Set some secret keys
+    val secretKeysWithSameValue = Seq(
+      "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "spark.my.password",
+      "spark.my.sECreT")
+    val cmdArgsForSecretWithSameValue = secretKeysWithSameValue.map(s => s"-D$s=sensitive_value")
+
+    val secretKeys = secretKeysWithSameValue ++ Seq("spark.your.password")
+    val cmdArgsForSecret = cmdArgsForSecretWithSameValue ++ Seq(
+      // Have '=' twice
+      "-Dspark.your.password=sensitive=sensitive2"
+    )
+
+    val ignoredArgs = Seq(
+      // starts with -D but no assignment
+      "-Ddummy",
+      // secret value contained not starting with -D (we don't care about this case for now)
+      "spark.my.password=sensitive_value",
+      // edge case: not started with -D, but matched pattern after first '-'
+      "--Dspark.my.password=sensitive_value")
+
+    val cmdArgs = cmdArgsForSecret ++ ignoredArgs ++ Seq(
+      // Set a non-secret key
+      "-Dspark.regular.property=regular_value",
+      // Set a property with a regular key but secret in the value
+      "-Dspark.sensitive.property=has_secret_in_value")
+
+    // Redact sensitive information
+    val redactedCmdArgs = Utils.redactCommandLineArgs(sparkConf, cmdArgs)
+
+    // These arguments should be left as they were:
+    // 1) argument without -D option is not applied
+    // 2) -D option without key-value assignment is not applied
+    assert(ignoredArgs.forall(redactedCmdArgs.contains))
+
+    val redactedCmdArgMap = redactedCmdArgs.filterNot(ignoredArgs.contains).map { cmd =>
+      val keyValue = cmd.substring("-D".length).split("=")
+      keyValue(0) -> keyValue.tail.mkString("=")
+    }.toMap
+
+    // Assert that secret information got redacted while the regular property remained the same
+    secretKeys.foreach { key =>
+      assert(redactedCmdArgMap(key) === Utils.REDACTION_REPLACEMENT_TEXT)
+    }
+
+    assert(redactedCmdArgMap("spark.regular.property") === "regular_value")
+    assert(redactedCmdArgMap("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
+  }
+
+  test("redact sensitive information in sequence of key value pairs") {
+    val secretKeys = Some("my.password".r)
+    assert(Utils.redact(secretKeys, Seq(("spark.my.password", "12345"))) ===
+      Seq(("spark.my.password", Utils.REDACTION_REPLACEMENT_TEXT)))
+    assert(Utils.redact(secretKeys, Seq(("anything", "spark.my.password=12345"))) ===
+      Seq(("anything", Utils.REDACTION_REPLACEMENT_TEXT)))
+    assert(Utils.redact(secretKeys, Seq((999, "spark.my.password=12345"))) ===
+      Seq((999, Utils.REDACTION_REPLACEMENT_TEXT)))
+    // Do not redact when value type is not string
+    assert(Utils.redact(secretKeys, Seq(("my.password", 12345))) ===
+      Seq(("my.password", 12345)))
   }
 
   test("tryWithSafeFinally") {

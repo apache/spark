@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.image
 
-import scala.language.existentials
 import scala.util.Random
 
 import org.apache.commons.io.FilenameUtils
@@ -103,7 +102,7 @@ private object SamplePathFilter {
       // scalastyle:off hadoopconfiguration
       val hadoopConf = spark.sparkContext.hadoopConfiguration
       // scalastyle:on hadoopconfiguration
-      val old = Option(hadoopConf.getClass(flagName, null))
+      val old = hadoopConf.getClass(flagName, null)
       hadoopConf.setDouble(SamplePathFilter.ratioParam, sampleRatio)
       hadoopConf.setLong(SamplePathFilter.seedParam, seed)
       hadoopConf.setClass(flagName, classOf[SamplePathFilter], classOf[PathFilter])
@@ -111,8 +110,8 @@ private object SamplePathFilter {
         hadoopConf.unset(SamplePathFilter.ratioParam)
         hadoopConf.unset(SamplePathFilter.seedParam)
         old match {
-          case Some(v) => hadoopConf.setClass(flagName, v, classOf[PathFilter])
-          case None => hadoopConf.unset(flagName)
+          case null => hadoopConf.unset(flagName)
+          case v => hadoopConf.setClass(flagName, v, classOf[PathFilter])
         }
       }
     } else {

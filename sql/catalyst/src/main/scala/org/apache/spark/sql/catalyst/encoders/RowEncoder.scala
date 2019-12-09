@@ -22,13 +22,15 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{ScalaReflection, WalkedTypePath}
+import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
+import org.apache.spark.sql.catalyst.SerializerBuildHelper._
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A factory for constructing encoders that convert external row to/from the Spark SQL
@@ -45,8 +47,11 @@ import org.apache.spark.unsafe.types.UTF8String
  *   StringType -> String
  *   DecimalType -> java.math.BigDecimal or scala.math.BigDecimal or Decimal
  *
- *   DateType -> java.sql.Date
- *   TimestampType -> java.sql.Timestamp
+ *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
+ *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
+ *
+ *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
+ *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
  *
  *   BinaryType -> byte array
  *   ArrayType -> scala.collection.Seq or Array
@@ -90,20 +95,18 @@ object RowEncoder {
       Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
     case TimestampType =>
-      StaticInvoke(
-        DateTimeUtils.getClass,
-        TimestampType,
-        "fromJavaTimestamp",
-        inputObject :: Nil,
-        returnNullable = false)
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        createSerializerForJavaInstant(inputObject)
+      } else {
+        createSerializerForSqlTimestamp(inputObject)
+      }
 
     case DateType =>
-      StaticInvoke(
-        DateTimeUtils.getClass,
-        DateType,
-        "fromJavaDate",
-        inputObject :: Nil,
-        returnNullable = false)
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        createSerializerForJavaLocalDate(inputObject)
+      } else {
+        createSerializerForSqlDate(inputObject)
+      }
 
     case d: DecimalType =>
       CheckOverflow(StaticInvoke(
@@ -111,15 +114,9 @@ object RowEncoder {
         d,
         "fromDecimal",
         inputObject :: Nil,
-        returnNullable = false), d)
+        returnNullable = false), d, !SQLConf.get.ansiEnabled)
 
-    case StringType =>
-      StaticInvoke(
-        classOf[UTF8String],
-        StringType,
-        "fromString",
-        inputObject :: Nil,
-        returnNullable = false)
+    case StringType => createSerializerForString(inputObject)
 
     case t @ ArrayType(et, containsNull) =>
       et match {
@@ -131,17 +128,14 @@ object RowEncoder {
             inputObject :: Nil,
             returnNullable = false)
 
-        case _ => MapObjects(
-          element => {
-            val value = serializerFor(ValidateExternalType(element, et), et)
-            if (!containsNull) {
-              AssertNotNull(value, Seq.empty)
-            } else {
-              value
-            }
-          },
-          inputObject,
-          ObjectType(classOf[Object]))
+        case _ =>
+          createSerializerForMapObjects(
+            inputObject,
+            ObjectType(classOf[Object]),
+            element => {
+              val value = serializerFor(ValidateExternalType(element, et), et)
+              expressionWithNullSafety(value, containsNull, WalkedTypePath())
+            })
       }
 
     case t @ MapType(kt, vt, valueNullable) =>
@@ -168,9 +162,7 @@ object RowEncoder {
         propagateNull = false)
 
       if (inputObject.nullable) {
-        If(IsNull(inputObject),
-          Literal.create(null, nonNullOutput.dataType),
-          nonNullOutput)
+        expressionForNullableExpr(inputObject, nonNullOutput)
       } else {
         nonNullOutput
       }
@@ -197,9 +189,7 @@ object RowEncoder {
       })
 
       if (inputObject.nullable) {
-        If(IsNull(inputObject),
-          Literal.create(null, nonNullOutput.dataType),
-          nonNullOutput)
+        expressionForNullableExpr(inputObject, nonNullOutput)
       } else {
         nonNullOutput
       }
@@ -224,8 +214,18 @@ object RowEncoder {
 
   def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
-    case TimestampType => ObjectType(classOf[java.sql.Timestamp])
-    case DateType => ObjectType(classOf[java.sql.Date])
+    case TimestampType =>
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        ObjectType(classOf[java.time.Instant])
+      } else {
+        ObjectType(classOf[java.sql.Timestamp])
+      }
+    case DateType =>
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        ObjectType(classOf[java.time.LocalDate])
+      } else {
+        ObjectType(classOf[java.sql.Date])
+      }
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
@@ -268,27 +268,22 @@ object RowEncoder {
       Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
     case TimestampType =>
-      StaticInvoke(
-        DateTimeUtils.getClass,
-        ObjectType(classOf[java.sql.Timestamp]),
-        "toJavaTimestamp",
-        input :: Nil,
-        returnNullable = false)
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        createDeserializerForInstant(input)
+      } else {
+        createDeserializerForSqlTimestamp(input)
+      }
 
     case DateType =>
-      StaticInvoke(
-        DateTimeUtils.getClass,
-        ObjectType(classOf[java.sql.Date]),
-        "toJavaDate",
-        input :: Nil,
-        returnNullable = false)
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        createDeserializerForLocalDate(input)
+      } else {
+        createDeserializerForSqlDate(input)
+      }
 
-    case _: DecimalType =>
-      Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]),
-        returnNullable = false)
+    case _: DecimalType => createDeserializerForJavaBigDecimal(input, returnNullable = false)
 
-    case StringType =>
-      Invoke(input, "toString", ObjectType(classOf[String]), returnNullable = false)
+    case StringType => createDeserializerForString(input, returnNullable = false)
 
     case ArrayType(et, nullable) =>
       val arrayData =
@@ -327,5 +322,11 @@ object RowEncoder {
       If(IsNull(input),
         Literal.create(null, externalDataTypeFor(input.dataType)),
         CreateExternalRow(convertedFields, schema))
+  }
+
+  private def expressionForNullableExpr(
+      expr: Expression,
+      newExprWhenNotNull: Expression): Expression = {
+    If(IsNull(expr), Literal.create(null, newExprWhenNotNull.dataType), newExprWhenNotNull)
   }
 }

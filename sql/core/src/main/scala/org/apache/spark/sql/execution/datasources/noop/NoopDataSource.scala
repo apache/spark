@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.noop
 
-import org.apache.spark.sql.SaveMode
+import java.util
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite, SupportsOutputMode}
-import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * This is no-op datasource. It does not do anything besides consuming its input.
@@ -32,25 +35,31 @@ import org.apache.spark.sql.types.StructType
  */
 class NoopDataSource extends TableProvider with DataSourceRegister {
   override def shortName(): String = "noop"
-  override def getTable(options: DataSourceOptions): Table = NoopTable
+  override def getTable(options: CaseInsensitiveStringMap): Table = NoopTable
 }
 
-private[noop] object NoopTable extends Table with SupportsBatchWrite with SupportsStreamingWrite {
-  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = NoopWriteBuilder
+private[noop] object NoopTable extends Table with SupportsWrite {
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = NoopWriteBuilder
   override def name(): String = "noop-table"
   override def schema(): StructType = new StructType()
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(
+      TableCapability.BATCH_WRITE,
+      TableCapability.STREAMING_WRITE,
+      TableCapability.TRUNCATE,
+      TableCapability.ACCEPT_ANY_SCHEMA).asJava
+  }
 }
 
-private[noop] object NoopWriteBuilder extends WriteBuilder
-  with SupportsSaveMode with SupportsOutputMode {
-  override def mode(mode: SaveMode): WriteBuilder = this
-  override def outputMode(mode: OutputMode): WriteBuilder = this
+private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsTruncate {
+  override def truncate(): WriteBuilder = this
   override def buildForBatch(): BatchWrite = NoopBatchWrite
   override def buildForStreaming(): StreamingWrite = NoopStreamingWrite
 }
 
 private[noop] object NoopBatchWrite extends BatchWrite {
-  override def createBatchWriterFactory(): DataWriterFactory = NoopWriterFactory
+  override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory =
+    NoopWriterFactory
   override def commit(messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
 }
@@ -66,8 +75,8 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
 }
 
 private[noop] object NoopStreamingWrite extends StreamingWrite {
-  override def createStreamingWriterFactory(): StreamingDataWriterFactory =
-    NoopStreamingDataWriterFactory
+  override def createStreamingWriterFactory(
+      info: PhysicalWriteInfo): StreamingDataWriterFactory = NoopStreamingDataWriterFactory
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 }

@@ -37,7 +37,7 @@
   <dependencies>
     <!-- Added for Hive Parquet SerDe -->
     <dependency>
-      <groupId>com.twitter</groupId>
+      <groupId>${hive.parquet.group}</groupId>
       <artifactId>parquet-hadoop-bundle</artifactId>
     </dependency>
     <dependency>
@@ -88,33 +88,40 @@
       <version>${protobuf.version}</version>
     </dependency>
 -->
-<!--
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
+      <scope>${hive.common.scope}</scope>
     </dependency>
--->
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
-<!--
-      <classifier>core</classifier>
--->
+      <classifier>${hive.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
     </dependency>
-    <!--
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-serde</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-shims</artifactId>
-        </dependency>
-    -->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-serde</artifactId>
+      <scope>${hive.serde.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-shims</artifactId>
+      <scope>${hive.shims.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-llap-common</artifactId>
+      <scope>${hive.llap.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-llap-client</artifactId>
+      <scope>${hive.llap.scope}</scope>
+    </dependency>
     <!-- hive-serde already depends on avro, but this brings in customized config of avro deps from parent -->
     <dependency>
       <groupId>org.apache.avro</groupId>
@@ -130,14 +137,6 @@
     <dependency>
       <groupId>commons-httpclient</groupId>
       <artifactId>commons-httpclient</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-core</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
@@ -229,7 +228,7 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
       <plugin>

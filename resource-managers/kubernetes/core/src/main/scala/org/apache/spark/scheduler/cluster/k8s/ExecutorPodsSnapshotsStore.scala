@@ -22,9 +22,11 @@ private[spark] trait ExecutorPodsSnapshotsStore {
 
   def addSubscriber
       (processBatchIntervalMillis: Long)
-      (onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit)
+      (onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit): Unit
 
   def stop(): Unit
+
+  def notifySubscribers(): Unit
 
   def updatePod(updatedPod: Pod): Unit
 

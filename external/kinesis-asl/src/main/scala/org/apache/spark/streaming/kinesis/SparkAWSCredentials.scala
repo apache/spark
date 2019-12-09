@@ -19,7 +19,6 @@ package org.apache.spark.streaming.kinesis
 
 import com.amazonaws.auth._
 
-import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 
 /**
@@ -83,14 +82,12 @@ private[kinesis] final case class STSCredentials(
   }
 }
 
-@Evolving
 object SparkAWSCredentials {
   /**
    * Builder for [[SparkAWSCredentials]] instances.
    *
    * @since 2.2.0
    */
-  @Evolving
   class Builder {
     private var basicCreds: Option[BasicCredentials] = None
     private var stsCreds: Option[STSCredentials] = None
@@ -101,8 +98,8 @@ object SparkAWSCredentials {
      *
      * @note The given AWS keypair will be saved in DStream checkpoints if checkpointing is
      * enabled. Make sure that your checkpoint directory is secure. Prefer using the
-     * [[http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default default provider chain]]
-     * instead if possible.
+     * default provider chain instead if possible
+     * (http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default).
      *
      * @param accessKeyId AWS access key ID
      * @param secretKey AWS secret key

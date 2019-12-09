@@ -23,6 +23,8 @@ import scala.util.Try
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.classification.ProbabilisticClassifierParams
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -40,39 +42,49 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   with HasCheckpointInterval with HasSeed with HasWeightCol {
 
   /**
-   * Maximum depth of the tree (>= 0).
+   * Leaf indices column name.
+   * Predicted leaf index of each instance in each tree by preorder.
+   * (default = "")
+   * @group param
+   */
+  final val leafCol: Param[String] =
+    new Param[String](this, "leafCol", "Leaf indices column name. " +
+      "Predicted leaf index of each instance in each tree by preorder")
+
+  /**
+   * Maximum depth of the tree (nonnegative).
    * E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * (default = 5)
    * @group param
    */
   final val maxDepth: IntParam =
-    new IntParam(this, "maxDepth", "Maximum depth of the tree. (>= 0)" +
+    new IntParam(this, "maxDepth", "Maximum depth of the tree. (Nonnegative)" +
       " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
       ParamValidators.gtEq(0))
 
   /**
    * Maximum number of bins used for discretizing continuous features and for choosing how to split
    * on features at each node.  More bins give higher granularity.
-   * Must be >= 2 and >= number of categories in any categorical feature.
+   * Must be at least 2 and at least number of categories in any categorical feature.
    * (default = 32)
    * @group param
    */
   final val maxBins: IntParam = new IntParam(this, "maxBins", "Max number of bins for" +
-    " discretizing continuous features.  Must be >=2 and >= number of categories for any" +
-    " categorical feature.", ParamValidators.gtEq(2))
+    " discretizing continuous features.  Must be at least 2 and at least number of categories" +
+    " for any categorical feature.", ParamValidators.gtEq(2))
 
   /**
    * Minimum number of instances each child must have after split.
    * If a split causes the left or right child to have fewer than minInstancesPerNode,
    * the split will be discarded as invalid.
-   * Should be >= 1.
+   * Must be at least 1.
    * (default = 1)
    * @group param
    */
   final val minInstancesPerNode: IntParam = new IntParam(this, "minInstancesPerNode", "Minimum" +
     " number of instances each child must have after split.  If a split causes the left or right" +
     " child to have fewer than minInstancesPerNode, the split will be discarded as invalid." +
-    " Should be >= 1.", ParamValidators.gtEq(1))
+    " Must be at least 1.", ParamValidators.gtEq(1))
 
   /**
    * Minimum fraction of the weighted sample count that each child must have after split.
@@ -91,7 +103,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 
   /**
    * Minimum information gain for a split to be considered at a tree node.
-   * Should be >= 0.0.
+   * Should be at least 0.0.
    * (default = 0.0)
    * @group param
    */
@@ -122,9 +134,15 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
 
-  setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1,
+  setDefault(leafCol -> "", maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1,
     minWeightFractionPerNode -> 0.0, minInfoGain -> 0.0, maxMemoryInMB -> 256,
     cacheNodeIds -> false, checkpointInterval -> 10)
+
+  /** @group setParam */
+  final def setLeafCol(value: String): this.type = set(leafCol, value)
+
+  /** @group getParam */
+  final def getLeafCol: String = $(leafCol)
 
   /** @group getParam */
   final def getMaxDepth: Int = $(maxDepth)
@@ -178,6 +196,7 @@ private[ml] trait TreeClassifierParams extends Params {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
+   * This impurity type is used in DecisionTreeClassifier and RandomForestClassifier,
    * Supported: "entropy" and "gini".
    * (default = gini)
    * @group param
@@ -213,11 +232,26 @@ private[ml] object TreeClassifierParams {
 }
 
 private[ml] trait DecisionTreeClassifierParams
-  extends DecisionTreeParams with TreeClassifierParams
+  extends DecisionTreeParams with TreeClassifierParams with ProbabilisticClassifierParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), DoubleType)
+    }
+    outputSchema
+  }
+}
 
 private[ml] trait HasVarianceImpurity extends Params {
   /**
    * Criterion used for information gain calculation (case-insensitive).
+   * This impurity type is used in DecisionTreeRegressor, RandomForestRegressor, GBTRegressor
+   * and GBTClassifier (since GBTClassificationModel is internally composed of
+   * DecisionTreeRegressionModels).
    * Supported: "variance".
    * (default = variance)
    * @group param
@@ -263,12 +297,14 @@ private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      SchemaUtils.appendColumn(newSchema, $(varianceCol), DoubleType)
-    } else {
-      newSchema
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(varianceCol), DoubleType)
     }
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), DoubleType)
+    }
+    outputSchema
   }
 }
 
@@ -316,7 +352,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
    * Supported options:
    *  - "auto": Choose automatically for task:
    *            If numTrees == 1, set to "all."
-   *            If numTrees > 1 (forest), set to "sqrt" for classification and
+   *            If numTrees greater than 1 (forest), set to "sqrt" for classification and
    *              to "onethird" for regression.
    *  - "all": use all features
    *  - "onethird": use 1/3 of the features
@@ -353,7 +389,41 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
 }
 
+/**
+ * Parameters for Decision Tree-based ensemble classification algorithms.
+ */
+private[ml] trait TreeEnsembleClassifierParams
+  extends TreeEnsembleParams with ProbabilisticClassifierParams {
 
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+    }
+    outputSchema
+  }
+}
+
+/**
+ * Parameters for Decision Tree-based ensemble regression algorithms.
+ */
+private[ml] trait TreeEnsembleRegressorParams
+  extends TreeEnsembleParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+    }
+    outputSchema
+  }
+}
 
 /**
  * Parameters for Random Forest algorithms.
@@ -361,8 +431,8 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /**
-   * Number of trees to train (>= 1).
-   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
+   * Number of trees to train (at least 1).
+   * If 1, then no bootstrapping is used.  If greater than 1, then bootstrapping is done.
    * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
    * (default = 20)
    *
@@ -371,7 +441,8 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
    * are a bit different.
    * @group param
    */
-  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
+  final val numTrees: IntParam =
+    new IntParam(this, "numTrees", "Number of trees to train (at least 1)",
     ParamValidators.gtEq(1))
 
   setDefault(numTrees -> 20)
@@ -381,10 +452,10 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 }
 
 private[ml] trait RandomForestClassifierParams
-  extends RandomForestParams with TreeClassifierParams
+  extends RandomForestParams with TreeEnsembleClassifierParams with TreeClassifierParams
 
 private[ml] trait RandomForestRegressorParams
-  extends RandomForestParams with TreeRegressorParams
+  extends RandomForestParams with TreeEnsembleRegressorParams with TreeRegressorParams
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
@@ -454,7 +525,8 @@ private[ml] object GBTClassifierParams {
     Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with HasVarianceImpurity {
+private[ml] trait GBTClassifierParams
+  extends GBTParams with TreeEnsembleClassifierParams with HasVarianceImpurity {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
@@ -491,7 +563,8 @@ private[ml] object GBTRegressorParams {
     Array("squared", "absolute").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
+private[ml] trait GBTRegressorParams
+  extends GBTParams with TreeEnsembleRegressorParams with TreeRegressorParams {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)

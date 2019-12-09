@@ -73,7 +73,7 @@ private[spark] object JettyUtils extends Logging {
       servletParams: ServletParams[T],
       conf: SparkConf): HttpServlet = {
     new HttpServlet {
-      override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
+      override def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         try {
           response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
           response.setStatus(HttpServletResponse.SC_OK)
@@ -297,7 +297,9 @@ private[spark] object JettyUtils extends Logging {
         (connector, connector.getLocalPort())
       }
       val httpConfig = new HttpConfiguration()
-      httpConfig.setRequestHeaderSize(conf.get(UI_REQUEST_HEADER_SIZE).toInt)
+      val requestHeaderSize = conf.get(UI_REQUEST_HEADER_SIZE).toInt
+      logDebug(s"Using requestHeaderSize: $requestHeaderSize")
+      httpConfig.setRequestHeaderSize(requestHeaderSize)
 
       // If SSL is configured, create the secure connector first.
       val securePort = sslOptions.createJettySslContextFactory().map { factory =>

@@ -32,9 +32,9 @@ class IntegralDeltaSuite extends SparkFunSuite {
   def testIntegralDelta[I <: IntegralType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[I],
-      scheme: CompressionScheme) {
+      scheme: CompressionScheme): Unit = {
 
-    def skeleton(input: Seq[I#InternalType]) {
+    def skeleton(input: Seq[I#InternalType]): Unit = {
       // -------------
       // Tests encoder
       // -------------
@@ -112,7 +112,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
       assert(!decoder.hasNext)
     }
 
-    def skeletonForDecompress(input: Seq[I#InternalType]) {
+    def skeletonForDecompress(input: Seq[I#InternalType]): Unit = {
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, scheme)
       val row = new GenericInternalRow(1)
       val nullRow = new GenericInternalRow(1)

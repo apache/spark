@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.exceptions.TestFailedException
 

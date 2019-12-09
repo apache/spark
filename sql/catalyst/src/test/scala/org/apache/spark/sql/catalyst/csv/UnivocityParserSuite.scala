@@ -25,6 +25,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -116,7 +117,9 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     parser = new UnivocityParser(StructType(Seq.empty), timestampsOptions)
     val customTimestamp = "31/01/2015 00:00"
     var format = FastDateFormat.getInstance(
-      timestampsOptions.timestampFormat, timestampsOptions.timeZone, timestampsOptions.locale)
+      timestampsOptions.timestampFormat,
+      TimeZone.getTimeZone(timestampsOptions.zoneId),
+      timestampsOptions.locale)
     val expectedTime = format.parse(customTimestamp).getTime
     val castedTimestamp = parser.makeConverter("_1", TimestampType, nullable = true)
         .apply(customTimestamp)
@@ -126,7 +129,9 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     val dateOptions = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy"), false, "GMT")
     parser = new UnivocityParser(StructType(Seq.empty), dateOptions)
     format = FastDateFormat.getInstance(
-      dateOptions.dateFormat, dateOptions.timeZone, dateOptions.locale)
+      dateOptions.dateFormat,
+      TimeZone.getTimeZone(dateOptions.zoneId),
+      dateOptions.locale)
     val expectedDate = format.parse(customDate).getTime
     val castedDate = parser.makeConverter("_1", DateType, nullable = true)
         .apply(customDate)
@@ -137,11 +142,11 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       "timestampFormat" -> "yyyy-MM-dd HH:mm:ss",
       "dateFormat" -> "yyyy-MM-dd"), false, "UTC")
     parser = new UnivocityParser(StructType(Seq.empty), timestampsOptions)
-    val expected = 1420070400 * DateTimeUtils.MICROS_PER_SECOND
+    val expected = 1420070400 * MICROS_PER_SECOND
     assert(parser.makeConverter("_1", TimestampType).apply(timestamp) ==
       expected)
     assert(parser.makeConverter("_1", DateType).apply("2015-01-01") ==
-      expected / DateTimeUtils.MICROS_PER_DAY)
+      expected / MICROS_PER_DAY)
   }
 
   test("Throws exception for casting an invalid string to Float and Double Types") {
@@ -226,5 +231,40 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     }
 
     Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
+  }
+
+  test("SPARK-27591 UserDefinedType can be read") {
+
+    @SQLUserDefinedType(udt = classOf[StringBasedUDT])
+    case class NameId(name: String, id: Int)
+
+    class StringBasedUDT extends UserDefinedType[NameId] {
+      override def sqlType: DataType = StringType
+
+      override def serialize(obj: NameId): Any = s"${obj.name}\t${obj.id}"
+
+      override def deserialize(datum: Any): NameId = datum match {
+        case s: String =>
+          val split = s.split("\t")
+          if (split.length != 2) throw new RuntimeException(s"Can't parse $s into NameId");
+          NameId(split(0), Integer.parseInt(split(1)))
+        case _ => throw new RuntimeException(s"Can't parse $datum into NameId");
+      }
+
+      override def userClass: Class[NameId] = classOf[NameId]
+    }
+
+    object StringBasedUDT extends StringBasedUDT
+
+    val input = "name\t42"
+    val expected = UTF8String.fromString(input)
+
+    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
+    val parser = new UnivocityParser(StructType(Seq.empty), options)
+
+    val convertedValue = parser.makeConverter("_1", StringBasedUDT, nullable = false).apply(input)
+
+    assert(convertedValue.isInstanceOf[UTF8String])
+    assert(convertedValue == expected)
   }
 }

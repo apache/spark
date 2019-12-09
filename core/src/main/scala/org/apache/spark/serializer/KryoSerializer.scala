@@ -130,7 +130,6 @@ class KryoSerializer(conf: SparkConf)
     val kryo = instantiator.newKryo()
     kryo.setRegistrationRequired(registrationRequired)
 
-    val oldClassLoader = Thread.currentThread.getContextClassLoader
     val classLoader = defaultClassLoader.getOrElse(Thread.currentThread.getContextClassLoader)
 
     // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops.
@@ -156,24 +155,22 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
     kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas))
 
-    try {
-      // scalastyle:off classforname
-      // Use the default classloader when calling the user registrator.
-      Thread.currentThread.setContextClassLoader(classLoader)
-      // Register classes given through spark.kryo.classesToRegister.
-      classesToRegister
-        .foreach { className => kryo.register(Class.forName(className, true, classLoader)) }
-      // Allow the user to register their own classes by setting spark.kryo.registrator.
-      userRegistrators
-        .map(Class.forName(_, true, classLoader).getConstructor().
-          newInstance().asInstanceOf[KryoRegistrator])
-        .foreach { reg => reg.registerClasses(kryo) }
-      // scalastyle:on classforname
-    } catch {
-      case e: Exception =>
-        throw new SparkException(s"Failed to register classes with Kryo", e)
-    } finally {
-      Thread.currentThread.setContextClassLoader(oldClassLoader)
+    // Use the default classloader when calling the user registrator.
+    Utils.withContextClassLoader(classLoader) {
+      try {
+        // Register classes given through spark.kryo.classesToRegister.
+        classesToRegister.foreach { className =>
+          kryo.register(Utils.classForName(className, noSparkClassLoader = true))
+        }
+        // Allow the user to register their own classes by setting spark.kryo.registrator.
+        userRegistrators
+          .map(Utils.classForName[KryoRegistrator](_, noSparkClassLoader = true).
+            getConstructor().newInstance())
+          .foreach { reg => reg.registerClasses(kryo) }
+      } catch {
+        case e: Exception =>
+          throw new SparkException(s"Failed to register classes with Kryo", e)
+      }
     }
 
     // Register Chill's classes; we do this after our ranges and the user's own classes to let
@@ -215,36 +212,8 @@ class KryoSerializer(conf: SparkConf)
 
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
-    Seq(
-      "org.apache.spark.ml.attribute.Attribute",
-      "org.apache.spark.ml.attribute.AttributeGroup",
-      "org.apache.spark.ml.attribute.BinaryAttribute",
-      "org.apache.spark.ml.attribute.NominalAttribute",
-      "org.apache.spark.ml.attribute.NumericAttribute",
-
-      "org.apache.spark.ml.feature.Instance",
-      "org.apache.spark.ml.feature.LabeledPoint",
-      "org.apache.spark.ml.feature.OffsetInstance",
-      "org.apache.spark.ml.linalg.DenseMatrix",
-      "org.apache.spark.ml.linalg.DenseVector",
-      "org.apache.spark.ml.linalg.Matrix",
-      "org.apache.spark.ml.linalg.SparseMatrix",
-      "org.apache.spark.ml.linalg.SparseVector",
-      "org.apache.spark.ml.linalg.Vector",
-      "org.apache.spark.ml.stat.distribution.MultivariateGaussian",
-      "org.apache.spark.ml.tree.impl.TreePoint",
-      "org.apache.spark.mllib.clustering.VectorWithNorm",
-      "org.apache.spark.mllib.linalg.DenseMatrix",
-      "org.apache.spark.mllib.linalg.DenseVector",
-      "org.apache.spark.mllib.linalg.Matrix",
-      "org.apache.spark.mllib.linalg.SparseMatrix",
-      "org.apache.spark.mllib.linalg.SparseVector",
-      "org.apache.spark.mllib.linalg.Vector",
-      "org.apache.spark.mllib.regression.LabeledPoint",
-      "org.apache.spark.mllib.stat.distribution.MultivariateGaussian"
-    ).foreach { name =>
+    KryoSerializer.loadableSparkClasses.foreach { clazz =>
       try {
-        val clazz = Utils.classForName(name)
         kryo.register(clazz)
       } catch {
         case NonFatal(_) => // do nothing
@@ -290,14 +259,14 @@ class KryoSerializationStream(
     this
   }
 
-  override def flush() {
+  override def flush(): Unit = {
     if (output == null) {
       throw new IOException("Stream is closed")
     }
     output.flush()
   }
 
-  override def close() {
+  override def close(): Unit = {
     if (output != null) {
       try {
         output.close()
@@ -332,7 +301,7 @@ class KryoDeserializationStream(
     }
   }
 
-  override def close() {
+  override def close(): Unit = {
     if (input != null) {
       try {
         // Kryo's Input automatically closes the input stream it is using.
@@ -515,6 +484,50 @@ private[serializer] object KryoSerializer {
       }
     }
   )
+
+  // classForName() is expensive in case the class is not found, so we filter the list of
+  // SQL / ML / MLlib classes once and then re-use that filtered list in newInstance() calls.
+  private lazy val loadableSparkClasses: Seq[Class[_]] = {
+    Seq(
+      "org.apache.spark.sql.catalyst.expressions.UnsafeRow",
+      "org.apache.spark.sql.catalyst.expressions.UnsafeArrayData",
+      "org.apache.spark.sql.catalyst.expressions.UnsafeMapData",
+
+      "org.apache.spark.ml.attribute.Attribute",
+      "org.apache.spark.ml.attribute.AttributeGroup",
+      "org.apache.spark.ml.attribute.BinaryAttribute",
+      "org.apache.spark.ml.attribute.NominalAttribute",
+      "org.apache.spark.ml.attribute.NumericAttribute",
+
+      "org.apache.spark.ml.feature.Instance",
+      "org.apache.spark.ml.feature.LabeledPoint",
+      "org.apache.spark.ml.feature.OffsetInstance",
+      "org.apache.spark.ml.linalg.DenseMatrix",
+      "org.apache.spark.ml.linalg.DenseVector",
+      "org.apache.spark.ml.linalg.Matrix",
+      "org.apache.spark.ml.linalg.SparseMatrix",
+      "org.apache.spark.ml.linalg.SparseVector",
+      "org.apache.spark.ml.linalg.Vector",
+      "org.apache.spark.ml.stat.distribution.MultivariateGaussian",
+      "org.apache.spark.ml.tree.impl.TreePoint",
+      "org.apache.spark.mllib.clustering.VectorWithNorm",
+      "org.apache.spark.mllib.linalg.DenseMatrix",
+      "org.apache.spark.mllib.linalg.DenseVector",
+      "org.apache.spark.mllib.linalg.Matrix",
+      "org.apache.spark.mllib.linalg.SparseMatrix",
+      "org.apache.spark.mllib.linalg.SparseVector",
+      "org.apache.spark.mllib.linalg.Vector",
+      "org.apache.spark.mllib.regression.LabeledPoint",
+      "org.apache.spark.mllib.stat.distribution.MultivariateGaussian"
+    ).flatMap { name =>
+      try {
+        Some[Class[_]](Utils.classForName(name))
+      } catch {
+        case NonFatal(_) => None // do nothing
+        case _: NoClassDefFoundError if Utils.isTesting => None // See SPARK-23422.
+      }
+    }
+  }
 }
 
 /**

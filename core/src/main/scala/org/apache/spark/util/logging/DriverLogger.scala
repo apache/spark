@@ -18,15 +18,18 @@
 package org.apache.spark.util.logging
 
 import java.io._
+import java.util.EnumSet
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.hdfs.client.HdfsDataOutputStream
 import org.apache.log4j.{FileAppender => Log4jFileAppender, _}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
@@ -39,7 +42,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   private val DEFAULT_LAYOUT = "%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n"
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
-  private var localLogFile: String = FileUtils.getFile(
+  private val localLogFile: String = FileUtils.getFile(
     Utils.getLocalDir(conf),
     DriverLogger.DRIVER_LOG_DIR,
     DriverLogger.DRIVER_LOG_FILE).getAbsolutePath()
@@ -111,7 +114,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
       try {
         inStream = new BufferedInputStream(new FileInputStream(localLogFile))
-        outputStream = fileSystem.create(new Path(dfsLogFile), true)
+        outputStream = SparkHadoopUtil.createFile(fileSystem, new Path(dfsLogFile),
+          conf.get(DRIVER_LOG_ALLOW_EC))
         fileSystem.setPermission(new Path(dfsLogFile), LOG_FILE_PERMISSIONS)
       } catch {
         case e: Exception =>
@@ -131,12 +135,20 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       }
       try {
         var remaining = inStream.available()
+        val hadData = remaining > 0
         while (remaining > 0) {
           val read = inStream.read(tmpBuffer, 0, math.min(remaining, UPLOAD_CHUNK_SIZE))
           outputStream.write(tmpBuffer, 0, read)
           remaining -= read
         }
-        outputStream.hflush()
+        if (hadData) {
+          outputStream match {
+            case hdfsStream: HdfsDataOutputStream =>
+              hdfsStream.hsync(EnumSet.allOf(classOf[HdfsDataOutputStream.SyncFlag]))
+            case other =>
+              other.hflush()
+          }
+        }
       } catch {
         case e: Exception => logError("Failed writing driver logs to dfs", e)
       }
@@ -163,9 +175,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
     def closeWriter(): Unit = {
       try {
-        threadpool.execute(new Runnable() {
-          override def run(): Unit = DfsAsyncWriter.this.close()
-        })
+        threadpool.execute(() => DfsAsyncWriter.this.close())
         threadpool.shutdown()
         threadpool.awaitTermination(1, TimeUnit.MINUTES)
       } catch {

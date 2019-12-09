@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[sql] object OrcFileFormat {
   private def checkFieldName(name: String): Unit = {
@@ -93,7 +93,7 @@ class OrcFileFormat
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    OrcUtils.readSchema(sparkSession, files)
+    OrcUtils.inferSchema(sparkSession, files, options)
   }
 
   override def prepareWrite(
@@ -164,6 +164,10 @@ class OrcFileFormat
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
     val capacity = sqlConf.orcVectorizedReaderBatchSize
 
+    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, resultSchemaString)
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
+
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
@@ -175,10 +179,11 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val reader = OrcFile.createReader(filePath, readerOptions)
-
-      val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-        isCaseSensitive, dataSchema, requiredSchema, reader, conf)
+      val requestedColIdsOrEmptyFile =
+        Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+          OrcUtils.requestedColumnIds(
+            isCaseSensitive, dataSchema, requiredSchema, reader, conf)
+        }
 
       if (requestedColIdsOrEmptyFile.isEmpty) {
         Iterator.empty
@@ -187,8 +192,6 @@ class OrcFileFormat
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
-        taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
-          requestedColIds.filter(_ != -1).sorted.mkString(","))
 
         val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
@@ -206,7 +209,7 @@ class OrcFileFormat
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
-            reader.getSchema,
+            TypeDescription.fromString(resultSchemaString),
             resultSchema.fields,
             requestedDataColIds,
             requestedPartitionColIds,

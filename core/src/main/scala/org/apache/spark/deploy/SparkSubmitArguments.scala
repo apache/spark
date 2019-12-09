@@ -19,17 +19,15 @@ package org.apache.spark.deploy
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 import java.lang.reflect.InvocationTargetException
-import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
-import java.util.jar.JarFile
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
 import scala.util.Try
 
-import org.apache.spark.{SparkException, SparkUserAppException}
+import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.DYN_ALLOCATION_ENABLED
@@ -183,9 +181,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(sparkProperties.get(config.CORES_MAX.key))
       .orNull
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
-    jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
-    files = Option(files).orElse(sparkProperties.get("spark.files")).orNull
-    pyFiles = Option(pyFiles).orElse(sparkProperties.get("spark.submit.pyFiles")).orNull
+    jars = Option(jars).orElse(sparkProperties.get(config.JARS.key)).orNull
+    files = Option(files).orElse(sparkProperties.get(config.FILES.key)).orNull
+    pyFiles = Option(pyFiles).orElse(sparkProperties.get(config.SUBMIT_PYTHON_FILES.key)).orNull
     ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
     ivySettingsPath = sparkProperties.get("spark.jars.ivySettings")
     packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
@@ -194,7 +192,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     repositories = Option(repositories)
       .orElse(sparkProperties.get("spark.jars.repositories")).orNull
     deployMode = Option(deployMode)
-      .orElse(sparkProperties.get("spark.submit.deployMode"))
+      .orElse(sparkProperties.get(config.SUBMIT_DEPLOY_MODE.key))
       .orElse(env.get("DEPLOY_MODE"))
       .orNull
     numExecutors = Option(numExecutors)
@@ -210,29 +208,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orNull
     dynamicAllocationEnabled =
       sparkProperties.get(DYN_ALLOCATION_ENABLED.key).exists("true".equalsIgnoreCase)
-
-    // Try to set main class from JAR if no --class argument is given
-    if (mainClass == null && !isPython && !isR && primaryResource != null) {
-      val uri = new URI(primaryResource)
-      val uriScheme = uri.getScheme()
-
-      uriScheme match {
-        case "file" =>
-          try {
-            Utils.tryWithResource(new JarFile(uri.getPath)) { jar =>
-              // Note that this might still return null if no main-class is set; we catch that later
-              mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
-            }
-          } catch {
-            case _: Exception =>
-              error(s"Cannot load main class from JAR $primaryResource")
-          }
-        case _ =>
-          error(
-            s"Cannot load main class from JAR $primaryResource with URI $uriScheme. " +
-            "Please specify a class through --class.")
-      }
-    }
 
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
     master = Option(master).getOrElse("local[*]")
@@ -269,9 +244,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (primaryResource == null) {
       error("Must specify a primary resource (JAR or Python or R file)")
     }
-    if (mainClass == null && SparkSubmit.isUserJar(primaryResource)) {
-      error("No main class set in JAR; please specify one with --class")
-    }
     if (driverMemory != null
         && Try(JavaUtils.byteStringAsBytes(driverMemory)).getOrElse(-1L) <= 0) {
       error("Driver memory must be a positive number")
@@ -305,19 +277,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateKillArguments(): Unit = {
-    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
-      error("Killing submissions is only supported in standalone or Mesos mode!")
-    }
     if (submissionToKill == null) {
       error("Please specify a submission to kill.")
     }
   }
 
   private def validateStatusRequestArguments(): Unit = {
-    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
-      error(
-        "Requesting submission statuses is only supported in standalone or Mesos mode!")
-    }
     if (submissionToRequestStatusFor == null) {
       error("Please specify a submission to request status for.")
     }
@@ -512,7 +477,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (unknownParam != null) {
       logInfo("Unknown/unsupported param " + unknownParam)
     }
-    val command = sys.env.get("_SPARK_CMD_USAGE").getOrElse(
+    val command = sys.env.getOrElse("_SPARK_CMD_USAGE",
       """Usage: spark-submit [options] <app jar | python file | R file> [app arguments]
         |Usage: spark-submit --kill [submission ID] --master [spark://...]
         |Usage: spark-submit --status [submission ID] --master [spark://...]
@@ -574,6 +539,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |
         | Spark standalone or Mesos with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.
+        |
+        | Spark standalone, Mesos or K8s with cluster deploy mode only:
         |  --kill SUBMISSION_ID        If given, kills the driver specified.
         |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
         |
@@ -662,4 +629,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   private def error(msg: String): Unit = throw new SparkException(msg)
 
+  private[deploy] def toSparkConf(sparkConf: Option[SparkConf] = None): SparkConf = {
+    // either use an existing config or create a new empty one
+    sparkProperties.foldLeft(sparkConf.getOrElse(new SparkConf())) {
+      case (conf, (k, v)) => conf.set(k, v)
+    }
+  }
 }

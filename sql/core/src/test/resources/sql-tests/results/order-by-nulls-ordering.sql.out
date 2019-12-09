@@ -206,14 +206,14 @@ select * from spark_10747_mix order by col1 nulls last, col5 nulls last
 -- !query 13 schema
 struct<col1:string,col2:int,col3:double,col4:decimal(10,2),col5:decimal(20,1)>
 -- !query 13 output
-a	1	1.0	1	NULL
-b	2	1.0	1	10
-c	3	2.0	2	15.1
-c	3	2.0	2	NULL
-d	3	2.0	3	0
-d	3	0.0	3	1
-d	3	NULL	4	1
-NULL	3	0.0	3	1
+a	1	1.0	1.00	NULL
+b	2	1.0	1.00	10.0
+c	3	2.0	2.00	15.1
+c	3	2.0	2.00	NULL
+d	3	2.0	3.00	0.0
+d	3	0.0	3.00	1.0
+d	3	NULL	4.00	1.0
+NULL	3	0.0	3.00	1.0
 
 
 -- !query 14
@@ -221,14 +221,14 @@ select * from spark_10747_mix order by col1 desc nulls first, col5 desc nulls fi
 -- !query 14 schema
 struct<col1:string,col2:int,col3:double,col4:decimal(10,2),col5:decimal(20,1)>
 -- !query 14 output
-NULL	3	0.0	3	1
-d	3	0.0	3	1
-d	3	NULL	4	1
-d	3	2.0	3	0
-c	3	2.0	2	NULL
-c	3	2.0	2	15.1
-b	2	1.0	1	10
-a	1	1.0	1	NULL
+NULL	3	0.0	3.00	1.0
+d	3	0.0	3.00	1.0
+d	3	NULL	4.00	1.0
+d	3	2.0	3.00	0.0
+c	3	2.0	2.00	NULL
+c	3	2.0	2.00	15.1
+b	2	1.0	1.00	10.0
+a	1	1.0	1.00	NULL
 
 
 -- !query 15
@@ -236,14 +236,14 @@ select * from spark_10747_mix order by col5 desc nulls first, col3 desc nulls la
 -- !query 15 schema
 struct<col1:string,col2:int,col3:double,col4:decimal(10,2),col5:decimal(20,1)>
 -- !query 15 output
-c	3	2.0	2	NULL
-a	1	1.0	1	NULL
-c	3	2.0	2	15.1
-b	2	1.0	1	10
-d	3	0.0	3	1
-NULL	3	0.0	3	1
-d	3	NULL	4	1
-d	3	2.0	3	0
+c	3	2.0	2.00	NULL
+a	1	1.0	1.00	NULL
+c	3	2.0	2.00	15.1
+b	2	1.0	1.00	10.0
+d	3	0.0	3.00	1.0
+NULL	3	0.0	3.00	1.0
+d	3	NULL	4.00	1.0
+d	3	2.0	3.00	0.0
 
 
 -- !query 16

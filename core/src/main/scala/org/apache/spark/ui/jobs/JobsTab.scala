@@ -19,8 +19,6 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler.SchedulingMode

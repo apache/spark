@@ -22,18 +22,14 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.read.InputPartition
+import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
-import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming._
 
 case class RateStreamPartitionOffset(
    partition: Int, currentValue: Long, currentTimeMs: Long) extends PartitionOffset
 
-class RateStreamContinuousStream(
-    rowsPerSecond: Long,
-    numPartitions: Int,
-    options: DataSourceOptions) extends ContinuousStream {
+class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extends ContinuousStream {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
   val creationTime = System.currentTimeMillis()
@@ -138,8 +134,10 @@ class RateStreamContinuousPartitionReader(
     nextReadTime += readTimeIncrement
 
     try {
-      while (System.currentTimeMillis < nextReadTime) {
-        Thread.sleep(nextReadTime - System.currentTimeMillis)
+      var toWaitMs = nextReadTime - System.currentTimeMillis
+      while (toWaitMs > 0) {
+        Thread.sleep(toWaitMs)
+        toWaitMs = nextReadTime - System.currentTimeMillis
       }
     } catch {
       case _: InterruptedException =>

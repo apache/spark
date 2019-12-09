@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs
 /**
  * Options for the Text data source.
  */
-private[text] class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
+class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
   extends Serializable {
 
   import TextOptions._

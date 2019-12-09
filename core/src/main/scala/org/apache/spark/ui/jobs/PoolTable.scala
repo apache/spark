@@ -18,6 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -48,7 +49,8 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
   private def poolRow(request: HttpServletRequest, s: Schedulable, p: PoolData): Seq[Node] = {
     val activeStages = p.stageIds.size
     val href = "%s/stages/pool?poolname=%s"
-      .format(UIUtils.prependBaseUri(request, parent.basePath), URLEncoder.encode(p.name, "UTF-8"))
+      .format(UIUtils.prependBaseUri(request, parent.basePath),
+        URLEncoder.encode(p.name, StandardCharsets.UTF_8.name()))
     <tr>
       <td>
         <a href={href}>{p.name}</a>

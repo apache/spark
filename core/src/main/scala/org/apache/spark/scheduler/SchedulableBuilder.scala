@@ -45,11 +45,11 @@ private[spark] trait SchedulableBuilder {
 private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
   extends SchedulableBuilder with Logging {
 
-  override def buildPools() {
+  override def buildPools(): Unit = {
     // nothing
   }
 
-  override def addTaskSetManager(manager: Schedulable, properties: Properties) {
+  override def addTaskSetManager(manager: Schedulable, properties: Properties): Unit = {
     rootPool.addSchedulable(manager)
   }
 }
@@ -70,7 +70,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   val DEFAULT_MINIMUM_SHARE = 0
   val DEFAULT_WEIGHT = 1
 
-  override def buildPools() {
+  override def buildPools(): Unit = {
     var fileData: Option[(InputStream, String)] = None
     try {
       fileData = schedulerAllocFile.map { f =>
@@ -106,7 +106,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     buildDefaultPool()
   }
 
-  private def buildDefaultPool() {
+  private def buildDefaultPool(): Unit = {
     if (rootPool.getSchedulableByName(DEFAULT_POOL_NAME) == null) {
       val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
         DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
@@ -116,7 +116,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
-  private def buildFairSchedulerPool(is: InputStream, fileName: String) {
+  private def buildFairSchedulerPool(is: InputStream, fileName: String): Unit = {
     val xml = XML.load(is)
     for (poolNode <- (xml \\ POOLS_PROPERTY)) {
 
@@ -180,7 +180,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
-  override def addTaskSetManager(manager: Schedulable, properties: Properties) {
+  override def addTaskSetManager(manager: Schedulable, properties: Properties): Unit = {
     val poolName = if (properties != null) {
         properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
       } else {

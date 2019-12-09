@@ -24,12 +24,14 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, SparkDataStream}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchStream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -44,7 +46,7 @@ import org.apache.spark.util.Clock
 trait ProgressReporter extends Logging {
 
   case class ExecutionStats(
-    inputRows: Map[BaseStreamingSource, Long],
+    inputRows: Map[SparkDataStream, Long],
     stateOperators: Seq[StateOperatorProgress],
     eventTimeStats: Map[String, String])
 
@@ -55,10 +57,10 @@ trait ProgressReporter extends Logging {
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
-  protected def newData: Map[BaseStreamingSource, LogicalPlan]
+  protected def newData: Map[SparkDataStream, LogicalPlan]
   protected def sinkCommitProgress: Option[StreamWriterCommitProgress]
-  protected def sources: Seq[BaseStreamingSource]
-  protected def sink: BaseStreamingSink
+  protected def sources: Seq[SparkDataStream]
+  protected def sink: Table
   protected def offsetSeqMetadata: OffsetSeqMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
@@ -67,8 +69,8 @@ trait ProgressReporter extends Logging {
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
   private var currentTriggerEndTimestamp = -1L
-  private var currentTriggerStartOffsets: Map[BaseStreamingSource, String] = _
-  private var currentTriggerEndOffsets: Map[BaseStreamingSource, String] = _
+  private var currentTriggerStartOffsets: Map[SparkDataStream, String] = _
+  private var currentTriggerEndOffsets: Map[SparkDataStream, String] = _
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
 
@@ -146,11 +148,11 @@ trait ProgressReporter extends Logging {
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
     val executionStats = extractExecutionStats(hasNewData)
-    val processingTimeSec =
-      (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / 1000
+    val processingTimeSec = Math.max(1L,
+      currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
 
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
-      (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / 1000
+      (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
     } else {
       Double.NaN
     }
@@ -171,6 +173,7 @@ trait ProgressReporter extends Logging {
     val sinkProgress = SinkProgress(
       sink.toString,
       sinkCommitProgress.map(_.numOutputRows))
+    val observedMetrics = extractObservedMetrics(hasNewData, lastExecution)
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -182,7 +185,8 @@ trait ProgressReporter extends Logging {
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
-      sink = sinkProgress)
+      sink = sinkProgress,
+      observedMetrics = new java.util.HashMap(observedMetrics.asJava))
 
     if (hasNewData) {
       // Reset noDataEventTimestamp if we processed any data
@@ -240,9 +244,9 @@ trait ProgressReporter extends Logging {
   }
 
   /** Extract number of input sources for each streaming source in plan */
-  private def extractSourceToNumInputRows(): Map[BaseStreamingSource, Long] = {
+  private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
 
-    def sumRows(tuples: Seq[(BaseStreamingSource, Long)]): Map[BaseStreamingSource, Long] = {
+    def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
       tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
     }
 
@@ -262,7 +266,7 @@ trait ProgressReporter extends Logging {
       val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
         case s: MicroBatchScanExec =>
           val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          val source = s.stream.asInstanceOf[BaseStreamingSource]
+          val source = s.stream
           source -> numRows
       }
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
@@ -319,6 +323,16 @@ trait ProgressReporter extends Logging {
         Map.empty
       }
     }
+  }
+
+  /** Extracts observed metrics from the most recent query execution. */
+  private def extractObservedMetrics(
+      hasNewData: Boolean,
+      lastExecution: QueryExecution): Map[String, Row] = {
+    if (!hasNewData || lastExecution == null) {
+      return Map.empty
+    }
+    lastExecution.observedMetrics
   }
 
   /** Records the duration of running `body` for the next query progress update. */

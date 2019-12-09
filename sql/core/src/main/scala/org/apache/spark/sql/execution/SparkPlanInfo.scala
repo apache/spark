@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, LocalShuffleReaderExec, QueryStageExec}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -52,10 +53,19 @@ private[execution] object SparkPlanInfo {
   def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
     val children = plan match {
       case ReusedExchangeExec(_, child) => child :: Nil
+      case ReusedSubqueryExec(child) => child :: Nil
+      case a: AdaptiveSparkPlanExec => a.executedPlan :: Nil
+      case stage: QueryStageExec => stage.plan :: Nil
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
+    }
+
+    val nodeName = plan match {
+      case physicalOperator: WholeStageCodegenExec =>
+        s"${plan.nodeName} (${physicalOperator.codegenStageId})"
+      case _ => plan.nodeName
     }
 
     // dump the file scan metadata (e.g file path) to event log
@@ -64,9 +74,10 @@ private[execution] object SparkPlanInfo {
       case _ => Map[String, String]()
     }
     new SparkPlanInfo(
-      plan.nodeName,
+      nodeName,
       plan.simpleString(SQLConf.get.maxToStringFields),
       children.map(fromSparkPlan),
-      metadata, metrics)
+      metadata,
+      metrics)
   }
 }

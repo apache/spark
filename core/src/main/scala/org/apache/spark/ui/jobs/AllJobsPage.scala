@@ -18,6 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
@@ -25,7 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.xml._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.config.SCHEDULER_MODE
@@ -122,7 +123,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="bottom"' +
+           |    'data-toggle="tooltip" data-placement="top"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
            |    'data-html="true">Executor ${e.id} added</div>'
@@ -138,7 +139,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-toggle="tooltip" data-placement="top"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -182,7 +183,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="right">
+      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="top">
         Event Timeline
       </a>
     </span> ++
@@ -524,7 +525,7 @@ private[ui] class JobPagedTable(
     desc)
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$jobTag.sort=$encodedSortColumn" +
@@ -534,7 +535,7 @@ private[ui] class JobPagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     s"$parameterPath&$jobTag.sort=$encodedSortColumn&$jobTag.desc=$desc#$tableHeaderId"
   }
 
@@ -557,7 +558,7 @@ private[ui] class JobPagedTable(
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
-              s"&$jobTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&$jobTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&$jobTag.desc=${!desc}" +
               s"&$jobTag.pageSize=$pageSize" +
               s"#$tableHeaderId")
@@ -574,7 +575,7 @@ private[ui] class JobPagedTable(
           if (sortable) {
             val headerLink = Unparsed(
               parameterPath +
-                s"&$jobTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+                s"&$jobTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
                 s"&$jobTag.pageSize=$pageSize" +
                 s"#$tableHeaderId")
 
@@ -628,7 +629,11 @@ private[ui] class JobPagedTable(
       </td>
       <td>{jobTableRow.formattedDuration}</td>
       <td class="stage-progress-cell">
-        {job.numCompletedStages}/{job.stageIds.size - job.numSkippedStages}
+        {job.numCompletedStages}/{
+          // A job contains at least 1 stage but if a job has no partitions(tasks),
+          // the stage is not submitted so the total stage should be regarded as 0.
+          if (job.numTasks > 0) job.stageIds.size - job.numSkippedStages else 0
+        }
         {if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)"}
         {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
       </td>
