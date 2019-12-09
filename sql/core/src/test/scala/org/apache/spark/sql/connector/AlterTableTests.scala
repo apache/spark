@@ -101,6 +101,21 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("AlterTable: add column with position") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+      val e1 = intercept[UnsupportedOperationException] {
+        sql(s"ALTER TABLE $t ADD COLUMN data string FIRST")
+      }
+      assert(e1.getMessage.contains("column position is not supported"))
+      val e2 = intercept[UnsupportedOperationException] {
+        sql(s"ALTER TABLE $t ADD COLUMN data string AFTER id")
+      }
+      assert(e2.getMessage.contains("column position is not supported"))
+    }
+  }
+
   test("AlterTable: add multiple columns") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -468,6 +483,21 @@ trait AlterTableTests extends SharedSparkSession {
 
       assert(table.name === fullTableName(t))
       assert(table.schema === StructType(Seq(StructField("id", IntegerType).withComment("doc"))))
+    }
+  }
+
+  test("AlterTable: update column position") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (a int, b int) USING $v2Format")
+      val e1 = intercept[UnsupportedOperationException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN b FIRST")
+      }
+      assert(e1.getMessage.contains("column position is not supported"))
+      val e2 = intercept[UnsupportedOperationException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN a AFTER b")
+      }
+      assert(e2.getMessage.contains("column position is not supported"))
     }
   }
 

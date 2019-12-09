@@ -102,6 +102,10 @@ private[sql] object CatalogV2Util {
     changes.foldLeft(schema) { (schema, change) =>
       change match {
         case add: AddColumn =>
+          if (add.position != null) {
+            throw new UnsupportedOperationException("column position is not supported yet.")
+          }
+
           add.fieldNames match {
             case Array(name) =>
               val newField = StructField(name, add.dataType, nullable = add.isNullable)
@@ -146,6 +150,9 @@ private[sql] object CatalogV2Util {
         case update: UpdateColumnComment =>
           replace(schema, update.fieldNames, field =>
             Some(field.withComment(update.newComment)))
+
+        case _: UpdateColumnPosition =>
+          throw new UnsupportedOperationException("column position is not supported yet.")
 
         case delete: DeleteColumn =>
           replace(schema, delete.fieldNames, _ => None)
