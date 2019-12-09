@@ -53,6 +53,8 @@ abstract class QueryStageExec extends LeafExecNode {
    */
   val plan: SparkPlan
 
+  var visited: Boolean = false
+
   /**
    * Materialize this query stage, to prepare for the execution, like submitting map stages,
    * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this

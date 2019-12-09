@@ -451,19 +451,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED = buildConf("spark.sql.adaptive.skewedJoin.enabled")
+  val ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED =
+    buildConf("spark.sql.adaptive.optimizeSkewedJoin.enabled")
     .doc("When true and adaptive execution is enabled, a skewed join is automatically handled at " +
       "runtime.")
     .booleanConf
     .createWithDefault(true)
-
-  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR =
-    buildConf("spark.sql.adaptive.skewedPartitionFactor")
-      .doc("A partition is considered as a skewed partition if its size is larger than" +
-        " this factor multiple the median partition size and also larger than " +
-        "spark.sql.adaptive.skewedPartitionSizeThreshold.")
-      .intConf
-      .createWithDefault(10)
 
   val ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD =
     buildConf("spark.sql.adaptive.skewedPartitionSizeThreshold")
@@ -471,6 +464,14 @@ object SQLConf {
         "partition in adaptive skewed join.")
       .longConf
       .createWithDefault(64 * 1024 * 1024L)
+
+  val ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR =
+    buildConf("spark.sql.adaptive.skewedPartitionFactor")
+      .doc("A partition is considered as a skewed partition if its size is larger than" +
+        " this factor multiple the median partition size and also larger than " +
+        s" ${ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key}")
+      .intConf
+      .createWithDefault(10)
 
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
@@ -2295,13 +2296,6 @@ class SQLConf extends Serializable with Logging {
 
   def maxNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS).getOrElse(numShufflePartitions)
-
-  def adaptiveSkewedJoinEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED)
-
-  def adaptiveSkewedFactor: Int = getConf(ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR)
-
-  def adaptiveSkewedSizeThreshold: Long =
-    getConf(ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 

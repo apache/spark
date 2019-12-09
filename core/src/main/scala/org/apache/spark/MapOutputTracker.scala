@@ -768,8 +768,6 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-
-
   override def stop(): Unit = {
     mapOutputRequests.offer(PoisonPill)
     threadpool.shutdown()
