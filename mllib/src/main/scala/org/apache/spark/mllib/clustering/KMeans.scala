@@ -284,6 +284,7 @@ class KMeans private (
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
       val costAccum = sc.doubleAccumulator
+      val countAccum = sc.longAccumulator
       val bcCenters = sc.broadcast(centers)
 
       // Find the new centers
@@ -301,6 +302,7 @@ class KMeans private (
         pointsAndWeights.foreach { case (point, weight) =>
           val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
           costAccum.add(cost * weight)
+          countAccum.add(1)
           distanceMeasureInstance.updateClusterSum(point, sums(bestCenter), weight)
           clusterWeightSum(bestCenter) += weight
         }
@@ -313,7 +315,7 @@ class KMeans private (
       }.collectAsMap()
 
       if (iteration == 0) {
-        instr.foreach(_.logNumExamples(data.count()))
+        instr.foreach(_.logNumExamples(countAccum.value))
         instr.foreach(_.logSumOfWeights(collected.values.map(_._2).sum))
       }
 
