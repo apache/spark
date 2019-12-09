@@ -28,13 +28,13 @@ import org.apache.spark.sql.types.IntegerType
  * aggregation in which the regular aggregation expressions and every distinct clause is aggregated
  * in a separate group. The results are then combined in a second aggregate.
  *
- * For example (in scala):
+ * Example one queried without filter clauses (in scala):
  * {{{
  *   val data = Seq(
- *     ("a", "ca1", "cb1", 10),
- *     ("a", "ca1", "cb2", 5),
- *     ("b", "ca1", "cb1", 13))
- *     .toDF("key", "cat1", "cat2", "value")
+ *     (1, "a", "ca1", "cb1", 10),
+ *     (2, "a", "ca1", "cb2", 5),
+ *     (3, "b", "ca1", "cb1", 13))
+ *     .toDF("id", "key", "cat1", "cat2", "value")
  *   data.createOrReplaceTempView("data")
  *
  *   val agg = data.groupBy($"key")
@@ -72,6 +72,83 @@ import org.apache.spark.sql.types.IntegerType
  *                       ('key, 'cat1, null, 1, null),
  *                       ('key, null, 'cat2, 2, null)]
  *        output = ['key, 'cat1, 'cat2, 'gid, 'value])
+ *       LocalTableScan [...]
+ * }}}
+ *
+ * Example two aggregate function without distinct and with filter clauses (in sql):
+ * {{{
+ *   select count(distinct cat1) as cat1_cnt, count(distinct cat2) as cat2_cnt,
+ *     sum(value) filter (where id > 1) as total
+ *   from data group by key
+ * }}}
+ *
+ * This translates to the following (pseudo) logical plan:
+ * {{{
+ * Aggregate(
+ *    key = ['key]
+ *    functions = [COUNT(DISTINCT 'cat1),
+ *                 COUNT(DISTINCT 'cat2),
+ *                 sum('value) with FILTER('id > 1)]
+ *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
+ *   LocalTableScan [...]
+ * }}}
+ *
+ * This rule rewrites this logical plan to the following (pseudo) logical plan:
+ * {{{
+ * Aggregate(
+ *    key = ['key]
+ *    functions = [count(if (('gid = 1)) 'cat1 else null),
+ *                 count(if (('gid = 2)) 'cat2 else null),
+ *                 first(if (('gid = 0)) 'total else null) ignore nulls]
+ *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
+ *   Aggregate(
+ *      key = ['key, 'cat1, 'cat2, 'gid]
+ *      functions = [sum('value) with FILTER('id > 1)]
+ *      output = ['key, 'cat1, 'cat2, 'gid, 'total])
+ *     Expand(
+ *        projections = [('key, null, null, 0, cast('value as bigint), 'id),
+ *                       ('key, 'cat1, null, 1, null, null),
+ *                       ('key, null, 'cat2, 2, null, null)]
+ *        output = ['key, 'cat1, 'cat2, 'gid, 'value, 'id])
+ *       LocalTableScan [...]
+ * }}}
+ * 
+ * Example three aggregate function with distinct and filter clauses (in sql):
+ * {{{
+ *   select count(distinct cat1) filter (where id > 1) as cat1_cnt, count(distinct cat2) as cat2_cnt,
+ *     sum(value) as total
+ *   from data group by key
+ * }}}
+ *
+ * This translates to the following (pseudo) logical plan:
+ * {{{
+ * Aggregate(
+ *    key = ['key]
+ *    functions = [COUNT(DISTINCT 'cat1) with FILTER('id > 1),
+ *                 COUNT(DISTINCT 'cat2),
+ *                 sum('value)]
+ *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
+ *   LocalTableScan [...]
+ * }}}
+ *
+ * This rule rewrites this logical plan to the following (pseudo) logical plan:
+ *
+ * {{{
+ * Aggregate(
+ *    key = ['key]
+ *    functions = [count(if (('gid = 1)) 'cat1 else null) with FILTER('id > 1),
+ *                 count(if (('gid = 2)) 'cat2 else null),
+ *                 first(if (('gid = 0)) 'total else null) ignore nulls]
+ *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
+ *   Aggregate(
+ *      key = ['key, 'cat1, 'id, 'cat2, 'gid]
+ *      functions = [sum('value)]
+ *      output = ['key, 'cat1, 'id, 'cat2, 'gid, 'total])
+ *     Expand(
+ *        projections = [('key, null, null, null, 0, cast('value as bigint)),
+ *                       ('key, 'cat1, 'id, null, 1, null),
+ *                       ('key, null, null, 'cat2, 2, null)]
+ *        output = ['key, 'cat1, 'id, 'cat2, 'gid, 'value])
  *       LocalTableScan [...]
  * }}}
  *
