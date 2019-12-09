@@ -46,10 +46,12 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
   public LocalDiskShuffleExecutorComponents(
       SparkConf sparkConf,
       BlockManager blockManager,
-      IndexShuffleBlockResolver blockResolver) {
+      IndexShuffleBlockResolver blockResolver,
+      LocalDiskShuffleReadSupport shuffleReadSupport) {
     this.sparkConf = sparkConf;
     this.blockManager = blockManager;
     this.blockResolver = blockResolver;
+    this.shuffleReadSupport = shuffleReadSupport;
   }
 
   @Override

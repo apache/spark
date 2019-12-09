@@ -26,12 +26,14 @@ import org.mockito.ArgumentMatchers.{eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import scala.collection.JavaConverters._
 
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
+import org.apache.spark.shuffle.io.LocalDiskShuffleReadSupport
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, ShuffleBlockId}
 
@@ -71,6 +73,10 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
   test("read() releases resources on completion") {
     MockitoAnnotations.initMocks(this)
     val testConf = new SparkConf(false)
+      .set(config.SHUFFLE_COMPRESS, true)
+      .set(config.SHUFFLE_SPILL_COMPRESS, false)
+      .set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL, false)
+
     // Create a SparkContext as a convenient way of setting SparkEnv (needed because some of the
     // shuffle code calls SparkEnv.get()).
     sc = new SparkContext("local", "test", testConf)
@@ -99,7 +105,8 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     compressedOutputStream.close()
 
     // Setup the mocked BlockManager to return RecordingManagedBuffers.
-    val localBlockManagerId = BlockManagerId("test-client", "test-client", 1)
+    val execId = "test-client"
+    val localBlockManagerId = BlockManagerId(execId, "test-client", 1)
     when(blockManager.blockManagerId).thenReturn(localBlockManagerId)
     val buffers = (0 until numMaps).map { mapId =>
       // Create a ManagedBuffer with the shuffle data.
@@ -145,15 +152,19 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
       serializer,
       new SparkConf()
         .set(config.SHUFFLE_COMPRESS, true)
-        .set(config.SHUFFLE_SPILL_COMPRESS, false))
+        .set(config.SHUFFLE_SPILL_COMPRESS, false)
+        .set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL, false))
 
     val taskContext = TaskContext.empty()
     TaskContext.setTaskContext(taskContext)
     val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val shuffleReadSupport = new LocalDiskShuffleReadSupport(
+      blockManager, mapOutputTracker, serializerManager, testConf)
     val shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
       testConf,
       blockManager,
-      blockResolver)
+      blockResolver,
+      shuffleReadSupport)
     val shuffleReader = new BlockStoreShuffleReader(
       shuffleHandle,
       reduceId,

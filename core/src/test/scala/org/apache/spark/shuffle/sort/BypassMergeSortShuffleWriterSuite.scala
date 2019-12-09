@@ -120,7 +120,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     }
 
     shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
-      conf, blockManager, blockResolver)
+      conf, blockManager, blockResolver, null)
   }
 
   override def afterEach(): Unit = {

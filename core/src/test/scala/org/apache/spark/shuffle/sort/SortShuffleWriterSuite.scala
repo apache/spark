@@ -60,7 +60,7 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
       new BaseShuffleHandle(shuffleId, dependency)
     }
     shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
-      conf, blockManager, shuffleBlockResolver)
+      conf, blockManager, shuffleBlockResolver, null)
   }
 
   override def afterAll(): Unit = {

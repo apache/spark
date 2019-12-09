@@ -53,15 +53,15 @@ private[spark] class BlockStoreShuffleReader[K, C](
   private val compressShuffle = sparkConf.get(config.SHUFFLE_COMPRESS)
 
   private def fetchContinuousBlocksInBatch: Boolean = {
-    val conf = SparkEnv.get.conf
     val serializerRelocatable = dep.serializer.supportsRelocationOfSerializedObjects
-    val compressed = conf.get(config.SHUFFLE_COMPRESS)
+    val compressed = sparkConf.get(config.SHUFFLE_COMPRESS)
     val codecConcatenation = if (compressed) {
-      CompressionCodec.supportsConcatenationOfSerializedStreams(CompressionCodec.createCodec(conf))
+      CompressionCodec.supportsConcatenationOfSerializedStreams(
+        CompressionCodec.createCodec(sparkConf))
     } else {
       true
     }
-    val useOldFetchProtocol = conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)
+    val useOldFetchProtocol = sparkConf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)
 
     val doBatchFetch = shouldBatchFetch && serializerRelocatable &&
       (!compressed || codecConcatenation) && !useOldFetchProtocol
@@ -77,9 +77,11 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
+    logError(s"I am here")
     val streamsIterator =
       shuffleExecutorComponents.getPartitionReaders(new Iterable[ShuffleBlockInfo] {
         override def iterator: Iterator[ShuffleBlockInfo] = {
+          logError(s"now I am here")
           val blockByAddress = mapIndex match {
             case (Some(mapId)) =>
               mapOutputTracker
@@ -94,6 +96,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
             case (_) => throw new IllegalArgumentException(
               "mapId should be both set or unset")
           }
+          logError(s"I have a few of these: ${blockByAddress.nonEmpty}")
           blockByAddress
             .flatMap { shuffleLocationInfo =>
               shuffleLocationInfo._2.map { blockInfo =>

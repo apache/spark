@@ -111,8 +111,6 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       val writer = mapOutputWriter.getPartitionWriter(p)
       val outputTempFile = File.createTempFile("channelTemp", "", tempDir)
       Files.write(outputTempFile.toPath, data(p))
-      val tempFileInput = new FileInputStream(outputTempFile)
-      val channel = writer.openChannelWrapper()
       Utils.tryWithResource(new FileInputStream(outputTempFile)) { tempFileInput =>
         Utils.tryWithResource(writer.openChannelWrapper().get) { channelWrapper =>
           assert(channelWrapper.channel().isInstanceOf[FileChannel],
