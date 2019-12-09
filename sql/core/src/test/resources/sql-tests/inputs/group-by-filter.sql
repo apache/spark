@@ -32,6 +32,7 @@ SELECT COUNT(a) FILTER (WHERE a = 1), COUNT(b) FILTER (WHERE a > 1) FROM testDat
 SELECT COUNT(id) FILTER (WHERE hiredate = date "2001-01-01") FROM emp;
 SELECT COUNT(id) FILTER (WHERE hiredate = to_date('2001-01-01 00:00:00')) FROM emp;
 SELECT COUNT(id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")) FROM emp;
+SELECT COUNT(id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") = "2001-01-01") FROM emp;
 
 -- Aggregate with filter and non-empty GroupBy expressions.
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData GROUP BY a;
@@ -40,6 +41,7 @@ SELECT COUNT(a) FILTER (WHERE a >= 0), COUNT(b) FILTER (WHERE a >= 3) FROM testD
 SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > date "2003-01-01") FROM emp GROUP BY dept_id;
 SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_date("2003-01-01")) FROM emp GROUP BY dept_id;
 SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_timestamp("2003-01-01 00:00:00")) FROM emp GROUP BY dept_id;
+SELECT dept_id, SUM(salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") > "2003-01-01") FROM emp GROUP BY dept_id;
 
 -- Aggregate with filter and grouped by literals.
 SELECT 'foo', COUNT(a) FILTER (WHERE b <= 2) FROM testData GROUP BY 1;
@@ -76,10 +78,8 @@ FROM emp GROUP BY k;
 SELECT a AS k, COUNT(b) FILTER (WHERE NOT b < 0) FROM testData GROUP BY k HAVING k > 1;
 SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= date "2005-01-01")
 FROM emp GROUP BY k HAVING k < 70;
-SELECT a AS k, COUNT(b) FILTER (WHERE NOT b < 0) FROM testData GROUP BY k HAVING k > 1;
 SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= to_date("2005-01-01"))
 FROM emp GROUP BY k HAVING k < 70;
-SELECT a AS k, COUNT(b) FILTER (WHERE NOT b < 0) FROM testData GROUP BY k HAVING k > 1;
 SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= to_timestamp("2005-01-01 00:00:00"))
 FROM emp GROUP BY k HAVING k < 70;
 
@@ -97,6 +97,16 @@ SELECT COUNT(1) FILTER (WHERE b = 2) FROM testData WHERE false;
 SELECT 1 FROM (SELECT COUNT(1) FILTER (WHERE a >= 3 OR b <= 1) FROM testData WHERE false) t;
 
 -- Aggregate with filter contains exists subquery
+SELECT emp.dept_id,
+       avg(salary),
+       avg(salary) FILTER (WHERE b = SELECT 2)
+FROM emp
+GROUP BY dept_id;
+SELECT emp.dept_id,
+       avg(salary),
+       avg(salary) FILTER (WHERE emp.dept_id = (SELECT dept_id FROM dept LIMIT 1))
+FROM emp
+GROUP BY dept_id;
 SELECT emp.dept_id,
        avg(salary),
        avg(salary) FILTER (WHERE EXISTS (SELECT state
