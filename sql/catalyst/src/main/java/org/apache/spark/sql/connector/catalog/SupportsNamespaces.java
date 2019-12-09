@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
-import org.apache.spark.util.Utils;
 
 import java.util.Arrays;
 import java.util.List;
