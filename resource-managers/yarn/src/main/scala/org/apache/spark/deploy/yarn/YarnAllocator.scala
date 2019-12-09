@@ -291,11 +291,13 @@ private[yarn] class YarnAllocator(
   def updateResourceRequests(): Unit = {
     val pendingAllocate = getPendingAllocate
     val numPendingAllocate = pendingAllocate.size
+    val numExecutorsExiting = pendingLossReasonRequests.size
     val missing = targetNumExecutors - numPendingAllocate -
-      numExecutorsStarting.get - runningExecutors.size
+      numExecutorsStarting.get - runningExecutors.size + numExecutorsExiting
     logDebug(s"Updating resource requests, target: $targetNumExecutors, " +
       s"pending: $numPendingAllocate, running: ${runningExecutors.size}, " +
-      s"executorsStarting: ${numExecutorsStarting.get}")
+      s"executorsStarting: ${numExecutorsStarting.get}" +
+      s"executorsStartingExiting:${numExecutorsExiting}")
 
     // Split the pending container request into three groups: locality matched list, locality
     // unmatched list and non-locality list. Take the locality matched container request into

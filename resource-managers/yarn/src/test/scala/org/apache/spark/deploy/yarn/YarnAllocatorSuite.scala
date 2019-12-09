@@ -37,7 +37,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceUtils.{AMOUNT, GPU}
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
 
@@ -534,5 +534,55 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)
     }
+  }
+
+
+  test("lost executor removed from driver") {
+
+    class MockDriverRpcContext extends RpcCallContext{
+      override def reply(response: Any): Unit = {
+
+      }
+
+      override def sendFailure(e: Throwable): Unit = {
+
+      }
+
+      override def senderAddress: RpcAddress = {
+        null
+      }
+    }
+
+    val handler = createAllocator(2)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (2)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), Set.empty)
+
+    handler.updateResourceRequests()
+
+    handler.getPendingAllocate.size should be (0)
+    // lost executor from driver
+    handler.enqueueGetLossReasonRequest("1", new MockDriverRpcContext())
+    handler.enqueueGetLossReasonRequest("2", new MockDriverRpcContext())
+
+    handler.updateResourceRequests()
+    // AM should update pending resource requests without container failure reason
+    handler.getPendingAllocate.size should be (2)
+
+    val statuses = Seq(container1, container2).map { c =>
+      ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Failed", -1)
+    }
+    handler.processCompletedContainers(statuses)
+    handler.updateResourceRequests()
+
+    handler.getPendingAllocate.size should be (2)
+    handler.getNumExecutorsFailed should be (2)
+    handler.getNumUnexpectedContainerRelease should be (2)
   }
 }
