@@ -129,10 +129,7 @@ case class AggregateExpression(
       ExprId(0))
   }
 
-  override def children: Seq[Expression] = filter match {
-    case Some(expr) => aggregateFunction :: expr :: Nil
-    case _ => aggregateFunction :: Nil
-  }
+  override def children: Seq[Expression] = aggregateFunction +: filter.toSeq
 
   override def dataType: DataType = aggregateFunction.dataType
   override def foldable: Boolean = false
