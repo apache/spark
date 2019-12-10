@@ -273,29 +273,29 @@ object MultilayerPerceptronClassifier
  * Each layer has sigmoid activation function, output layer has softmax.
  *
  * @param uid uid
- * @param layers array of layer sizes including input and output layers
+ * @param modelLayers array of layer sizes including input and output layers
  * @param weights the weights of layers
  */
 @Since("1.5.0")
 class MultilayerPerceptronClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    @Since("1.5.0") val layers: Array[Int],
+    @Since("1.5.0") val modelLayers: Array[Int],
     @Since("2.0.0") val weights: Vector)
   extends ProbabilisticClassificationModel[Vector, MultilayerPerceptronClassificationModel]
-  with Serializable with MLWritable {
+  with MultilayerPerceptronParams with Serializable with MLWritable {
 
   @Since("1.6.0")
-  override val numFeatures: Int = layers.head
+  override val numFeatures: Int = modelLayers.head
 
   private[ml] val mlpModel = FeedForwardTopology
-    .multiLayerPerceptron(layers, softmaxOnTop = true)
+    .multiLayerPerceptron(modelLayers, softmaxOnTop = true)
     .model(weights)
 
   /**
    * Returns layers in a Java List.
    */
   private[ml] def javaLayers: java.util.List[Int] = {
-    layers.toList.asJava
+    modelLayers.toList.asJava
   }
 
   /**
@@ -308,7 +308,8 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassificationModel = {
-    val copied = new MultilayerPerceptronClassificationModel(uid, layers, weights).setParent(parent)
+    val copied = new MultilayerPerceptronClassificationModel(uid, modelLayers, weights)
+      .setParent(parent)
     copyValues(copied, extra)
   }
 
@@ -322,11 +323,11 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   override protected def predictRaw(features: Vector): Vector = mlpModel.predictRaw(features)
 
-  override def numClasses: Int = layers.last
+  override def numClasses: Int = modelLayers.last
 
   @Since("3.0.0")
   override def toString: String = {
-    s"MultilayerPerceptronClassificationModel: uid=$uid, numLayers=${layers.length}, " +
+    s"MultilayerPerceptronClassificationModel: uid=$uid, numLayers=${modelLayers.length}, " +
       s"numClasses=$numClasses, numFeatures=$numFeatures"
   }
 }
@@ -353,7 +354,7 @@ object MultilayerPerceptronClassificationModel
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: layers, weights
-      val data = Data(instance.layers, instance.weights)
+      val data = Data(instance.modelLayers, instance.weights)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
