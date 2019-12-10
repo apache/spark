@@ -73,30 +73,125 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
       Vector, FMClassificationModel](this, model, smallBinaryDataset)
   }
 
-  test("factorization machines logisticLoss") {
+  def logLoss(modelRes: DataFrame): Double = {
+    modelRes.select("label", "probability").rdd.map {
+      case Row(label: Double, probability: DenseVector) =>
+        if (label > 0) -math.log(probability(1))
+        else -math.log(probability(0))
+    }.mean()
+  }
+
+  test("check logisticLoss with AdamW") {
     // This testcase only tests whether the FM logloss part is valid and does not test the
     // pairwise interaction logic. The pairwise interaction logic be tested in FMRegressor.
     // When there is only one feature, FM will degenerate into LR. So two models will get
     // almost same loss value.
-    def logLoss(modelRes: DataFrame): Double = {
-      modelRes.select("label", "probability").rdd.map {
-        case Row(label: Double, probability: DenseVector) =>
-          if (label > 0) -math.log(probability(1))
-          else -math.log(probability(0))
-      }.mean()
-    }
 
-    val fm = new FMClassifier().setMaxIter(200)
+    val fm = new FMClassifier().setMaxIter(50)
     val fmModel = fm.fit(smallBinaryDataset)
     val fmRes = fmModel.transform(smallBinaryDataset)
     val fmLogLoss = logLoss(fmRes)
 
-    val lr = new LogisticRegression()
-    val lrModel = lr.fit(smallBinaryDataset)
-    val lrRes = lrModel.transform(smallBinaryDataset)
-    val lrLogLoss = logLoss(lrRes)
+    /*
+      Use following code to fit the dataset, the resulting logloss is 0.4756465459065247.
+      val lr = new LogisticRegression()
+      val lrModel = lr.fit(smallBinaryDataset)
+      val lrRes = lrModel.transform(smallBinaryDataset)
+      val lrLogLoss = logLoss(lrRes)
+     */
+    assert(fmLogLoss ~== 0.4756465459065247 absTol 1E-3)
+  }
 
-    assert(fmLogLoss ~== lrLogLoss absTol 1E-4)
+  test("check logisticLoss with GD") {
+    val fm = new FMClassifier().setSolver("gd")
+    val fmModel = fm.fit(smallBinaryDataset)
+    val fmRes = fmModel.transform(smallBinaryDataset)
+    val fmLogLoss = logLoss(fmRes)
+    assert(fmLogLoss ~== 0.4756465459065247 absTol 1E-2)
+  }
+
+  test("sparse datasets") {
+    // test sparse input will not throw exception
+    val dataset = spark.createDataFrame(Array(
+      (1.0, Vectors.dense(Array(1.0, 2.0, 3.0))),
+      (0.0, Vectors.sparse(3, Array(0, 2), Array(-1.0, 2.0))),
+      (0.0, Vectors.sparse(3, Array.emptyIntArray, Array.emptyDoubleArray)),
+      (1.0, Vectors.sparse(3, Array(0, 1), Array(2.0, 3.0)))
+    )).toDF("label", "features")
+    val fm = new FMClassifier().setMaxIter(10)
+    fm.fit(dataset)
+  }
+
+  test("setThreshold, getThreshold") {
+    val fm = new FMClassifier()
+
+    // default
+    withClue("FMClassifier should not have thresholds set by default.") {
+      intercept[NoSuchElementException] {
+        fm.getThresholds
+      }
+    }
+
+    // Set via thresholds
+    val fm2 = new FMClassifier()
+    val threshold = Array(0.3, 0.7)
+    fm2.setThresholds(threshold)
+    assert(fm2.getThresholds === threshold)
+  }
+
+  test("thresholds prediction") {
+    val fm = new FMClassifier()
+    val df = smallBinaryDataset.toDF()
+    val fmModel = fm.fit(df)
+
+    // should predict all zeros
+    fmModel.setThresholds(Array(0.0, 1.0))
+    testTransformer[(Double, Vector)](df, fmModel, "prediction") {
+      case Row(prediction: Double) => prediction === 0.0
+    }
+
+    // should predict all ones
+    fmModel.setThresholds(Array(1.0, 0.0))
+    testTransformer[(Double, Vector)](df, fmModel, "prediction") {
+      case Row(prediction: Double) => prediction === 1.0
+    }
+
+    val fmBase = new FMClassifier()
+    val model = fmBase.fit(df)
+    val basePredictions = model.transform(df).select("prediction").collect()
+
+    // constant threshold scaling is the same as no thresholds
+    fmModel.setThresholds(Array(1.0, 1.0))
+    testTransformerByGlobalCheckFunc[(Double, Vector)](df, fmModel, "prediction") {
+      scaledPredictions: Seq[Row] =>
+        assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
+          scaled.getDouble(0) === base.getDouble(0)
+        })
+    }
+
+    // force it to use the predict method
+    model.setRawPredictionCol("").setProbabilityCol("").setThresholds(Array(0, 1))
+    testTransformer[(Double, Vector)](df, model, "prediction") {
+      case Row(prediction: Double) => prediction === 0.0
+    }
+  }
+
+  test("FMClassifier doesn't fit bias when fitBias is off") {
+    val fm = new FMClassifier().setFitBias(false)
+    val model = fm.fit(smallBinaryDataset)
+    assert(model.bias === 0.0)
+  }
+
+  test("FMClassifier doesn't fit linear when fitLinear is off") {
+    val fm = new FMClassifier().setFitLinear(false)
+    val model = fm.fit(smallBinaryDataset)
+    assert(model.linear === Vectors.sparse(model.numFeatures, Seq.empty))
+  }
+
+  test("prediction on single instance") {
+    val fm = new FMClassifier()
+    val fmModel = fm.fit(smallBinaryDataset)
+    testPredictionModelSinglePrediction(fmModel, smallBinaryDataset)
   }
 
   test("read/write") {

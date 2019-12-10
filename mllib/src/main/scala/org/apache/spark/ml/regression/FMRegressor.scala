@@ -502,8 +502,8 @@ class FMRegressionModel private[regression] (
 
   override def toString: String = {
     s"FMRegressionModel: " +
-      s"uid = ${super.toString}, numFeatures = $numFeatures, " +
-      s"factorSize = ${$(factorSize)}, fitLinear = ${$(fitLinear)}, fitBias = ${$(fitBias)}"
+      s"uid=${super.toString}, numFeatures=$numFeatures, " +
+      s"factorSize=${$(factorSize)}, fitLinear=${$(fitLinear)}, fitBias=${$(fitBias)}"
   }
 }
 
@@ -788,6 +788,19 @@ private[ml] class MSEFactorizationMachinesGradient(
   }
 }
 
+/**
+ * AdamW optimizer.
+ *
+ * The implementation is based upon:
+ * <a href="https://arxiv.org/pdf/1711.05101.pdf">
+ * Loshchilov I, Hutter F. "DECOUPLED WEIGHT DECAY REGULARIZATION" 2019</a>.
+ *
+ * The main contribution of this paper is to improve regularization in Adam
+ * by decoupling the weight decay from the gradient-based update.
+ * This paper proposed a simple modification to recover the original formulation of
+ * weight decay regularization by decoupling the weight decay from the optimization steps
+ * taken w.r.t. the loss function.
+ */
 private[ml] class AdamWUpdater(weightSize: Int) extends Updater with Logging {
   val beta1: Double = 0.9
   val beta2: Double = 0.999

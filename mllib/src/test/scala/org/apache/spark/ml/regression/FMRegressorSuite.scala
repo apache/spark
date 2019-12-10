@@ -93,9 +93,9 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
   }
 
   def checkMSE(fitBias: Boolean, fitLinear: Boolean): Unit = {
-    val numFeatures = 10
-    val numSamples = 1000
-    val factorSize = 4
+    val numFeatures = 3
+    val numSamples = 200
+    val factorSize = 2
     val (data, coefficients) = generateFactorInteractionInput(
       spark, factorSize, numFeatures, numSamples, seed, fitBias, fitLinear)
     val (b, w, v) = splitCoefficients(new DenseVector(coefficients),
@@ -109,7 +109,7 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setFitBias(fitBias)
       .setFitLinear(fitLinear)
       .setInitStd(0.01)
-      .setMaxIter(300)
+      .setMaxIter(100)
       .setMiniBatchFraction(1.0)
       .setStepSize(1.0)
       .setRegParam(0.0)
@@ -122,11 +122,11 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
       .select((col("error") * col("error")).as("error_square"))
       .agg(avg("error_square"))
       .collect()(0).getAs[Double](0)
-    assert(mse ~== 0.0 absTol 1E-6)
+    assert(mse ~== 0.0 absTol 1E-4)
 
     // check coefficients
-    assert(b ~== fmModel.bias absTol 1E-4)
-    assert(w ~== fmModel.linear absTol 1E-4)
+    assert(b ~== fmModel.bias absTol 1E-2)
+    assert(w ~== fmModel.linear absTol 1E-2)
     (0 until numFeatures).foreach { i =>
       ((i + 1) until numFeatures).foreach { j =>
         // assert <v_i, v_j> is same
@@ -136,7 +136,7 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
           innerProd1 += v(i, k) * v(j, k)
           innerProd2 += fmModel.factors(i, k) * fmModel.factors(j, k)
         }
-        assert(innerProd1 ~== innerProd2 absTol 1E-4)
+        assert(innerProd1 ~== innerProd2 absTol 1E-2)
       }
     }
   }
@@ -233,7 +233,7 @@ object FMRegressorSuite {
     fmModel.set(fmModel.fitBias, fitBias)
     fmModel.set(fmModel.fitLinear, fitLinear)
     val data = fmModel.transform(X)
-      .withColumn("label", col("prediction"))
+      .withColumnRenamed("prediction", "label")
       .select("features", "label")
     (data, coefficients)
   }

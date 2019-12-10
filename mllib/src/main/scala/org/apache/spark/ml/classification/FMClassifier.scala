@@ -282,8 +282,8 @@ class FMClassificationModel private[classification] (
 
   override def toString: String = {
     s"FMClassificationModel: " +
-      s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures, " +
-      s"factorSize = ${$(factorSize)}, fitLinear = ${$(fitLinear)}, fitBias = ${$(fitBias)}"
+      s"uid=${super.toString}, numClasses=$numClasses, numFeatures=$numFeatures, " +
+      s"factorSize=${$(factorSize)}, fitLinear=${$(fitLinear)}, fitBias=${$(fitBias)}"
   }
 }
 
