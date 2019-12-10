@@ -107,7 +107,15 @@ select integer '2147483648';
 
 -- awareness of the negative/positive sign before type
 select -integer '7';
+select +integer '7';
+select +date '1999-01-01';
+select +timestamp '1999-01-01';
+select +interval '1 day';
+select +map(1, 2);
+select +array(1,2);
+select +named_struct('a', 1, 'b', 'spark');
+select +X'1';
+-- can't negate date/timestamp/binary
 select -date '1999-01-01';
 select -timestamp '1999-01-01';
 select -x'2379ACFe';
-select +integer '7';

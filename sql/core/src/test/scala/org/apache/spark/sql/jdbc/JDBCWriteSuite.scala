@@ -574,48 +574,6 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
-  test("SPARK-29644: Write tables with ShortType") {
-    import testImplicits._
-    val df = Seq(-32768.toShort, 0.toShort, 1.toShort, 38.toShort, 32768.toShort).toDF("a")
-    val tablename = "shorttable"
-    df.write
-      .format("jdbc")
-      .mode("overwrite")
-      .option("url", url)
-      .option("dbtable", tablename)
-      .save()
-    val df2 = spark.read
-      .format("jdbc")
-      .option("url", url)
-      .option("dbtable", tablename)
-      .load()
-    assert(df.count == df2.count)
-    val rows = df2.collect()
-    val colType = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(colType(0) == "class java.lang.Short")
-  }
-
-  test("SPARK-29644: Write tables with ByteType") {
-    import testImplicits._
-    val df = Seq(-127.toByte, 0.toByte, 1.toByte, 38.toByte, 128.toByte).toDF("a")
-    val tablename = "bytetable"
-    df.write
-      .format("jdbc")
-      .mode("overwrite")
-      .option("url", url)
-      .option("dbtable", tablename)
-      .save()
-    val df2 = spark.read
-      .format("jdbc")
-      .option("url", url)
-      .option("dbtable", tablename)
-      .load()
-    assert(df.count == df2.count)
-    val rows = df2.collect()
-    val colType = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(colType(0) == "class java.lang.Byte")
-  }
-
   private def runAndVerifyRecordsWritten(expected: Long)(job: => Unit): Unit = {
     assert(expected === runAndReturnMetrics(job, _.taskMetrics.outputMetrics.recordsWritten))
   }

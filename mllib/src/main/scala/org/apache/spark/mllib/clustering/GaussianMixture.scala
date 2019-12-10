@@ -234,6 +234,7 @@ class GaussianMixture private (
       iter += 1
       compute.destroy()
     }
+    breezeData.unpersist()
 
     new GaussianMixtureModel(weights, gaussians)
   }

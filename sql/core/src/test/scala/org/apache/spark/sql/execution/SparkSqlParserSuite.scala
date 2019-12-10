@@ -80,21 +80,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
-  test("show functions") {
-    assertEqual("show functions", ShowFunctionsCommand(None, None, true, true))
-    assertEqual("show all functions", ShowFunctionsCommand(None, None, true, true))
-    assertEqual("show user functions", ShowFunctionsCommand(None, None, true, false))
-    assertEqual("show system functions", ShowFunctionsCommand(None, None, false, true))
-    intercept("show special functions", "SHOW special FUNCTIONS")
-    assertEqual("show functions foo",
-      ShowFunctionsCommand(None, Some("foo"), true, true))
-    assertEqual("show functions foo.bar",
-      ShowFunctionsCommand(Some("foo"), Some("bar"), true, true))
-    assertEqual("show functions 'foo\\\\.*'",
-      ShowFunctionsCommand(None, Some("foo\\.*"), true, true))
-    intercept("show functions foo.bar.baz", "Unsupported function name")
-  }
-
   test("describe function") {
     assertEqual("describe function bar",
       DescribeFunctionCommand(FunctionIdentifier("bar", database = None), isExtended = false))
@@ -159,7 +144,7 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("create table - schema") {
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)",
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile",
       createTable(
         table = "my_tab",
         schema = (new StructType)
@@ -179,7 +164,8 @@ class SparkSqlParserSuite extends AnalysisTest {
         partitionColumnNames = Seq("c", "d")
       )
     )
-    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>)",
+    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>) " +
+      "STORED AS textfile",
       createTable(
         table = "my_tab",
         schema = (new StructType)

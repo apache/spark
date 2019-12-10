@@ -407,7 +407,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Long, TimestampType) =>
       val formatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"TIMESTAMP('${formatter.format(v)}')"
+      s"TIMESTAMP '${formatter.format(v)}'"
+    case (i: CalendarInterval, CalendarIntervalType) =>
+      s"INTERVAL '${IntervalUtils.toMultiUnitsString(i)}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }

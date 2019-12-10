@@ -21,6 +21,8 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
@@ -153,8 +155,14 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(!lr.isDefined(lr.weightCol))
     assert(lr.getFitIntercept)
     assert(lr.getStandardization)
+
     val model = lr.fit(smallBinaryDataset)
-    model.transform(smallBinaryDataset)
+    val transformed = model.transform(smallBinaryDataset)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
+
+    transformed
       .select("label", "probability", "prediction", "rawPrediction")
       .collect()
     assert(model.getThreshold === 0.5)

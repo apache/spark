@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.Utils
 
@@ -126,7 +126,7 @@ case class HashAggregateExec(
             initialInputBufferOffset,
             resultExpressions,
             (expressions, inputSchema) =>
-              newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
+              MutableProjection.create(expressions, inputSchema),
             child.output,
             iter,
             testFallbackStartsAt,
@@ -486,10 +486,9 @@ case class HashAggregateExec(
 
       // Create a MutableProjection to merge the rows of same key together
       val mergeExpr = declFunctions.flatMap(_.mergeExpressions)
-      val mergeProjection = newMutableProjection(
+      val mergeProjection = MutableProjection.create(
         mergeExpr,
-        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes),
-        subexpressionEliminationEnabled)
+        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes))
       val joinedRow = new JoinedRow()
 
       var currentKey: UnsafeRow = null
@@ -644,7 +643,8 @@ case class HashAggregateExec(
   private def checkIfFastHashMapSupported(ctx: CodegenContext): Boolean = {
     val isSupported =
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
-        f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
+        f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
+        f.dataType.isInstanceOf[CalendarIntervalType]) &&
         bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
 
     // For vectorized hash map, We do not support byte array based decimal type for aggregate values
@@ -656,7 +656,7 @@ case class HashAggregateExec(
     val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
       .forall(!DecimalType.isByteArrayDecimalType(_))
 
-    isSupported  && isNotByteArrayDecimalType
+    isSupported && isNotByteArrayDecimalType
   }
 
   private def enableTwoLevelHashMap(ctx: CodegenContext): Unit = {

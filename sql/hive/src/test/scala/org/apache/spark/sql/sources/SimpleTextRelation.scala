@@ -23,7 +23,7 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, InterpretedProjection, JoinedRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedProjection, JoinedRow, Literal, Predicate}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -88,7 +88,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
             val attribute = inputAttributes.find(_.name == column).get
             expressions.GreaterThan(attribute, literal)
         }.reduceOption(expressions.And).getOrElse(Literal(true))
-        InterpretedPredicate.create(filterCondition, inputAttributes)
+        Predicate.create(filterCondition, inputAttributes)
       }
 
       // Uses a simple projection to simulate column pruning
