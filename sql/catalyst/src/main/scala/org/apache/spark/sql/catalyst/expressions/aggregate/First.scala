@@ -47,9 +47,9 @@ import org.apache.spark.sql.types._
 case class First(funcName: String, child: Expression, ignoreNullsExpr: Expression)
   extends DeclarativeAggregate with ExpectsInputTypes {
 
-  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
-
   def this(child: Expression, ignoreNullsExpr: Expression) = this("first", child, ignoreNullsExpr)
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
 
   override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
