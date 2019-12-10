@@ -31,9 +31,7 @@ class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[DoubleColumnStats], DOUBLE, Array(Double.MaxValue, Double.MinValue, 0))
   testColumnStats(classOf[StringColumnStats], STRING, Array(null, null, 0))
   testDecimalColumnStats(Array(null, null, 0))
-  testIntervalColumnStats(Array(
-    new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MaxValue),
-    new CalendarInterval(Int.MinValue, Int.MinValue, Long.MinValue), 0))
+  testIntervalColumnStats(Array(CalendarInterval.MAX_VALUE, CalendarInterval.MIN_VALUE, 0))
 
   def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],
