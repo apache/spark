@@ -35,7 +35,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RegisterExecutorFailed}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{LaunchedExecutor, RegisterExecutor, RegisterExecutorFailed}
 
 /**
  * End-to-end tests for dynamic allocation in standalone mode.
@@ -507,6 +507,7 @@ class StandaloneDynamicAllocationSuite
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
     when(taskScheduler.nodeBlacklist()).thenReturn(Set("blacklisted-host"))
     when(taskScheduler.resourceOffers(any())).thenReturn(Nil)
+    when(taskScheduler.resourcesReqsPerTask).thenReturn(Seq.empty)
     when(taskScheduler.sc).thenReturn(sc)
 
     val rpcEnv = RpcEnv.create("test-rpcenv", "localhost", 0, conf, securityManager)
@@ -634,6 +635,7 @@ class StandaloneDynamicAllocationSuite
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
       backend.driverEndpoint.askSync[Boolean](message)
+      backend.driverEndpoint.send(LaunchedExecutor(id))
     }
   }
 

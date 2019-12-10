@@ -20,6 +20,8 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.sql.Date
 
+import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -729,7 +731,41 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      sql("INSERT INTO TABLE test_table SELECT 2, null")
+      val msg = intercept[AnalysisException] {
+        sql("INSERT INTO TABLE test_table SELECT 2, null")
+      }.getMessage
+      assert(msg.contains("Cannot write nullable values to non-null column 's'"))
     }
+  }
+
+  test("Stop task set if FileAlreadyExistsException was thrown") {
+    withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(i INT, part1 INT) USING PARQUET
+            |PARTITIONED BY (part1)
+          """.stripMargin)
+
+        val df = Seq((1, 1)).toDF("i", "part1")
+        val err = intercept[SparkException] {
+          df.write.mode("overwrite").format("parquet").insertInto("t")
+        }
+        assert(err.getCause.getMessage.contains("can not write to output file: " +
+          "org.apache.hadoop.fs.FileAlreadyExistsException"))
+      }
+    }
+  }
+}
+
+class FileExistingTestFileSystem extends RawLocalFileSystem {
+  override def create(
+      f: Path,
+      overwrite: Boolean,
+      bufferSize: Int,
+      replication: Short,
+      blockSize: Long): FSDataOutputStream = {
+    throw new FileAlreadyExistsException(s"${f.toString} already exists")
   }
 }

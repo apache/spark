@@ -164,12 +164,12 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
 
   test("mapVertices changing type with same erased type") {
     withSpark { sc =>
-      val vertices = sc.parallelize(Array[(Long, Option[java.lang.Integer])](
+      val vertices = sc.parallelize(Seq[(Long, Option[java.lang.Integer])](
         (1L, Some(1)),
         (2L, Some(2)),
         (3L, Some(3))
       ))
-      val edges = sc.parallelize(Array(
+      val edges = sc.parallelize(Seq(
         Edge(1L, 2L, 0),
         Edge(2L, 3L, 0),
         Edge(3L, 1L, 0)
@@ -219,7 +219,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
   test("reverse with join elimination") {
     withSpark { sc =>
       val vertices: RDD[(VertexId, Int)] = sc.parallelize(Seq((1L, 1), (2L, 2)))
-      val edges: RDD[Edge[Int]] = sc.parallelize(Array(Edge(1L, 2L, 0)))
+      val edges: RDD[Edge[Int]] = sc.parallelize(Seq(Edge(1L, 2L, 0)))
       val graph = Graph(vertices, edges).reverse
       val result = GraphXUtils.mapReduceTriplets[Int, Int, Int](
         graph, et => Iterator((et.dstId, et.srcAttr)), _ + _)

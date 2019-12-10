@@ -177,6 +177,7 @@ $(document).ready(function() {
             {name: 'eventLog'},
           ],
           "autoWidth": false,
+          "deferRender": true
         };
 
         if (hasMultipleAttempts) {

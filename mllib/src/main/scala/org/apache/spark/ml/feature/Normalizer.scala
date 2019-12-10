@@ -59,7 +59,17 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     vector => normalizer.transform(OldVectors.fromML(vector)).asML
   }
 
+  override protected def validateInputType(inputType: DataType): Unit = {
+    require(inputType.isInstanceOf[VectorUDT],
+      s"Input type must be ${(new VectorUDT).catalogString} but got ${inputType.catalogString}.")
+  }
+
   override protected def outputDataType: DataType = new VectorUDT()
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"Normalizer: uid=$uid, p=${$(p)}"
+  }
 }
 
 @Since("1.6.0")

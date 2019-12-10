@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.{File, FilenameFilter, FileNotFoundException}
+import java.io.{File, FileNotFoundException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.util.Locale
 
@@ -27,9 +27,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT, NullData, NullUDT}
+import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
@@ -664,7 +664,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           dir.delete()
           spark.range(1000).write.orc(dir.toString)
           val df = spark.read.orc(dir.toString)
-          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
+          assert(df.queryExecution.optimizedPlan.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
         }
       }
     }
@@ -720,7 +720,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           .option("path", paths.head.getCanonicalPath)
           .parquet(paths(1).getCanonicalPath, paths(2).getCanonicalPath)
         df.queryExecution.optimizedPlan match {
-          case PhysicalOperation(_, _, DataSourceV2Relation(table: ParquetTable, _, _)) =>
+          case PhysicalOperation(_, _, DataSourceV2ScanRelation(table: ParquetTable, _, _)) =>
             assert(table.paths.toSet == paths.map(_.getCanonicalPath).toSet)
           case _ =>
             throw new AnalysisException("Can not match ParquetTable in the query.")

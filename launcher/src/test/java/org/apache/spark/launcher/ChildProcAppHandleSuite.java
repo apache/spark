@@ -77,11 +77,11 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     SparkLauncher launcher = new SparkLauncher();
     launcher.redirectError(ProcessBuilder.Redirect.PIPE);
     assertNotNull(launcher.errorStream);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.PIPE);
+    assertEquals(ProcessBuilder.Redirect.Type.PIPE, launcher.errorStream.type());
 
     launcher.redirectOutput(ProcessBuilder.Redirect.PIPE);
     assertNotNull(launcher.outputStream);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.PIPE);
+    assertEquals(ProcessBuilder.Redirect.Type.PIPE, launcher.outputStream.type());
   }
 
   @Test
@@ -89,11 +89,11 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     SparkLauncher launcher = new SparkLauncher();
     launcher.redirectError(ProcessBuilder.Redirect.PIPE)
       .redirectError(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
+    assertEquals(ProcessBuilder.Redirect.Type.INHERIT, launcher.errorStream.type());
 
     launcher.redirectOutput(ProcessBuilder.Redirect.PIPE)
       .redirectOutput(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
+    assertEquals(ProcessBuilder.Redirect.Type.INHERIT, launcher.outputStream.type());
   }
 
   @Test

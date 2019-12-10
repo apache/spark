@@ -27,7 +27,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "mysql:5.7.9"
+    override val imageName = "mysql:5.7.28"
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
@@ -39,6 +39,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   override def dataPreparation(conn: Connection): Unit = {
+    // Since MySQL 5.7.14+, we need to disable strict mode
+    conn.prepareStatement("SET GLOBAL sql_mode = ''").executeUpdate()
     conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y TEXT(8))").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()

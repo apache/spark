@@ -162,7 +162,7 @@ private[hive] object IsolatedClientLoader extends Logging {
  * @param execJars A collection of jar files that must include hive and hadoop.
  * @param config   A set of options that will be added to the HiveConf of the constructed client.
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
- *                    true unless loading the version of hive that is on Sparks classloader.
+ *                    true unless loading the version of hive that is on Spark's classloader.
  * @param sharesHadoopClasses When true, we will share Hadoop classes between Spark and
  * @param baseClassLoader The spark classloader that is used to load shared classes.
  */

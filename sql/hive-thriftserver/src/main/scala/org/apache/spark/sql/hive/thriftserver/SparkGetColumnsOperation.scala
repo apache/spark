@@ -22,6 +22,7 @@ import java.util.regex.Pattern
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hive.service.cli._
@@ -129,11 +130,20 @@ private[hive] class SparkGetColumnsOperation(
       }
       setState(OperationState.FINISHED)
     } catch {
-      case e: HiveSQLException =>
+      case e: Throwable =>
+        logError(s"Error executing get columns operation with $statementId", e)
         setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        throw e
+        e match {
+          case hiveException: HiveSQLException =>
+            HiveThriftServer2.listener.onStatementError(
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+            throw hiveException
+          case _ =>
+            val root = ExceptionUtils.getRootCause(e)
+            HiveThriftServer2.listener.onStatementError(
+              statementId, root.getMessage, SparkUtils.exceptionString(root))
+            throw new HiveSQLException("Error getting columns: " + root.toString, root)
+        }
     }
     HiveThriftServer2.listener.onStatementFinish(statementId)
   }

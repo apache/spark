@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.mutable
 
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
@@ -28,9 +30,9 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.dynalloc.ExecutorMonitor
 import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 /**
@@ -606,7 +608,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addTime(manager) === NOT_SET)
     onSchedulerBacklogged(manager)
     val firstAddTime = addTime(manager)
-    assert(firstAddTime === clock.getTimeMillis + schedulerBacklogTimeout * 1000)
+    assert(firstAddTime === clock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeout))
     clock.advance(100L)
     onSchedulerBacklogged(manager)
     assert(addTime(manager) === firstAddTime) // timer is already started
@@ -620,7 +622,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addTime(manager) === NOT_SET)
     onSchedulerBacklogged(manager)
     val secondAddTime = addTime(manager)
-    assert(secondAddTime === clock.getTimeMillis + schedulerBacklogTimeout * 1000)
+    assert(secondAddTime === clock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeout))
     clock.advance(100L)
     onSchedulerBacklogged(manager)
     assert(addTime(manager) === secondAddTime) // timer is already started
@@ -1049,7 +1051,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
     clock.advance(1000)
-    updateAndSyncNumExecutorsTarget(manager, clock.getTimeMillis())
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTargetForDefaultProfile(manager) === 2)
     val taskInfo0 = createTaskInfo(0, 0, "executor-1")
     post(SparkListenerTaskStart(0, 0, taskInfo0))
@@ -1065,7 +1067,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
     assert(numExecutorsTargetForDefaultProfile(manager) === 2)
     clock.advance(1000)
-    updateAndSyncNumExecutorsTarget(manager, clock.getTimeMillis())
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTargetForDefaultProfile(manager) === 1)
     verify(client, never).killExecutors(any(), any(), any(), any())
 
@@ -1131,8 +1133,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     manager
   }
 
+  private val execInfo = new ExecutorInfo("host1", 1, Map.empty,
+    Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+
   private def onExecutorAdded(manager: ExecutorAllocationManager, id: String): Unit = {
-    post(SparkListenerExecutorAdded(0L, id, new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
+    post(SparkListenerExecutorAdded(0L, id, execInfo))
   }
 
   private def onExecutorRemoved(manager: ExecutorAllocationManager, id: String): Unit = {
@@ -1198,7 +1203,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     PrivateMethod[mutable.HashMap[ResourceProfile, Int]](
       Symbol("numExecutorsTargetPerResourceProfile"))
   private val _maxNumExecutorsNeededPerResourceProfile =
-    PrivateMethod[Int](Symbol("maxNumExecutorsNeededPerResourceProfile"))
+    PrivateMethod[Int](Symbol("maxNumExecutorsNeededPerResourceProfileId"))
   private val _addTime = PrivateMethod[Long](Symbol("addTime"))
   private val _schedule = PrivateMethod[Unit](Symbol("schedule"))
   private val _doUpdateRequest = PrivateMethod[Unit](Symbol("doUpdateRequest"))

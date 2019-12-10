@@ -629,6 +629,19 @@ class UDFTests(ReusedSQLTestCase):
 
         self.sc.parallelize(range(1), 1).mapPartitions(task).count()
 
+    def test_udf_with_256_args(self):
+        N = 256
+        data = [["data-%d" % i for i in range(N)]] * 5
+        df = self.spark.createDataFrame(data)
+
+        def f(*a):
+            return "success"
+
+        fUdf = udf(f, StringType())
+
+        r = df.select(fUdf(*df.columns))
+        self.assertEqual(r.first()[0], "success")
+
 
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):

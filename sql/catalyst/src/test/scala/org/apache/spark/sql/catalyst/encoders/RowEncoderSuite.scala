@@ -169,7 +169,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   private def testDecimalOverflow(schema: StructType, row: Row): Unit = {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
       val encoder = RowEncoder(schema).resolveAndBind()
       intercept[Exception] {
         encoder.toRow(row)
@@ -182,7 +182,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       }
     }
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false") {
       val encoder = RowEncoder(schema).resolveAndBind()
       assert(encoder.fromRow(encoder.toRow(row)).get(0) == null)
     }

@@ -32,6 +32,7 @@ import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -563,7 +564,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         checkAnswer(
           sql("SELECT testUDFToListInt(s) FROM inputTable"),
           Seq(Row(Seq(1, 2, 3))))
-        assert(sql("show functions").count() == numFunc + 1)
+        assert(sql("show functions").count() ==
+          numFunc + FunctionsCommand.virtualOperators.size + 1)
         assert(spark.catalog.listFunctions().count() == numFunc + 1)
       }
     }

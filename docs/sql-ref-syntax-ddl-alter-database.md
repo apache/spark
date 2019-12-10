@@ -21,13 +21,13 @@ license: |
 ### Description
 You can alter metadata associated with a database by setting `DBPROPERTIES`.  The specified property
 values override any existing value with the same property name. Please note that the usage of 
-`SCHEMA` and `DATABASE` are interchangable and one can be used in place of the other. An error message
+`SCHEMA` and `DATABASE` are interchangeable and one can be used in place of the other. An error message
 is issued if the database is not found in the system. This command is mostly used to record the metadata
 for a database and may be used for auditing purposes.
 
 ### Syntax
 {% highlight sql %}
-ALTER {DATABASE | SCHEMA} database_name SET DBPROPERTIES (propery_name=property_value, ...);
+ALTER {DATABASE | SCHEMA} database_name SET DBPROPERTIES (property_name=property_value, ...);
 {% endhighlight %}
 
 ### Parameters

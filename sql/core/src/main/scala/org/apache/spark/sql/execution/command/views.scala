@@ -21,48 +21,13 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunction, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-
-
-/**
- * ViewType is used to specify the expected view type when we want to create or replace a view in
- * [[CreateViewCommand]].
- */
-sealed trait ViewType {
-  override def toString: String = getClass.getSimpleName.stripSuffix("$")
-}
-
-/**
- * LocalTempView means session-scoped local temporary views. Its lifetime is the lifetime of the
- * session that created it, i.e. it will be automatically dropped when the session terminates. It's
- * not tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
- */
-object LocalTempView extends ViewType
-
-/**
- * GlobalTempView means cross-session global temporary views. Its lifetime is the lifetime of the
- * Spark application, i.e. it will be automatically dropped when the application terminates. It's
- * tied to a system preserved database `global_temp`, and we must use the qualified name to refer a
- * global temp view, e.g. SELECT * FROM global_temp.view1.
- */
-object GlobalTempView extends ViewType
-
-/**
- * PersistedView means cross-session persisted views. Persisted views stay until they are
- * explicitly dropped by user command. It's always tied to a database, default to the current
- * database if not specified.
- *
- * Note that, Existing persisted view with the same name are not visible to the current session
- * while the local temporary view exists, unless the view name is qualified by database.
- */
-object PersistedView extends ViewType
-
 
 /**
  * Create or replace a view with given query plan. This command will generate some view-specific
@@ -190,21 +155,26 @@ case class CreateViewCommand(
       // added/generated from a temporary view.
       // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
       // package (e.g., HiveGenericUDF).
-      child.collect {
-        // Disallow creating permanent views based on temporary views.
-        case UnresolvedRelation(AsTableIdentifier(ident))
+      def verify(child: LogicalPlan) {
+        child.collect {
+          // Disallow creating permanent views based on temporary views.
+          case UnresolvedRelation(AsTableIdentifier(ident))
             if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
-          // temporary views are only stored in the session catalog
-          throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-            s"referencing a temporary view $ident")
-        case other if !other.resolved => other.expressions.flatMap(_.collect {
-          // Disallow creating permanent views based on temporary UDFs.
-          case e: UnresolvedFunction
-            if sparkSession.sessionState.catalog.isTemporaryFunction(e.name) =>
+            // temporary views are only stored in the session catalog
             throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-              s"referencing a temporary function `${e.name}`")
-        })
+              s"referencing a temporary view $ident")
+          case other if !other.resolved => other.expressions.flatMap(_.collect {
+            // Traverse subquery plan for any unresolved relations.
+            case e: SubqueryExpression => verify(e.plan)
+            // Disallow creating permanent views based on temporary UDFs.
+            case e: UnresolvedFunction
+              if sparkSession.sessionState.catalog.isTemporaryFunction(e.name) =>
+              throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+                s"referencing a temporary function `${e.name}`")
+          })
+        }
       }
+      verify(child)
     }
   }
 

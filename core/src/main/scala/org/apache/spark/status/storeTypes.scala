@@ -177,10 +177,13 @@ private[spark] class TaskDataWrapper(
     val accumulatorUpdates: Seq[AccumulableInfo],
     val errorMessage: Option[String],
 
+    val hasMetrics: Boolean,
     // The following is an exploded view of a TaskMetrics API object. This saves 5 objects
-    // (= 80 bytes of Java object overhead) per instance of this wrapper. If the first value
-    // (executorDeserializeTime) is -1L, it means the metrics for this task have not been
-    // recorded.
+    // (= 80 bytes of Java object overhead) per instance of this wrapper. Non successful
+    // tasks' metrics will have negative values in `TaskDataWrapper`. `TaskData` will have
+    // actual metric values. To recover the actual metric value from `TaskDataWrapper`,
+    // need use `getMetricValue` method. If `hasMetrics` is false, it means the metrics
+    // for this task have not been recorded.
     @KVIndexParam(value = TaskIndexNames.DESER_TIME, parent = TaskIndexNames.STAGE)
     val executorDeserializeTime: Long,
     @KVIndexParam(value = TaskIndexNames.DESER_CPU_TIME, parent = TaskIndexNames.STAGE)
@@ -233,39 +236,46 @@ private[spark] class TaskDataWrapper(
     val stageId: Int,
     val stageAttemptId: Int) {
 
-  def hasMetrics: Boolean = executorDeserializeTime >= 0
+  // SPARK-26260: To handle non successful tasks metrics (Running, Failed, Killed).
+  private def getMetricValue(metric: Long): Long = {
+    if (status != "SUCCESS") {
+      math.abs(metric + 1)
+    } else {
+      metric
+    }
+  }
 
   def toApi: TaskData = {
     val metrics = if (hasMetrics) {
       Some(new TaskMetrics(
-        executorDeserializeTime,
-        executorDeserializeCpuTime,
-        executorRunTime,
-        executorCpuTime,
-        resultSize,
-        jvmGcTime,
-        resultSerializationTime,
-        memoryBytesSpilled,
-        diskBytesSpilled,
-        peakExecutionMemory,
+        getMetricValue(executorDeserializeTime),
+        getMetricValue(executorDeserializeCpuTime),
+        getMetricValue(executorRunTime),
+        getMetricValue(executorCpuTime),
+        getMetricValue(resultSize),
+        getMetricValue(jvmGcTime),
+        getMetricValue(resultSerializationTime),
+        getMetricValue(memoryBytesSpilled),
+        getMetricValue(diskBytesSpilled),
+        getMetricValue(peakExecutionMemory),
         new InputMetrics(
-          inputBytesRead,
-          inputRecordsRead),
+          getMetricValue(inputBytesRead),
+          getMetricValue(inputRecordsRead)),
         new OutputMetrics(
-          outputBytesWritten,
-          outputRecordsWritten),
+          getMetricValue(outputBytesWritten),
+          getMetricValue(outputRecordsWritten)),
         new ShuffleReadMetrics(
-          shuffleRemoteBlocksFetched,
-          shuffleLocalBlocksFetched,
-          shuffleFetchWaitTime,
-          shuffleRemoteBytesRead,
-          shuffleRemoteBytesReadToDisk,
-          shuffleLocalBytesRead,
-          shuffleRecordsRead),
+          getMetricValue(shuffleRemoteBlocksFetched),
+          getMetricValue(shuffleLocalBlocksFetched),
+          getMetricValue(shuffleFetchWaitTime),
+          getMetricValue(shuffleRemoteBytesRead),
+          getMetricValue(shuffleRemoteBytesReadToDisk),
+          getMetricValue(shuffleLocalBytesRead),
+          getMetricValue(shuffleRecordsRead)),
         new ShuffleWriteMetrics(
-          shuffleBytesWritten,
-          shuffleWriteTime,
-          shuffleRecordsWritten)))
+          getMetricValue(shuffleBytesWritten),
+          getMetricValue(shuffleWriteTime),
+          getMetricValue(shuffleRecordsWritten))))
     } else {
       None
     }
@@ -296,8 +306,10 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SCHEDULER_DELAY, parent = TaskIndexNames.STAGE)
   def schedulerDelay: Long = {
     if (hasMetrics) {
-      AppStatusUtils.schedulerDelay(launchTime, resultFetchStart, duration, executorDeserializeTime,
-        resultSerializationTime, executorRunTime)
+      AppStatusUtils.schedulerDelay(launchTime, resultFetchStart, duration,
+        getMetricValue(executorDeserializeTime),
+        getMetricValue(resultSerializationTime),
+        getMetricValue(executorRunTime))
     } else {
       -1L
     }
@@ -330,7 +342,7 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_READS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalReads: Long = {
     if (hasMetrics) {
-      shuffleLocalBytesRead + shuffleRemoteBytesRead
+      getMetricValue(shuffleLocalBytesRead) + getMetricValue(shuffleRemoteBytesRead)
     } else {
       -1L
     }
@@ -339,7 +351,7 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_BLOCKS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalBlocks: Long = {
     if (hasMetrics) {
-      shuffleLocalBlocksFetched + shuffleRemoteBlocksFetched
+      getMetricValue(shuffleLocalBlocksFetched) + getMetricValue(shuffleRemoteBlocksFetched)
     } else {
       -1L
     }

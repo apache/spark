@@ -39,10 +39,10 @@
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
-
     <dependency>
-      <groupId>io.dropwizard.metrics</groupId>
-      <artifactId>metrics-ganglia</artifactId>
+      <groupId>info.ganglia.gmetric4j</groupId>
+      <artifactId>gmetric4j</artifactId>
+      <version>1.0.10</version>
     </dependency>
   </dependencies>
 </project>

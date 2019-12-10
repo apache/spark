@@ -44,6 +44,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
   def write(
       rdd: RDD[_],
       dep: ShuffleDependency[_, _, _],
+      mapId: Long,
       context: TaskContext,
       partition: Partition): MapStatus = {
     var writer: ShuffleWriter[Any, Any] = null
@@ -51,7 +52,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](
         dep.shuffleHandle,
-        context.taskAttemptId(),
+        mapId,
         context,
         createMetricsReporter(context))
       writer.write(

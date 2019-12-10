@@ -102,6 +102,13 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         """
         return self._set(minConfidence=value)
 
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
     @property
     @since("2.2.0")
     def freqItemsets(self):
@@ -159,7 +166,7 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     >>> fp = FPGrowth(minSupport=0.2, minConfidence=0.7)
     >>> fpm = fp.fit(data)
     >>> fpm.setPredictionCol("newPrediction")
-    FPGrowth...
+    FPGrowthModel...
     >>> fpm.freqItemsets.show(5)
     +---------+----+
     |    items|freq|
@@ -238,6 +245,12 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         Sets the value of :py:attr:`minConfidence`.
         """
         return self._set(minConfidence=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
 
     def _create_model(self, java_model):
         return FPGrowthModel(java_model)

@@ -175,6 +175,12 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"VectorAssembler: uid=$uid, handleInvalid=${$(handleInvalid)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")

@@ -56,7 +56,7 @@ object PhysicalOperation extends PredicateHelper {
    * }}}
    */
   private def collectProjectsAndFilters(plan: LogicalPlan):
-      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
+      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, AttributeMap[Expression]) =
     plan match {
       case Project(fields, child) if fields.forall(_.deterministic) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child)
@@ -72,14 +72,15 @@ object PhysicalOperation extends PredicateHelper {
         collectProjectsAndFilters(h.child)
 
       case other =>
-        (None, Nil, other, Map.empty)
+        (None, Nil, other, AttributeMap(Seq()))
     }
 
-  private def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
-    case a @ Alias(child, _) => a.toAttribute -> child
-  }.toMap
+  private def collectAliases(fields: Seq[Expression]): AttributeMap[Expression] =
+    AttributeMap(fields.collect {
+      case a: Alias => (a.toAttribute, a.child)
+    })
 
-  private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
+  private def substitute(aliases: AttributeMap[Expression])(expr: Expression): Expression = {
     expr.transform {
       case a @ Alias(ref: AttributeReference, name) =>
         aliases.get(ref)
