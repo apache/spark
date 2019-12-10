@@ -274,5 +274,7 @@ class SparkSqlParserSuite extends AnalysisTest {
       ListJarsCommand("/path-with-dash/abc.jar".split("\\s+")))
     assertEqual("LIST JAR \'abc.jar\'", ListJarsCommand("abc.jar".split("\\s+")))
     assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand("abc.jar".split("\\s+")))
+    assertEqual("ADD FILE /path with space/abc.txt", AddFileCommand("/path with space/abc.txt"))
+    assertEqual("ADD JAR /path with space/abc.jar", AddJarCommand("/path with space/abc.jar"))
   }
 }
