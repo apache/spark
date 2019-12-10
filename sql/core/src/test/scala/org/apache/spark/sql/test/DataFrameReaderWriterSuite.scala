@@ -489,11 +489,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     // when users do not specify the schema
     checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
 
-    // when users specify the schema
+    // when users specify a wrong schema
     val inputSchema = new StructType().add("s", IntegerType, nullable = false)
     val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
-    assert(e.getMessage.contains(
-      "org.apache.spark.sql.sources.SimpleScanSource does not allow user-specified schemas"))
+    assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
   }
 
   test("read a data source that does not extend RelationProvider") {
