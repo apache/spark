@@ -520,7 +520,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val agged = grouped.mapGroups { case (g, iter) => (g._1, iter.map(_._2).sum) }
+    val agged = grouped.mapGroups { (g, iter) => (g._1, iter.map(_._2).sum) }
 
     checkDatasetUnorderly(
       agged,
@@ -530,7 +530,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val agged = grouped.flatMapGroups { case (g, iter) =>
+    val agged = grouped.flatMapGroups { (g, iter) =>
       Iterator(g._1, iter.map(_._2).sum.toString)
     }
 
@@ -542,11 +542,11 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, mapValues, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val keyValue = ds.groupByKey(_._1).mapValues(_._2)
-    val agged = keyValue.mapGroups { case (g, iter) => (g, iter.sum) }
+    val agged = keyValue.mapGroups { (g, iter) => (g, iter.sum) }
     checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
 
     val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
-    val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
+    val agged1 = keyValue1.mapGroups { (g, iter) => (g._1, iter.map(_._1).sum) }
     checkDataset(agged1, ("a", 30), ("b", 3), ("c", 1))
   }
 
@@ -907,7 +907,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("grouping key and grouped value has field with same name") {
     val ds = Seq(ClassData("a", 1), ClassData("a", 2)).toDS()
     val agged = ds.groupByKey(d => ClassNullableData(d.a, null)).mapGroups {
-      case (key, values) => key.a + values.map(_.b).sum
+      (key, values) => key.a + values.map(_.b).sum
     }
 
     checkDataset(agged, "a3")
@@ -1002,7 +1002,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       .select("user", "item")
       .as[(Int, Int)]
       .groupByKey(_._1)
-      .mapGroups { case (src, ids) => (src, ids.map(_._2).toArray) }
+      .mapGroups { (src, ids) => (src, ids.map(_._2).toArray) }
       .toDF("id", "actual")
 
     dataset.join(actual, dataset("user") === actual("id")).collect()
@@ -1269,10 +1269,10 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
 
     checkDataset(
       df.withColumn("b", lit(0)).as[ClassData]
-        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+        .groupByKey(_.a).flatMapGroups { (_, _) => List[Int]() })
     checkDataset(
       df.withColumn("b", expr("0")).as[ClassData]
-        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+        .groupByKey(_.a).flatMapGroups { (_, _) => List[Int]() })
   }
 
   test("SPARK-18125: Spark generated code causes CompileException") {
