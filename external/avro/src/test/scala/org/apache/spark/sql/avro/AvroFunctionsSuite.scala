@@ -159,28 +159,30 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       struct('id.as("col1"), 'id.cast("string").as("col2")).as("struct")
     )
     val avroStructDF = df.select(functions.to_avro('struct).as("avro"))
-    val actualAvroSchema = s"""
-                             |{
-                             |  "type": "record",
-                             |  "name": "struct",
-                             |  "fields": [
-                             |    {"name": "col1", "type": "int"},
-                             |    {"name": "col2", "type": "string"}
-                             |  ]
-                             |}
-    """.stripMargin
+    val actualAvroSchema =
+      s"""
+         |{
+         |  "type": "record",
+         |  "name": "struct",
+         |  "fields": [
+         |    {"name": "col1", "type": "int"},
+         |    {"name": "col2", "type": "string"}
+         |  ]
+         |}
+         |""".stripMargin
 
-    val evolvedAvroSchema = s"""
-                              |{
-                              |  "type": "record",
-                              |  "name": "struct",
-                              |  "fields": [
-                              |    {"name": "col1", "type": "int"},
-                              |    {"name": "col2", "type": "string"},
-                              |    {"name": "col3", "type": "string", "default": ""}
-                              |  ]
-                              |}
-    """.stripMargin
+    val evolvedAvroSchema =
+      s"""
+         |{
+         |  "type": "record",
+         |  "name": "struct",
+         |  "fields": [
+         |    {"name": "col1", "type": "int"},
+         |    {"name": "col2", "type": "string"},
+         |    {"name": "col3", "type": "string", "default": ""}
+         |  ]
+         |}
+         |""".stripMargin
 
     val expected = spark.range(10).select(
       struct('id.as("col1"), 'id.cast("string").as("col2"), lit("").as("col3")).as("struct")
