@@ -163,15 +163,54 @@ object Cast {
 
   /**
    * Returns true iff we can cast the `from` type to `to` type as per the ANSI SQL.
-   * In practice, the behavior is mostly the same as PostgreSQL. It disallows certain unreasonable
-   * type conversions such as converting `string` to `int` or `double` to `boolean`.
+   * In practice, the behavior is mostly the same as PostgreSQL.
+   *
+   * If `to` type is character string, binary string, numeric, boolean, datetime, interval, or a
+   * user-defined type, then either `from` type shall be assignable to `to` or there shall exist
+   * an appropriate user-defined cast function UDCF from `from` type to `to` type.
+   *
+   * (SD) --------------------- (TD) -------------------------
+   *     | EN  AN  C  D  T  TS  YM  DT  BO  UDT  B  RT  CT  RW
+   * EN  |  Y   Y  Y  N  N   N   M   M   N   M   N   M   N   N
+   * AN  |  Y   Y  Y  N  N   N   N   N   N   M   N   M   N   N
+   *  C  |  Y   Y  Y  Y  Y   Y   Y   Y   Y   M   N   M   N   N
+   *  D  |  N   N  Y  Y  N   Y   N   N   N   M   N   M   N   N
+   *  T  |  N   N  Y  N  Y   Y   N   N   N   M   N   M   N   N
+   * TS  |  N   N  Y  Y  Y   Y   N   N   N   M   N   M   N   N
+   * YM  |  M   N  Y  N  N   N   Y   N   N   M   N   M   N   N
+   * DT  |  M   N  Y  N  N   N   N   Y   N   M   N   M   N   N
+   * BO  |  N   N  Y  N  N   N   N   N   Y   M   N   M   N   N
+   * UDT |  M   M  M  M  M   M   M   M   M   M   M   M   M   N
+   *  B  |  N   N  N  N  N   N   N   N   N   M   Y   M   N   N
+   * RT  |  M   M  M  M  M   M   M   M   M   M   M   M   N   N
+   * CT  |  N   N  N  N  N   N   N   N   N   M   N   N   M   N
+   * RW  |  N   N  N  N  N   N   N   N   N   N   N   N   N   M
+   *
+   * Where:
+   * EN = Exact Numeric
+   * AN = Approximate Numeric
+   * C = Character (Fixed- or Variable-Length, or Character Large Object)
+   * D = Date
+   * T = Time
+   * TS = Timestamp
+   * YM = Year-Month Interval
+   * DT = Day-Time Interval
+   * BO = Boolean
+   * UDT = User-Defined Type
+   * B = Binary (Fixed- or Variable-Length or Binary Large Object)
+   * RT = Reference type
+   * CT = Collection type
+   * RW = Row type
+   *
    */
   def canANSIStoreAssign(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
     case (NullType, _) => true
     case (_: NumericType, _: NumericType) => true
+    // TODO: discuss, string <-> binary is forbidden via ansi
     case (_: AtomicType, StringType) => true
-    case (_: CalendarIntervalType, StringType) => true
+    case (StringType, _: AtomicType) => true
+
     case (DateType, TimestampType) => true
     case (TimestampType, DateType) => true
 

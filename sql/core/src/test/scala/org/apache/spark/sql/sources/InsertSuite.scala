@@ -641,11 +641,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
         var msg = intercept[AnalysisException] {
-          sql("insert into t values('a', 'b')")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
-        msg = intercept[AnalysisException] {
           sql("insert into t values(now(), now())")
         }.getMessage
         assert(msg.contains("Cannot safely cast 'i': TimestampType to IntegerType") &&
@@ -655,6 +650,25 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }.getMessage
         assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
           msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+      }
+    }
+  }
+
+  test("Allow on writing any string value to atomic type with ANSI policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d float, b boolean) using parquet")
+        sql("insert into t values('a', 'b', 'true')")
+        sql("insert into t values('1L', '2.0', 't')")
+        sql("insert into t values('3.0', '4', 'xyz')")
+        sql("insert into t values('5.0', '6L', 'f')")
+        checkAnswer(sql("select * from t"),
+          Seq(Row(3, 4.0F, null),
+            Row(5, null, false),
+            Row(null, 2.0F, true),
+            Row(null, null, true)))
       }
     }
   }
