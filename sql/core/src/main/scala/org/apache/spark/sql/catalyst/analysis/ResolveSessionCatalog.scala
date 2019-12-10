@@ -477,11 +477,11 @@ class ResolveSessionCatalog(
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
-    val CatalogAndTable(catalog, parts) = tableName
+    val CatalogAndTableIdentifier(catalog, tableIdent) = tableName
     if (!isSessionCatalog(catalog)) {
       throw new AnalysisException(s"$sql is only supported with v1 tables.")
     }
-    parts
+    tableIdent.asMultipartIdentifier
   }
 
   private def buildCatalogTable(
@@ -524,8 +524,8 @@ class ResolveSessionCatalog(
 
   object SessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndTable(catalog, table) if isSessionCatalog(catalog) =>
-        Some(catalog -> table)
+      case CatalogAndTableIdentifier(catalog, tableIdent) if isSessionCatalog(catalog) =>
+        Some(catalog -> tableIdent.asMultipartIdentifier)
       case _ => None
     }
   }

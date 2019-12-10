@@ -92,15 +92,50 @@ private[sql] trait LookupCatalog extends Logging {
    * Catalog name takes precedence over namespaces.
    */
   object CatalogAndNamespace {
-    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = parts match {
-      case Seq(catalogName, tail @ _*) =>
+    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
+      assert(nameParts.nonEmpty)
+      nameParts match {
+        case Seq(catalogName, tail @ _*) =>
+          try {
+            Some(
+              (catalogManager.catalog(catalogName), tail))
+          } catch {
+            case _: CatalogNotFoundException =>
+              Some((currentCatalog, nameParts))
+          }
+      }
+    }
+  }
+
+  /**
+   * Extract catalog and table identifier from a multi-part identifier with the current catalog if
+   * needed. Table identifier takes precedence over catalog name.
+   */
+  object CatalogAndTableIdentifier {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
+    private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+
+    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Identifier)] = {
+      assert(nameParts.nonEmpty)
+      if (nameParts.length == 1) {
+        Some((currentCatalog, Identifier.of(Array(), nameParts.head)))
+      } else if (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(globalTempDB)) {
+        // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
+        // API does not support view yet, and we have to use v1 commands to deal with global temp
+        // views. To simplify the implementation, we put global temp views in a special namespace
+        // in the session catalog. The special namespace has higher priority during name resolution.
+        // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
+        // this custom catalog can't be accessed.
+        Some((catalogManager.v2SessionCatalog, nameParts.asIdentifier))
+      } else {
         try {
-          Some(
-            (catalogManager.catalog(catalogName), tail))
+          Some((catalogManager.catalog(nameParts.head), nameParts.tail.asIdentifier))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((currentCatalog, parts))
+            Some((currentCatalog, nameParts.asIdentifier))
         }
+      }
     }
   }
 
@@ -136,38 +171,6 @@ private[sql] trait LookupCatalog extends Logging {
         Some(TableIdentifier(table, Some(database)))
       case _ =>
         None
-    }
-  }
-
-  /**
-   * Extract catalog and the rest name parts as a table identifier.
-   * This does not return an empty array as a table name, thus for the single-part name,
-   * it is resolved to a table name, not a catalog.
-   */
-  object CatalogAndTable {
-    private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-
-    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = {
-      assert(nameParts.nonEmpty)
-
-      if (nameParts.length == 1) {
-        Some((currentCatalog, nameParts))
-      } else if (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(globalTempDB)) {
-        // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
-        // API does not support view yet, and we have to use v1 commands to deal with global temp
-        // views. To simplify the implementation, we put global temp views in a special namespace
-        // in the session catalog. The special namespace has higher priority during name resolution.
-        // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
-        // this custom catalog can't be accessed.
-        Some((catalogManager.v2SessionCatalog, nameParts))
-      } else {
-        try {
-          Some((catalogManager.catalog(nameParts.head), nameParts.tail))
-        } catch {
-          case _: CatalogNotFoundException =>
-            Some((currentCatalog, nameParts))
-        }
-      }
     }
   }
 }
