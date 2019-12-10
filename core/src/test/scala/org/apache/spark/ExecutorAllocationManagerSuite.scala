@@ -1203,7 +1203,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     PrivateMethod[mutable.HashMap[ResourceProfile, Int]](
       Symbol("numExecutorsTargetPerResourceProfile"))
   private val _maxNumExecutorsNeededPerResourceProfile =
-    PrivateMethod[Int](Symbol("maxNumExecutorsNeededPerResourceProfileId"))
+    PrivateMethod[Int](Symbol("maxNumExecutorsNeededPerResourceProfile"))
   private val _addTime = PrivateMethod[Long](Symbol("addTime"))
   private val _schedule = PrivateMethod[Unit](Symbol("schedule"))
   private val _doUpdateRequest = PrivateMethod[Unit](Symbol("doUpdateRequest"))
