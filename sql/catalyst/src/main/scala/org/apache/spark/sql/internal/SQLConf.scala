@@ -1261,8 +1261,7 @@ object SQLConf {
   val STREAMING_STOP_TIMEOUT =
     buildConf("spark.sql.streaming.stopTimeout")
       .doc("How long to wait for the streaming execution thread to stop when calling the " +
-        "streaming query's stop() method in milliseconds. 0 means to wait infinitely. Setting a " +
-        "negative value will throw an IllegalArgumentException when stop is called.")
+        "streaming query's stop() method in milliseconds. 0 or negative values wait indefinitely.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(0L)
 

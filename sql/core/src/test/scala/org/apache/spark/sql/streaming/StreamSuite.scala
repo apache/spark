@@ -19,8 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 
+import scala.concurrent.TimeoutException
 import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
@@ -42,7 +43,7 @@ import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreCon
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -1124,6 +1125,37 @@ class StreamSuite extends StreamTest {
         lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 2)
       }
     )
+  }
+
+  // ProcessingTime trigger generates MicroBatchExecution, and ContinuousTrigger starts a
+  // ContinuousExecution
+  Seq(Trigger.ProcessingTime("1 second"), Trigger.Continuous("1 second")).foreach { trigger =>
+    test(s"SPARK-30143: stop waits until timeout if blocked - trigger: $trigger") {
+      val latch = new CountDownLatch(1)
+      BlockOnStopSourceProvider.setLatch(latch)
+      val sq = spark.readStream.format(BlockOnStopSourceProvider.getClass.getName)
+        .load()
+        .writeStream
+        .format("console")
+        .trigger(trigger)
+        .start()
+      failAfter(60.seconds) {
+        val startTime = System.nanoTime()
+        withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "2000") {
+          intercept[TimeoutException] {
+            sq.stop()
+          }
+        }
+        val duration = (System.nanoTime() - startTime) / 1e6
+        assert(duration >= 2000 * 1e6,
+          s"Should have waited more than 2000 millis, but waited $duration millis")
+
+        latch.countDown()
+        withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "0") {
+          sq.stop()
+        }
+      }
+    }
   }
 }
 
