@@ -34,6 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -333,7 +334,7 @@ private[parquet] class ParquetRowConverter(
                 s"but got a ${value.length()}-byte array.")
 
             val buf = value.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-            val microseconds = buf.getInt * DateTimeUtils.MICROS_PER_MILLIS
+            val microseconds = buf.getInt * MICROS_PER_MILLIS
             val days = buf.getInt
             val months = buf.getInt
             updater.set(new CalendarInterval(months, days, microseconds))

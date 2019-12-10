@@ -34,6 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -213,7 +214,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
           val interval = row.getInterval(ordinal)
           val buf = ByteBuffer.wrap(reusableBuffer)
           buf.order(ByteOrder.LITTLE_ENDIAN)
-            .putInt((interval.milliseconds()).toInt)
+            .putInt(Math.toIntExact(interval.microseconds / MICROS_PER_MILLIS))
             .putInt(interval.days)
             .putInt(interval.months)
           recordConsumer.addBinary(Binary.fromReusedByteArray(reusableBuffer))

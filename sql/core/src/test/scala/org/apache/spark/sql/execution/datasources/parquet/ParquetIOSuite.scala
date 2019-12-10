@@ -751,7 +751,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           Decimal("1234.23456"),
           DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
           DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")),
-          IntervalUtils.fromString("interval 1 month 2 microsecond"))
+          IntervalUtils.safeStringToInterval(
+            UTF8String.fromString("interval 1 month 2 microsecond")))
 
       dataTypes.zip(constantValues).foreach { case (dt, v) =>
         val schema = StructType(StructField("pcol", dt) :: Nil)
