@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1385,7 +1386,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
-        invertIfNotDefined(Like(e, expression(ctx.pattern)))
+        val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
+          if (str.length != 1) {
+            throw new ParseException("Invalid escape string." +
+              "Escape string must contains only one character.", ctx)
+          }
+          str.charAt(0)
+        }.getOrElse('\\')
+        invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
       case SqlBaseParser.NULL if ctx.NOT != null =>
@@ -1460,7 +1468,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val value = expression(ctx.valueExpression)
     ctx.operator.getType match {
       case SqlBaseParser.PLUS =>
-        value
+        UnaryPositive(value)
       case SqlBaseParser.MINUS =>
         UnaryMinus(value)
       case SqlBaseParser.TILDE =>
@@ -1948,11 +1956,29 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     Literal(BigDecimal(ctx.getText).underlying())
   }
 
+  /**
+   * Create a decimal literal for a regular decimal number or a scientific decimal number.
+   */
+  override def visitLegacyDecimalLiteral(
+      ctx: LegacyDecimalLiteralContext): Literal = withOrigin(ctx) {
+    Literal(BigDecimal(ctx.getText).underlying())
+  }
+
+  /**
+   * Create a double literal for number with an exponent, e.g. 1E-30
+   */
+  override def visitExponentLiteral(ctx: ExponentLiteralContext): Literal = {
+    numericLiteral(ctx, ctx.getText, /* exponent values don't have a suffix */
+      Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
+  }
+
   /** Create a numeric literal expression. */
-  private def numericLiteral
-      (ctx: NumberContext, minValue: BigDecimal, maxValue: BigDecimal, typeName: String)
-      (converter: String => Any): Literal = withOrigin(ctx) {
-    val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
+  private def numericLiteral(
+      ctx: NumberContext,
+      rawStrippedQualifier: String,
+      minValue: BigDecimal,
+      maxValue: BigDecimal,
+      typeName: String)(converter: String => Any): Literal = withOrigin(ctx) {
     try {
       val rawBigDecimal = BigDecimal(rawStrippedQualifier)
       if (rawBigDecimal < minValue || rawBigDecimal > maxValue) {
@@ -1970,28 +1996,36 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Byte Literal expression.
    */
   override def visitTinyIntLiteral(ctx: TinyIntLiteralContext): Literal = {
-    numericLiteral(ctx, Byte.MinValue, Byte.MaxValue, ByteType.simpleString)(_.toByte)
+    val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
+    numericLiteral(ctx, rawStrippedQualifier,
+      Byte.MinValue, Byte.MaxValue, ByteType.simpleString)(_.toByte)
   }
 
   /**
    * Create a Short Literal expression.
    */
   override def visitSmallIntLiteral(ctx: SmallIntLiteralContext): Literal = {
-    numericLiteral(ctx, Short.MinValue, Short.MaxValue, ShortType.simpleString)(_.toShort)
+    val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
+    numericLiteral(ctx, rawStrippedQualifier,
+      Short.MinValue, Short.MaxValue, ShortType.simpleString)(_.toShort)
   }
 
   /**
    * Create a Long Literal expression.
    */
   override def visitBigIntLiteral(ctx: BigIntLiteralContext): Literal = {
-    numericLiteral(ctx, Long.MinValue, Long.MaxValue, LongType.simpleString)(_.toLong)
+    val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
+    numericLiteral(ctx, rawStrippedQualifier,
+      Long.MinValue, Long.MaxValue, LongType.simpleString)(_.toLong)
   }
 
   /**
    * Create a Double Literal expression.
    */
   override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = {
-    numericLiteral(ctx, Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
+    val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
+    numericLiteral(ctx, rawStrippedQualifier,
+      Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
   }
 
   /**
@@ -2347,6 +2381,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   type TableHeader = (Seq[String], Boolean, Boolean, Boolean)
 
   /**
+   * Type to keep track of table clauses:
+   * (partitioning, bucketSpec, options, locationSpec, properties, comment).
+   */
+  type TableClauses = (Seq[Transform], Option[BucketSpec], Map[String, String],
+    Map[String, String], Option[String], Option[String])
+
+  /**
    * Validate a create table statement and return the [[TableIdentifier]].
    */
   override def visitCreateTableHeader(
@@ -2493,10 +2534,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
     Option(ctx.comment).map(string).map {
-      properties += CreateNamespaceStatement.COMMENT_PROPERTY_KEY -> _
+      properties += SupportsNamespaces.PROP_COMMENT -> _
     }
     ctx.locationSpec.asScala.headOption.map(visitLocationSpec).map {
-      properties += CreateNamespaceStatement.LOCATION_PROPERTY_KEY -> _
+      properties += SupportsNamespaces.PROP_LOCATION -> _
     }
 
     CreateNamespaceStatement(
@@ -2581,6 +2622,24 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         ctx.EXTENDED != null)
     }
 
+  override def visitCreateTableClauses(ctx: CreateTableClausesContext): TableClauses = {
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
+    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+
+    val partitioning: Seq[Transform] =
+      Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
+    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
+    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val comment = Option(ctx.comment).map(string)
+    (partitioning, bucketSpec, properties, options, location, comment)
+  }
+
   /**
    * Create a table, returning a [[CreateTableStatement]] logical plan.
    *
@@ -2606,26 +2665,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     if (external) {
-      operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
+      operationNotAllowed("CREATE EXTERNAL TABLE ...", ctx)
     }
-
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-    checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
-    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
-    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
-
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val partitioning: Seq[Transform] =
-      Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
-    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
-    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-
-    val provider = ctx.tableProvider.multipartIdentifier.getText
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
-    val comment = Option(ctx.comment).map(string)
+    val defaultProvider = conf.defaultDataSourceName
+    val provider =
+      Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(defaultProvider)
+    val (partitioning, bucketSpec, properties, options, location, comment) =
+      visitCreateTableClauses(ctx.createTableClauses())
 
     Option(ctx.query).map(plan) match {
       case Some(_) if temp =>
@@ -2680,23 +2727,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed("REPLACE EXTERNAL TABLE ... USING", ctx)
     }
 
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-    checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
-    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
-    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
-
+    val (partitioning, bucketSpec, properties, options, location, comment) =
+      visitCreateTableClauses(ctx.createTableClauses())
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val partitioning: Seq[Transform] =
-      Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
-    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
-    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-
     val provider = ctx.tableProvider.multipartIdentifier.getText
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
-    val comment = Option(ctx.comment).map(string)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
 
     Option(ctx.query).map(plan) match {
@@ -3229,6 +3263,57 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create or replace a view. This creates a [[CreateViewStatement]]
+   *
+   * For example:
+   * {{{
+   *   CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] multi_part_name
+   *   [(column_name [COMMENT column_comment], ...) ]
+   *   create_view_clauses
+   *
+   *   AS SELECT ...;
+   *
+   *   create_view_clauses (order insensitive):
+   *     [COMMENT view_comment]
+   *     [TBLPROPERTIES (property_name = property_value, ...)]
+   * }}}
+   */
+  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
+    if (!ctx.identifierList.isEmpty) {
+      operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
+    }
+
+    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.STRING).map(string)
+      }
+    }
+
+    val viewType = if (ctx.TEMPORARY == null) {
+      PersistedView
+    } else if (ctx.GLOBAL != null) {
+      GlobalTempView
+    } else {
+      LocalTempView
+    }
+    CreateViewStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      userSpecifiedColumns,
+      ctx.STRING.asScala.headOption.map(string),
+      ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
+        .getOrElse(Map.empty),
+      Option(source(ctx.query)),
+      plan(ctx.query),
+      ctx.EXISTS != null,
+      ctx.REPLACE != null,
+      viewType)
+  }
+
+  /**
    * Alter the query of a view. This creates a [[AlterViewAsStatement]]
    *
    * For example:
@@ -3273,5 +3358,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     ShowTablePropertiesStatement(
       visitMultipartIdentifier(ctx.table),
       Option(ctx.key).map(visitTablePropertyKey))
+  }
+
+  /**
+   * Create a plan for a SHOW FUNCTIONS command.
+   */
+  override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
+    val (userScope, systemScope) = Option(ctx.identifier)
+      .map(_.getText.toLowerCase(Locale.ROOT)) match {
+        case None | Some("all") => (true, true)
+        case Some("system") => (false, true)
+        case Some("user") => (true, false)
+        case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
+    }
+    val pattern = Option(ctx.pattern).map(string(_))
+    val functionName = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowFunctionsStatement(userScope, systemScope, pattern, functionName)
   }
 }

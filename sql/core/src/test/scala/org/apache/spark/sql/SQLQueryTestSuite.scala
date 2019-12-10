@@ -64,8 +64,17 @@ import org.apache.spark.tags.ExtendedSQLTest
  * The format for input files is simple:
  *  1. A list of SQL queries separated by semicolon.
  *  2. Lines starting with -- are treated as comments and ignored.
- *  3. Lines starting with --SET are used to run the file with the following set of configs.
+ *  3. Lines starting with --SET are used to specify the configs when running this testing file. You
+ *     can set multiple configs in one --SET, using comma to separate them. Or you can use multiple
+ *     --SET statements.
  *  4. Lines starting with --IMPORT are used to load queries from another test file.
+ *  5. Lines starting with --CONFIG_DIM are used to specify config dimensions of this testing file.
+ *     The dimension name is decided by the string after --CONFIG_DIM. For example, --CONFIG_DIM1
+ *     belongs to dimension 1. One dimension can have multiple lines, each line representing one
+ *     config set (one or more configs, separated by comma). Spark will run this testing file many
+ *     times, each time picks one config set from each dimension, until all the combinations are
+ *     tried. For example, if dimension 1 has 2 lines, dimension 2 has 3 lines, this testing file
+ *     will be run 6 times (cartesian product).
  *
  * For example:
  * {{{
@@ -266,7 +275,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     })
 
     if (regenerateGoldenFiles) {
-      runQueries(queries, testCase, Some(settings))
+      runQueries(queries, testCase, settings)
     } else {
       // A config dimension has multiple config sets, and a config set has multiple configs.
       // - config dim:     Seq[Seq[(String, String)]]
@@ -288,7 +297,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
       configSets.foreach { configSet =>
         try {
-          runQueries(queries, testCase, Some(settings ++ configSet))
+          runQueries(queries, testCase, settings ++ configSet)
         } catch {
           case e: Throwable =>
             val configs = configSet.map {
@@ -304,7 +313,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   protected def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Option[Seq[(String, String)]]): Unit = {
+      configSet: Seq[(String, String)]): Unit = {
     // Create a local SparkSession to have stronger isolation between different test cases.
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
@@ -329,12 +338,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       case _ =>
     }
 
-    if (configSet.isDefined) {
+    if (configSet.nonEmpty) {
       // Execute the list of set operation in order to add the desired configs
-      val setOperations = configSet.get.map { case (key, value) => s"set $key=$value" }
+      val setOperations = configSet.map { case (key, value) => s"set $key=$value" }
       logInfo(s"Setting configs: ${setOperations.mkString(", ")}")
       setOperations.foreach(localSparkSession.sql)
     }
+
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
       val (schema, output) = handleExceptions(getNormalizedResult(localSparkSession, sql))

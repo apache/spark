@@ -27,12 +27,15 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 import org.apache.spark.sql.streaming.StreamingQuerySuite.clock
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.types.StructType
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
   test("StreamingQueryProgress - prettyJson") {
@@ -77,6 +80,17 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |  "sink" : {
         |    "description" : "sink",
         |    "numOutputRows" : -1
+        |  },
+        |  "observedMetrics" : {
+        |    "event1" : {
+        |      "c1" : 1,
+        |      "c2" : 3.0
+        |    },
+        |    "event2" : {
+        |      "rc" : 1,
+        |      "min_q" : "hello",
+        |      "max_q" : "world"
+        |    }
         |  }
         |}
       """.stripMargin.trim)
@@ -110,6 +124,22 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
          |  "sink" : {
          |    "description" : "sink",
          |    "numOutputRows" : -1
+         |  },
+         |  "observedMetrics" : {
+         |    "event_a" : {
+         |      "c1" : null,
+         |      "c2" : -20.7
+         |    },
+         |    "event_b1" : {
+         |      "rc" : 33,
+         |      "min_q" : "foo",
+         |      "max_q" : "bar"
+         |    },
+         |    "event_b2" : {
+         |      "rc" : 200,
+         |      "min_q" : "fzo",
+         |      "max_q" : "baz"
+         |    }
          |  }
          |}
       """.stripMargin.trim)
@@ -265,6 +295,17 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
 }
 
 object StreamingQueryStatusAndProgressSuite {
+  private val schema1 = new StructType()
+    .add("c1", "long")
+    .add("c2", "double")
+  private val schema2 = new StructType()
+    .add("rc", "long")
+    .add("min_q", "string")
+    .add("max_q", "string")
+  private def row(schema: StructType, elements: Any*): Row = {
+    new GenericRowWithSchema(elements.toArray, schema)
+  }
+
   val testProgress1 = new StreamingQueryProgress(
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
@@ -293,7 +334,10 @@ object StreamingQueryStatusAndProgressSuite {
         processedRowsPerSecond = Double.PositiveInfinity  // should not be present in the json
       )
     ),
-    sink = SinkProgress("sink", None)
+    sink = SinkProgress("sink", None),
+    observedMetrics = new java.util.HashMap(Map(
+      "event1" -> row(schema1, 1L, 3.0d),
+      "event2" -> row(schema2, 1L, "hello", "world")).asJava)
   )
 
   val testProgress2 = new StreamingQueryProgress(
@@ -317,7 +361,11 @@ object StreamingQueryStatusAndProgressSuite {
         processedRowsPerSecond = Double.NegativeInfinity // should not be present in the json
       )
     ),
-    sink = SinkProgress("sink", None)
+    sink = SinkProgress("sink", None),
+    observedMetrics = new java.util.HashMap(Map(
+      "event_a" -> row(schema1, null, -20.7d),
+      "event_b1" -> row(schema2, 33L, "foo", "bar"),
+      "event_b2" -> row(schema2, 200L, "fzo", "baz")).asJava)
   )
 
   val testStatus = new StreamingQueryStatus("active", true, false)

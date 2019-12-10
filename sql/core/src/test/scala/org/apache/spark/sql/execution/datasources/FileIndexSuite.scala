@@ -352,6 +352,26 @@ class FileIndexSuite extends SharedSparkSession {
       "driver side must not be negative"))
   }
 
+  test ("SPARK-29537: throw exception when user defined a wrong base path") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val wrongBasePath = new File(dir, "unknown")
+      // basePath must be a directory
+      wrongBasePath.mkdir()
+      val parameters = Map("basePath" -> wrongBasePath.getCanonicalPath)
+      val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
+      val msg = intercept[IllegalArgumentException] {
+        // trigger inferPartitioning()
+        fileIndex.partitionSpec()
+      }.getMessage
+      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+    }
+  }
+
   test("refresh for InMemoryFileIndex with FileStatusCache") {
     withTempDir { dir =>
       val fileStatusCache = FileStatusCache.getOrCreate(spark)

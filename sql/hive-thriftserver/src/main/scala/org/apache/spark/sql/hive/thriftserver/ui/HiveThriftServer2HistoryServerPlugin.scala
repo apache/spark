@@ -15,33 +15,26 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql;
+package org.apache.spark.sql.hive.thriftserver.ui
 
-import java.util.Arrays;
-import java.util.List;
-import static java.util.stream.Collectors.toList;
+import org.apache.spark.SparkConf
+import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
+import org.apache.spark.ui.SparkUI
 
-import scala.collection.mutable.WrappedArray;
+class HiveThriftServer2HistoryServerPlugin extends AppHistoryServerPlugin {
 
-import static org.junit.Assert.assertEquals;
+  override def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener] = {
+    Seq(new HiveThriftServer2Listener(store, conf, None, false))
+  }
 
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-
-public class JavaTestUtils {
-    public static <T> void checkAnswer(Dataset<T> actual, List<Row> expected) {
-        assertEquals(expected, actual.collectAsList());
+  override def setupUI(ui: SparkUI): Unit = {
+    val store = new HiveThriftServer2AppStatusStore(ui.store.store)
+    if (store.getSessionCount > 0) {
+      new ThriftServerTab(store, ui)
     }
+  }
 
-    public static List<Row> toRows(Object... objs) {
-        return Arrays.asList(objs)
-            .stream()
-            .map(RowFactory::create)
-            .collect(toList());
-    }
-
-    public static <T> WrappedArray<T> makeArray(T... ts) {
-        return WrappedArray.make(ts);
-    }
+  override def displayOrder: Int = 1
 }
+

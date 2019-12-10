@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StructType
 
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
@@ -291,13 +292,23 @@ class GBTClassificationModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
+  @Since("1.6.0")
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateField(outputSchema, getLeafField($(leafCol)))
+    }
+    outputSchema
+  }
+
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { features: Vector => predictLeaf(features) }
-      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
+        outputSchema($(leafCol)).metadata)
     } else {
       outputData
     }

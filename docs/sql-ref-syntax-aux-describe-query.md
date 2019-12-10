@@ -26,7 +26,7 @@ describe the query output.
 
 ### Syntax
 {% highlight sql %}
-{DESC | DESCRIBE} [QUERY] input_statement
+{ DESC | DESCRIBE } [ QUERY ] input_statement
 {% endhighlight %}
 
 ### Parameters

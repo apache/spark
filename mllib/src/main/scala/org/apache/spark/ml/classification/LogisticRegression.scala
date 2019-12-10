@@ -501,7 +501,7 @@ class LogisticRegression @Since("1.2.0") (
       fitIntercept)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(
-      (createSummarizerBuffer("mean", "variance", "count"), new MultiClassSummarizer))(
+      (createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
       seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
       combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
@@ -582,7 +582,7 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         val featuresMean = summarizer.mean.toArray
-        val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+        val featuresStd = summarizer.std.toArray
 
         if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
           featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {

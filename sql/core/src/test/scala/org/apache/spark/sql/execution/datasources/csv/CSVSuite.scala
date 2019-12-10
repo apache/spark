@@ -2073,15 +2073,6 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
     }
   }
 
-  test("do not produce empty files for empty partitions") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.emptyDataset[String].write.csv(path)
-      val files = new File(path).listFiles()
-      assert(!files.exists(_.getName.endsWith("csv")))
-    }
-  }
-
   test("Do not reuse last good value for bad input field") {
     val schema = StructType(
       StructField("col1", StringType) ::

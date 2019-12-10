@@ -47,7 +47,7 @@ public abstract class BlockTransferMessage implements Encodable {
   public enum Type {
     OPEN_BLOCKS(0), UPLOAD_BLOCK(1), REGISTER_EXECUTOR(2), STREAM_HANDLE(3), REGISTER_DRIVER(4),
     HEARTBEAT(5), UPLOAD_BLOCK_STREAM(6), REMOVE_BLOCKS(7), BLOCKS_REMOVED(8),
-    FETCH_SHUFFLE_BLOCKS(9);
+    FETCH_SHUFFLE_BLOCKS(9), GET_LOCAL_DIRS_FOR_EXECUTORS(10), LOCAL_DIRS_FOR_EXECUTORS(11);
 
     private final byte id;
 
@@ -76,6 +76,8 @@ public abstract class BlockTransferMessage implements Encodable {
         case 7: return RemoveBlocks.decode(buf);
         case 8: return BlocksRemoved.decode(buf);
         case 9: return FetchShuffleBlocks.decode(buf);
+        case 10: return GetLocalDirsForExecutors.decode(buf);
+        case 11: return LocalDirsForExecutors.decode(buf);
         default: throw new IllegalArgumentException("Unknown message type: " + type);
       }
     }

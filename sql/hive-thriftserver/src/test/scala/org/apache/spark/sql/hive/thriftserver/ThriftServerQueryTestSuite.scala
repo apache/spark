@@ -106,16 +106,14 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   override def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Option[Seq[(String, String)]]): Unit = {
+      configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
     withJdbcStatement { statement =>
 
       loadTestData(statement)
 
-      configSet.foreach { configs =>
-        for ((k, v) <- configs) {
-          statement.execute(s"SET $k = $v")
-        }
+      configSet.foreach { case (k, v) =>
+        statement.execute(s"SET $k = $v")
       }
 
       testCase match {
