@@ -180,8 +180,8 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   }
 
   override def dropNamespace(namespace: Array[String]): Boolean = {
-    listNamespaces(namespace).map(dropNamespace)
-    listTables(namespace).map(dropTable)
+    listNamespaces(namespace).foreach(dropNamespace)
+    listTables(namespace).foreach(dropTable)
     Option(namespaces.remove(namespace.toList)).isDefined
   }
 }

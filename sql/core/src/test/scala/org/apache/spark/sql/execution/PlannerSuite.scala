@@ -856,6 +856,30 @@ class PlannerSuite extends SharedSparkSession {
         StructField("f2", StringType, nullable = true),
         StructField("f3", StringType, nullable = false))))
   }
+
+  test("Do not analyze subqueries twice") {
+    // Analyzing the subquery twice will result in stacked
+    // CheckOverflow & PromotePrecision expressions.
+    val df = sql(
+      """
+        |SELECT id,
+        |       (SELECT 1.3000000 * AVG(CAST(id AS DECIMAL(10, 3))) FROM range(13)) AS ref
+        |FROM   range(5)
+        |""".stripMargin)
+
+    val Seq(subquery) = df.queryExecution.executedPlan.subqueriesAll
+    subquery.foreach { node =>
+      node.expressions.foreach { expression =>
+        expression.foreach {
+          case PromotePrecision(_: PromotePrecision) =>
+            fail(s"$expression contains stacked PromotePrecision expressions.")
+          case CheckOverflow(_: CheckOverflow, _, _) =>
+            fail(s"$expression contains stacked CheckOverflow expressions.")
+          case _ => // Ok
+        }
+      }
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements

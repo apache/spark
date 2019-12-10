@@ -423,7 +423,7 @@ class DynamicPartitionPruningSuite
           """
             |SELECT * FROM fact_sk f
             |JOIN dim_store s
-            |ON f.date_id = s.store_id
+            |ON f.store_id = s.store_id
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, false, false)

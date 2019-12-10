@@ -81,7 +81,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
     checkFromInvalidString(null, "cannot be null")
 
-    for (input <- Seq("", " ", "interval", "interval1 day", "foo", "foo 1 day")) {
+    for (input <- Seq("", "interval", "foo", "foo 1 day")) {
       checkFromInvalidString(input, "Error parsing")
     }
   }
@@ -115,9 +115,16 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFromInvalidString("1a1 hour", "invalid value '1a1'")
     checkFromInvalidString("1.1a1 seconds", "invalid value '1.1a1'")
     checkFromInvalidString("2234567890 days", "integer overflow")
+    checkFromInvalidString(". seconds", "invalid value '.'")
+  }
+
+  test("string to interval: whitespaces") {
+    checkFromInvalidString(" ", "Error parsing ' ' to interval")
     checkFromInvalidString("\n", "Error parsing '\n' to interval")
     checkFromInvalidString("\t", "Error parsing '\t' to interval")
-    checkFromInvalidString(". seconds", "invalid value '.'")
+    checkFromString("1 \t day \n 2 \r hour", new CalendarInterval(0, 1, 2 * MICROS_PER_HOUR))
+    checkFromInvalidString("interval1 \t day \n 2 \r hour", "invalid interval prefix interval1")
+    checkFromString("interval\r1\tday", new CalendarInterval(0, 1, 0))
   }
 
   test("string to interval: seconds with fractional part") {

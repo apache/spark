@@ -358,8 +358,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (featuresSummarizer, ySummarizer) = instances.treeAggregate(
-      (createSummarizerBuffer("mean", "variance"),
-        createSummarizerBuffer("mean", "variance", "count")))(
+      (createSummarizerBuffer("mean", "std"),
+        createSummarizerBuffer("mean", "std", "count")))(
       seqOp = (c: (SummarizerBuffer, SummarizerBuffer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight),
           c._2.add(Vectors.dense(instance.label), instance.weight)),
@@ -370,7 +370,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     )
 
     val yMean = ySummarizer.mean(0)
-    val rawYStd = math.sqrt(ySummarizer.variance(0))
+    val rawYStd = ySummarizer.std(0)
 
     instr.logNumExamples(ySummarizer.count)
     instr.logNamedValue(Instrumentation.loggerTags.meanOfLabels, yMean)
@@ -421,7 +421,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     // setting yStd=abs(yMean) ensures that y is not scaled anymore in l-bfgs algorithm.
     val yStd = if (rawYStd > 0) rawYStd else math.abs(yMean)
     val featuresMean = featuresSummarizer.mean.toArray
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val featuresStd = featuresSummarizer.std.toArray
     val bcFeaturesMean = instances.context.broadcast(featuresMean)
     val bcFeaturesStd = instances.context.broadcast(featuresStd)
 

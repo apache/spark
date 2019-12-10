@@ -169,7 +169,7 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
   usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
   since = "3.0.0")
 // scalastyle:on line.size.limit
-case class Version() extends LeafExpression with CodegenFallback {
+case class SparkVersion() extends LeafExpression with CodegenFallback {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
   override def dataType: DataType = StringType

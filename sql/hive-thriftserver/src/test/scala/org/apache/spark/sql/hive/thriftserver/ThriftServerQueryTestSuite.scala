@@ -106,27 +106,21 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   override def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Option[Seq[(String, String)]]): Unit = {
+      configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
     withJdbcStatement { statement =>
 
       loadTestData(statement)
 
-      configSet.foreach { configs =>
-        for ((k, v) <- configs) {
-          statement.execute(s"SET $k = $v")
-        }
+      configSet.foreach { case (k, v) =>
+        statement.execute(s"SET $k = $v")
       }
 
       testCase match {
-        case _: PgSQLTest =>
-          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
-        case _: AnsiTest =>
-          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
-          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
+        case _: PgSQLTest | _: AnsiTest =>
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
         case _ =>
-          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
-          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = false")
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
       }
 
       // Run the SQL queries preparing them for comparison.

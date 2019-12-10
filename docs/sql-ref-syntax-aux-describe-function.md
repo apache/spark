@@ -27,7 +27,7 @@ metadata information is returned along with the extended usage information.
 
 ### Syntax
 {% highlight sql %}
-{DESC | DESCRIBE} FUNCTION [EXTENDED] function_name
+{ DESC | DESCRIBE } FUNCTION [ EXTENDED ] function_name
 {% endhighlight %}
 
 ### Parameters
@@ -40,7 +40,7 @@ metadata information is returned along with the extended usage information.
     it is resolved from the current database.<br><br>
     <b>Syntax:</b>
       <code>
-        [database_name.]function_name
+        [ database_name. ] function_name
       </code>
   </dd>
 </dl>
