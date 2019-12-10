@@ -95,7 +95,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
@@ -1742,34 +1742,6 @@ private[spark] object Utils extends Logging {
 
     // Nothing else to guard against ?
     hashAbs
-  }
-
-  /**
-   * NaN-safe version of `java.lang.Double.compare()` which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN is greater than any non-NaN double.
-   */
-  def nanSafeCompareDoubles(x: Double, y: Double): Int = {
-    val xIsNan: Boolean = java.lang.Double.isNaN(x)
-    val yIsNan: Boolean = java.lang.Double.isNaN(y)
-    if ((xIsNan && yIsNan) || (x == y)) 0
-    else if (xIsNan) 1
-    else if (yIsNan) -1
-    else if (x > y) 1
-    else -1
-  }
-
-  /**
-   * NaN-safe version of `java.lang.Float.compare()` which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN is greater than any non-NaN float.
-   */
-  def nanSafeCompareFloats(x: Float, y: Float): Int = {
-    val xIsNan: Boolean = java.lang.Float.isNaN(x)
-    val yIsNan: Boolean = java.lang.Float.isNaN(y)
-    if ((xIsNan && yIsNan) || (x == y)) 0
-    else if (xIsNan) 1
-    else if (yIsNan) -1
-    else if (x > y) 1
-    else -1
   }
 
   /**

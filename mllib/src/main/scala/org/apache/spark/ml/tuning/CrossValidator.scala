@@ -323,6 +323,11 @@ class CrossValidatorModel private[ml] (
   override def write: CrossValidatorModel.CrossValidatorModelWriter = {
     new CrossValidatorModel.CrossValidatorModelWriter(this)
   }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"CrossValidatorModel: uid=$uid, bestModel=$bestModel, numFolds=${$(numFolds)}"
+  }
 }
 
 @Since("1.6.0")

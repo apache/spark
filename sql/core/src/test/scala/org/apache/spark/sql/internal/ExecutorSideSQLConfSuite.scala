@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession

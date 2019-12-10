@@ -22,9 +22,11 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.FileAlreadyExistsException
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
+import org.scalatest.Assertions._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -127,7 +129,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   def removeExecutor(execId: String): Unit = {
     executors -= execId
     val host = executorIdToHost.get(execId)
-    assert(host != None)
+    assert(host.isDefined)
     val hostId = host.get
     val executorsOnHost = hostToExecutors(hostId)
     executorsOnHost -= execId
@@ -1774,5 +1776,24 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
     assert(!manager.checkSpeculatableTasks(0))
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+  }
+
+  test("TaskOutputFileAlreadyExistException lead to task set abortion") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    assert(sched.taskSetsFailed.isEmpty)
+
+    val offerResult = manager.resourceOffer("exec1", "host1", ANY)
+    assert(offerResult.isDefined,
+      "Expect resource offer on iteration 0 to return a task")
+    assert(offerResult.get.index === 0)
+    val reason = new ExceptionFailure(
+      new TaskOutputFileAlreadyExistException(
+        new FileAlreadyExistsException("file already exists")),
+      Seq.empty[AccumulableInfo])
+    manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
+    assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 }

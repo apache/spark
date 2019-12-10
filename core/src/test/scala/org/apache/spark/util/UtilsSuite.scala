@@ -849,36 +849,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(buffer.toString === "st circular test circular")
   }
 
-  test("nanSafeCompareDoubles") {
-    def shouldMatchDefaultOrder(a: Double, b: Double): Unit = {
-      assert(Utils.nanSafeCompareDoubles(a, b) === JDouble.compare(a, b))
-      assert(Utils.nanSafeCompareDoubles(b, a) === JDouble.compare(b, a))
-    }
-    shouldMatchDefaultOrder(0d, 0d)
-    shouldMatchDefaultOrder(0d, 1d)
-    shouldMatchDefaultOrder(Double.MinValue, Double.MaxValue)
-    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NaN) === 0)
-    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.PositiveInfinity) === 1)
-    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NegativeInfinity) === 1)
-    assert(Utils.nanSafeCompareDoubles(Double.PositiveInfinity, Double.NaN) === -1)
-    assert(Utils.nanSafeCompareDoubles(Double.NegativeInfinity, Double.NaN) === -1)
-  }
-
-  test("nanSafeCompareFloats") {
-    def shouldMatchDefaultOrder(a: Float, b: Float): Unit = {
-      assert(Utils.nanSafeCompareFloats(a, b) === JFloat.compare(a, b))
-      assert(Utils.nanSafeCompareFloats(b, a) === JFloat.compare(b, a))
-    }
-    shouldMatchDefaultOrder(0f, 0f)
-    shouldMatchDefaultOrder(1f, 1f)
-    shouldMatchDefaultOrder(Float.MinValue, Float.MaxValue)
-    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NaN) === 0)
-    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.PositiveInfinity) === 1)
-    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NegativeInfinity) === 1)
-    assert(Utils.nanSafeCompareFloats(Float.PositiveInfinity, Float.NaN) === -1)
-    assert(Utils.nanSafeCompareFloats(Float.NegativeInfinity, Float.NaN) === -1)
-  }
-
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
     conf.set("spark.master", "yarn")

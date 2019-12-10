@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions.{And, SubqueryExpression}
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -27,11 +27,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
+    case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
 
       val (withSubquery, withoutSubquery) = filters.partition(SubqueryExpression.hasSubquery)
-      val normalizedFilters = DataSourceStrategy.normalizeFilters(
+      val normalizedFilters = DataSourceStrategy.normalizeExprs(
         withoutSubquery, relation.output)
 
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.

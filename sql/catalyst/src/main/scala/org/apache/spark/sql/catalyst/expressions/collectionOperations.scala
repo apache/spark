@@ -28,14 +28,14 @@ import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -898,54 +898,6 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   }
 
   override def prettyName: String = "sort_array"
-}
-
-
-/**
- * Sorts the input array in ascending order according to the natural ordering of
- * the array elements and returns it.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(array) - Sorts the input array in ascending order. The elements of the input array must
-      be orderable. Null elements will be placed at the end of the returned array.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
-       ["a","b","c","d",null]
-  """,
-  since = "2.4.0")
-// scalastyle:on line.size.limit
-case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLike {
-
-  override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
-
-  override def arrayExpression: Expression = child
-  override def nullOrder: NullOrder = NullOrder.Greatest
-
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
-      TypeCheckResult.TypeCheckSuccess
-    case ArrayType(dt, _) =>
-      val dtSimple = dt.catalogString
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
-  }
-
-  override def nullSafeEval(array: Any): Any = {
-    sortEval(array, true)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => sortCodegen(ctx, ev, c, "true"))
-  }
-
-  override def prettyName: String = "array_sort"
 }
 
 /**
@@ -2613,7 +2565,7 @@ object Sequence {
       new CalendarInterval(0, 1, 0))
 
     private val backedSequenceImpl = new IntegralSequenceImpl[T](dt)
-    private val microsPerDay = 24 * CalendarInterval.MICROS_PER_HOUR
+    private val microsPerDay = HOURS_PER_DAY * MICROS_PER_HOUR
     // We choose a minimum days(28) in one month to calculate the `intervalStepInMicros`
     // in order to make sure the estimated array length is long enough
     private val microsPerMonth = 28 * microsPerDay

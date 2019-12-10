@@ -120,6 +120,12 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
         throw new IllegalArgumentException(s"No support for metric $mn, distance $dm")
     }
   }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ClusteringEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"distanceMeasure=${$(distanceMeasure)}"
+  }
 }
 
 

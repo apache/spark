@@ -18,49 +18,30 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Period;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+
+import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 /**
  * The internal representation of interval type.
  */
-public final class CalendarInterval implements Serializable {
-  public static final long MICROS_PER_MILLI = 1000L;
-  public static final long MICROS_PER_SECOND = MICROS_PER_MILLI * 1000;
-  public static final long MICROS_PER_MINUTE = MICROS_PER_SECOND * 60;
-  public static final long MICROS_PER_HOUR = MICROS_PER_MINUTE * 60;
-  public static final long MICROS_PER_DAY = MICROS_PER_HOUR * 24;
-  public static final long MICROS_PER_WEEK = MICROS_PER_DAY * 7;
-
+public final class CalendarInterval implements Serializable, Comparable<CalendarInterval> {
   public final int months;
   public final int days;
   public final long microseconds;
 
-  public long milliseconds() {
-    return this.microseconds / MICROS_PER_MILLI;
-  }
-
+  // CalendarInterval is represented by months, days and microseconds. Months and days are not
+  // units of time with a constant length (unlike hours, seconds), so they are two separated fields
+  // from microseconds. One month may be equal to 29, 30 or 31 days and one day may be equal to
+  // 23, 24 or 25 hours (daylight saving)
   public CalendarInterval(int months, int days, long microseconds) {
     this.months = months;
     this.days = days;
     this.microseconds = microseconds;
-  }
-
-  public CalendarInterval add(CalendarInterval that) {
-    int months = this.months + that.months;
-    int days = this.days + that.days;
-    long microseconds = this.microseconds + that.microseconds;
-    return new CalendarInterval(months, days, microseconds);
-  }
-
-  public CalendarInterval subtract(CalendarInterval that) {
-    int months = this.months - that.months;
-    int days = this.days - that.days;
-    long microseconds = this.microseconds - that.microseconds;
-    return new CalendarInterval(months, days, microseconds);
-  }
-
-  public CalendarInterval negate() {
-    return new CalendarInterval(-this.months, -this.days, -this.microseconds);
   }
 
   @Override
@@ -79,40 +60,77 @@ public final class CalendarInterval implements Serializable {
   }
 
   @Override
+  public int compareTo(CalendarInterval that) {
+    long thisAdjustDays =
+      this.microseconds / MICROS_PER_DAY + this.days + this.months * DAYS_PER_MONTH;
+    long thatAdjustDays =
+      that.microseconds / MICROS_PER_DAY + that.days + that.months * DAYS_PER_MONTH;
+    long daysDiff = thisAdjustDays - thatAdjustDays;
+    if (daysDiff == 0) {
+      long msDiff = (this.microseconds % MICROS_PER_DAY) - (that.microseconds % MICROS_PER_DAY);
+      if (msDiff == 0) {
+        return 0;
+      } else if (msDiff > 0) {
+        return 1;
+      } else {
+        return -1;
+      }
+    } else if (daysDiff > 0){
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  @Override
   public String toString() {
-    StringBuilder sb = new StringBuilder("interval");
+    if (months == 0 && days == 0 && microseconds == 0) {
+      return "0 seconds";
+    }
+
+    StringBuilder sb = new StringBuilder();
 
     if (months != 0) {
-      appendUnit(sb, months / 12, "year");
-      appendUnit(sb, months % 12, "month");
+      appendUnit(sb, months / 12, "years");
+      appendUnit(sb, months % 12, "months");
     }
 
-    if (days != 0) {
-      appendUnit(sb, days / 7, "week");
-      appendUnit(sb, days % 7, "day");
-    }
+    appendUnit(sb, days, "days");
 
     if (microseconds != 0) {
       long rest = microseconds;
-      appendUnit(sb, rest / MICROS_PER_HOUR, "hour");
+      appendUnit(sb, rest / MICROS_PER_HOUR, "hours");
       rest %= MICROS_PER_HOUR;
-      appendUnit(sb, rest / MICROS_PER_MINUTE, "minute");
+      appendUnit(sb, rest / MICROS_PER_MINUTE, "minutes");
       rest %= MICROS_PER_MINUTE;
-      appendUnit(sb, rest / MICROS_PER_SECOND, "second");
-      rest %= MICROS_PER_SECOND;
-      appendUnit(sb, rest / MICROS_PER_MILLI, "millisecond");
-      rest %= MICROS_PER_MILLI;
-      appendUnit(sb, rest, "microsecond");
-    } else if (months == 0 && days == 0) {
-      sb.append(" 0 microseconds");
+      if (rest != 0) {
+        String s = BigDecimal.valueOf(rest, 6).stripTrailingZeros().toPlainString();
+        sb.append(s).append(" seconds ");
+      }
     }
 
+    sb.setLength(sb.length() - 1);
     return sb.toString();
   }
 
   private void appendUnit(StringBuilder sb, long value, String unit) {
     if (value != 0) {
-      sb.append(' ').append(value).append(' ').append(unit).append('s');
+      sb.append(value).append(' ').append(unit).append(' ');
     }
   }
+
+  /**
+   * Extracts the date part of the interval.
+   * @return an instance of {@code java.time.Period} based on the months and days fields
+   *         of the given interval, not null.
+   */
+  public Period extractAsPeriod() { return Period.of(0, months, days); }
+
+  /**
+   * Extracts the time part of the interval.
+   * @return an instance of {@code java.time.Duration} based on the microseconds field
+   *         of the given interval, not null.
+   * @throws ArithmeticException if a numeric overflow occurs
+   */
+  public Duration extractAsDuration() { return Duration.of(microseconds, ChronoUnit.MICROS); }
 }

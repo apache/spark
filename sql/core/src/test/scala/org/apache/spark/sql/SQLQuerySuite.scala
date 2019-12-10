@@ -41,6 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class SQLQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -1564,23 +1565,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       }
       e.message.contains("Cannot save interval data type into external storage")
     })
-
-    val e1 = intercept[AnalysisException] {
-      sql("select interval")
-    }
-    assert(e1.message.contains("at least one time unit should be given for interval literal"))
-
-    // Currently we don't yet support nanosecond
-    val e2 = intercept[AnalysisException] {
-      sql("select interval 23 nanosecond")
-    }
-    assert(e2.message.contains("no viable alternative at input 'interval 23 nanosecond'"))
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
-    import org.apache.spark.unsafe.types.CalendarInterval
-    import org.apache.spark.unsafe.types.CalendarInterval.MICROS_PER_WEEK
-
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
     checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
 
@@ -3315,6 +3302,36 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
           |) t3
           |ON t1.x=t3.x
         """.stripMargin).collect()
+    }
+  }
+
+  test("SPARK-29682: Conflicting attributes in Expand are resolved") {
+    val numsDF = Seq(1, 2, 3).toDF("nums")
+    val cubeDF = numsDF.cube("nums").agg(max(lit(0)).as("agcol"))
+
+    checkAnswer(
+      cubeDF.join(cubeDF, "nums"),
+      Row(1, 0, 0) :: Row(2, 0, 0) :: Row(3, 0, 0) :: Nil)
+  }
+
+  test("SPARK-29860: Fix dataType mismatch issue for InSubquery") {
+    withTempView("ta", "tb", "tc", "td", "te", "tf") {
+      sql("CREATE TEMPORARY VIEW ta AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(8, 0))) AS ta(id)")
+      sql("CREATE TEMPORARY VIEW tb AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(7, 2))) AS tb(id)")
+      sql("CREATE TEMPORARY VIEW tc AS SELECT * FROM VALUES(CAST(1 AS DOUBLE)) AS tc(id)")
+      sql("CREATE TEMPORARY VIEW td AS SELECT * FROM VALUES(CAST(1 AS FLOAT)) AS td(id)")
+      sql("CREATE TEMPORARY VIEW te AS SELECT * FROM VALUES(CAST(1 AS BIGINT)) AS te(id)")
+      sql("CREATE TEMPORARY VIEW tf AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(38, 38))) AS tf(id)")
+      val df1 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tb)")
+      checkAnswer(df1, Row(new java.math.BigDecimal(1)))
+      val df2 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tc)")
+      checkAnswer(df2, Row(new java.math.BigDecimal(1)))
+      val df3 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM td)")
+      checkAnswer(df3, Row(new java.math.BigDecimal(1)))
+      val df4 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM te)")
+      checkAnswer(df4, Row(new java.math.BigDecimal(1)))
+      val df5 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tf)")
+      checkAnswer(df5, Array.empty[Row])
     }
   }
 }

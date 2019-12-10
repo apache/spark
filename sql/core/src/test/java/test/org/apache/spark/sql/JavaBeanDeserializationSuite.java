@@ -78,7 +78,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
       .as(encoder);
 
     List<ArrayRecord> records = dataset.collectAsList();
-    Assert.assertEquals(records, ARRAY_RECORDS);
+    Assert.assertEquals(ARRAY_RECORDS, records);
   }
 
   private static final List<MapRecord> MAP_RECORDS = new ArrayList<>();
@@ -121,7 +121,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<MapRecord> records = dataset.collectAsList();
 
-    Assert.assertEquals(records, MAP_RECORDS);
+    Assert.assertEquals(MAP_RECORDS, records);
   }
 
   @Test

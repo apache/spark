@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, StringArrayParam}
+import org.apache.spark.ml.param.{ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCols, HasNumFeatures, HasOutputCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
@@ -198,6 +198,13 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
     }
     val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
+  }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"FeatureHasher: uid=$uid, numFeatures=${$(numFeatures)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(categoricalCols).map(c => s", numCategoricalCols=${c.length}").getOrElse("")
   }
 }
 

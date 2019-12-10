@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -62,8 +64,28 @@ class ResolveSessionCatalog(
          nameParts @ SessionCatalog(catalog, tableName), colName, dataType, comment) =>
       loadTable(catalog, tableName.asIdentifier).collect {
         case v1Table: V1Table =>
-          // TODO(SPARK-29353): we should fallback to the v1 `AlterTableChangeColumnCommand`.
-          throw new AnalysisException("ALTER COLUMN is only supported with v2 tables.")
+          if (colName.length > 1) {
+            throw new AnalysisException(
+              "ALTER COLUMN with qualified column is only supported with v2 tables.")
+          }
+          if (dataType.isEmpty) {
+            throw new AnalysisException(
+              "ALTER COLUMN with v1 tables must specify new data type.")
+          }
+          val builder = new MetadataBuilder
+          // Add comment to metadata
+          comment.map(c => builder.putString("comment", c))
+          // Add Hive type string to metadata.
+          val cleanedDataType = HiveStringType.replaceCharType(dataType.get)
+          if (dataType.get != cleanedDataType) {
+            builder.putString(HIVE_TYPE_STRING, dataType.get.catalogString)
+          }
+          val newColumn = StructField(
+            colName(0),
+            cleanedDataType,
+            nullable = true,
+            builder.build())
+          AlterTableChangeColumnCommand(tableName.asTableIdentifier, colName(0), newColumn)
       }.getOrElse {
         val typeChange = dataType.map { newDataType =>
           TableChange.updateColumnType(colName.toArray, newDataType, true)
@@ -127,7 +149,7 @@ class ResolveSessionCatalog(
           throw new AnalysisException(
             "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
         }
-        val changes = Seq(TableChange.setProperty("location", newLoc))
+        val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
         createAlterTable(nameParts, catalog, tableName, changes)
       }
 
@@ -138,16 +160,29 @@ class ResolveSessionCatalog(
     case AlterViewUnsetPropertiesStatement(SessionCatalog(catalog, tableName), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(tableName.asTableIdentifier, keys, ifExists, isView = true)
 
-    case DeleteFromStatement(
-         nameParts @ SessionCatalog(catalog, tableName), tableAlias, condition) =>
-      loadTable(catalog, tableName.asIdentifier).collect {
-        case v1Table: V1Table =>
-          throw new AnalysisException("DELETE FROM is only supported with v2 tables.")
-      }.getOrElse {
-        val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
-        val aliased = tableAlias.map(SubqueryAlias(_, r)).getOrElse(r)
-        DeleteFromTable(aliased, condition)
+    case d @ DescribeNamespaceStatement(SessionCatalog(_, nameParts), _) =>
+      if (nameParts.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${nameParts.quoted}")
       }
+      DescribeDatabaseCommand(nameParts.head, d.extended)
+
+    case AlterNamespaceSetPropertiesStatement(SessionCatalog(_, nameParts), properties) =>
+      if (nameParts.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${nameParts.quoted}")
+      }
+      AlterDatabasePropertiesCommand(nameParts.head, properties)
+
+    case AlterNamespaceSetLocationStatement(SessionCatalog(_, nameParts), location) =>
+      if (nameParts.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${nameParts.quoted}")
+      }
+      AlterDatabaseSetLocationCommand(nameParts.head, location)
+
+    case RenameTableStatement(SessionCatalog(_, oldName), newNameParts, isView) =>
+      AlterTableRenameCommand(oldName.asTableIdentifier, newNameParts.asTableIdentifier, isView)
 
     case DescribeTableStatement(
          nameParts @ SessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
@@ -268,11 +303,9 @@ class ResolveSessionCatalog(
           s"The database name is not valid: ${nameParts.quoted}")
       }
 
-      val comment = c.properties.get(CreateNamespaceStatement.COMMENT_PROPERTY_KEY)
-      val location = c.properties.get(CreateNamespaceStatement.LOCATION_PROPERTY_KEY)
-      val newProperties = c.properties -
-        CreateNamespaceStatement.COMMENT_PROPERTY_KEY -
-        CreateNamespaceStatement.LOCATION_PROPERTY_KEY
+      val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
+      val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
+      val newProperties = c.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala
       CreateDatabaseCommand(nameParts.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespaceStatement(SessionCatalog(_, nameParts), _, _) =>
@@ -291,6 +324,15 @@ class ResolveSessionCatalog(
 
     case ShowTablesStatement(None, pattern) if isSessionCatalog(currentCatalog) =>
       ShowTablesCommand(None, pattern)
+
+    case ShowTableStatement(namespace, pattern, partitionsSpec) =>
+      val db = namespace match {
+        case Some(namespace) if namespace.length != 1 =>
+          throw new AnalysisException(
+            s"The database name is not valid: ${namespace.quoted}")
+        case _ => namespace.map(_.head)
+      }
+      ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
 
     case AnalyzeTableStatement(tableName, partitionSpec, noScan) =>
       val v1TableName = parseV1Table(tableName, "ANALYZE TABLE")
@@ -370,6 +412,13 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
+    case AlterTableAddPartitionStatement(tableName, partitionSpecsAndLocs, ifNotExists) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE ADD PARTITION")
+      AlterTableAddPartitionCommand(
+        v1TableName.asTableIdentifier,
+        partitionSpecsAndLocs,
+        ifNotExists)
+
     case AlterTableRenamePartitionStatement(tableName, from, to) =>
       val v1TableName = parseV1Table(tableName, "ALTER TABLE RENAME PARTITION")
       AlterTableRenamePartitionCommand(
@@ -385,6 +434,60 @@ class ResolveSessionCatalog(
         ifExists,
         purge,
         retainData)
+
+    case AlterTableSerDePropertiesStatement(
+      tableName, serdeClassName, serdeProperties, partitionSpec) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE SerDe Properties")
+      AlterTableSerDePropertiesCommand(
+        v1TableName.asTableIdentifier,
+        serdeClassName,
+        serdeProperties,
+        partitionSpec)
+
+    case AlterViewAsStatement(tableName, originalText, query) =>
+      val v1TableName = parseV1Table(tableName, "ALTER VIEW QUERY")
+      AlterViewAsCommand(
+        v1TableName.asTableIdentifier,
+        originalText,
+        query)
+
+    case CreateViewStatement(
+      tableName, userSpecifiedColumns, comment, properties,
+      originalText, child, allowExisting, replace, viewType) =>
+
+      val v1TableName = parseV1Table(tableName, "CREATE VIEW")
+      CreateViewCommand(
+        v1TableName.asTableIdentifier,
+        userSpecifiedColumns,
+        comment,
+        properties,
+        originalText,
+        child,
+        allowExisting,
+        replace,
+        viewType)
+
+    case ShowTablePropertiesStatement(SessionCatalog(_, tableName), propertyKey) =>
+      ShowTablePropertiesCommand(
+        tableName.asTableIdentifier,
+        propertyKey)
+
+    case ShowFunctionsStatement(userScope, systemScope, pattern, fun) =>
+      val (database, function) = fun match {
+        case Some(CatalogAndIdentifierParts(catalog, functionName)) =>
+          if (isSessionCatalog(catalog)) {
+            functionName match {
+              case Seq(db, fn) => (Some(db), Some(fn))
+              case Seq(fn) => (None, Some(fn))
+              case _ =>
+                throw new AnalysisException(s"Unsupported function name '${functionName.quoted}'")
+            }
+          } else {
+            throw new AnalysisException ("SHOW FUNCTIONS is only supported in v1 catalog")
+          }
+        case None => (None, pattern)
+      }
+      ShowFunctionsCommand(database, function, userScope, systemScope)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {

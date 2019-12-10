@@ -1,3 +1,8 @@
+-- Test sort operator with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 -- Q1. testing window functions with order by
 create table spark_10747(col1 int, col2 int, col3 int) using parquet;
 

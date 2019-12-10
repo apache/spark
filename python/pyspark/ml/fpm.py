@@ -166,7 +166,7 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     >>> fp = FPGrowth(minSupport=0.2, minConfidence=0.7)
     >>> fpm = fp.fit(data)
     >>> fpm.setPredictionCol("newPrediction")
-    FPGrowth...
+    FPGrowthModel...
     >>> fpm.freqItemsets.show(5)
     +---------+----+
     |    items|freq|

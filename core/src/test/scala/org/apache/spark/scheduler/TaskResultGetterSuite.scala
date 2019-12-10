@@ -29,6 +29,7 @@ import com.google.common.util.concurrent.MoreExecutors
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyLong}
 import org.mockito.Mockito.{spy, times, verify}
+import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 

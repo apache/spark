@@ -391,7 +391,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     withTempPath { dir =>
       val basePath = dir.getCanonicalPath
       val schema = StructType(Array(StructField("name", DecimalType(10, 5), false)))
-      val rowRDD = sparkContext.parallelize(Array(Row(Decimal("67123.45"))))
+      val rowRDD = sparkContext.parallelize(Seq(Row(Decimal("67123.45"))))
       val df = spark.createDataFrame(rowRDD, schema)
       df.write.parquet(basePath)
 

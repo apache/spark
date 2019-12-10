@@ -20,6 +20,8 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.sql.Date
 
+import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -266,6 +268,55 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     assert(
       message.contains("Cannot overwrite a path that is also being read from."),
       "INSERT OVERWRITE to a table while querying it should not be allowed.")
+  }
+
+  test("SPARK-30112: it is allowed to write to a table while querying it for " +
+    "dynamic partition overwrite.") {
+    Seq(PartitionOverwriteMode.DYNAMIC.toString,
+        PartitionOverwriteMode.STATIC.toString).foreach { mode =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {
+        withTable("insertTable") {
+          sql(
+            """
+              |CREATE TABLE insertTable(i int, part1 int, part2 int) USING PARQUET
+              |PARTITIONED BY (part1, part2)
+            """.stripMargin)
+
+          sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2=1) SELECT 1")
+          checkAnswer(spark.table("insertTable"), Row(1, 1, 1))
+          sql("INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2=2) SELECT 2")
+          checkAnswer(spark.table("insertTable"), Row(1, 1, 1) :: Row(2, 1, 2) :: Nil)
+
+          if (mode == PartitionOverwriteMode.DYNAMIC.toString) {
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                |SELECT i + 1, part2 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"), Row(2, 1, 1) :: Row(3, 1, 2) :: Nil)
+
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                |SELECT i + 1, part2 + 1 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"),
+              Row(2, 1, 1) :: Row(3, 1, 2) :: Row(4, 1, 3) :: Nil)
+          } else {
+            val message = intercept[AnalysisException] {
+              sql(
+                """
+                  |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                  |SELECT i + 1, part2 FROM insertTable
+                """.stripMargin)
+            }.getMessage
+            assert(
+              message.contains("Cannot overwrite a path that is also being read from."),
+              "INSERT OVERWRITE to a table while querying it should not be allowed.")
+          }
+        }
+      }
+    }
   }
 
   test("Caching")  {
@@ -734,5 +785,36 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }.getMessage
       assert(msg.contains("Cannot write nullable values to non-null column 's'"))
     }
+  }
+
+  test("Stop task set if FileAlreadyExistsException was thrown") {
+    withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(i INT, part1 INT) USING PARQUET
+            |PARTITIONED BY (part1)
+          """.stripMargin)
+
+        val df = Seq((1, 1)).toDF("i", "part1")
+        val err = intercept[SparkException] {
+          df.write.mode("overwrite").format("parquet").insertInto("t")
+        }
+        assert(err.getCause.getMessage.contains("can not write to output file: " +
+          "org.apache.hadoop.fs.FileAlreadyExistsException"))
+      }
+    }
+  }
+}
+
+class FileExistingTestFileSystem extends RawLocalFileSystem {
+  override def create(
+      f: Path,
+      overwrite: Boolean,
+      bufferSize: Int,
+      replication: Short,
+      blockSize: Long): FSDataOutputStream = {
+    throw new FileAlreadyExistsException(s"${f.toString} already exists")
   }
 }

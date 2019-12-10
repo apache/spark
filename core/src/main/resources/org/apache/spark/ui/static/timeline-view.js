@@ -83,8 +83,9 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
   });
 }
 
-$(function (){
-  if (window.localStorage.getItem("expand-application-timeline") == "true") {
+$(function () {
+  if ($("span.expand-application-timeline").length &&
+      window.localStorage.getItem("expand-application-timeline") == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem("expand-application-timeline", "false");
     $("span.expand-application-timeline").trigger('click');
@@ -159,8 +160,9 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
   });
 }
 
-$(function (){
-  if (window.localStorage.getItem("expand-job-timeline") == "true") {
+$(function () {
+  if ($("span.expand-job-timeline").length &&
+      window.localStorage.getItem("expand-job-timeline") == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem("expand-job-timeline", "false");
     $("span.expand-job-timeline").trigger('click');
@@ -226,8 +228,9 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
   });
 }
 
-$(function (){
-  if (window.localStorage.getItem("expand-task-assignment-timeline") == "true") {
+$(function () {
+  if ($("span.expand-task-assignment-timeline").length &&
+      window.localStorage.getItem("expand-task-assignment-timeline") == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem("expand-task-assignment-timeline", "false");
     $("span.expand-task-assignment-timeline").trigger('click');
