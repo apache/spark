@@ -91,7 +91,7 @@ object ArrowUtils {
             toArrowField(field.name, field.dataType, field.nullable, timeZoneId)
           }.toSeq.asJava)
       case MapType(keyType, valueType, valueContainsNull) =>
-        val mapType = new FieldType(valueContainsNull, new ArrowType.Map(false), null)
+        val mapType = new FieldType(nullable, new ArrowType.Map(false), null)
         // Note: Map Type struct can not be null, Struct Type key field can not be null
         new Field(name, mapType,
           Seq(toArrowField(MapVector.DATA_VECTOR_NAME,
