@@ -556,7 +556,7 @@ object functions {
    * @since 2.0.0
    */
   def last(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
-    new Last("last", e.expr, Literal(ignoreNulls))
+    new Last(e.expr, Literal(ignoreNulls))
   }
 
   /**
