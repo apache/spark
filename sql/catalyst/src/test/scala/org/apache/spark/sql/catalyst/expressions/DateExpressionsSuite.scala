@@ -1131,8 +1131,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SubtractDates(Literal(end), epochDate),
       IntervalUtils.stringToInterval(UTF8String.fromString("interval 49 years 9 months 4 days")))
     checkEvaluation(SubtractDates(epochDate, Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString(
-        "interval -49 years -9 months -4 days")))
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval -49 years -9 months -4 days")))
     checkEvaluation(
       SubtractDates(
         Literal(LocalDate.of(10000, 1, 1)),

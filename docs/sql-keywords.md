@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-When `spark.sql.dialect.spark.ansi.enabled` is true, Spark SQL will use the ANSI mode parser.
+When `spark.sql.ansi.enabled` is true, Spark SQL will use the ANSI mode parser.
 In this mode, Spark SQL has two kinds of keywords:
 * Reserved keywords: Keywords that are reserved and can't be used as identifiers for table, view, column, function, alias, etc.
 * Non-reserved keywords: Keywords that have a special meaning only in particular contexts and can be used as identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK can be used as identifiers in other places.
