@@ -936,7 +936,7 @@ class DataSourceV2SQLSuite
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test"),
         Row("Owner Name", Utils.getCurrentUserName()),
-        Row("Owner Type", PrincipalType.USER.name())
+        Row("Owner Type", "USER")
       ))
     }
   }
@@ -952,7 +952,7 @@ class DataSourceV2SQLSuite
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test"),
         Row("Owner Name", Utils.getCurrentUserName()),
-        Row("Owner Type", PrincipalType.USER.name()),
+        Row("Owner Type", "USER"),
         Row("Properties", "((a,b),(b,a),(c,c))")
       ))
     }
@@ -969,7 +969,7 @@ class DataSourceV2SQLSuite
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test_2"),
         Row("Owner Name", Utils.getCurrentUserName()),
-        Row("Owner Type", PrincipalType.USER.name())
+        Row("Owner Type", "USER")
       ))
     }
   }
@@ -985,7 +985,7 @@ class DataSourceV2SQLSuite
         Row("Description", "test namespace"),
         Row("Location", "/tmp/ns_test_3"),
         Row("Owner Name", "adminRole"),
-        Row("Owner Type", PrincipalType.ROLE.name())
+        Row("Owner Type", "ROLE")
       ))
     }
   }
