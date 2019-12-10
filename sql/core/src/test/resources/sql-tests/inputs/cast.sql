@@ -75,11 +75,3 @@ select cast('1.0 ' as DEC);
 select cast('\t\t true \n\r ' as boolean);
 select cast('\t\n false \t\r' as boolean);
 select cast('\t\n xyz \t\r' as boolean);
-
-
--- real / numeric
-select cast(1.0 as real);
-select cast('1' as real);
-select cast(1.0 as numeric);
-select cast(1.0 as numeric(3));
-select cast(1.08 as numeric(3,1));

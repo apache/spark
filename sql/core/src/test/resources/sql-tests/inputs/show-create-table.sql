@@ -60,7 +60,7 @@ TBLPROPERTIES ('a' = '1');
 SHOW CREATE TABLE tbl;
 DROP TABLE tbl;
 
--- new real/numeric type
+-- float alias real and decimal alias numeric
 CREATE TABLE tbl (a REAL, b NUMERIC, c NUMERIC(10), d NUMERIC(10,1)) USING parquet;
 SHOW CREATE TABLE tbl;
 DROP TABLE tbl;
