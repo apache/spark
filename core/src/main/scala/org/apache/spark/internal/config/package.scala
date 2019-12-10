@@ -1499,6 +1499,18 @@ package object config {
       .doubleConf
       .createWithDefault(0.75)
 
+  private[spark] val SPECULATION_TASK_DURATION_THRESHOLD =
+    ConfigBuilder("spark.speculation.task.duration.threshold")
+      .doc("Task duration after which scheduler would try to speculative run the task. If " +
+        "provided, tasks would be speculatively run if current stage contains less tasks " +
+        "than or equal to the number of slots on a single executor and the task is taking " +
+        "longer time than the threshold. This config helps speculate stage with very few " +
+        "tasks. Regular speculation configs may also apply if the executor slots are " +
+        "large enough. E.g. tasks might be re-launched if there are enough successful runs " +
+        "even though the threshold hasn't been reached.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .stringConf
