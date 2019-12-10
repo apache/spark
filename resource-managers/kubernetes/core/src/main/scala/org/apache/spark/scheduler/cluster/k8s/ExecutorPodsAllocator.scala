@@ -75,7 +75,7 @@ private[spark] class ExecutorPodsAllocator(
   // Executors that have been deleted by this allocator but not yet detected as deleted in
   // a snapshot from the API server. This is used to deny registration from these executors
   // if they happen to come up before the deletion takes effect.
-  @volatile private var excessExecutors = Set.empty[Long]
+  @volatile private var deletedExecutorIds = Set.empty[Long]
 
   def start(applicationId: String): Unit = {
     snapshotsStore.addSubscriber(podAllocationDelay) {
@@ -90,7 +90,7 @@ private[spark] class ExecutorPodsAllocator(
     }
   }
 
-  def isDeleted(executorId: String): Boolean = excessExecutors.contains(executorId.toLong)
+  def isDeleted(executorId: String): Boolean = deletedExecutorIds.contains(executorId.toLong)
 
   private def onNewSnapshots(
       applicationId: String,
@@ -150,15 +150,15 @@ private[spark] class ExecutorPodsAllocator(
 
     // Make a local, non-volatile copy of the reference since it's used multiple times. This
     // is the only method that modifies the list, so this is safe.
-    var _excessExecutors = excessExecutors
+    var _deletedExecutorIds = deletedExecutorIds
 
     if (snapshots.nonEmpty) {
       logDebug(s"Pod allocation status: $currentRunningCount running, " +
         s"${currentPendingExecutors.size} pending, " +
         s"${newlyCreatedExecutors.size} unacknowledged.")
 
-      val existingExecs = snapshots.last.executorPods.keySet
-      _excessExecutors = _excessExecutors.filter(existingExecs.contains)
+      val existingExecs = lastSnapshot.executorPods.keySet
+      _deletedExecutorIds = _deletedExecutorIds.filter(existingExecs.contains)
     }
 
     val currentTotalExpectedExecutors = totalExpectedExecutors.get
@@ -183,7 +183,7 @@ private[spark] class ExecutorPodsAllocator(
 
       if (toDelete.nonEmpty) {
         logInfo(s"Deleting ${toDelete.size} excess pod requests (${toDelete.mkString(",")}).")
-        _excessExecutors = _excessExecutors ++ toDelete
+        _deletedExecutorIds = _deletedExecutorIds ++ toDelete
 
         Utils.tryLogNonFatalError {
           kubernetesClient
@@ -225,7 +225,7 @@ private[spark] class ExecutorPodsAllocator(
       }
     }
 
-    excessExecutors = _excessExecutors
+    deletedExecutorIds = _deletedExecutorIds
 
     // Update the flag that helps the setTotalExpectedExecutors() callback avoid triggering this
     // update method when not needed.
