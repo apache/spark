@@ -344,29 +344,4 @@ private[sql] object SQLTestData {
   case class CourseSales(course: String, year: Int, earnings: Double)
   case class TrainingSales(training: String, sales: CourseSales)
   case class IntervalData(data: CalendarInterval)
-//  case class TestUDT() extends UserDefinedType[IExampleBaseType] {
-//
-//    override def sqlType: StructType = {
-//      StructType(Seq(
-//        StructField("intfield", IntegerType, nullable = false)))
-//    }
-//
-//    override def serialize(obj: IExampleBaseType): InternalRow = {
-//      val row = new GenericInternalRow(1)
-//      row.setInt(0, obj.field)
-//      row
-//    }
-//
-//    override def deserialize(datum: Any): IExampleBaseType = {
-//      datum match {
-//        case row: InternalRow =>
-//          require(row.numFields == 1,
-//            "TestUDT requires row with length == 1")
-//          val field = row.getInt(0)
-//          new ExampleBaseClass(field)
-//      }
-//    }
-//
-//    override def userClass: Class[IExampleBaseType] = classOf[IExampleBaseType]
-//  }
 }

@@ -46,7 +46,6 @@ object ArrowUtils {
     case BinaryType => ArrowType.Binary.INSTANCE
     case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
     case DateType => new ArrowType.Date(DateUnit.DAY)
-    case MapType(k, v, nullable) => new ArrowType.Map(false)
     case TimestampType =>
       if (timeZoneId == null) {
         throw new UnsupportedOperationException(

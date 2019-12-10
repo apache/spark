@@ -160,7 +160,7 @@ public final class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof MapVector) {
       MapVector mapVector = (MapVector) vector;
       accessor = new MapAccessor(mapVector);
-    }  else if (vector instanceof ListVector) {
+    } else if (vector instanceof ListVector) {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
     } else if (vector instanceof StructVector) {
