@@ -291,7 +291,7 @@ private[yarn] class YarnAllocator(
     resourceProfileToTotalExecs.foreach { case (rp, num) =>
       if (!rpIdToYarnResource.contains(rp.id)) {
         getOrUpdateRunningExecutorForRPId(rp.id)
-        logInfo(s"resource profile ${rp.id} doesn't exist")
+        logInfo(s"resource profile ${rp.id} doesn't exist, adding it")
         val execResources = rp.executorResources
         execResources.foreach { case (r, execReq) =>
           r match {
@@ -354,7 +354,7 @@ private[yarn] class YarnAllocator(
 
     val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
       if (numExecs != getTargetNumExecutorsForRPId(rp.id)) {
-        logInfo(s"Driver requested a total number of $numExecs executor(s) " +
+        logInfo(s"Driver updated requested a total number of $numExecs executor(s) " +
           s"for resource profile id: ${rp.id}.")
         targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
         allocatorBlacklistTracker.setSchedulerBlacklistedNodes(nodeBlacklist)

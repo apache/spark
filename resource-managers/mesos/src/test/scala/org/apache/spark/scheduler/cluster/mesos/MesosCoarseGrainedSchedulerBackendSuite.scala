@@ -672,7 +672,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
         Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1, "hosts13" -> 1)),
       Map(defaultResourceProfile -> 4))
-    )
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
