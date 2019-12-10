@@ -92,14 +92,14 @@ private[sql] trait LookupCatalog extends Logging {
    * Catalog name takes precedence over namespaces.
    */
   object CatalogAndNamespace {
-    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Option[Seq[String]])] = parts match {
+    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = parts match {
       case Seq(catalogName, tail @ _*) =>
         try {
           Some(
-            (catalogManager.catalog(catalogName), if (tail.isEmpty) { None } else { Some(tail) }))
+            (catalogManager.catalog(catalogName), tail))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((currentCatalog, Some(parts)))
+            Some((currentCatalog, parts))
         }
     }
   }
@@ -140,32 +140,33 @@ private[sql] trait LookupCatalog extends Logging {
   }
 
   /**
-   * Extract catalog and the rest name parts from a multi-part identifier.
+   * Extract catalog and the rest name parts as a table identifier.
+   * This does not return an empty array as a table name, thus for the single-part name,
+   * it is resolved to a table name, not a catalog.
    */
-  object CatalogAndIdentifierParts {
+  object CatalogAndTable {
     private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
 
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = {
       assert(nameParts.nonEmpty)
-      try {
+
+      if (nameParts.length == 1) {
+        Some((currentCatalog, nameParts))
+      } else if (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(globalTempDB)) {
         // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
         // API does not support view yet, and we have to use v1 commands to deal with global temp
         // views. To simplify the implementation, we put global temp views in a special namespace
         // in the session catalog. The special namespace has higher priority during name resolution.
         // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
         // this custom catalog can't be accessed.
-        if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
-          if (nameParts.size == 2) {
-            Some((catalogManager.v2SessionCatalog, nameParts))
-          } else {
-            Some((currentCatalog, nameParts))
-          }
-        } else {
+        Some((catalogManager.v2SessionCatalog, nameParts))
+      } else {
+        try {
           Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+        } catch {
+          case _: CatalogNotFoundException =>
+            Some((currentCatalog, nameParts))
         }
-      } catch {
-        case _: CatalogNotFoundException =>
-          Some((currentCatalog, nameParts))
       }
     }
   }
