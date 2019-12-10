@@ -88,27 +88,24 @@ private[sql] trait LookupCatalog extends Logging {
   }
 
   /**
-   * Extract catalog and namespace from a multi-part identifier with the current catalog if needed.
+   * Extract catalog and namespace from a multi-part name with the current catalog if needed.
    * Catalog name takes precedence over namespaces.
    */
   object CatalogAndNamespace {
     def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
       assert(nameParts.nonEmpty)
-      nameParts match {
-        case Seq(catalogName, tail @ _*) =>
-          try {
-            Some((catalogManager.catalog(catalogName), tail))
-          } catch {
-            case _: CatalogNotFoundException =>
-              Some((currentCatalog, nameParts))
-          }
+      try {
+        Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+      } catch {
+        case _: CatalogNotFoundException =>
+          Some((currentCatalog, nameParts))
       }
     }
   }
 
   /**
-   * Extract catalog and table identifier from a multi-part identifier with the current catalog if
-   * needed. Table identifier takes precedence over catalog name.
+   * Extract catalog and identifier from a multi-part name with the current catalog if needed.
+   * Identifier takes precedence over catalog name.
    */
   object CatalogAndIdentifier {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
