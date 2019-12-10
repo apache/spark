@@ -155,6 +155,7 @@ trait StreamingQuery {
    *
    * @since 2.0.0
    */
+  @throws[TimeoutException]
   def stop(): Unit
 
   /**
