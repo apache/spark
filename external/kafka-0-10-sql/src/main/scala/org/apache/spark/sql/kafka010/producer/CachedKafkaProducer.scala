@@ -15,19 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.kafka010.producer
 
-import org.scalatest.BeforeAndAfterAll
+import java.{util => ju}
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.kafka010.producer.InternalKafkaProducerPool
+import scala.util.control.NonFatal
 
-/** A trait to clean cached Kafka producers in `afterAll` */
-trait KafkaTest extends BeforeAndAfterAll {
-  self: SparkFunSuite =>
+import org.apache.kafka.clients.producer.KafkaProducer
 
-  override def afterAll(): Unit = {
-    super.afterAll()
-    InternalKafkaProducerPool.reset()
+import org.apache.spark.internal.Logging
+
+private[kafka010] class CachedKafkaProducer(
+  val cacheKey: Seq[(String, Object)],
+  val producer: KafkaProducer[Array[Byte], Array[Byte]]) extends Logging {
+  val id: String = ju.UUID.randomUUID().toString
+
+  private[producer] def close(): Unit = {
+    try {
+      logInfo(s"Closing the KafkaProducer with id: $id.")
+      producer.close()
+    } catch {
+      case NonFatal(e) => logWarning("Error while closing kafka producer.", e)
+    }
   }
 }
