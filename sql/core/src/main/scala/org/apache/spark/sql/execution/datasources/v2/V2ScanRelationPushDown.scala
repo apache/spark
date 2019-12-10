@@ -31,7 +31,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
       val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
 
       val (withSubquery, withoutSubquery) = filters.partition(SubqueryExpression.hasSubquery)
-      val normalizedFilters = DataSourceStrategy.normalizeFilters(
+      val normalizedFilters = DataSourceStrategy.normalizeExprs(
         withoutSubquery, relation.output)
 
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.

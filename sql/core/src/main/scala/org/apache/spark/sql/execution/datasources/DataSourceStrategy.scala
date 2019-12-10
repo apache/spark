@@ -429,14 +429,14 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
 
 object DataSourceStrategy {
   /**
-   * The attribute name of predicate could be different than the one in schema in case of
-   * case insensitive, we should change them to match the one in schema, so we do not need to
-   * worry about case sensitivity anymore.
+   * The attribute name may differ from the one in the schema if the query analyzer
+   * is case insensitive. We should change attribute names to match the ones in the schema,
+   * so we do not need to worry about case sensitivity anymore.
    */
-  protected[sql] def normalizeFilters(
-      filters: Seq[Expression],
+  protected[sql] def normalizeExprs(
+      exprs: Seq[Expression],
       attributes: Seq[AttributeReference]): Seq[Expression] = {
-    filters.map { e =>
+    exprs.map { e =>
       e transform {
         case a: AttributeReference =>
           a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
