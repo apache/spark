@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.spark.{FutureAction, MapOutputStatistics}
@@ -52,8 +51,6 @@ abstract class QueryStageExec extends LeafExecNode {
    * The sub-tree of the query plan that belongs to this query stage.
    */
   val plan: SparkPlan
-
-  var visited: Boolean = false
 
   /**
    * Materialize this query stage, to prepare for the execution, like submitting map stages,

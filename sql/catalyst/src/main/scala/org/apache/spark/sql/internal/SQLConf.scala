@@ -459,14 +459,14 @@ object SQLConf {
     .createWithDefault(true)
 
   val ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD =
-    buildConf("spark.sql.adaptive.skewedPartitionSizeThreshold")
+    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionSizeThreshold")
       .doc("Configures the minimum size in bytes for a partition that is considered as a skewed " +
         "partition in adaptive skewed join.")
       .longConf
       .createWithDefault(64 * 1024 * 1024L)
 
   val ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR =
-    buildConf("spark.sql.adaptive.skewedPartitionFactor")
+    buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionFactor")
       .doc("A partition is considered as a skewed partition if its size is larger than" +
         " this factor multiple the median partition size and also larger than " +
         s" ${ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key}")

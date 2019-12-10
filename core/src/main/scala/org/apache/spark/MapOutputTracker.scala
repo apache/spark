@@ -344,7 +344,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * Called from executors to get the server URIs and output sizes for each shuffle block that
    * needs to be read from a given range of map output partitions (startPartition is included but
    * endPartition is excluded from the range) and is produced by
-   * a range mapper (startMapId, endMapId, startMapId is included and the endMapId is excluded).
+   * a range of mappers (startMapId, endMapId, startMapId is included and the endMapId is excluded).
    *
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)

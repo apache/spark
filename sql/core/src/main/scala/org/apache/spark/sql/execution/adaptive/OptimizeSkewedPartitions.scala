@@ -58,9 +58,9 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
     if (bytes(bytesLen / 2) > 0) bytes(bytesLen / 2) else 1
   }
 
-  /*
-  * Get all the map data size for specific reduce partitionId.
-  */
+  /**
+   * Get all the map data size for specific reduce partitionId.
+   */
   def getMapSizeForSpecificPartition(partitionId: Int, shuffleId: Int): Array[Long] = {
     val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     mapOutputTracker.shuffleStatuses.get(shuffleId).
@@ -87,24 +87,22 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   private def getStatistics(queryStage: QueryStageExec): MapOutputStatistics = {
-    val shuffleStage = queryStage match {
-      case stage: ShuffleQueryStageExec => stage
-      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => stage
-    }
+    val shuffleStage = getShuffleStage(queryStage)
     val metrics = shuffleStage.mapOutputStatisticsFuture
-    assert(metrics.isCompleted, "ShuffleQueryStageExec should already be ready")
+    assert(metrics.isCompleted,
+      "ShuffleQueryStageExec should already be ready when executing OptimizeSkewedPartitions rule")
     ThreadUtils.awaitResult(metrics, Duration.Zero)
   }
 
   /**
-   * Base optimization support check: the join type is supported and plan statistics is available.
+   * Base optimization support check: the join type is supported.
    * Note that for some join types(like left outer), whether a certain partition can be optimized
    * also depends on the filed isSkewAndSupportsSplit.
    */
   private def supportOptimization(
-    joinType: JoinType,
-    leftStage: QueryStageExec,
-    rightStage: QueryStageExec): Boolean = {
+      joinType: JoinType,
+      leftStage: QueryStageExec,
+      rightStage: QueryStageExec): Boolean = {
     val joinTypeSupported = supportedJoinTypes.contains(joinType)
     val shuffleStageCheck = ShuffleQueryStageExec.isShuffleQueryStageExec(leftStage) &&
       ShuffleQueryStageExec.isShuffleQueryStageExec(rightStage)
@@ -133,6 +131,10 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
       }
     }
     partitionStartIndices.zip(partitionEndIndices).toArray
+  }
+
+  private def getMappersNum(stage: QueryStageExec): Int = {
+    getShuffleStage(stage).plan.shuffleDependency.rdd.partitions.length
   }
 
   def handleSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
@@ -176,36 +178,37 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
           for (i <- 0 until leftMapIdStartIndices.length;
                j <- 0 until rightMapIdStartIndices.length) {
             val leftEndMapId = if (i == leftMapIdStartIndices.length - 1) {
-              getShuffleStage(left).plan.shuffleDependency.rdd.partitions.length
+              getMappersNum(left)
             } else {
               leftMapIdStartIndices(i + 1)
             }
             val rightEndMapId = if (j == rightMapIdStartIndices.length - 1) {
-              getShuffleStage(right).
-                plan.shuffleDependency.rdd.partitions.length
+              getMappersNum(right)
             } else {
               rightMapIdStartIndices(j + 1)
             }
-
+            // TODO we may can optimize the sort merge join to broad cast join after
+            // we get the raw data size of per partition,
             val leftSkewedReader =
-              PostShufflePartitionReader(left, partitionId, leftMapIdStartIndices(i), leftEndMapId)
+              SkewedShufflePartitionReader(
+                left, partitionId, leftMapIdStartIndices(i), leftEndMapId)
 
             val rightSkewedReader =
-              PostShufflePartitionReader(right, partitionId,
+              SkewedShufflePartitionReader(right, partitionId,
                 rightMapIdStartIndices(j), rightEndMapId)
             subJoins += SortMergeJoinExec(leftKeys, rightKeys, joinType, condition,
               leftSkewedReader, rightSkewedReader)
           }
         }
       }
-      logDebug(s"skewed partition number is ${skewedPartitions.size}")
+      logDebug(s"number of skewed partitions is ${skewedPartitions.size}")
       if (skewedPartitions.size > 0) {
         val partitionIndices = estimatePartitionStartEndIndices(
           getStatistics(left), skewedPartitions)
         val optimizedSmj = smj.transformDown {
           case sort: SortExec if (sort.child.isInstanceOf[QueryStageExec] &&
             ShuffleQueryStageExec.isShuffleQueryStageExec(sort.child)) => {
-            val partialReader = PartialShufflePartitionReader(
+            val partialReader = PartialShuffleReader(
                 sort.child.asInstanceOf[QueryStageExec], partitionIndices)
             sort.copy(child = partialReader)
           }
@@ -219,13 +222,14 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.ADAPTIVE_EXECUTION_SKEWED_JOIN_ENABLED)) {
-      return  plan
+      return plan
     }
 
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
       case _: LocalShuffleReaderExec => Nil
-      case _: PostShufflePartitionReader => Nil
-      case _: PartialShufflePartitionReader => Nil
+      case _: SkewedShufflePartitionReader => Nil
+      case _: PartialShuffleReader => Nil
+      case _: CoalescedShuffleReaderExec => Nil
       case stage: ShuffleQueryStageExec => Seq(stage)
       case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
@@ -243,14 +247,14 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
-case class PartialShufflePartitionReader(
-    child: QueryStageExec, partitionIndices: Array[(Int, Int)]) extends UnaryExecNode {
+case class PartialShuffleReader(
+    child: QueryStageExec, partitionRanges: Array[(Int, Int)]) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
 
   override def doCanonicalize(): SparkPlan = child.canonicalized
 
   override def outputPartitioning: Partitioning = {
-    UnknownPartitioning(partitionIndices.length)
+    UnknownPartitioning(partitionRanges.length)
   }
 
   private var cachedShuffleRDD: ShuffledRowRDD = null
@@ -259,16 +263,16 @@ case class PartialShufflePartitionReader(
     if (cachedShuffleRDD == null) {
       cachedShuffleRDD = child match {
         case stage: ShuffleQueryStageExec =>
-          stage.plan.createShuffledRDD(Some(partitionIndices))
+          stage.plan.createShuffledRDD(Some(partitionRanges))
         case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-          stage.plan.createShuffledRDD(Some(partitionIndices))
+          stage.plan.createShuffledRDD(Some(partitionRanges))
       }
     }
     cachedShuffleRDD
   }
 }
 
-case class PostShufflePartitionReader(
+case class SkewedShufflePartitionReader(
     child: QueryStageExec,
     partitionIndex: Int,
     startMapId: Int,

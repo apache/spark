@@ -144,7 +144,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
       shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
-
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
