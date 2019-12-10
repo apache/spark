@@ -343,12 +343,12 @@ case class DataSource(
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
         if (baseRelation.schema != schema) {
-          val errorMsg = "The user-specified schema doesn't match the actual schema: " +
+          throw new AnalysisException(
+            "The user-specified schema doesn't match the actual schema: " +
             s"user-specified: ${schema.toDDL}, actual: ${baseRelation.schema.toDDL}. If " +
             "you're using DataFrameReader.schema API or creating a table, please do not " +
             "specify the schema. Or if you're scanning an existed table, please drop " +
-            "it and re-create it."
-          throw new AnalysisException(errorMsg)
+            "it and re-create it.")
         }
         baseRelation
 
