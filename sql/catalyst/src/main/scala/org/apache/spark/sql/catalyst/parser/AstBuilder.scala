@@ -3358,4 +3358,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       visitMultipartIdentifier(ctx.table),
       Option(ctx.key).map(visitTablePropertyKey))
   }
+
+  /**
+   * Create a plan for a SHOW FUNCTIONS command.
+   */
+  override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
+    val (userScope, systemScope) = Option(ctx.identifier)
+      .map(_.getText.toLowerCase(Locale.ROOT)) match {
+        case None | Some("all") => (true, true)
+        case Some("system") => (false, true)
+        case Some("user") => (true, false)
+        case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
+    }
+    val pattern = Option(ctx.pattern).map(string(_))
+    val functionName = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowFunctionsStatement(userScope, systemScope, pattern, functionName)
+  }
 }

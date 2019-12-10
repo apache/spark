@@ -170,6 +170,12 @@ object SQLConf {
     }
   }
 
+  val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
+    .internal()
+    .doc("The max number of iterations the analyzer runs.")
+    .intConf
+    .createWithDefault(100)
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -180,7 +186,7 @@ object SQLConf {
 
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()
-    .doc("The max number of iterations the optimizer and analyzer runs.")
+    .doc("The max number of iterations the optimizer runs.")
     .intConf
     .createWithDefault(100)
 
@@ -2125,6 +2131,8 @@ class SQLConf extends Serializable with Logging {
   @transient protected val reader = new ConfigReader(settings)
 
   /** ************************ Spark SQL Params/Hints ******************* */
+
+  def analyzerMaxIterations: Int = getConf(ANALYZER_MAX_ITERATIONS)
 
   def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
 
