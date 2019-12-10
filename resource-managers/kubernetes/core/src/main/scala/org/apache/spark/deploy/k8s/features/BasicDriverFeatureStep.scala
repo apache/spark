@@ -78,6 +78,14 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
           .build()
       }
 
+    val driverDnsConfigOptions = conf.dnsConfigOptions.toSeq
+      .map { option =>
+        new PodDNSConfigOptionBuilder()
+          .withName(option._1)
+          .withValue(option._2)
+          .build()
+    }
+
     val driverCpuQuantity = new QuantityBuilder(false)
       .withAmount(driverCoresRequest)
       .build()
@@ -146,6 +154,11 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .withRestartPolicy("Never")
         .addToNodeSelector(conf.nodeSelector.asJava)
         .addToImagePullSecrets(conf.imagePullSecrets: _*)
+        .editOrNewDnsConfig()
+          .addToNameservers(conf.dnsConfigNameservers: _*)
+          .addToSearches(conf.dnsConfigSearches: _*)
+          .addAllToOptions(driverDnsConfigOptions.asJava)
+          .endDnsConfig()
         .endSpec()
       .build()
 

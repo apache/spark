@@ -60,6 +60,9 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     TEST_IMAGE_PULL_SECRETS.map { secret =>
       new LocalObjectReferenceBuilder().withName(secret).build()
     }
+  private val TEST_KUBERNETES_DNS_CONFIG_NAMESERVERS = Seq("8.8.8.8", "4.4.4.4")
+  private val TEST_KUBERNETES_DNS_CONFIG_SEARCHES = Seq("a.com", "b.com")
+
   private val DRIVER_POD = new PodBuilder()
     .withNewMetadata()
       .withName(DRIVER_POD_NAME)
@@ -84,6 +87,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       .set(config.DRIVER_PORT, DRIVER_PORT)
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
       .set("spark.kubernetes.resource.type", "java")
+      .set(KUBERNETES_DNS_CONFIG_NAMESERVERS, TEST_KUBERNETES_DNS_CONFIG_NAMESERVERS)
+      .set(KUBERNETES_DNS_CONFIG_SEARCHES, TEST_KUBERNETES_DNS_CONFIG_SEARCHES)
   }
 
   private def newExecutorConf(
@@ -157,6 +162,12 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     // The pod has no node selector, volumes.
     assert(executor.pod.getSpec.getNodeSelector.isEmpty)
     assert(executor.pod.getSpec.getVolumes.isEmpty)
+
+    // Validate the pod dns config.
+    assert(executor.pod.getSpec().getDnsConfig().getNameservers().asScala ===
+      TEST_KUBERNETES_DNS_CONFIG_NAMESERVERS)
+    assert(executor.pod.getSpec().getDnsConfig().getSearches().asScala ===
+      TEST_KUBERNETES_DNS_CONFIG_SEARCHES)
 
     checkEnv(executor, baseConf, Map())
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)

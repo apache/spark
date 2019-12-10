@@ -75,6 +75,22 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
+  var KUBERNETES_DNS_CONFIG_NAMESERVERS =
+    ConfigBuilder("spark.kubernetes.dnsConfig.nameservers")
+      .doc("Comma separated list of the Kubernetes dns nameservers.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  var KUBERNETES_DNS_CONFIG_SEARCHES =
+    ConfigBuilder("spark.kubernetes.dnsConfig.searches")
+      .doc("Comma separated list of the Kubernetes dns searches.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  var KUBERNETES_DNS_CONFIG_OPTIONS_PREFIX = "spark.kubernetes.dnsConfig.options."
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"

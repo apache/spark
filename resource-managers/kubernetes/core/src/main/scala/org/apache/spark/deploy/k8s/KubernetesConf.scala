@@ -55,6 +55,10 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
       }
   }
 
+  def dnsConfigNameservers: Seq[String] = get(KUBERNETES_DNS_CONFIG_NAMESERVERS)
+  def dnsConfigSearches: Seq[String] = get(KUBERNETES_DNS_CONFIG_SEARCHES)
+  def dnsConfigOptions: Map[String, String]
+
   def nodeSelector: Map[String, String] =
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX)
 
@@ -96,6 +100,10 @@ private[spark] class KubernetesDriverConf(
     }
 
     driverCustomLabels ++ presetLabels
+  }
+
+  override def dnsConfigOptions: Map[String, String] = {
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DNS_CONFIG_OPTIONS_PREFIX)
   }
 
   override def environment: Map[String, String] = {
@@ -147,6 +155,10 @@ private[spark] class KubernetesExecutorConf(
     }
 
     executorCustomLabels ++ presetLabels
+  }
+
+  override def dnsConfigOptions: Map[String, String] = {
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DNS_CONFIG_OPTIONS_PREFIX)
   }
 
   override def environment: Map[String, String] = sparkConf.getExecutorEnv.filter(

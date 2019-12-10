@@ -50,8 +50,11 @@ class KubernetesConfSuite extends SparkFunSuite {
     "spark.executorEnv.executorEnvVars3_var3" -> "executorEnvVars3",
     "spark.executorEnv.executorEnvVars4-var4" -> "executorEnvVars4",
     "spark.executorEnv.executorEnvVars5-var5" -> "executorEnvVars5/var5")
+  private val DNS_CONFIG_OPTIONS = Map(
+    "ndots" -> "2",
+    "mdots" -> "1")
 
-  test("Resolve driver labels, annotations, secret mount paths, envs, and memory overhead") {
+  test("Resolve driver labels, annotations, secret mount paths, envs, dns and memory overhead") {
     val sparkConf = new SparkConf(false)
       .set(MEMORY_OVERHEAD_FACTOR, 0.3)
     CUSTOM_LABELS.foreach { case (key, value) =>
@@ -69,6 +72,9 @@ class KubernetesConfSuite extends SparkFunSuite {
     CUSTOM_ENVS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_ENV_PREFIX$key", value)
     }
+    DNS_CONFIG_OPTIONS.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_DNS_CONFIG_OPTIONS_PREFIX$key", value)
+    }
 
     val conf = KubernetesConf.createDriverConf(
       sparkConf,
@@ -85,6 +91,7 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.secretEnvNamesToKeyRefs === SECRET_ENV_VARS)
     assert(conf.environment === CUSTOM_ENVS)
     assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
+    assert(conf.dnsConfigOptions == DNS_CONFIG_OPTIONS)
   }
 
   test("Basic executor translated fields.") {
@@ -108,6 +115,28 @@ class KubernetesConfSuite extends SparkFunSuite {
       Seq(
         new LocalObjectReferenceBuilder().withName("my-secret-1").build(),
         new LocalObjectReferenceBuilder().withName("my-secret-2").build()))
+  }
+
+  test("Test pod dns config nameservers.") {
+    val conf = KubernetesConf.createExecutorConf(
+      new SparkConf(false)
+        .set(KUBERNETES_DNS_CONFIG_NAMESERVERS, Seq("8.8.8.8", "4.4.4.4")),
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD))
+    assert(conf.dnsConfigNameservers ===
+      Seq("8.8.8.8", "4.4.4.4"))
+  }
+
+  test("Test pod dns config searches.") {
+    val conf = KubernetesConf.createExecutorConf(
+      new SparkConf(false)
+        .set(KUBERNETES_DNS_CONFIG_SEARCHES, Seq("a.com", "b.com")),
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD))
+    assert(conf.dnsConfigSearches ===
+      Seq("a.com", "b.com"))
   }
 
   test("Set executor labels, annotations, and secrets") {

@@ -155,6 +155,14 @@ private[spark] class BasicExecutorFeatureStep(
         }
       }
 
+    val executorDnsConfigOptions = kubernetesConf.dnsConfigOptions.toSeq
+      .map { option =>
+        new PodDNSConfigOptionBuilder()
+          .withName(option._1)
+          .withValue(option._2)
+          .build()
+    }
+
     val requiredPorts = Seq(
       (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
       .map { case (name, port) =>
@@ -213,6 +221,11 @@ private[spark] class BasicExecutorFeatureStep(
         .withRestartPolicy("Never")
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
+        .editOrNewDnsConfig()
+          .addToNameservers(kubernetesConf.dnsConfigNameservers: _*)
+          .addToSearches(kubernetesConf.dnsConfigSearches: _*)
+          .addAllToOptions(executorDnsConfigOptions.asJava)
+          .endDnsConfig()
         .endSpec()
       .build()
 

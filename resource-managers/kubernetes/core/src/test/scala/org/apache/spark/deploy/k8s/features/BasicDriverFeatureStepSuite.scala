@@ -45,6 +45,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     TEST_IMAGE_PULL_SECRETS.map { secret =>
       new LocalObjectReferenceBuilder().withName(secret).build()
     }
+  private val TEST_KUBERNETES_DNS_CONFIG_NAMESERVERS = Seq("8.8.8.8", "4.4.4.4")
+  private val TEST_KUBERNETES_DNS_CONFIG_SEARCHES = Seq("a.com", "b.com")
+  private val TEST_KUBERNETES_DNS_CONFIG_OPTIONS = Map(
+    "ndots" -> "2",
+    "mdots" -> "1")
 
   test("Check the pod respects all configurations from the user.") {
     val resourceID = ResourceID(SPARK_DRIVER_PREFIX, GPU)
@@ -58,6 +63,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(DRIVER_MEMORY_OVERHEAD, 200L)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
+      .set(KUBERNETES_DNS_CONFIG_NAMESERVERS, TEST_KUBERNETES_DNS_CONFIG_NAMESERVERS)
+      .set(KUBERNETES_DNS_CONFIG_SEARCHES, TEST_KUBERNETES_DNS_CONFIG_SEARCHES)
     resources.foreach { case (_, testRInfo) =>
       sparkConf.set(testRInfo.rId.amountConf, testRInfo.count)
       sparkConf.set(testRInfo.rId.vendorConf, testRInfo.vendor)
@@ -66,7 +73,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       sparkConf = sparkConf,
       labels = DRIVER_LABELS,
       environment = DRIVER_ENVS,
-      annotations = DRIVER_ANNOTATIONS)
+      annotations = DRIVER_ANNOTATIONS,
+      dnsConfigOptions = TEST_KUBERNETES_DNS_CONFIG_OPTIONS)
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
     val basePod = SparkPod.initialPod()
@@ -90,7 +98,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .map { env => (env.getName, env.getValue) }
       .toMap
     DRIVER_ENVS.foreach { case (k, v) =>
-      assert(envs(v) === v)
+      assert(envs(k) === v)
     }
     assert(envs(ENV_SPARK_USER) === Utils.getCurrentUserName())
 
@@ -101,6 +109,23 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       envVar.getName.equals(ENV_DRIVER_BIND_ADDRESS) &&
         envVar.getValueFrom.getFieldRef.getApiVersion.equals("v1") &&
         envVar.getValueFrom.getFieldRef.getFieldPath.equals("status.podIP")))
+
+    // Valiate the pod dns config.
+    assert(configuredPod.pod.getSpec().getDnsConfig().getNameservers().asScala ===
+      TEST_KUBERNETES_DNS_CONFIG_NAMESERVERS)
+    assert(configuredPod.pod.getSpec().getDnsConfig().getSearches().asScala ===
+      TEST_KUBERNETES_DNS_CONFIG_SEARCHES)
+
+    val options = configuredPod.pod
+      .getSpec()
+      .getDnsConfig()
+      .getOptions()
+      .asScala
+      .map { option => (option.getName, option.getValue) }
+      .toMap
+    TEST_KUBERNETES_DNS_CONFIG_OPTIONS.foreach { case (k, v) =>
+        assert(options(k) == v)
+    }
 
     val resourceRequirements = configuredPod.container.getResources
     val requests = resourceRequirements.getRequests.asScala
