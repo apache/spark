@@ -297,7 +297,7 @@ private[yarn] class YarnAllocator(
     logDebug(s"Updating resource requests, target: $targetNumExecutors, " +
       s"pending: $numPendingAllocate, running: ${runningExecutors.size}, " +
       s"executorsStarting: ${numExecutorsStarting.get}" +
-      s"executorsStartingExiting:${numExecutorsExiting}")
+      s"executorsExiting:${numExecutorsExiting}")
 
     // Split the pending container request into three groups: locality matched list, locality
     // unmatched list and non-locality list. Take the locality matched container request into
