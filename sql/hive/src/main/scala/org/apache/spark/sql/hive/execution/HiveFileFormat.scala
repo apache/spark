@@ -133,7 +133,7 @@ class HiveOutputWriter(
   private val standardOI = ObjectInspectorUtils
     .getStandardObjectInspector(
       tableDesc.getDeserializer(jobConf).getObjectInspector,
-      ObjectInspectorCopyOption.JAVA)
+      ObjectInspectorCopyOption.DEFAULT)
     .asInstanceOf[StructObjectInspector]
 
   private val fieldOIs =
