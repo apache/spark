@@ -1820,6 +1820,18 @@ class DataSourceV2SQLSuite
     assert(e.message.contains("SHOW FUNCTIONS is only supported in v1 catalog"))
   }
 
+  test("DROP FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("DROP FUNCTION testcat.ns1.ns2.fun")
+    }
+    assert(e.message.contains("DROP FUNCTION is only supported in v1 catalog"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+  }
+
   test("global temp view should not be masked by v2 catalog") {
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
     spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)

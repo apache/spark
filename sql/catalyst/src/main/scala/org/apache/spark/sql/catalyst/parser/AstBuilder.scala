@@ -3376,7 +3376,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     DescribeFunctionStatement(functionName, EXTENDED != null)
   }
 
-
   /**
    * Create a plan for a SHOW FUNCTIONS command.
    */
@@ -3391,5 +3390,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val pattern = Option(ctx.pattern).map(string(_))
     val functionName = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     ShowFunctionsStatement(userScope, systemScope, pattern, functionName)
+  }
+
+  /**
+   * Create a [[DropFunctionCommand]] statement.
+   *
+   * For example:
+   * {{{
+   *   DROP [TEMPORARY] FUNCTION [IF EXISTS] function;
+   * }}}
+   */
+  override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
+    DropFunctionStatement(
+      functionName,
+      ctx.EXISTS != null,
+      ctx.TEMPORARY != null)
   }
 }
