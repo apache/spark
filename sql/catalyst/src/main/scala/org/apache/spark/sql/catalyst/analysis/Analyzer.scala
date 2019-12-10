@@ -1661,8 +1661,8 @@ class Analyzer(
                     (if (filter.isDefined) "FILTER predicate" :: Nil else Nil)
                   if (notSupportedWords.nonEmpty) {
                     failAnalysis(
-                      s"${notSupportedWords.mkString(" and ")} specified, but ${other.prettyName} " +
-                        "is not an aggregate function")
+                      s"${notSupportedWords.mkString(" and ")} specified, but ${other.prettyName}" +
+                        " is not an aggregate function")
                   } else {
                     other
                   }
