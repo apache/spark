@@ -53,7 +53,7 @@ case class Last(funcName: String, child: Expression, ignoreNullsExpr: Expression
 
   def this(funcName: String, child: Expression) =
     this(funcName, child, Literal.create(false, BooleanType))
-  
+
   override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
   override def nullable: Boolean = true
