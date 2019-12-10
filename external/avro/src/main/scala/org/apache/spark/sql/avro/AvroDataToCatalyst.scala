@@ -56,7 +56,8 @@ case class AvroDataToCatalyst(
   @transient private lazy val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
 
   @transient private lazy val reader = avroOptions.actualSchema
-    .map(actualSchema => new GenericDatumReader[Any](new Schema.Parser().parse(actualSchema), avroSchema))
+    .map(actualSchema =>
+      new GenericDatumReader[Any](new Schema.Parser().parse(actualSchema), avroSchema))
     .getOrElse(new GenericDatumReader[Any](avroSchema))
 
   @transient private lazy val deserializer = new AvroDeserializer(avroSchema, dataType)
