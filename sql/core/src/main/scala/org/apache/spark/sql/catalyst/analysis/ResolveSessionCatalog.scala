@@ -477,13 +477,13 @@ class ResolveSessionCatalog(
 
     case ShowFunctionsStatement(userScope, systemScope, pattern, fun) =>
       val (database, function) = fun match {
-        case Some(CatalogAndIdentifierParts(catalog, functionName)) =>
+        case Some(CatalogObjectIdentifier(catalog, functionIdent)) =>
           if (isSessionCatalog(catalog)) {
-            functionName match {
+            functionIdent.asMultipartIdentifier match {
               case Seq(db, fn) => (Some(db), Some(fn))
               case Seq(fn) => (None, Some(fn))
               case _ =>
-                throw new AnalysisException(s"Unsupported function name '${functionName.quoted}'")
+                throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
             }
           } else {
             throw new AnalysisException ("SHOW FUNCTIONS is only supported in v1 catalog")
