@@ -105,7 +105,8 @@ private[sql] trait LookupCatalog extends Logging {
 
   /**
    * Extract catalog and identifier from a multi-part name with the current catalog if needed.
-   * Identifier takes precedence over catalog name.
+   * Catalog name takes precedence over identifier, but for a single-part name, identifier takes
+   * precedence over catalog name.
    */
   object CatalogAndIdentifier {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
