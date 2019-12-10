@@ -125,8 +125,8 @@ The stage detail page begins with information like total time across all tasks, 
 </p>
 
 There is also a visual representation of the directed acyclic graph (DAG) of this stage, where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied.
-Nodes belonging are grouped by operation scope in the DAG visualization and labelled with the operation scope name (BatchScan, WholeStageCodegen, Exchange, etc).
-Notably, Whole Stage Code Generation operations are also annotated with the code generation id. For Stages belonging to Spark DataFrame or SQL execution, this allows to cross-reference Stage execution details to the relevant details in the Web-UI SQL Tab page where SQL plan graphs and execution plans are reported.
+Nodes are grouped by operation scope in the DAG visualization and labelled with the operation scope name (BatchScan, WholeStageCodegen, Exchange, etc).
+Notably, Whole Stage Code Generation operations are also annotated with the code generation id. For stages belonging to Spark DataFrame or SQL execution, this allows to cross-reference Stage execution details to the relevant details in the Web-UI SQL Tab page where SQL plan graphs and execution plans are reported.
 
 <p style="text-align: center;">
   <img src="img/AllStagesPageDetail5.png" title="Stage DAG" alt="Stage DAG" width="50%">
