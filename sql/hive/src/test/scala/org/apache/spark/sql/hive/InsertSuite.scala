@@ -22,6 +22,7 @@ import java.io.File
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
