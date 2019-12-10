@@ -1,0 +1,4 @@
+numpy==1.16.4
+scipy==1.2.2
+pandas==0.23.2
+pyarrow==0.12.1
