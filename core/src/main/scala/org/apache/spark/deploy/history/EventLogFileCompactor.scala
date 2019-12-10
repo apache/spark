@@ -119,9 +119,9 @@ class FilteredEventLogFileRewriter(
   def rewrite(eventLogFiles: Seq[FileStatus]): String = {
     require(eventLogFiles.nonEmpty)
 
-    val targetEventLogFilePath = eventLogFiles.last.getPath
-    val logWriter = new CompactedEventLogFileWriter(targetEventLogFilePath, "dummy", None,
-      targetEventLogFilePath.getParent.toUri, sparkConf, hadoopConf)
+    val lastIndexEventLogPath = eventLogFiles.last.getPath
+    val logWriter = new CompactedEventLogFileWriter(lastIndexEventLogPath, "dummy", None,
+      lastIndexEventLogPath.getParent.toUri, sparkConf, hadoopConf)
 
     logWriter.start()
     eventLogFiles.foreach { file =>

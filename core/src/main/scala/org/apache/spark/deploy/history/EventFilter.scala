@@ -74,9 +74,9 @@ private[spark] trait EventFilter {
 }
 
 object EventFilter extends Logging {
-  def checkFilters(filters: Seq[EventFilter], event: SparkListenerEvent): Boolean = {
+  def acceptEvent(filters: Seq[EventFilter], event: SparkListenerEvent): Boolean = {
     val results = filters.flatMap(_.acceptFn().lift.apply(event))
-    results.isEmpty || results.forall(_ == true)
+    results.isEmpty || !results.contains(false)
   }
 
   def applyFilterToFile(
@@ -110,7 +110,7 @@ object EventFilter extends Logging {
           }
 
           event.foreach { e =>
-            if (EventFilter.checkFilters(filters, e)) {
+            if (EventFilter.acceptEvent(filters, e)) {
               fnAccepted(currentLine, e)
             } else {
               fnRejected(currentLine, e)

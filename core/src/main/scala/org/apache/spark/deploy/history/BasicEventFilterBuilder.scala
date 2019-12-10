@@ -68,7 +68,7 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
     _liveExecutors -= executorRemoved.executorId
   }
 
-  override def createFilter(): EventFilter = BasicEventFilter(this)
+  override def createFilter(): EventFilter = new BasicEventFilter(this)
 }
 
 /**
@@ -145,6 +145,10 @@ private[spark] class BasicEventFilter(
     liveExecutors: Set[String])
   extends JobEventFilter(_liveJobToStages, _stageToTasks, _stageToRDDs) with Logging {
 
+  def this(builder: BasicEventFilterBuilder) = {
+    this(builder.liveJobToStages, builder.stageToTasks, builder.stageToRDDs, builder.liveExecutors)
+  }
+
   logDebug(s"live executors : $liveExecutors")
 
   private val _acceptFn: PartialFunction[SparkListenerEvent, Boolean] = {
@@ -157,15 +161,5 @@ private[spark] class BasicEventFilter(
 
   override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {
     _acceptFn.orElse(acceptFnForJobEvents)
-  }
-}
-
-private[spark] object BasicEventFilter {
-  def apply(builder: BasicEventFilterBuilder): BasicEventFilter = {
-    new BasicEventFilter(
-      builder.liveJobToStages,
-      builder.stageToTasks,
-      builder.stageToRDDs,
-      builder.liveExecutors)
   }
 }

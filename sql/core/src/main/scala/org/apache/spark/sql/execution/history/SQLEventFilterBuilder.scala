@@ -89,14 +89,13 @@ private[spark] class SQLEventFilterBuilder extends SparkListener with EventFilte
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
-    val jobs = _liveExecutionToJobs.getOrElse(event.executionId, mutable.HashSet[Int]())
-    _liveExecutionToJobs -= event.executionId
-
-    val stagesToDrop = _jobToStages.filter(kv => jobs.contains(kv._1)).values.flatten
-    _jobToStages --= jobs
-    stages --= stagesToDrop
-    _stageToTasks --= stagesToDrop
-    _stageToRDDs --= stagesToDrop
+    _liveExecutionToJobs.remove(event.executionId).foreach { jobs =>
+      val stagesToDrop = _jobToStages.filter(kv => jobs.contains(kv._1)).values.flatten
+      _jobToStages --= jobs
+      stages --= stagesToDrop
+      _stageToTasks --= stagesToDrop
+      _stageToRDDs --= stagesToDrop
+    }
   }
 
   override def createFilter(): EventFilter = {
@@ -136,7 +135,7 @@ private[spark] class SQLLiveEntitiesEventFilter(
     case e: SparkListenerDriverAccumUpdates =>
       liveExecutionToJobs.contains(e.executionId)
 
-    case e if acceptFnForJobEvents.isDefinedAt(e) && acceptFnForJobEvents(e) =>
+    case e if acceptFnForJobEvents.lift(e).contains(true) =>
       // NOTE: if acceptFnForJobEvents(e) returns false, we should leave it to "unmatched"
       true
 
