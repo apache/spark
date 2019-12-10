@@ -185,6 +185,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     "FILTER predicate specified, but percent_rank is not an aggregate function" :: Nil)
 
   errorTest(
+    "higher order function with filter predicate",
+    CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
+      "filter (where c > 1)"),
+    "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
+
+  errorTest(
     "nested aggregate functions",
     testRelation.groupBy('a)(
       AggregateExpression(
