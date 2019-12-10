@@ -1,0 +1,6 @@
+# ML/MLlib
+numpy==1.14.6
+scipy==1.0.1
+# SQL
+pandas==0.23.2
+pyarrow==0.15.1
