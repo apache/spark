@@ -38,7 +38,7 @@ private[sql] trait LookupCatalog extends Logging {
    *
    * This does not substitute the default catalog if no catalog is set in the identifier.
    */
-  private object CatalogAndIdentifier {
+  private object CatalogAndMultipartIdentifier {
     def unapply(parts: Seq[String]): Some[(Option[CatalogPlugin], Seq[String])] = parts match {
       case Seq(_) =>
         Some((None, parts))
@@ -57,7 +57,7 @@ private[sql] trait LookupCatalog extends Logging {
    */
   object CatalogObjectIdentifier {
     def unapply(parts: Seq[String]): Some[(CatalogPlugin, Identifier)] = parts match {
-      case CatalogAndIdentifier(maybeCatalog, nameParts) =>
+      case CatalogAndMultipartIdentifier(maybeCatalog, nameParts) =>
         Some((
             maybeCatalog.getOrElse(currentCatalog),
             Identifier.of(nameParts.init.toArray, nameParts.last)
@@ -97,8 +97,7 @@ private[sql] trait LookupCatalog extends Logging {
       nameParts match {
         case Seq(catalogName, tail @ _*) =>
           try {
-            Some(
-              (catalogManager.catalog(catalogName), tail))
+            Some((catalogManager.catalog(catalogName), tail))
           } catch {
             case _: CatalogNotFoundException =>
               Some((currentCatalog, nameParts))
@@ -111,7 +110,7 @@ private[sql] trait LookupCatalog extends Logging {
    * Extract catalog and table identifier from a multi-part identifier with the current catalog if
    * needed. Table identifier takes precedence over catalog name.
    */
-  object CatalogAndTableIdentifier {
+  object CatalogAndIdentifier {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
     private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
@@ -146,7 +145,8 @@ private[sql] trait LookupCatalog extends Logging {
    */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndIdentifier(None, names) if CatalogV2Util.isSessionCatalog(currentCatalog) =>
+      case CatalogAndMultipartIdentifier(None, names)
+          if CatalogV2Util.isSessionCatalog(currentCatalog) =>
         names match {
           case Seq(name) =>
             Some(TableIdentifier(name))
@@ -165,9 +165,9 @@ private[sql] trait LookupCatalog extends Logging {
    */
   object AsTemporaryViewIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndIdentifier(None, Seq(table)) =>
+      case CatalogAndMultipartIdentifier(None, Seq(table)) =>
         Some(TableIdentifier(table))
-      case CatalogAndIdentifier(None, Seq(database, table)) =>
+      case CatalogAndMultipartIdentifier(None, Seq(database, table)) =>
         Some(TableIdentifier(table, Some(database)))
       case _ =>
         None
