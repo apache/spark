@@ -49,6 +49,9 @@ case class First(funcName: String, child: Expression, ignoreNullsExpr: Expressio
 
   def this(child: Expression) = this("first", child, Literal.create(false, BooleanType))
 
+  def this(child: Expression, ignoreNullsExpr: Expression) =
+    this("first", child, ignoreNullsExpr)
+
   override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
   override def nullable: Boolean = true
