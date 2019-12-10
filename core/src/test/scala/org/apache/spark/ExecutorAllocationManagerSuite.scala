@@ -170,12 +170,13 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
   }
 
-  def testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
+  def  testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
     val updatesNeeded =
       new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
     val conf = createConf(3, 15)
       .set(config.DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO, divisor)
       .set(config.EXECUTOR_CORES, cores)
+    ResourceProfile.resetDefaultProfile(conf)
     val manager = createManager(conf)
     post(SparkListenerStageSubmitted(createStageInfo(0, 20)))
     for (i <- 0 to 5) {
@@ -490,7 +491,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       info => post(SparkListenerTaskStart(0, 0, info)) }
     assert(manager.executorMonitor.executorCount === 8)
     assert(numExecutorsTargetForDefaultProfile(manager) === 8)
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) == 8)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 8)
     // won't work since numExecutorsTargetForDefaultProfile == numExecutors
     assert(!removeExecutor(manager, "1"))
 
@@ -502,7 +503,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     adjustRequestedExecutors(manager)
     assert(manager.executorMonitor.executorCount === 8)
     assert(numExecutorsTargetForDefaultProfile(manager) === 5)
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) == 5)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
     assert(removeExecutor(manager, "1"))
     assert(removeExecutors(manager, Seq("2", "3"))=== Seq("2", "3"))
     onExecutorRemoved(manager, "1")
@@ -514,7 +515,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       new ExecutorMetrics, null))
     assert(manager.executorMonitor.executorCount === 5)
     assert(numExecutorsTargetForDefaultProfile(manager) === 5)
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) == 4)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 4)
     assert(!removeExecutor(manager, "4")) // lower limit
     assert(addExecutorsToTarget(manager, updatesNeeded) === 0) // upper limit
   }
@@ -830,7 +831,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
     clock.advance(100L)
 
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
     schedule(manager)
 
     // Verify that current number of executors should be ramp down when first job is submitted
@@ -852,7 +853,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     clock.advance(executorIdleTimeout * 1000)
 
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) === 0)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 0)
     schedule(manager)
     // Verify executor is timeout,numExecutorsTargetForDefaultProfile is recalculated
     assert(numExecutorsTargetForDefaultProfile(manager) === 2)
@@ -923,19 +924,19 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   test("SPARK-8366: maxNumExecutorsNeededPerResourceProfile should properly handle failed tasks") {
     val manager = createManager(createConf())
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) === 0)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 0)
 
     post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
 
     val taskInfo = createTaskInfo(1, 1, "executor-1")
     post(SparkListenerTaskStart(0, 0, taskInfo))
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
 
     // If the task is failed, we expect it to be resubmitted later.
     val taskEndReason = ExceptionFailure(null, null, null, null, None)
     post(SparkListenerTaskEnd(0, 0, null, taskEndReason, taskInfo, new ExecutorMetrics, null))
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
   }
 
   test("reset the state of allocation manager") {
@@ -1061,7 +1062,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     // have one task finish -- we should adjust the target number of executors down
     // but we should *not* kill any executors yet
     post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo0, new ExecutorMetrics, null))
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
     assert(numExecutorsTargetForDefaultProfile(manager) === 2)
     clock.advance(1000)
     updateAndSyncNumExecutorsTarget(manager, clock.getTimeMillis())
@@ -1075,7 +1076,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       .thenReturn(Seq("executor-1"))
     clock.advance(3000)
     schedule(manager)
-    assert(maxNumExecutorsNeededPerResourceProfile(manager) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
     assert(numExecutorsTargetForDefaultProfile(manager) === 1)
     // here's the important verify -- we did kill the executors, but did not adjust the target count
     verify(client).killExecutors(Seq("executor-1"), false, false, false)
@@ -1102,7 +1103,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
       initialExecutors: Int = 1): SparkConf = {
-    new SparkConf()
+    val sparkConf = new SparkConf()
       .set(config.DYN_ALLOCATION_ENABLED, true)
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
       .set(config.DYN_ALLOCATION_MAX_EXECUTORS, maxExecutors)
@@ -1117,6 +1118,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
       .set(TEST_SCHEDULE_INTERVAL, 10000L)
+    ResourceProfile.resetDefaultProfile(sparkConf)
+    sparkConf
   }
 
   private def createManager(
@@ -1237,7 +1240,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       updatesNeeded: mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
   ): Int = {
     val maxNumExecutorsNeeded =
-      manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(defaultProfile.id)
+      manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(defaultProfile)
     manager invokePrivate
       _addExecutorsToTarget(maxNumExecutorsNeeded, defaultProfile, updatesNeeded)
   }
@@ -1257,8 +1260,10 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _schedule()
   }
 
-  private def maxNumExecutorsNeededPerResourceProfile(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(defaultProfile.id)
+  private def maxNumExecutorsNeededPerResourceProfile(
+      manager: ExecutorAllocationManager,
+      rp: ResourceProfile): Int = {
+    manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp)
   }
 
   private def adjustRequestedExecutors(manager: ExecutorAllocationManager): Int = {
