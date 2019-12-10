@@ -37,3 +37,34 @@ select bit_count(-9223372036854775808L);
 -- other illegal arguments
 select bit_count("bit count");
 select bit_count('a');
+
+-- test for bit_xor
+--
+CREATE OR REPLACE TEMPORARY VIEW bitwise_test AS SELECT * FROM VALUES
+  (1, 1, 1, 1L),
+  (2, 3, 4, null),
+  (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4);
+
+-- empty case
+SELECT BIT_XOR(b3) AS n1 FROM bitwise_test where 1 = 0;
+
+-- null case
+SELECT BIT_XOR(b4) AS n1 FROM bitwise_test where b4 is null;
+
+-- the suffix numbers show the expected answer
+SELECT
+ BIT_XOR(cast(b1 as tinyint))  AS a4,
+ BIT_XOR(cast(b2 as smallint))  AS b5,
+ BIT_XOR(b3)  AS c2,
+ BIT_XOR(b4)  AS d2,
+ BIT_XOR(distinct b4) AS e2
+FROM bitwise_test;
+
+-- group by
+SELECT bit_xor(b3) FROM bitwise_test GROUP BY b1 & 1;
+
+--having
+SELECT b1, bit_xor(b2) FROM bitwise_test GROUP BY b1 HAVING bit_and(b2) < 7;
+
+-- window
+SELECT b1, b2, bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test;

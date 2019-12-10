@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.benchmark.BenchmarkBase
 import org.apache.spark.scheduler.CompressedMapStatus
@@ -67,19 +69,20 @@ object MapStatusesSerDeserBenchmark extends BenchmarkBase {
     var serializedBroadcastSizes = 0
 
     val (serializedMapStatus, serializedBroadcast) = MapOutputTracker.serializeMapStatuses(
-      shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, minBroadcastSize)
+      shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, minBroadcastSize,
+      sc.getConf)
     serializedMapStatusSizes = serializedMapStatus.length
     if (serializedBroadcast != null) {
       serializedBroadcastSizes = serializedBroadcast.value.length
     }
 
     benchmark.addCase("Serialization") { _ =>
-      MapOutputTracker.serializeMapStatuses(
-        shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, minBroadcastSize)
+      MapOutputTracker.serializeMapStatuses(shuffleStatus.mapStatuses, tracker.broadcastManager,
+        tracker.isLocal, minBroadcastSize, sc.getConf)
     }
 
     benchmark.addCase("Deserialization") { _ =>
-      val result = MapOutputTracker.deserializeMapStatuses(serializedMapStatus)
+      val result = MapOutputTracker.deserializeMapStatuses(serializedMapStatus, sc.getConf)
       assert(result.length == numMaps)
     }
 

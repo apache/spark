@@ -227,8 +227,8 @@ object OptimizeIn extends Rule[LogicalPlan] {
         if (newList.length == 1
           // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
           // TODO: we exclude them in this rule.
-          && !v.isInstanceOf[CreateNamedStructLike]
-          && !newList.head.isInstanceOf[CreateNamedStructLike]) {
+          && !v.isInstanceOf[CreateNamedStruct]
+          && !newList.head.isInstanceOf[CreateNamedStruct]) {
           EqualTo(v, newList.head)
         } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
@@ -484,7 +484,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Like(input, Literal(pattern, StringType)) =>
+    case Like(input, Literal(pattern, StringType), escapeChar) =>
       if (pattern == null) {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
@@ -503,8 +503,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
             Contains(input, Literal(infix))
           case equalTo(str) =>
             EqualTo(input, Literal(str))
-          case _ =>
-            Like(input, Literal.create(pattern, StringType))
+          case _ => Like(input, Literal.create(pattern, StringType), escapeChar)
         }
       }
   }

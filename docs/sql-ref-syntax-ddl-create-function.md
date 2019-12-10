@@ -60,11 +60,11 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
   </dd>
   <dt><code><em>function_name</em></code></dt>
   <dd>
-    Specifies a name of funnction to be created. The function name may be
+    Specifies a name of function to be created. The function name may be
     optionally qualified with a database name. <br><br>
     <b>Syntax:</b>
       <code>
-        [database_name.]function_name
+        [ database_name. ] function_name
       </code>
   </dd>
   <dt><code><em>class_name</em></code></dt>
@@ -84,7 +84,7 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     along with its dependencies. <br><br>
     <b>Syntax:</b>
       <code>
-        USING { { (JAR | FILE ) resource_uri} , ...}
+        USING { { (JAR | FILE ) resource_uri } , ... }
       </code>
   </dd>
 </dl>

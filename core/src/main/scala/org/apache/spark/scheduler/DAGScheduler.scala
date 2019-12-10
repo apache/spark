@@ -267,7 +267,7 @@ private[spark] class DAGScheduler(
       executorUpdates: mutable.Map[(Int, Int), ExecutorMetrics]): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
       executorUpdates))
-    blockManagerMaster.driverEndpoint.askSync[Boolean](
+    blockManagerMaster.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(blockManagerId), new RpcTimeout(10.minutes, "BlockManagerHeartbeat"))
   }
 
@@ -696,8 +696,18 @@ private[spark] class DAGScheduler(
     val jobId = nextJobId.getAndIncrement()
     if (partitions.isEmpty) {
       val time = clock.getTimeMillis()
+      val dummyStageInfo =
+        new StageInfo(
+          StageInfo.INVALID_STAGE_ID,
+          StageInfo.INVALID_ATTEMPT_ID,
+          callSite.shortForm,
+          0,
+          Seq.empty[RDDInfo],
+          Seq.empty[Int],
+          "")
       listenerBus.post(
-        SparkListenerJobStart(jobId, time, Seq[StageInfo](), Utils.cloneProperties(properties)))
+        SparkListenerJobStart(
+          jobId, time, Seq[StageInfo](dummyStageInfo), Utils.cloneProperties(properties)))
       listenerBus.post(
         SparkListenerJobEnd(jobId, time, JobSucceeded))
       // Return immediately if the job is running 0 tasks

@@ -32,6 +32,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.util.Utils
 
@@ -274,48 +275,119 @@ class StreamingQueryManagerSuite extends StreamTest {
   }
 
   testQuietly("can't start multiple instances of the same streaming query in the same session") {
-    withTempDir { dir =>
-      val (ms1, ds1) = makeDataset
-      val (ms2, ds2) = makeDataset
-      val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
-      val dataLocation = new File(dir, "data").getCanonicalPath
+    withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "false") {
+      withTempDir { dir =>
+        val (ms1, ds1) = makeDataset
+        val (ms2, ds2) = makeDataset
+        val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
+        val dataLocation = new File(dir, "data").getCanonicalPath
 
-      val query1 = ds1.writeStream.format("parquet")
-        .option("checkpointLocation", chkLocation).start(dataLocation)
-      ms1.addData(1, 2, 3)
-      try {
-        val e = intercept[IllegalStateException] {
-          ds2.writeStream.format("parquet")
-            .option("checkpointLocation", chkLocation).start(dataLocation)
+        val query1 = ds1.writeStream.format("parquet")
+          .option("checkpointLocation", chkLocation).start(dataLocation)
+        ms1.addData(1, 2, 3)
+        try {
+          val e = intercept[IllegalStateException] {
+            ds2.writeStream.format("parquet")
+              .option("checkpointLocation", chkLocation).start(dataLocation)
+          }
+          assert(e.getMessage.contains("same id"))
+        } finally {
+          spark.streams.active.foreach(_.stop())
         }
-        assert(e.getMessage.contains("same id"))
-      } finally {
-        query1.stop()
+      }
+    }
+  }
+
+  testQuietly("new instance of the same streaming query stops old query in the same session") {
+    failAfter(90 seconds) {
+      withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "true") {
+        withTempDir { dir =>
+          val (ms1, ds1) = makeDataset
+          val (ms2, ds2) = makeDataset
+          val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
+          val dataLocation = new File(dir, "data").getCanonicalPath
+
+          val query1 = ds1.writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+          ms1.addData(1, 2, 3)
+          val query2 = ds2.writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+          try {
+            ms2.addData(1, 2, 3)
+            query2.processAllAvailable()
+            assert(spark.sharedState.activeStreamingQueries.get(query2.id) ===
+              query2.asInstanceOf[StreamingQueryWrapper].streamingQuery,
+              "The correct streaming query is not being tracked in global state")
+
+            assert(!query1.isActive,
+              "First query should have stopped before starting the second query")
+          } finally {
+            spark.streams.active.foreach(_.stop())
+          }
+        }
       }
     }
   }
 
   testQuietly(
     "can't start multiple instances of the same streaming query in the different sessions") {
-    withTempDir { dir =>
-      val session2 = spark.cloneSession()
+    withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "false") {
+      withTempDir { dir =>
+        val session2 = spark.cloneSession()
 
-      val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
-      val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
-      val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
-      val dataLocation = new File(dir, "data").getCanonicalPath
+        val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
+        val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+        val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
+        val dataLocation = new File(dir, "data").getCanonicalPath
 
-      val query1 = ms1.toDS().writeStream.format("parquet")
-        .option("checkpointLocation", chkLocation).start(dataLocation)
-      ms1.addData(1, 2, 3)
-      try {
-        val e = intercept[IllegalStateException] {
-          ds2.writeStream.format("parquet")
-            .option("checkpointLocation", chkLocation).start(dataLocation)
+        val query1 = ms1.toDS().writeStream.format("parquet")
+          .option("checkpointLocation", chkLocation).start(dataLocation)
+        ms1.addData(1, 2, 3)
+        try {
+          val e = intercept[IllegalStateException] {
+            ds2.writeStream.format("parquet")
+              .option("checkpointLocation", chkLocation).start(dataLocation)
+          }
+          assert(e.getMessage.contains("same id"))
+        } finally {
+          spark.streams.active.foreach(_.stop())
+          session2.streams.active.foreach(_.stop())
         }
-        assert(e.getMessage.contains("same id"))
-      } finally {
-        query1.stop()
+      }
+    }
+  }
+
+  testQuietly(
+    "new instance of the same streaming query stops old query in a different session") {
+    failAfter(90 seconds) {
+      withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "true") {
+        withTempDir { dir =>
+          val session2 = spark.cloneSession()
+
+          val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
+          val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+          val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
+          val dataLocation = new File(dir, "data").getCanonicalPath
+
+          val query1 = ms1.toDS().writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+          ms1.addData(1, 2, 3)
+          val query2 = ds2.writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+          try {
+            ms1.addData(1, 2, 3)
+            query2.processAllAvailable()
+            assert(spark.sharedState.activeStreamingQueries.get(query2.id) ===
+              query2.asInstanceOf[StreamingQueryWrapper].streamingQuery,
+              "The correct streaming execution is not being tracked in global state")
+
+            assert(!query1.isActive,
+              "First query should have stopped before starting the second query")
+          } finally {
+            spark.streams.active.foreach(_.stop())
+            session2.streams.active.foreach(_.stop())
+          }
+        }
       }
     }
   }

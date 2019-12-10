@@ -20,10 +20,13 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning}
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.datasources.SchemaPruning
+import org.apache.spark.sql.execution.datasources.v2.V2ScanRelationPushDown
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs}
 
 class SparkOptimizer(
@@ -32,10 +35,12 @@ class SparkOptimizer(
     experimentalMethods: ExperimentalMethods)
   extends Optimizer(catalogManager) {
 
+  override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
+    // TODO: move SchemaPruning into catalyst
+    SchemaPruning :: PruneFileSourcePartitions :: V2ScanRelationPushDown :: Nil
+
   override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
-    Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
-    Batch("Schema Pruning", Once, SchemaPruning) :+
     Batch("PartitionPruning", Once,
       PartitionPruning,
       OptimizeSubqueries) :+
@@ -64,7 +69,8 @@ class SparkOptimizer(
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
     ExtractPythonUDFFromJoinCondition.ruleName :+
     ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
-    ExtractPythonUDFs.ruleName
+    ExtractPythonUDFs.ruleName :+
+    V2ScanRelationPushDown.ruleName
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before

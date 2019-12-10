@@ -18,18 +18,14 @@
 package org.apache.spark.api.python
 
 import java.io.{DataOutputStream, File, FileOutputStream}
-import java.net.InetAddress
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 
-import py4j.GatewayServer
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
 
 /**
- * Process that starts a Py4J GatewayServer on an ephemeral port.
+ * Process that starts a Py4J server on an ephemeral port.
  *
  * This process is launched (via SparkSubmit) by the PySpark driver (see java_gateway.py).
  */
@@ -37,23 +33,13 @@ private[spark] object PythonGatewayServer extends Logging {
   initializeLogIfNecessary(true)
 
   def main(args: Array[String]): Unit = {
-    val secret = Utils.createSecret(new SparkConf())
-
-    // Start a GatewayServer on an ephemeral port. Make sure the callback client is configured
-    // with the same secret, in case the app needs callbacks from the JVM to the underlying
-    // python processes.
-    val localhost = InetAddress.getLoopbackAddress()
-    val gatewayServer: GatewayServer = new GatewayServer.GatewayServerBuilder()
-      .authToken(secret)
-      .javaPort(0)
-      .javaAddress(localhost)
-      .callbackClient(GatewayServer.DEFAULT_PYTHON_PORT, localhost, secret)
-      .build()
+    val sparkConf = new SparkConf()
+    val gatewayServer: Py4JServer = new Py4JServer(sparkConf)
 
     gatewayServer.start()
     val boundPort: Int = gatewayServer.getListeningPort
     if (boundPort == -1) {
-      logError("GatewayServer failed to bind; exiting")
+      logError(s"${gatewayServer.server.getClass} failed to bind; exiting")
       System.exit(1)
     } else {
       logDebug(s"Started PythonGatewayServer on port $boundPort")
@@ -68,7 +54,7 @@ private[spark] object PythonGatewayServer extends Logging {
     val dos = new DataOutputStream(new FileOutputStream(tmpPath))
     dos.writeInt(boundPort)
 
-    val secretBytes = secret.getBytes(UTF_8)
+    val secretBytes = gatewayServer.secret.getBytes(UTF_8)
     dos.writeInt(secretBytes.length)
     dos.write(secretBytes, 0, secretBytes.length)
     dos.close()

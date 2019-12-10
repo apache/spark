@@ -18,12 +18,14 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.Types
+import java.util.Locale
 
 import org.apache.spark.sql.types._
 
 private object DB2Dialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:db2")
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
 
   override def getCatalystType(
       sqlType: Int,

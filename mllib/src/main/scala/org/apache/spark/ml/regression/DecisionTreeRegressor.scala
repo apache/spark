@@ -23,7 +23,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -36,7 +36,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeMo
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
-
+import org.apache.spark.sql.types.StructType
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Decision_tree_learning">Decision tree</a>
@@ -132,15 +132,14 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(
-      data: RDD[LabeledPoint],
+      data: RDD[Instance],
       oldStrategy: OldStrategy,
       featureSubsetStrategy: String): DecisionTreeRegressionModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(data)
     instr.logParams(this, params: _*)
 
-    val instances = data.map(_.toInstance)
-    val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,
+    val trees = RandomForest.run(data, oldStrategy, numTrees = 1,
       featureSubsetStrategy, seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
@@ -203,9 +202,21 @@ class DecisionTreeRegressionModel private[ml] (
     rootNode.predictImpl(features).impurityStats.calculate()
   }
 
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(varianceCol))
+    }
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateField(outputSchema, getLeafField($(leafCol)))
+    }
+    outputSchema
+  }
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
@@ -214,18 +225,21 @@ class DecisionTreeRegressionModel private[ml] (
       val predictUDF = udf { features: Vector => predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
+        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
       val predictVarianceUDF = udf { features: Vector => predictVariance(features) }
       predictionColNames :+= $(varianceCol)
       predictionColumns :+= predictVarianceUDF(col($(featuresCol)))
+        .as($(varianceCol), outputSchema($(varianceCol)).metadata)
     }
 
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { features: Vector => predictLeaf(features) }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
+        .as($(leafCol), outputSchema($(leafCol)).metadata)
     }
 
     if (predictionColNames.nonEmpty) {
@@ -244,7 +258,8 @@ class DecisionTreeRegressionModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"DecisionTreeRegressionModel (uid=$uid) of depth $depth with $numNodes nodes"
+    s"DecisionTreeRegressionModel: uid=$uid, depth=$depth, numNodes=$numNodes, " +
+      s"numFeatures=$numFeatures"
   }
 
   /**

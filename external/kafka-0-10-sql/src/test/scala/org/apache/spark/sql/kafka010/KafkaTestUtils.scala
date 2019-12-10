@@ -18,14 +18,14 @@
 package org.apache.spark.sql.kafka010
 
 import java.io.{File, IOException}
-import java.lang.{Integer => JInt}
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
-import java.util.{Collections, Map => JMap, Properties, UUID}
+import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
 import javax.security.auth.login.Configuration
 
 import scala.collection.JavaConverters._
+import scala.io.Source
 import scala.util.Random
 
 import com.google.common.io.Files
@@ -41,13 +41,12 @@ import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SaslConfigs
-import org.apache.kafka.common.header.Header
-import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.zookeeper.server.auth.SASLAuthenticationProvider
+import org.scalatest.Assertions._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
@@ -67,6 +66,8 @@ class KafkaTestUtils(
     secure: Boolean = false) extends Logging {
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
+  private val IBM_KRB_DEBUG_CONFIG = "com.ibm.security.krb5.Krb5Debug"
+  private val SUN_KRB_DEBUG_CONFIG = "sun.security.krb5.debug"
 
   private val localCanonicalHostName = InetAddress.getLoopbackAddress().getCanonicalHostName()
   logInfo(s"Local host name is $localCanonicalHostName")
@@ -133,9 +134,45 @@ class KafkaTestUtils(
   private def setUpMiniKdc(): Unit = {
     val kdcDir = Utils.createTempDir()
     val kdcConf = MiniKdc.createConf()
+    kdcConf.setProperty(MiniKdc.DEBUG, "true")
     kdc = new MiniKdc(kdcConf, kdcDir)
     kdc.start()
+    // TODO https://issues.apache.org/jira/browse/SPARK-30037
+    // Need to build spark's own MiniKDC and customize krb5.conf like Kafka
+    rewriteKrb5Conf()
     kdcReady = true
+  }
+
+  /**
+   * In this method we rewrite krb5.conf to make kdc and client use the same enctypes
+   */
+  private def rewriteKrb5Conf(): Unit = {
+    val krb5Conf = Source.fromFile(kdc.getKrb5conf, "UTF-8").getLines()
+    var rewritten = false
+    val addedConfig =
+      addedKrb5Config("default_tkt_enctypes", "aes128-cts-hmac-sha1-96") +
+        addedKrb5Config("default_tgs_enctypes", "aes128-cts-hmac-sha1-96")
+    val rewriteKrb5Conf = krb5Conf.map(s =>
+      if (s.contains("libdefaults")) {
+        rewritten = true
+        s + addedConfig
+      } else {
+        s
+      }).filter(!_.trim.startsWith("#")).mkString(System.lineSeparator())
+
+    val krb5confStr = if (!rewritten) {
+      "[libdefaults]" + addedConfig + System.lineSeparator() +
+        System.lineSeparator() + rewriteKrb5Conf
+    } else {
+      rewriteKrb5Conf
+    }
+
+    kdc.getKrb5conf.delete()
+    Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+  }
+
+  private def addedKrb5Config(key: String, value: String): String = {
+    System.lineSeparator() + s"    $key=$value"
   }
 
   private def createKeytabsAndJaasConfigFile(): String = {
@@ -170,6 +207,7 @@ class KafkaTestUtils(
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
+      |  refreshKrb5Config=true
       |  keyTab="${zkServerKeytabFile.getAbsolutePath()}"
       |  principal="$zkServerUser@$realm";
       |};
@@ -179,6 +217,7 @@ class KafkaTestUtils(
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
+      |  refreshKrb5Config=true
       |  keyTab="${zkClientKeytabFile.getAbsolutePath()}"
       |  principal="$zkClientUser@$realm";
       |};
@@ -238,6 +277,7 @@ class KafkaTestUtils(
     }
 
     if (secure) {
+      setupKrbDebug()
       setUpMiniKdc()
       val jaasConfigFile = createKeytabsAndJaasConfigFile()
       System.setProperty(JAVA_AUTH_CONFIG, jaasConfigFile)
@@ -249,6 +289,14 @@ class KafkaTestUtils(
     setupEmbeddedKafkaServer()
     eventually(timeout(1.minute)) {
       assert(zkUtils.getAllBrokersInCluster().nonEmpty, "Broker was not up in 60 seconds")
+    }
+  }
+
+  private def setupKrbDebug(): Unit = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      System.setProperty(IBM_KRB_DEBUG_CONFIG, "all")
+    } else {
+      System.setProperty(SUN_KRB_DEBUG_CONFIG, "true")
     }
   }
 
@@ -303,6 +351,15 @@ class KafkaTestUtils(
       kdc.stop()
     }
     UserGroupInformation.reset()
+    teardownKrbDebug()
+  }
+
+  private def teardownKrbDebug(): Unit = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      System.clearProperty(IBM_KRB_DEBUG_CONFIG)
+    } else {
+      System.clearProperty(SUN_KRB_DEBUG_CONFIG)
+    }
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */

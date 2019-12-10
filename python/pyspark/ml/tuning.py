@@ -88,8 +88,14 @@ class ParamGridBuilder(object):
     def addGrid(self, param, values):
         """
         Sets the given parameters in this grid to fixed values.
+
+        param must be an instance of Param associated with an instance of Params
+        (such as Estimator or Transformer).
         """
-        self._param_grid[param] = values
+        if isinstance(param, Param):
+            self._param_grid[param] = values
+        else:
+            raise TypeError("param must be an instance of Param")
 
         return self
 
@@ -298,6 +304,24 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         Sets the value of :py:attr:`numFolds`.
         """
         return self._set(numFolds=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    def setCollectSubModels(self, value):
+        """
+        Sets the value of :py:attr:`collectSubModels`.
+        """
+        return self._set(collectSubModels=value)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
@@ -642,6 +666,24 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
         Sets the value of :py:attr:`trainRatio`.
         """
         return self._set(trainRatio=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    def setCollectSubModels(self, value):
+        """
+        Sets the value of :py:attr:`collectSubModels`.
+        """
+        return self._set(collectSubModels=value)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)

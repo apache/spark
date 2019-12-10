@@ -11,7 +11,7 @@ struct<>
 
 
 -- !query 1
-INSERT INTO FLOAT8_TBL VALUES ('    0.0   ')
+INSERT INTO FLOAT8_TBL VALUES (double('    0.0   '))
 -- !query 1 schema
 struct<>
 -- !query 1 output
@@ -19,7 +19,7 @@ struct<>
 
 
 -- !query 2
-INSERT INTO FLOAT8_TBL VALUES ('1004.30  ')
+INSERT INTO FLOAT8_TBL VALUES (double('1004.30  '))
 -- !query 2 schema
 struct<>
 -- !query 2 output
@@ -27,7 +27,7 @@ struct<>
 
 
 -- !query 3
-INSERT INTO FLOAT8_TBL VALUES ('   -34.84')
+INSERT INTO FLOAT8_TBL VALUES (double('   -34.84'))
 -- !query 3 schema
 struct<>
 -- !query 3 output
@@ -35,7 +35,7 @@ struct<>
 
 
 -- !query 4
-INSERT INTO FLOAT8_TBL VALUES ('1.2345678901234e+200')
+INSERT INTO FLOAT8_TBL VALUES (double('1.2345678901234e+200'))
 -- !query 4 schema
 struct<>
 -- !query 4 output
@@ -43,7 +43,7 @@ struct<>
 
 
 -- !query 5
-INSERT INTO FLOAT8_TBL VALUES ('1.2345678901234e-200')
+INSERT INTO FLOAT8_TBL VALUES (double('1.2345678901234e-200'))
 -- !query 5 schema
 struct<>
 -- !query 5 output
@@ -684,7 +684,7 @@ struct<>
 
 
 -- !query 76
-INSERT INTO FLOAT8_TBL VALUES ('0.0')
+INSERT INTO FLOAT8_TBL VALUES (double('0.0'))
 -- !query 76 schema
 struct<>
 -- !query 76 output
@@ -692,7 +692,7 @@ struct<>
 
 
 -- !query 77
-INSERT INTO FLOAT8_TBL VALUES ('-34.84')
+INSERT INTO FLOAT8_TBL VALUES (double('-34.84'))
 -- !query 77 schema
 struct<>
 -- !query 77 output
@@ -700,7 +700,7 @@ struct<>
 
 
 -- !query 78
-INSERT INTO FLOAT8_TBL VALUES ('-1004.30')
+INSERT INTO FLOAT8_TBL VALUES (double('-1004.30'))
 -- !query 78 schema
 struct<>
 -- !query 78 output
@@ -708,7 +708,7 @@ struct<>
 
 
 -- !query 79
-INSERT INTO FLOAT8_TBL VALUES ('-1.2345678901234e+200')
+INSERT INTO FLOAT8_TBL VALUES (double('-1.2345678901234e+200'))
 -- !query 79 schema
 struct<>
 -- !query 79 output
@@ -716,7 +716,7 @@ struct<>
 
 
 -- !query 80
-INSERT INTO FLOAT8_TBL VALUES ('-1.2345678901234e-200')
+INSERT INTO FLOAT8_TBL VALUES (double('-1.2345678901234e-200'))
 -- !query 80 schema
 struct<>
 -- !query 80 output

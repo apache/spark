@@ -42,7 +42,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -776,7 +775,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("CREATE TABLE test2 (key INT, value STRING)")
       testData.write.mode(SaveMode.Append).insertInto("test2")
       testData.write.mode(SaveMode.Append).insertInto("test2")
-      sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
+      sql("CREATE TABLE test USING hive AS " +
+        "SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
       checkAnswer(
         table("test"),
         sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
@@ -937,7 +937,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     read.json(ds).createOrReplaceTempView("data")
 
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
-      sql("CREATE TABLE explodeTest (key bigInt)")
+      sql("CREATE TABLE explodeTest (key bigInt) USING hive")
       table("explodeTest").queryExecution.analyzed match {
         case SubqueryAlias(_, r: HiveTableRelation) => // OK
         case _ =>
@@ -1181,51 +1181,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     read.json(ds).createOrReplaceTempView("t")
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
-  }
-
-  test("Convert hive interval term into Literal of CalendarIntervalType") {
-    checkAnswer(sql("select interval '0 0:0:0.1' day to second"),
-      Row(CalendarInterval.fromString("interval 100 milliseconds")))
-    checkAnswer(sql("select interval '10-9' year to month"),
-      Row(CalendarInterval.fromString("interval 10 years 9 months")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to hour"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to minute"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
-        "32 seconds 998 milliseconds 999 microseconds")))
-    checkAnswer(sql("select interval '15:40:32.99899999' hour to minute"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
-    checkAnswer(sql("select interval '15:40.99899999' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 minutes 40 seconds 998 milliseconds " +
-        "999 microseconds")))
-    checkAnswer(sql("select interval '15:40' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
-    checkAnswer(sql("select interval '15:40:32.99899999' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes 32 seconds 998 milliseconds " +
-        "999 microseconds")))
-    checkAnswer(sql("select interval '20 40:32.99899999' minute to second"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 40 minutes 32 seconds " +
-        "998 milliseconds 999 microseconds")))
-    checkAnswer(sql("select interval '40:32.99899999' minute to second"),
-      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds 998 milliseconds " +
-        "999 microseconds")))
-    checkAnswer(sql("select interval '40:32' minute to second"),
-      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds")))
-    checkAnswer(sql("select interval '30' year"),
-      Row(CalendarInterval.fromString("interval 30 years")))
-    checkAnswer(sql("select interval '25' month"),
-      Row(CalendarInterval.fromString("interval 25 months")))
-    checkAnswer(sql("select interval '-100' day"),
-      Row(CalendarInterval.fromString("interval -14 weeks -2 days")))
-    checkAnswer(sql("select interval '40' hour"),
-      Row(CalendarInterval.fromString("interval 1 days 16 hours")))
-    checkAnswer(sql("select interval '80' minute"),
-      Row(CalendarInterval.fromString("interval 1 hour 20 minutes")))
-    checkAnswer(sql("select interval '299.889987299' second"),
-      Row(CalendarInterval.fromString(
-        "interval 4 minutes 59 seconds 889 milliseconds 987 microseconds")))
   }
 
   test("specifying database name for a temporary view is not allowed") {
@@ -1936,7 +1891,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
 
       withTable("load_t") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/*part-r*' INTO TABLE load_t")
         checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1"), Row("2"), Row("3")))
 
@@ -1956,7 +1911,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8)
       }
       withTable("load_t") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000 1' INTO TABLE load_t")
         checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1")))
       }
@@ -1971,7 +1926,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t_folder_wildcard") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '${
           path.substring(0, path.length - 1)
             .concat("*")
@@ -1995,7 +1950,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t1") {
-        sql("CREATE TABLE load_t1 (a STRING)")
+        sql("CREATE TABLE load_t1 (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000?' INTO TABLE load_t1")
         checkAnswer(sql("SELECT * FROM load_t1"), Seq(Row("1"), Row("2"), Row("3")))
       }
@@ -2010,7 +1965,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t2") {
-        sql("CREATE TABLE load_t2 (a STRING)")
+        sql("CREATE TABLE load_t2 (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/?art-r-00001' INTO TABLE load_t2")
         checkAnswer(sql("SELECT * FROM load_t2"), Seq(Row("1")))
       }
@@ -2136,7 +2091,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       withTable("t") {
         df.createTempView("tempView")
         val e = intercept[AnalysisException] {
-          sql("CREATE TABLE t AS SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
+          sql("CREATE TABLE t USING hive AS " +
+            "SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
         }.getMessage
         assert(e.contains(expectedMsg))
       }
@@ -2421,7 +2377,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         })
         spark
           .range(5)
-          .select(badUDF('id).as("a"))
+          .select(badUDF($"id").as("a"))
           .createOrReplaceTempView("test")
         val scriptFilePath = getTestResourcePath("data")
         val e = intercept[SparkException] {

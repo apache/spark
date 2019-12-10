@@ -787,6 +787,9 @@ private[hive] trait HiveInspectors {
       ObjectInspectorFactory.getStandardStructObjectInspector(
         java.util.Arrays.asList(fields.map(f => f.name) : _*),
         java.util.Arrays.asList(fields.map(f => toInspector(f.dataType)) : _*))
+    case _: UserDefinedType[_] =>
+      val sqlType = dataType.asInstanceOf[UserDefinedType[_]].sqlType
+      toInspector(sqlType)
   }
 
   /**
@@ -849,6 +852,8 @@ private[hive] trait HiveInspectors {
       }
     case Literal(_, dt: StructType) =>
       toInspector(dt)
+    case Literal(_, dt: UserDefinedType[_]) =>
+      toInspector(dt.sqlType)
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")
     // ideally, we don't test the foldable here(but in optimizer), however, some of the

@@ -161,8 +161,8 @@ public class RowBasedKeyValueBatchSuite {
         valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
          RowBasedKeyValueBatch batch2 = RowBasedKeyValueBatch.allocate(fixedKeySchema,
         valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
-      Assert.assertEquals(batch1.getClass(), VariableLengthRowBasedKeyValueBatch.class);
-      Assert.assertEquals(batch2.getClass(), FixedLengthRowBasedKeyValueBatch.class);
+      Assert.assertEquals(VariableLengthRowBasedKeyValueBatch.class, batch1.getClass());
+      Assert.assertEquals(FixedLengthRowBasedKeyValueBatch.class, batch2.getClass());
     }
   }
 
@@ -290,7 +290,7 @@ public class RowBasedKeyValueBatchSuite {
         appendRow(batch, key, value);
       }
       UnsafeRow ret = appendRow(batch, key, value);
-      Assert.assertEquals(batch.numRows(), 10);
+      Assert.assertEquals(10, batch.numRows());
       Assert.assertNull(ret);
       org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> iterator
               = batch.rowIterator();
@@ -322,7 +322,7 @@ public class RowBasedKeyValueBatchSuite {
         numRows++;
       }
       UnsafeRow ret = appendRow(batch, key, value);
-      Assert.assertEquals(batch.numRows(), numRows);
+      Assert.assertEquals(numRows, batch.numRows());
       Assert.assertNull(ret);
       org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> iterator
               = batch.rowIterator();

@@ -370,7 +370,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return Platform.getByte(base, offset + i);
   }
 
-  private boolean matchAt(final UTF8String s, int pos) {
+  public boolean matchAt(final UTF8String s, int pos) {
     if (s.numBytes + pos > numBytes || pos < 0) {
       return false;
     }
@@ -538,14 +538,42 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trim() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    while (s < this.numBytes && getByte(s) == ' ') s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the space (0x20) in the right side
     int e = this.numBytes - 1;
-    while (e > s && getByte(e) == 0x20) e--;
+    while (e > s && getByte(e) == ' ') e--;
+    if (s == 0 && e == numBytes - 1) {
+      // Nothing trimmed
+      return this;
+    }
+    return copyUTF8String(s, e);
+  }
+
+  /**
+   * Trims whitespaces (<= ASCII 32) from both ends of this string.
+   *
+   * Note that, this method is the same as java's {@link String#trim}, and different from
+   * {@link UTF8String#trim()} which remove only spaces(= ASCII 32) from both ends.
+   *
+   * @return A UTF8String whose value is this UTF8String, with any leading and trailing white
+   * space removed, or this UTF8String if it has no leading or trailing whitespace.
+   *
+   */
+  public UTF8String trimAll() {
+    int s = 0;
+    // skip all of the whitespaces (<=0x20) in the left side
+    while (s < this.numBytes && getByte(s) <= ' ') s++;
+    if (s == this.numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    // skip all of the whitespaces (<=0x20) in the right side
+    int e = this.numBytes - 1;
+    while (e > s && getByte(e) <= ' ') e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -1063,7 +1091,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses this UTF8String to long.
+   * Parses this UTF8String(trimmed if needed) to long.
    *
    * Note that, in this method we accumulate the result in negative format, and convert it to
    * positive format at the end, if this string is not started with '-'. This is because min value
@@ -1077,18 +1105,20 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toLong(LongWrapper toLongResult) {
-    if (numBytes == 0) {
-      return false;
-    }
-
-    byte b = getByte(0);
-    final boolean negative = b == '-';
     int offset = 0;
+    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
+    if (offset == this.numBytes) return false;
+
+    int end = this.numBytes - 1;
+    while (end > offset && getByte(end) <= ' ') end--;
+
+    byte b = getByte(offset);
+    final boolean negative = b == '-';
     if (negative || b == '+') {
-      offset++;
-      if (numBytes == 1) {
+      if (end - offset == 0) {
         return false;
       }
+      offset++;
     }
 
     final byte separator = '.';
@@ -1096,7 +1126,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     final long stopValue = Long.MIN_VALUE / radix;
     long result = 0;
 
-    while (offset < numBytes) {
+    while (offset <= end) {
       b = getByte(offset);
       offset++;
       if (b == separator) {
@@ -1131,7 +1161,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // This is the case when we've encountered a decimal separator. The fractional
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
-    while (offset < numBytes) {
+    while (offset <= end) {
       byte currentByte = getByte(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;
@@ -1151,7 +1181,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses this UTF8String to int.
+   * Parses this UTF8String(trimmed if needed) to int.
    *
    * Note that, in this method we accumulate the result in negative format, and convert it to
    * positive format at the end, if this string is not started with '-'. This is because min value
@@ -1168,18 +1198,20 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toInt(IntWrapper intWrapper) {
-    if (numBytes == 0) {
-      return false;
-    }
-
-    byte b = getByte(0);
-    final boolean negative = b == '-';
     int offset = 0;
+    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
+    if (offset == this.numBytes) return false;
+
+    int end = this.numBytes - 1;
+    while (end > offset && getByte(end) <= ' ') end--;
+
+    byte b = getByte(offset);
+    final boolean negative = b == '-';
     if (negative || b == '+') {
-      offset++;
-      if (numBytes == 1) {
+      if (end - offset == 0) {
         return false;
       }
+      offset++;
     }
 
     final byte separator = '.';
@@ -1187,7 +1219,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     final int stopValue = Integer.MIN_VALUE / radix;
     int result = 0;
 
-    while (offset < numBytes) {
+    while (offset <= end) {
       b = getByte(offset);
       offset++;
       if (b == separator) {
@@ -1222,7 +1254,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // This is the case when we've encountered a decimal separator. The fractional
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
-    while (offset < numBytes) {
+    while (offset <= end) {
       byte currentByte = getByte(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;

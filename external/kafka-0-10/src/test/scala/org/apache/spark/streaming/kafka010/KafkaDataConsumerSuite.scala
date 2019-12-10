@@ -121,8 +121,6 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
     val numThreads = 100
     val numConsumerUsages = 500
 
-    @volatile var error: Throwable = null
-
     def consume(i: Int): Unit = {
       val useCache = Random.nextBoolean
       val taskContext = if (Random.nextBoolean) {
@@ -138,10 +136,6 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
           new String(bytes)
         }
         assert(rcvd == data)
-      } catch {
-        case e: Throwable =>
-          error = e
-          throw e
       } finally {
         consumer.release()
       }
@@ -155,7 +149,6 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
         })
       }
       futures.foreach(_.get(1, TimeUnit.MINUTES))
-      assert(error == null)
     } finally {
       threadPool.shutdown()
     }

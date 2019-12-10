@@ -20,8 +20,9 @@ package org.apache.spark.sql.types
 import java.lang.{Long => JLong}
 import java.math.{BigInteger, MathContext, RoundingMode}
 
+import scala.util.Try
+
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.AnalysisException
 
 /**
  * A mutable implementation of BigDecimal that can hold a Long if values are small enough.
@@ -188,7 +189,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toScalaBigInt: BigInt = {
     if (decimalVal.ne(null)) {
-      decimalVal.toBigInt()
+      decimalVal.toBigInt
     } else {
       BigInt(toLong)
     }
@@ -220,15 +221,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  def toDouble: Double = toBigDecimal.doubleValue()
+  def toDouble: Double = toBigDecimal.doubleValue
 
-  def toFloat: Float = toBigDecimal.floatValue()
+  def toFloat: Float = toBigDecimal.floatValue
 
   def toLong: Long = {
     if (decimalVal.eq(null)) {
       longVal / POW_10(_scale)
     } else {
-      decimalVal.longValue()
+      decimalVal.longValue
     }
   }
 
@@ -622,6 +623,9 @@ object Decimal {
     override def toLong(x: Decimal): Long = x.toLong
     override def fromInt(x: Int): Decimal = new Decimal().set(x)
     override def compare(x: Decimal, y: Decimal): Int = x.compare(y)
+    // Added from Scala 2.13; don't override to work in 2.12
+    // TODO revisit once Scala 2.12 support is dropped
+    def parseString(str: String): Option[Decimal] = Try(Decimal(str)).toOption
   }
 
   /** A [[scala.math.Fractional]] evidence parameter for Decimals. */

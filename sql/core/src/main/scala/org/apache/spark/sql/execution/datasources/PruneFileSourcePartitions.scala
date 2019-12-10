@@ -39,7 +39,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
-      val normalizedFilters = DataSourceStrategy.normalizeFilters(
+      val normalizedFilters = DataSourceStrategy.normalizeExprs(
         filters.filterNot(SubqueryExpression.hasSubquery), logicalRelation.output)
 
       val sparkSession = fsRelation.sparkSession
@@ -48,7 +48,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
           partitionSchema, sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters = ExpressionSet(normalizedFilters.filter { f =>
-        f.references.subsetOf(partitionSet) && f.find(_.isInstanceOf[SubqueryExpression]).isEmpty
+        f.references.subsetOf(partitionSet)
       })
 
       if (partitionKeyFilters.nonEmpty) {
