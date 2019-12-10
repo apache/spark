@@ -51,6 +51,9 @@ case class First(funcName: String, child: Expression, ignoreNullsExpr: Expressio
 
   def this(child: Expression) = this(child, Literal.create(false, BooleanType))
 
+  def this(funcName: String, child: Expression) =
+    this(funcName, child, Literal.create(false, BooleanType))
+
   override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
   override def nullable: Boolean = true
@@ -115,5 +118,7 @@ case class First(funcName: String, child: Expression, ignoreNullsExpr: Expressio
 
   override lazy val evaluateExpression: AttributeReference = first
 
-  override def toString: String = s"$funcName($child)${if (ignoreNulls) " ignore nulls"}"
+  override def nodeName: String = funcName
+
+  override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 }

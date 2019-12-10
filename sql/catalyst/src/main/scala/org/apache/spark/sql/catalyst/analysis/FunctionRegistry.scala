@@ -635,7 +635,6 @@ object FunctionRegistry {
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
     val constructors = tag.runtimeClass.getConstructors
       .filter(_.getParameterTypes.head == classOf[String])
-    assert(constructors.length == 1)
     val builder = (expressions: Seq[Expression]) => {
       val params = classOf[String] +: Seq.fill(expressions.size)(classOf[Expression])
       val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
