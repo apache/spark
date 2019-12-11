@@ -255,7 +255,7 @@ object StatFunctions extends Logging {
           case "count" => (child: Expression) => Count(child).toAggregateExpression()
           case "mean" => (child: Expression) => Average(child).toAggregateExpression()
           case "stddev" => (child: Expression) =>
-            StddevSamp("stddev_samp", child).toAggregateExpression()
+            StddevSamp("stddev", child).toAggregateExpression()
           case "min" => (child: Expression) => Min(child).toAggregateExpression()
           case "max" => (child: Expression) => Max(child).toAggregateExpression()
           case _ => throw new IllegalArgumentException(s"$stats is not a recognised statistic")

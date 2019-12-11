@@ -24,8 +24,7 @@ import org.apache.spark.sql.types.IntegerType
 class LastTestSuite extends SparkFunSuite {
   val input = AttributeReference("input", IntegerType, nullable = true)()
   val evaluator = DeclarativeAggregateEvaluator(Last(input, Literal(false)), Seq(input))
-  val evaluatorIgnoreNulls = DeclarativeAggregateEvaluator(
-    Last(input, Literal(true)), Seq(input))
+  val evaluatorIgnoreNulls = DeclarativeAggregateEvaluator(Last(input, Literal(true)), Seq(input))
 
   test("empty buffer") {
     assert(evaluator.initialize() === InternalRow(null, false))
