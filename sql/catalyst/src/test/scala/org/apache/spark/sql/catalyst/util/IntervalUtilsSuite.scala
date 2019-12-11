@@ -416,14 +416,14 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFail("5 12:40", HOUR, MINUTE, "must match day-time format")
 
     check("12:40:30.999999999", HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
-    check("+12:40:30.999999999", HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
-    check("-12:40:30.999999999", HOUR, SECOND, "-12 hours -40 minutes -30.999999 seconds")
+    check("+12:40:30.123456789", HOUR, SECOND, "12 hours 40 minutes 30.123456 seconds")
+    check("-12:40:30.123456789", HOUR, SECOND, "-12 hours -40 minutes -30.123456 seconds")
     checkFail("5 12:40:30", HOUR, SECOND, "must match day-time format")
     checkFail("12:40:30.0123456789", HOUR, SECOND, "must match day-time format")
 
-    check("40:30.999999999", MINUTE, SECOND, "40 minutes 30.999999 seconds")
-    check("+40:30.999999999", MINUTE, SECOND, "40 minutes 30.999999 seconds")
-    check("-40:30.999999999", MINUTE, SECOND, "-40 minutes -30.999999 seconds")
+    check("40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
+    check("+40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
+    check("-40:30.123456789", MINUTE, SECOND, "-40 minutes -30.123456 seconds")
     checkFail("12:40:30", MINUTE, SECOND, "must match day-time format")
 
     check("5 12", DAY, HOUR, "5 days 12 hours")
@@ -438,7 +438,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
     check("5 12:40:30.123", DAY, SECOND, "5 days 12 hours 40 minutes 30.123 seconds")
     check("+5 12:40:30.123456", DAY, SECOND, "5 days 12 hours 40 minutes 30.123456 seconds")
-    check("-5 12:40:30.999999999", DAY, SECOND, "-5 days -12 hours -40 minutes -30.999999 seconds")
+    check("-5 12:40:30.123456789", DAY, SECOND, "-5 days -12 hours -40 minutes -30.123456 seconds")
     checkFail("5 12", DAY, SECOND, "must match day-time format")
 
     checkFail("5 30:12:20", DAY, SECOND, "hour 30 outside range")
