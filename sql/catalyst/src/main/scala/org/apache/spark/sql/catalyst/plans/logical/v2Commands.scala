@@ -280,6 +280,14 @@ case class AlterNamespaceSetProperties(
     properties: Map[String, String]) extends Command
 
 /**
+ * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET OWNER command, as parsed from SQL.
+ */
+case class AlterNamespaceSetOwner(
+    namespace: Seq[String],
+    ownerName: String,
+    ownerType: String) extends Command
+
+/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
