@@ -172,7 +172,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "non aggregate function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT hex(a) FILTER (WHERE c = 1) FROM TaBlE2"),
-    "DISTINCT or FILTER predicate specified, but hex is not an aggregate function" :: Nil)
+    "DISTINCT or FILTER specified, but hex is not an aggregate function" :: Nil)
 
   errorTest(
     "distinct window function",
