@@ -99,7 +99,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT, false)
+    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 }
 
@@ -155,16 +155,25 @@ class RobustScaler (override val uid: String)
     val localUpper = $(upper)
     val localLower = $(lower)
 
-    val collected = vectors.flatMap { vec =>
-      require(vec.size == numFeatures,
-        s"Number of dimensions must be $numFeatures but got ${vec.size}")
-      Iterator.range(0, numFeatures).map { i => (i, vec(i)) }
+    // compute scale by the logic in treeAggregate with depth=2
+    // TODO: design a common treeAggregateByKey in PairRDDFunctions?
+    val scale = math.max(math.ceil(math.sqrt(vectors.getNumPartitions)).toInt, 2)
+
+    val collected = vectors.mapPartitionsWithIndex { case (pid, iter) =>
+      val p = pid % scale
+      iter.flatMap { vec =>
+        require(vec.size == numFeatures,
+          s"Number of dimensions must be $numFeatures but got ${vec.size}")
+        Iterator.range(0, numFeatures).map { i => ((p, i), vec(i)) }
+      }
     }.aggregateByKey(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))(
       seqOp = (s, v) => s.insert(v),
       combOp = (s1, s2) => s1.compress.merge(s2.compress)
-    ).mapValues { s =>
-      // confirm compression before query
+    ).map { case ((_, i), s) => (i, s)
+    }.reduceByKey { case (s1, s2) => s1.compress.merge(s2.compress)
+    }.mapValues { s =>
+        // confirm compression before query
       val s2 = s.compress
       val range = s2.query(localUpper).get - s2.query(localLower).get
       val median = s2.query(0.5).get
