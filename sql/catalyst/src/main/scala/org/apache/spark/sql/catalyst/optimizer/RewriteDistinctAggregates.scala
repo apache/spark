@@ -77,16 +77,16 @@ import org.apache.spark.sql.types.IntegerType
  *
  * Second example: aggregate function without distinct and with filter clauses (in sql):
  * {{{
- *   SELECT 
- *     COUNT(DISTINCT cat1) as cat1_cnt, 
- *     COUNT(DISTINCT cat2) as cat2_cnt, 
+ *   SELECT
+ *     COUNT(DISTINCT cat1) as cat1_cnt,
+ *     COUNT(DISTINCT cat2) as cat2_cnt,
  *     SUM(value) FILTER (
- *       WHERE 
+ *       WHERE
  *         id > 1
- *     ) AS total 
- *  FROM 
- *    data 
- *  GROUP BY 
+ *     ) AS total
+ *  FROM
+ *    data
+ *  GROUP BY
  *    key
  * }}}
  *
@@ -123,16 +123,16 @@ import org.apache.spark.sql.types.IntegerType
  *
  * Third example: aggregate function with distinct and filter clauses (in sql):
  * {{{
- *   SELECT 
+ *   SELECT
  *     COUNT(DISTINCT cat1) FILTER (
- *       WHERE 
+ *       WHERE
  *         id > 1
- *     ) as cat1_cnt, 
- *     COUNT(DISTINCT cat2) as cat2_cnt, 
+ *     ) as cat1_cnt,
+ *     COUNT(DISTINCT cat2) as cat2_cnt,
  *     SUM(value) as total
- *   FROM 
- *     data 
- *   GROUP BY 
+ *   FROM
+ *     data
+ *   GROUP BY
  *     key
  * }}}
  *
