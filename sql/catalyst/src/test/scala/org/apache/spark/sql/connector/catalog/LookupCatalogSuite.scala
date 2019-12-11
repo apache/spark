@@ -58,7 +58,7 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       ("tbl", sessionCatalog, Seq.empty, "tbl"),
       ("db.tbl", sessionCatalog, Seq("db"), "tbl"),
       (s"$globalTempDB.tbl", sessionCatalog, Seq(globalTempDB), "tbl"),
-      (s"$globalTempDB.ns1.ns2.tbl", catalogs(globalTempDB), Seq("ns1", "ns2"), "tbl"),
+      (s"$globalTempDB.ns1.ns2.tbl", sessionCatalog, Seq(globalTempDB, "ns1", "ns2"), "tbl"),
       ("prod.func", catalogs("prod"), Seq.empty, "func"),
       ("ns1.ns2.tbl", sessionCatalog, Seq("ns1", "ns2"), "tbl"),
       ("prod.db.tbl", catalogs("prod"), Seq("db"), "tbl"),

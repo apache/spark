@@ -104,7 +104,7 @@ private[sql] trait LookupCatalog extends Logging {
       assert(nameParts.nonEmpty)
       if (nameParts.length == 1) {
         Some((currentCatalog, Identifier.of(Array(), nameParts.head)))
-      } else if (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(globalTempDB)) {
+      } else if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
         // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
         // API does not support view yet, and we have to use v1 commands to deal with global temp
         // views. To simplify the implementation, we put global temp views in a special namespace
