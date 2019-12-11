@@ -61,11 +61,26 @@ class InMemoryFileIndex(
   override val rootPaths =
     rootPathsSpecified.filterNot(FileStreamSink.ancestorIsMetadataDirectory(_, hadoopConf))
 
+  var _metadataOpsTimeNs: Option[Long] = None
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
   refresh0()
+
+  private[sql] def this(sparkSession: SparkSession,
+                        partitionSpec: PartitionSpec,
+                        parameters: Map[String, String],
+                        userSpecifiedSchema: Option[StructType],
+                        fileStatusCache: FileStatusCache,
+                        metadataOpsTimeNs: Option[Long]) {
+    this(sparkSession, partitionSpec.partitions.map(_.path),
+      parameters, userSpecifiedSchema, fileStatusCache)
+    cachedPartitionSpec = partitionSpec
+    _metadataOpsTimeNs = metadataOpsTimeNs
+  }
+
+  override def metadataOpsTimeNs: Option[Long] = _metadataOpsTimeNs
 
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
