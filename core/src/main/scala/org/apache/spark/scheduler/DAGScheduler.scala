@@ -450,6 +450,7 @@ private[spark] class DAGScheduler(
   private def mergeResourceProfiles(r1: ResourceProfile, r2: ResourceProfile): ResourceProfile = {
 
     // TODO - add merge functionality
+    throw new SparkException("Merging of ResourceProfiles not yet supported!")
     r1
     /*
     val mergedKeys = r1.getResources.keySet ++ r2.getResources.keySet

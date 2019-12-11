@@ -274,12 +274,13 @@ private[spark] class ExecutorAllocationManager(
    * The maximum number of executors we would need under the current load to satisfy all running
    * and pending tasks, rounded up.
    */
-  private def maxNumExecutorsNeededPerResourceProfileId(rp: ResourceProfile): Int = {
+  private def maxNumExecutorsNeededPerResourceProfile(rp: ResourceProfile): Int = {
     val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp.id) +
       listener.totalRunningTasksPerResourceProfile(rp.id)
     val executorCores = rp.getExecutorCores.getOrElse(conf.get(EXECUTOR_CORES))
     val tasksPerExecutor = ResourceProfile.numTasksPerExecutor(executorCores, rp, conf)
-    logWarning(s"max needed executor rpId: $rp.id numpending $numRunningOrPendingTasks")
+    logWarning(s"max needed executor rpId: $rp.id numpending $numRunningOrPendingTasks," +
+      s" tasksperexecutor $tasksPerExecutor")
     math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
       tasksPerExecutor).toInt
   }
@@ -334,7 +335,7 @@ private[spark] class ExecutorAllocationManager(
 
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
       resourceProfileManager.getAllProfiles.foreach { case (rProfId, resourceProfile) =>
-        val maxNeeded = maxNumExecutorsNeededPerResourceProfileId(resourceProfile)
+        val maxNeeded = maxNumExecutorsNeededPerResourceProfile(resourceProfile)
         val targetExecs =
           numExecutorsTargetPerResourceProfile.getOrElseUpdate(resourceProfile, initialNumExecutors)
         if (maxNeeded < targetExecs) {
@@ -390,7 +391,6 @@ private[spark] class ExecutorAllocationManager(
       updates: Map[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates],
       now: Long): Int = {
     // Only call cluster manager if target has changed.
-    logWarning("in do Request update: " + updates)
     if (updates.size > 0) {
       val requestAcknowledged = try {
         logInfo("requesting updates: " + updates)
@@ -485,7 +485,7 @@ private[spark] class ExecutorAllocationManager(
 
     // Boost our target with the number to add for this round:
     numExecutorsTargetPerResourceProfile(rp) +=
-      numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rp.id, 0)
+      numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rp.id, 1)
 
     // Ensure that our target doesn't exceed what we need at the present moment:
     numExecutorsTargetPerResourceProfile(rp) =
@@ -661,8 +661,7 @@ private[spark] class ExecutorAllocationManager(
         allocationManager.onSchedulerBacklogged()
         // need to keep stage task requirements to ask for the right containers
         val stageResourceProf = stageSubmitted.stageInfo.resourceProfile.getOrElse(defaultProfile)
-        logInfo("stage reosurce profile is: " + stageResourceProf)
-        // stageAttemptToResourceProfile(stageAttempt) = stageResourceProf
+        logInfo("stage resource profile is: " + stageResourceProf)
         val profId = stageResourceProf.id
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
@@ -672,8 +671,7 @@ private[spark] class ExecutorAllocationManager(
         // TODO - shouldn't need this if added rdd.withResources
         resourceProfileManager.addResourceProfile(stageResourceProf)
         // resourceProfileIdToResourceProfile.getOrElseUpdate(profId, stageResourceProf)
-        numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, 0)
-
+        numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, initialNumExecutors)
 
         // Compute the number of tasks requested by the stage on each host
         var numTasksPending = 0
@@ -929,7 +927,7 @@ private[spark] class ExecutorAllocationManager(
     registerGauge("numberAllExecutors", executorMonitor.executorCount, 0)
     registerGauge("numberTargetExecutors", numExecutorsTargetPerResourceProfile(defaultProfile), 0)
     registerGauge("numberMaxNeededExecutors",
-      maxNumExecutorsNeededPerResourceProfileId(defaultProfile), 0)
+      maxNumExecutorsNeededPerResourceProfile(defaultProfile), 0)
   }
 }
 

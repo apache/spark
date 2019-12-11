@@ -173,6 +173,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assume(isYarnResourceTypesAvailable())
     val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG)
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
+    // create default profile so we get a different id to test below
+    val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     val rprof = new ResourceProfile
     val execReq = new ExecutorResourceRequests().resource("resource.gpu", 6)
     val taskReq = new TaskResourceRequests().resource("resource.gpu", 1)
@@ -181,7 +183,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     // request a single container and receive it
     val handler = createAllocator(0)
 
-    val resourceProfileToTotalExecs = mutable.HashMap(rprof -> 1)
+    val resourceProfileToTotalExecs = mutable.HashMap(defaultRProf -> 0, rprof -> 1)
     val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(rprof.id -> 0)
     handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
       numLocalityAwareTasksPerResourceProfileId.toMap, Map.empty, Set.empty)
@@ -200,6 +202,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
+
+    ResourceProfile.resetDefaultProfile(sparkConf)
   }
 
 
@@ -207,6 +211,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assume(isYarnResourceTypesAvailable())
     val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG)
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
+    // create default profile so we get a different id to test below
+    val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     val rprof = new ResourceProfile
     val execReq = new ExecutorResourceRequests().resource("resource.gpu", 6)
     val taskReq = new TaskResourceRequests().resource("resource.gpu", 1)
@@ -219,21 +225,19 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     // request a single container and receive it
     val handler = createAllocator(1)
-    handler.updateResourceRequests()
-    handler.getNumExecutorsRunning should be (0)
-    handler.getNumContainersPendingAllocate should be (1)
-
-    val resourceProfileToTotalExecs = mutable.HashMap(rprof -> 1, rprof2 -> 2)
+    val resourceProfileToTotalExecs = mutable.HashMap(defaultRProf -> 0, rprof -> 1, rprof2 -> 2)
     val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(rprof.id -> 0, rprof2.id -> 0)
     handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
       numLocalityAwareTasksPerResourceProfileId.toMap, Map.empty, Set.empty)
 
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getNumContainersPendingAllocate should be (3)
+
     val container = createContainer("host1", priority = Priority.newInstance(rprof.id))
-    handler.handleAllocatedContainers(Array(container))
     val container2 = createContainer("host2", priority = Priority.newInstance(rprof2.id))
-    handler.handleAllocatedContainers(Array(container2))
     val container3 = createContainer("host3", priority = Priority.newInstance(rprof2.id))
-    handler.handleAllocatedContainers(Array(container3))
+    handler.handleAllocatedContainers(Array(container, container2, container3))
 
     handler.getNumExecutorsRunning should be (3)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
@@ -248,6 +252,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
+
+    ResourceProfile.resetDefaultProfile(sparkConf)
   }
 
   test("custom resource requested from yarn") {
