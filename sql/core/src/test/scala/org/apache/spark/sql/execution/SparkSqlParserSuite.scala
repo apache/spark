@@ -262,18 +262,18 @@ class SparkSqlParserSuite extends AnalysisTest {
 
   test("manage resources") {
     assertEqual("ADD FILE abc.txt", AddFileCommand("abc.txt"))
-    assertEqual("ADD FILE \'abc.txt\'", AddFileCommand("abc.txt"))
+    assertEqual("ADD FILE 'abc.txt'", AddFileCommand("abc.txt"))
     assertEqual("ADD FILE \"/path/to/abc.txt\"", AddFileCommand("/path/to/abc.txt"))
-    assertEqual("LIST FILE abc.txt", ListFilesCommand("abc.txt".split("\\s+")))
-    assertEqual("LIST FILE \'/path//abc.txt\'", ListFilesCommand("/path//abc.txt".split("\\s+")))
-    assertEqual("LIST FILE \"/path2/abc.txt\"", ListFilesCommand("/path2/abc.txt".split("\\s+")))
+    assertEqual("LIST FILE abc.txt", ListFilesCommand(Array("abc.txt")))
+    assertEqual("LIST FILE '/path//abc.txt'", ListFilesCommand(Array("/path//abc.txt")))
+    assertEqual("LIST FILE \"/path2/abc.txt\"", ListFilesCommand(Array("/path2/abc.txt")))
     assertEqual("ADD JAR /path2/_2/abc.jar", AddJarCommand("/path2/_2/abc.jar"))
-    assertEqual("ADD JAR \'/test/path_2/jar/abc.jar\'", AddJarCommand("/test/path_2/jar/abc.jar"))
+    assertEqual("ADD JAR '/test/path_2/jar/abc.jar'", AddJarCommand("/test/path_2/jar/abc.jar"))
     assertEqual("ADD JAR \"abc.jar\"", AddJarCommand("abc.jar"))
     assertEqual("LIST JAR /path-with-dash/abc.jar",
-      ListJarsCommand("/path-with-dash/abc.jar".split("\\s+")))
-    assertEqual("LIST JAR \'abc.jar\'", ListJarsCommand("abc.jar".split("\\s+")))
-    assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand("abc.jar".split("\\s+")))
+      ListJarsCommand(Array("/path-with-dash/abc.jar")))
+    assertEqual("LIST JAR 'abc.jar'", ListJarsCommand(Array("abc.jar")))
+    assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand(Array("abc.jar")))
     assertEqual("ADD FILE /path with space/abc.txt", AddFileCommand("/path with space/abc.txt"))
     assertEqual("ADD JAR /path with space/abc.jar", AddJarCommand("/path with space/abc.jar"))
   }
