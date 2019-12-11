@@ -213,8 +213,8 @@ statement
         multipartIdentifier partitionSpec? describeColName?            #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | COMMENT ON (database | NAMESPACE) multipartIdentifier IS
-        kind=(STRING | NULL)                                           #commentNamespace
-    | COMMENT ON TABLE multipartIdentifier IS kind=(STRING | NULL)     #commentTable
+        commennt=(STRING | NULL)                                       #commentNamespace
+    | COMMENT ON TABLE multipartIdentifier IS commennt=(STRING | NULL) #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier

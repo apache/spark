@@ -3376,7 +3376,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {
-    val comment = ctx.kind.getType match {
+    val comment = ctx.commennt.getType match {
       case SqlBaseParser.NULL => ""
       case _ => string(ctx.STRING)
     }
@@ -3384,7 +3384,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   override def visitCommentTable(ctx: CommentTableContext): LogicalPlan = withOrigin(ctx) {
-    val comment = ctx.kind.getType match {
+    val comment = ctx.commennt.getType match {
       case SqlBaseParser.NULL => ""
       case _ => string(ctx.STRING)
     }
