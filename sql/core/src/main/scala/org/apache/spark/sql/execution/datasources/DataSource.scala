@@ -796,7 +796,7 @@ object DataSource extends Logging {
       }
     }
 
-    allPaths.seq
+    allPaths.toSeq
   }
 
   /**
