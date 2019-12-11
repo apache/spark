@@ -216,15 +216,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
       ShowTableProperties(r, propertyKey)
 
-    case CommentOnNamespace(CatalogAndIdentifierParts(catalog, parts), comment) =>
+    case CommentOnNamespace(CatalogAndNamespace(catalog, parts), comment) =>
       AlterNamespaceSetProperties(
         catalog.asNamespaceCatalog,
         parts,
         Map(SupportsNamespaces.PROP_COMMENT -> comment))
 
-    case CommentOnTable(nameParts @ CatalogAndIdentifierParts(catalog, tableName), comment) =>
+    case CommentOnTable(nameParts @ CatalogAndIdentifier(catalog, tableName), comment) =>
       val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
-      createAlterTable(nameParts, catalog, tableName, Seq(changes))
+      createAlterTable(nameParts, catalog, tableName.asMultipartIdentifier, Seq(changes))
   }
 
   object NonSessionCatalogAndTable {
