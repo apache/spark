@@ -980,7 +980,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
-    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ($"id" + i).as(s"c$i")} : _*)
     // Make sure the generated code for this plan can compile and execute.
     checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
   }
@@ -1390,7 +1390,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       }
 
       testCheckpointing("basic") {
-        val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
+        val ds = spark.range(10).repartition($"id" % 2).filter($"id" > 5).orderBy($"id".desc)
         val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
 
         val logicalRDD = cp.logicalPlan match {
@@ -1425,10 +1425,10 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       }
 
       testCheckpointing("should preserve partitioning information") {
-        val ds = spark.range(10).repartition('id % 2)
+        val ds = spark.range(10).repartition($"id" % 2)
         val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
 
-        val agg = cp.groupBy('id % 2).agg(count('id))
+        val agg = cp.groupBy($"id" % 2).agg(count($"id"))
 
         agg.queryExecution.executedPlan.collectFirst {
           case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
@@ -1440,7 +1440,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
           )
         }
 
-        checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
+        checkAnswer(agg, ds.groupBy($"id" % 2).agg(count($"id")))
       }
     }
   }
@@ -1538,11 +1538,9 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.sort("id"), expected)
     checkAnswer(df.sort(col("id")), expected)
     checkAnswer(df.sort($"id"), expected)
-    checkAnswer(df.sort('id), expected)
     checkAnswer(df.orderBy("id"), expected)
     checkAnswer(df.orderBy(col("id")), expected)
     checkAnswer(df.orderBy($"id"), expected)
-    checkAnswer(df.orderBy('id), expected)
   }
 
   test("SPARK-21567: Dataset should work with type alias") {
@@ -1697,7 +1695,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-24571: filtering of string values by char literal") {
     val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
-    checkAnswer(df.where('city === 'X'), Seq(Row("X")))
+    checkAnswer(df.where($"city" === 'X'), Seq(Row("X")))
     checkAnswer(
       df.where($"city".contains(java.lang.Character.valueOf('A'))),
       Seq(Row("Amsterdam")))
