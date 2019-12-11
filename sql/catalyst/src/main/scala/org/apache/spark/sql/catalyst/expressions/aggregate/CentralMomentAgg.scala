@@ -175,6 +175,8 @@ case class StddevSamp(funcName: String, child: Expression) extends CentralMoment
   }
 
   override def nodeName: String = funcName
+
+  override def flatArguments: Iterator[Any] = Iterator(child)
 }
 
 // Compute the population variance of a column
@@ -216,6 +218,8 @@ case class VarianceSamp(funcName: String, child: Expression) extends CentralMome
   }
 
   override def nodeName: String = funcName
+
+  override def flatArguments: Iterator[Any] = Iterator(child)
 }
 
 @ExpressionDescription(

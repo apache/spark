@@ -85,7 +85,7 @@ struct<stddev_pop(CAST(CAST(udf(cast(b as string)) AS FLOAT) AS DOUBLE)):double>
 -- !query 10
 SELECT udf(stddev_samp(b)) FROM aggtest
 -- !query 10 schema
-struct<CAST(udf(cast(stddev_samp(stddev_samp, cast(b as double)) as string)) AS DOUBLE):double>
+struct<CAST(udf(cast(stddev_samp(cast(b as double)) as string)) AS DOUBLE):double>
 -- !query 10 output
 151.38936080399804
 
@@ -101,7 +101,7 @@ struct<var_pop(CAST(CAST(udf(cast(b as string)) AS FLOAT) AS DOUBLE)):double>
 -- !query 12
 SELECT udf(var_samp(b)) FROM aggtest
 -- !query 12 schema
-struct<CAST(udf(cast(var_samp(var_samp, cast(b as double)) as string)) AS DOUBLE):double>
+struct<CAST(udf(cast(var_samp(cast(b as double)) as string)) AS DOUBLE):double>
 -- !query 12 output
 22918.738564643096
 
