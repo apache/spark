@@ -1513,7 +1513,7 @@ object SQLConf {
         "1. pyspark.sql.DataFrame.toPandas " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "The following data types are unsupported: " +
-        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
+        "BinaryType, ArrayType of TimestampType, and nested StructType.")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
   val ARROW_SPARKR_EXECUTION_ENABLED =
@@ -1525,7 +1525,7 @@ object SQLConf {
         "3. dapply " +
         "4. gapply " +
         "The following data types are unsupported: " +
-        "FloatType, BinaryType, ArrayType, StructType and MapType.")
+        "FloatType, BinaryType, ArrayType, and StructType.")
       .booleanConf
       .createWithDefault(false)
 
