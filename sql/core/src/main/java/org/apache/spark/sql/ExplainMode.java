@@ -41,14 +41,14 @@ public enum ExplainMode {
    */
   Extended,
   /**
-   * Extended mode means that when printing explain for a DataFrame, if generated codes are
+   * Codegen mode means that when printing explain for a DataFrame, if generated codes are
    * available, a physical plan and the generated codes are expected to be printed to the console.
    *
    * @since 3.0.0
    */
   Codegen,
   /**
-   * Extended mode means that when printing explain for a DataFrame, if plan node statistics are
+   * Cost mode means that when printing explain for a DataFrame, if plan node statistics are
    * available, a logical plan and the statistics are expected to be printed to the console.
    *
    * @since 3.0.0
