@@ -386,7 +386,6 @@ private[spark] class ExecutorAllocationManager(
       updates: Map[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates],
       now: Long): Int = {
     // Only call cluster manager if target has changed.
-    logWarning("in do Request update: " + updates)
     if (updates.size > 0) {
       val requestAcknowledged = try {
         logInfo("requesting updates: " + updates)
@@ -481,7 +480,7 @@ private[spark] class ExecutorAllocationManager(
 
     // Boost our target with the number to add for this round:
     numExecutorsTargetPerResourceProfile(rp) +=
-      numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rp.id, 0)
+      numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rp.id, 1)
 
     // Ensure that our target doesn't exceed what we need at the present moment:
     numExecutorsTargetPerResourceProfile(rp) =
@@ -649,8 +648,7 @@ private[spark] class ExecutorAllocationManager(
         allocationManager.onSchedulerBacklogged()
         // need to keep stage task requirements to ask for the right containers
         val stageResourceProf = stageSubmitted.stageInfo.resourceProfile.getOrElse(defaultProfile)
-        logInfo("stage reosurce profile is: " + stageResourceProf)
-        // stageAttemptToResourceProfile(stageAttempt) = stageResourceProf
+        logInfo("stage resource profile is: " + stageResourceProf)
         val profId = stageResourceProf.id
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
@@ -658,8 +656,7 @@ private[spark] class ExecutorAllocationManager(
         numExecutorsToAddPerResourceProfileId.getOrElseUpdate(profId, 1)
         // Note we never remove profiles from resourceProfileIdToResourceProfile
         resourceProfileIdToResourceProfile.getOrElseUpdate(profId, stageResourceProf)
-        numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, 0)
-
+        numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, initialNumExecutors)
 
         // Compute the number of tasks requested by the stage on each host
         var numTasksPending = 0
