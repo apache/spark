@@ -159,7 +159,7 @@ class RobustScaler (override val uid: String)
     // TODO: design a common treeAggregateByKey in PairRDDFunctions?
     val scale = math.max(math.ceil(math.sqrt(vectors.getNumPartitions)).toInt, 2)
 
-    val collected = vectors.mapPartitionsWithIndex { case (pid, iter) =>
+    val (ranges, medians) = vectors.mapPartitionsWithIndex { case (pid, iter) =>
       val p = pid % scale
       iter.flatMap { vec =>
         require(vec.size == numFeatures,
@@ -178,17 +178,9 @@ class RobustScaler (override val uid: String)
       val range = s2.query(localUpper).get - s2.query(localLower).get
       val median = s2.query(0.5).get
       (range, median)
-    }.collectAsMap()
-
-    val ranges = Array.ofDim[Double](numFeatures)
-    val medians = Array.ofDim[Double](numFeatures)
-    var i = 0
-    while (i < numFeatures) {
-      val (range, median) = collected(i)
-      ranges(i) = range
-      medians(i) = median
-      i += 1
-    }
+    }.sortBy(_._1).values.collect().unzip
+    require(ranges.length == numFeatures,
+      "QuantileSummaries on some dimensions were not computed")
 
     copyValues(new RobustScalerModel(uid, Vectors.dense(ranges).compressed,
       Vectors.dense(medians).compressed).setParent(this))
