@@ -192,6 +192,7 @@
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
     <htmlunit.version>2.22</htmlunit.version>
+    <prometheus.version>0.8.0</prometheus.version>
     <!--
     Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
     -->
@@ -701,6 +702,21 @@
         <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-jmx</artifactId>
         <version>${codahale.metrics.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.prometheus</groupId>
+        <artifactId>simpleclient</artifactId>
+        <version>${prometheus.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.prometheus</groupId>
+        <artifactId>simpleclient_httpserver</artifactId>
+        <version>${prometheus.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.prometheus</groupId>
+        <artifactId>simpleclient_pushgateway</artifactId>
+        <version>${prometheus.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>

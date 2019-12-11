@@ -208,3 +208,14 @@
 #*.sink.prometheusServlet.path=/metrics/prometheus
 #master.sink.prometheusServlet.path=/metrics/master/prometheus
 #applications.sink.prometheusServlet.path=/metrics/applications/prometheus
+
+# Example configuration for PrometheusPushGateWay
+#*.sink.prometheusPushGateWay.class=org.apache.spark.metrics.sink.PrometheusPushGateWay
+#*.sink.prometheusPushGateWay.job=spark
+#*.sink.prometheusPushGateWay.host=127.0.0.1
+#*.sink.prometheusPushGateWay.port=9091
+#*.sink.prometheusPushGateWay.groupKey=job=spark;instance=spark
+#driver.sink.prometheusPushGateWay.job=spark
+#driver.sink.prometheusPushGateWay.host=127.0.0.1
+#driver.sink.prometheusPushGateWay.port=9091
+#driver.sink.prometheusPushGateWay.groupKey=job=spark;type=spark
