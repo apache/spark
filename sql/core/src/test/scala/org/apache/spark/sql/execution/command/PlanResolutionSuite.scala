@@ -141,7 +141,8 @@ class PlanResolutionSuite extends AnalysisTest {
       CTESubstitution,
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
-      analyzer.ResolveTables)
+      analyzer.ResolveTables,
+      analyzer.ResolveRelations)
     rules.foldLeft(parsePlan(query)) {
       case (plan, rule) => rule.apply(plan)
     }

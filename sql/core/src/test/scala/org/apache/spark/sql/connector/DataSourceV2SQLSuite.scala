@@ -1822,6 +1822,15 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SHOW FUNCTIONS not valid v1 namespace") {
+    val function = "testcat.ns1.ns2.fun"
+
+    val e = intercept[AnalysisException] {
+      sql(s"SHOW FUNCTIONS LIKE $function")
+    }
+    assert(e.message.contains("SHOW FUNCTIONS is only supported in v1 catalog"))
+  }
+
   test("global temp view should not be masked by v2 catalog") {
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
     spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
@@ -1833,6 +1842,38 @@ class DataSourceV2SQLSuite
       sql(s"drop view $globalTempDB.v2")
     } finally {
       spark.sharedState.globalTempViewManager.clear()
+    }
+  }
+
+  test("SPARK-30104: global temp db is used as a table name under v2 catalog") {
+    val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val t = s"testcat.$globalTempDB"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql("USE testcat")
+      // The following should not throw AnalysisException, but should use `testcat.$globalTempDB`.
+      sql(s"DESCRIBE TABLE $globalTempDB")
+    }
+  }
+
+  test("table name same as catalog can be used") {
+    withTable("testcat.testcat") {
+      sql(s"CREATE TABLE testcat.testcat (id bigint, data string) USING foo")
+      sql("USE testcat")
+      // The following should not throw AnalysisException.
+      sql(s"DESCRIBE TABLE testcat")
+    }
+  }
+
+  test("SPARK-30001: session catalog name can be specified in SQL statements") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+
+    withTable("t") {
+      sql("CREATE TABLE t USING json AS SELECT 1 AS i")
+      checkAnswer(sql("select * from t"), Row(1))
+      checkAnswer(sql("select * from spark_catalog.t"), Row(1))
+      checkAnswer(sql("select * from spark_catalog.default.t"), Row(1))
     }
   }
 

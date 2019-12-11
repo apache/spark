@@ -321,25 +321,25 @@ struct<five:string,f1:int,x:int>
 -- !query 33
 SELECT '' AS five, i.f1, i.f1 / smallint('2') AS x FROM INT4_TBL i
 -- !query 33 schema
-struct<five:string,f1:int,x:int>
+struct<five:string,f1:int,x:double>
 -- !query 33 output
-	-123456	-61728
-	-2147483647	-1073741823
-	0	0
-	123456	61728
-	2147483647	1073741823
+	-123456	-61728.0
+	-2147483647	-1.0737418235E9
+	0	0.0
+	123456	61728.0
+	2147483647	1.0737418235E9
 
 
 -- !query 34
 SELECT '' AS five, i.f1, i.f1 / int('2') AS x FROM INT4_TBL i
 -- !query 34 schema
-struct<five:string,f1:int,x:int>
+struct<five:string,f1:int,x:double>
 -- !query 34 output
-	-123456	-61728
-	-2147483647	-1073741823
-	0	0
-	123456	61728
-	2147483647	1073741823
+	-123456	-61728.0
+	-2147483647	-1.0737418235E9
+	0	0.0
+	123456	61728.0
+	2147483647	1.0737418235E9
 
 
 -- !query 35
@@ -417,17 +417,17 @@ struct<ten:int>
 -- !query 44
 SELECT 2 + 2 / 2 AS three
 -- !query 44 schema
-struct<three:int>
+struct<three:double>
 -- !query 44 output
-3
+3.0
 
 
 -- !query 45
 SELECT (2 + 2) / 2 AS two
 -- !query 45 schema
-struct<two:int>
+struct<two:double>
 -- !query 45 output
-2
+2.0
 
 
 -- !query 46

@@ -186,6 +186,18 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
   }
 
+  test("like escape expressions") {
+    val message = "Escape string must contains only one character."
+    assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", '#'))
+    assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", '\"'))
+    intercept("a like 'pattern%' escape '##'", message)
+    intercept("a like 'pattern%' escape ''", message)
+    assertEqual("a not like 'pattern%' escape '#'", !('a.like("pattern%", '#')))
+    assertEqual("a not like 'pattern%' escape '\"'", !('a.like("pattern%", '\"')))
+    intercept("a not like 'pattern%' escape '\"/'", message)
+    intercept("a not like 'pattern%' escape ''", message)
+  }
+
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
     val conf = new SQLConf()
     conf.setConfString(SQLConf.ESCAPED_STRING_LITERALS.key, "true")
@@ -633,7 +645,7 @@ class ExpressionParserSuite extends AnalysisTest {
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
 
         // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
-        withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
           assertEqual(intervalValue, expected)
         }
       }
@@ -720,12 +732,12 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("SPARK-23264 Interval Compatibility tests") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         assertEqual(intervalValue, expected)
       }
 
       // Compatibility tests: If ANSI SQL disabled, `intervalValue` should be parsed as an alias
-      withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
         val aliases = defaultParser.parseExpression(intervalValue).collect {
           case a @ Alias(_: Literal, name)
             if intervalUnits.exists { unit => name.startsWith(unit.toString) } => a
@@ -823,12 +835,12 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("current date/timestamp braceless expressions") {
-    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
     }
 
-    withSQLConf(SQLConf.DIALECT_SPARK_ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
     }

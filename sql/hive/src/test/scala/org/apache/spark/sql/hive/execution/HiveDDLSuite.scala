@@ -180,8 +180,8 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
   test("SPARK-22431: illegal nested type") {
     val queries = Seq(
-      "CREATE TABLE t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
-      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT)",
+      "CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
+      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive",
       "CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
 
     queries.foreach(query => {
@@ -252,7 +252,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
   test("SPARK-22431: negative alter table tests with nested types") {
     withTable("t1") {
-      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
       val err = intercept[SparkException] {
         spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
       }.getMessage
@@ -475,7 +475,7 @@ class HiveDDLSuite
           "create the table `default`.`tab1`"))
 
         e = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tab2 location '${tempDir.getCanonicalPath}'")
+          sql(s"CREATE TABLE tab2 USING hive location '${tempDir.getCanonicalPath}'")
         }.getMessage
         assert(e.contains("Unable to infer the schema. The schema specification is required to " +
           "create the table `default`.`tab2`"))
@@ -1638,7 +1638,7 @@ class HiveDDLSuite
         assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
 
         intercept[TableAlreadyExistsException] {
-          sql(s"CREATE TABLE $indexTabName(b int)")
+          sql(s"CREATE TABLE $indexTabName(b int) USING hive")
         }
         intercept[TableAlreadyExistsException] {
           sql(s"ALTER TABLE $tabName RENAME TO $indexTabName")
@@ -2495,7 +2495,7 @@ class HiveDDLSuite
 
   test("load command for non local invalid path validation") {
     withTable("tbl") {
-      sql("CREATE TABLE tbl(i INT, j STRING)")
+      sql("CREATE TABLE tbl(i INT, j STRING) USING hive")
       val e = intercept[AnalysisException](
         sql("load data inpath '/doesnotexist.csv' into table tbl"))
       assert(e.message.contains("LOAD DATA input path does not exist"))
@@ -2710,6 +2710,33 @@ class HiveDDLSuite
         Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
       assert(table.storage.serde === Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
       assert(table.storage.properties("test") == "test")
+    }
+  }
+
+  test("SPARK-30098: create table without provider should " +
+    "use default data source under non-legacy mode") {
+    val catalog = spark.sessionState.catalog
+    withSQLConf(
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "false") {
+      withTable("s") {
+        val defaultProvider = conf.defaultDataSourceName
+        sql("CREATE TABLE s(a INT, b INT)")
+        val table = catalog.getTableMetadata(TableIdentifier("s"))
+        assert(table.provider === Some(defaultProvider))
+      }
+    }
+  }
+
+  test("SPARK-30098: create table without provider should " +
+    "use hive under legacy mode") {
+    val catalog = spark.sessionState.catalog
+    withSQLConf(
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
+      withTable("s") {
+        sql("CREATE TABLE s(a INT, b INT)")
+        val table = catalog.getTableMetadata(TableIdentifier("s"))
+        assert(table.provider === Some("hive"))
+      }
     }
   }
 }

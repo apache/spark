@@ -96,6 +96,8 @@ private[sql] object CatalogV2Implicits {
         quote(ident.name)
       }
     }
+
+    def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
   }
 
   implicit class MultipartIdentifierHelper(parts: Seq[String]) {

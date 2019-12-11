@@ -1425,7 +1425,7 @@ class TypeCoercionSuite extends AnalysisTest {
 
   test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
     "in aggregation function like sum") {
-    val rules = Seq(FunctionArgumentConversion, Division(conf))
+    val rules = Seq(FunctionArgumentConversion, Division)
     // Casts Integer to Double
     ruleTest(rules, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
     // Left expression is Double, right expression is Int. Another rule ImplicitTypeCasts will
@@ -1444,33 +1444,10 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("SPARK-17117 null type coercion in divide") {
-    val rules = Seq(FunctionArgumentConversion, Division(conf), ImplicitTypeCasts)
+    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
-  }
-
-  test("SPARK-28395 Division operator support integral division") {
-    val rules = Seq(FunctionArgumentConversion, Division(conf))
-    Seq(SQLConf.Dialect.SPARK, SQLConf.Dialect.POSTGRESQL).foreach { dialect =>
-      withSQLConf(SQLConf.DIALECT.key -> dialect.toString) {
-        val result1 = if (dialect == SQLConf.Dialect.POSTGRESQL) {
-          IntegralDivide(1L, 1L)
-        } else {
-          Divide(Cast(1L, DoubleType), Cast(1L, DoubleType))
-        }
-        ruleTest(rules, Divide(1L, 1L), result1)
-        val result2 = if (dialect == SQLConf.Dialect.POSTGRESQL) {
-          IntegralDivide(1, Cast(1, ShortType))
-        } else {
-          Divide(Cast(1, DoubleType), Cast(Cast(1, ShortType), DoubleType))
-        }
-        ruleTest(rules, Divide(1, Cast(1, ShortType)), result2)
-
-        ruleTest(rules, Divide(1L, 1D), Divide(Cast(1L, DoubleType), Cast(1D, DoubleType)))
-        ruleTest(rules, Divide(Decimal(1.1), 1L), Divide(Decimal(1.1), 1L))
-      }
-    }
   }
 
   test("binary comparison with string promotion") {
