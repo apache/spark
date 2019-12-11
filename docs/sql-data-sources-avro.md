@@ -240,6 +240,15 @@ Data source options of Avro can be set via:
     </td>
     <td>function <code>from_avro</code></td>
   </tr>
+  <tr>
+    <td><code>actualSchema</code></td>
+    <td>None</td>
+    <td>Optional Avro schema (in JSON format) that was used to serialize the data. This should be set if the schema provided
+      for deserialization is compatible with - but not the same as - the one used to originally convert the data to Avro.
+      For more information on Avro's schema evolution and compatability, please refer to the [documentation of Confluent](https://docs.confluent.io/current/schema-registry/avro.html).
+    </td>
+    <td>function <code>from_avro</code></td>
+  </tr>
 </table>
 
 ## Configuration
