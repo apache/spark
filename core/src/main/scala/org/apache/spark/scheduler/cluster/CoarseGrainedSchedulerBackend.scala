@@ -669,13 +669,17 @@ class CoarseGrainedSchedulerBackend(
   final override def requestTotalExecutors(
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
       hostToLocalTaskCount: Map[Int, Map[String, Int]],
-      resourceProfileToNumExecutors: Map[ResourceProfile, Int]
+      resourceProfileIdToNumExecutors: Map[Int, Int]
     ): Boolean = {
-    val totalExecs = resourceProfileToNumExecutors.values.sum
+    val totalExecs = resourceProfileIdToNumExecutors.values.sum
     if (totalExecs < 0) {
       throw new IllegalArgumentException(
         "Attempted to request a negative number of executor(s) " +
           s"$totalExecs from the cluster manager. Please specify a positive number!")
+    }
+
+    val resourceProfileToNumExecutors = resourceProfileIdToNumExecutors.map { case (rpid, num) =>
+      (resourceProfileManager.resourceProfileFromId(rpid), num)
     }
 
     val response = synchronized {
