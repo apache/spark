@@ -481,25 +481,15 @@ case class AlterTableAddPartitionCommand(
 
     if (table.stats.nonEmpty) {
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+        def calculatePartSize(part: CatalogTablePartition) = CommandUtils.calculateLocationSize(
+          sparkSession.sessionState, table.identifier, part.storage.locationUri)
         val threshold = sparkSession.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
-        val evalPool = ThreadUtils.newForkJoinPool("AlterTableAddPartitionsCommand", 8)
-        val parParts: GenSeq[CatalogTablePartition] =
-          if (parts.length > threshold) {
-            val parParts = parts.par
-            parParts.tasksupport = new ForkJoinTaskSupport(evalPool)
-            parParts
+        val partSizes = if (parts.length > threshold) {
+            ThreadUtils.parmap(parts, "gatheringNewPartitionStats", 8)(calculatePartSize)
           } else {
-            parts
+            parts.map(calculatePartSize)
           }
-
-        val addedSize = try {
-          parParts.map { part =>
-            CommandUtils.calculateLocationSize(sparkSession.sessionState, table.identifier,
-              part.storage.locationUri)
-          }.sum
-        } finally {
-          evalPool.shutdown()
-        }
+        val addedSize = partSizes.sum
         if (addedSize > 0) {
           val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
           catalog.alterTableStats(table.identifier, Some(newStats))
