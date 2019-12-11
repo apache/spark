@@ -24,8 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, Loc
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.After
-import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.FIRST
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{createAfter, FIRST}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
@@ -549,7 +548,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int AFTER y"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, None, Some(After(Array("y"))))
+        QualifiedColType(Seq("x"), IntegerType, None, Some(createAfter("y")))
       )))
   }
 
@@ -639,13 +638,13 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: update column type, comment and position") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c " +
-        "TYPE bigint COMMENT 'new comment' AFTER x.y"),
+        "TYPE bigint COMMENT 'new comment' AFTER d"),
       AlterTableAlterColumnStatement(
         Seq("table_name"),
         Seq("a", "b", "c"),
         Some(LongType),
         Some("new comment"),
-        Some(After(Array("x", "y")))))
+        Some(createAfter("d"))))
   }
 
   test("alter table: drop column") {

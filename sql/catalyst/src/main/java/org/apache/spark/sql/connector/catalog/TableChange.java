@@ -301,13 +301,15 @@ public interface TableChange {
   interface ColumnPosition {
     First FIRST = new First();
 
-    static ColumnPosition After(String[] column) {
+    static ColumnPosition createAfter(String column) {
       return new After(column);
     }
   }
 
   /**
    * Column position FIRST means the specified column should be the first column.
+   * Note that, the specified column may be a nested field, and then FIRST means this field should
+   * be the first one within the struct.
    */
   final class First implements ColumnPosition {
     private First() {}
@@ -320,22 +322,24 @@ public interface TableChange {
 
   /**
    * Column position AFTER means the specified column should be put after the given `column`.
+   * Note that, the specified column may be a nested field, and then the given `column` refers to
+   * a nested field in the same struct.
    */
   final class After implements ColumnPosition {
-    private final String[] column;
+    private final String column;
 
-    private After(String[] column) {
+    private After(String column) {
       assert column != null;
       this.column = column;
     }
 
-    public String[] getColumn() {
+    public String getColumn() {
       return column;
     }
 
     @Override
     public String toString() {
-      return "AFTER " + CatalogV2Implicits.quoteNameParts(column);
+      return "AFTER " + column;
     }
 
     @Override
@@ -343,12 +347,12 @@ public interface TableChange {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       After after = (After) o;
-      return Arrays.equals(column, after.column);
+      return column.equals(after.column);
     }
 
     @Override
     public int hashCode() {
-      return Arrays.hashCode(column);
+      return Objects.hash(column);
     }
   }
 

@@ -2807,8 +2807,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitColPosition(ctx: ColPositionContext): ColumnPosition = {
     ctx.position.getType match {
       case SqlBaseParser.FIRST => ColumnPosition.FIRST
-      case SqlBaseParser.AFTER =>
-        ColumnPosition.After(typedVisit[Seq[String]](ctx.multipartIdentifier).toArray)
+      case SqlBaseParser.AFTER => ColumnPosition.createAfter(ctx.afterCol.getText)
     }
   }
 

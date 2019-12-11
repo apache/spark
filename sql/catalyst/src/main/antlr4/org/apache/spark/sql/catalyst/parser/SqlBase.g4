@@ -855,7 +855,7 @@ intervalUnit
     ;
 
 colPosition
-    : position=FIRST | position=AFTER multipartIdentifier
+    : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
     ;
 
 dataType

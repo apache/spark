@@ -45,7 +45,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       createAlterTable(nameParts, catalog, tbl, changes)
 
     case AlterTableAlterColumnStatement(
-        nameParts @ NonSessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
+         nameParts @ NonSessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
       val colNameArray = colName.toArray
       val typeChange = dataType.map { newDataType =>
         TableChange.updateColumnType(colNameArray, newDataType, true)
