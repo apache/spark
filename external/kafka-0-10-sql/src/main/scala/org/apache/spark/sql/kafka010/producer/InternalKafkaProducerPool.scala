@@ -148,7 +148,8 @@ private[producer] class InternalKafkaProducerPool(
 }
 
 private[kafka010] object InternalKafkaProducerPool extends Logging {
-  private val pool = new InternalKafkaProducerPool(SparkEnv.get.conf)
+  private val pool = new InternalKafkaProducerPool(
+    Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf()))
 
   private type CacheKey = Seq[(String, Object)]
   private type Producer = KafkaProducer[Array[Byte], Array[Byte]]
