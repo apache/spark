@@ -122,8 +122,8 @@ case class First(funcName: String, child: Expression, ignoreNullsExpr: Expressio
 object First {
 
   def apply(child: Expression, ignoreNullsExpr: Expression): First =
-    First("first", child, ignoreNullsExpr)
+    new First("first", child, ignoreNullsExpr)
 
   def apply(child: Expression): First =
-    First("first", child)
+    new First("first", child)
 }

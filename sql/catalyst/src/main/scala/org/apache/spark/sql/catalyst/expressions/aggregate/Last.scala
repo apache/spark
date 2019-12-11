@@ -118,8 +118,8 @@ case class Last(funcName: String, child: Expression, ignoreNullsExpr: Expression
 object Last {
 
   def apply(child: Expression, ignoreNullsExpr: Expression): Last =
-    Last("last", child, ignoreNullsExpr)
+    new Last("last", child, ignoreNullsExpr)
 
   def apply(child: Expression): Last =
-    Last("last", child)
+    new Last("last", child)
 }
