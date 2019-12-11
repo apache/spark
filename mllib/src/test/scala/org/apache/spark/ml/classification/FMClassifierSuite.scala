@@ -176,10 +176,10 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  test("FMClassifier doesn't fit bias when fitBias is off") {
-    val fm = new FMClassifier().setFitBias(false)
+  test("FMClassifier doesn't fit intercept when fitIntercept is off") {
+    val fm = new FMClassifier().setFitIntercept(false)
     val model = fm.fit(smallBinaryDataset)
-    assert(model.bias === 0.0)
+    assert(model.intercept === 0.0)
   }
 
   test("FMClassifier doesn't fit linear when fitLinear is off") {
@@ -199,7 +199,7 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
       model: FMClassificationModel,
       model2: FMClassificationModel
     ): Unit = {
-      assert(model.bias === model2.bias)
+      assert(model.intercept === model2.intercept)
       assert(model.linear.toArray === model2.linear.toArray)
       assert(model.factors.toArray === model2.factors.toArray)
       assert(model.numFeatures === model2.numFeatures)
@@ -227,7 +227,7 @@ object FMClassifierSuite {
     "rawPredictionCol" -> "rawPrediction",
     "probabilityCol" -> "probability",
     "factorSize" -> 4,
-    "fitBias" -> false,
+    "fitIntercept" -> false,
     "fitLinear" -> false,
     "regParam" -> 0.01,
     "miniBatchFraction" -> 0.1,

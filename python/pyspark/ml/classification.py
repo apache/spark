@@ -2363,8 +2363,8 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol, HasSolver, HasSeed,
-                   JavaMLWritable, JavaMLReadable):
+class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol, HasSolver,
+                   HasSeed, HasFitIntercept, JavaMLWritable, JavaMLReadable):
     """
     Factorization Machines learning algorithm for classification.
 
@@ -2402,9 +2402,6 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
                        "which are used to get pairwise interactions between variables",
                        typeConverter=TypeConverters.toInt)
 
-    fitBias = Param(Params._dummy(), "fitBias", "whether to fit global bias term",
-                    typeConverter=TypeConverters.toBoolean)
-
     fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
                       typeConverter=TypeConverters.toBoolean)
 
@@ -2424,20 +2421,20 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
-                 factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
+                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                  tol=1e-6, solver="adamW", thresholds=None, seed=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                 factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                  tol=1e-6, solver="adamW", thresholds=None, seed=None)
         """
         super(FMClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.FMClassifier", self.uid)
-        self._setDefault(factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
+        self._setDefault(factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
                          miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                          tol=1e-6, solver="adamW")
         kwargs = self._input_kwargs
@@ -2447,13 +2444,13 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     @since("3.0.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
-                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0,
+                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                   tol=1e-6, solver="adamW", thresholds=None, seed=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                  factorSize=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                   tol=1e-6, solver="adamW", thresholds=None, seed=None)
         Sets Params for FMClassifier.
@@ -2470,13 +2467,6 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
         Sets the value of :py:attr:`factorSize`.
         """
         return self._set(factorSize=value)
-
-    @since("3.0.0")
-    def setFitBias(self, value):
-        """
-        Sets the value of :py:attr:`fitBias`.
-        """
-        return self._set(fitBias=value)
 
     @since("3.0.0")
     def setFitLinear(self, value):
@@ -2509,11 +2499,11 @@ class FMClassificationModel(JavaProbabilisticClassificationModel, JavaMLWritable
 
     @property
     @since("3.0.0")
-    def bias(self):
+    def intercept(self):
         """
-        Model bias.
+        Model intercept.
         """
-        return self._call_java("bias")
+        return self._call_java("intercept")
 
     @property
     @since("3.0.0")

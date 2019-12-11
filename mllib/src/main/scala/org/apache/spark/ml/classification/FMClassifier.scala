@@ -85,14 +85,14 @@ class FMClassifier @Since("3.0.0") (
   setDefault(factorSize -> 8)
 
   /**
-   * Set whether to fit global bias term.
+   * Set whether to fit intercept term.
    * Default is true.
    *
    * @group setParam
    */
   @Since("3.0.0")
-  def setFitBias(value: Boolean): this.type = set(fitBias, value)
-  setDefault(fitBias -> true)
+  def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
+  setDefault(fitIntercept -> true)
 
   /**
    * Set whether to fit linear term.
@@ -208,7 +208,7 @@ class FMClassifier @Since("3.0.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, factorSize, fitBias, fitLinear, regParam,
+    instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
     instr.logNumClasses(numClasses)
 
@@ -217,12 +217,12 @@ class FMClassifier @Since("3.0.0") (
 
     val coefficients = trainImpl(data, numFeatures, LogisticLoss)
 
-    val (bias, linear, factors) = splitCoefficients(
-      coefficients, numFeatures, $(factorSize), $(fitBias), $(fitLinear))
+    val (intercept, linear, factors) = splitCoefficients(
+      coefficients, numFeatures, $(factorSize), $(fitIntercept), $(fitLinear))
 
     if (handlePersistence) data.unpersist()
 
-    copyValues(new FMClassificationModel(uid, bias, linear, factors))
+    copyValues(new FMClassificationModel(uid, intercept, linear, factors))
   }
 
   @Since("3.0.0")
@@ -242,7 +242,7 @@ object FMClassifier extends DefaultParamsReadable[FMClassifier] {
 @Since("3.0.0")
 class FMClassificationModel private[classification] (
   @Since("3.0.0") override val uid: String,
-  @Since("3.0.0") val bias: Double,
+  @Since("3.0.0") val intercept: Double,
   @Since("3.0.0") val linear: Vector,
   @Since("3.0.0") val factors: Matrix)
   extends ProbabilisticClassificationModel[Vector, FMClassificationModel]
@@ -255,7 +255,7 @@ class FMClassificationModel private[classification] (
   override val numFeatures: Int = linear.size
 
   override protected def predictRaw(features: Vector): Vector = {
-    val rawPrediction = getRawPrediction(features, bias, linear, factors)
+    val rawPrediction = getRawPrediction(features, intercept, linear, factors)
     Vectors.dense(Array(-rawPrediction, rawPrediction))
   }
 
@@ -273,7 +273,7 @@ class FMClassificationModel private[classification] (
 
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMClassificationModel = {
-    copyValues(new FMClassificationModel(uid, bias, linear, factors), extra)
+    copyValues(new FMClassificationModel(uid, intercept, linear, factors), extra)
   }
 
   @Since("3.0.0")
@@ -283,7 +283,7 @@ class FMClassificationModel private[classification] (
   override def toString: String = {
     s"FMClassificationModel: " +
       s"uid=${super.toString}, numClasses=$numClasses, numFeatures=$numFeatures, " +
-      s"factorSize=${$(factorSize)}, fitLinear=${$(fitLinear)}, fitBias=${$(fitBias)}"
+      s"factorSize=${$(factorSize)}, fitLinear=${$(fitLinear)}, fitIntercept=${$(fitIntercept)}"
   }
 }
 
@@ -301,13 +301,13 @@ object FMClassificationModel extends MLReadable[FMClassificationModel] {
     instance: FMClassificationModel) extends MLWriter with Logging {
 
     private case class Data(
-      bias: Double,
+      intercept: Double,
       linear: Vector,
       factors: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.bias, instance.linear, instance.factors)
+      val data = Data(instance.intercept, instance.linear, instance.factors)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -322,9 +322,9 @@ object FMClassificationModel extends MLReadable[FMClassificationModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val Row(bias: Double, linear: Vector, factors: Matrix) =
-        data.select("bias", "linear", "factors").head()
-      val model = new FMClassificationModel(metadata.uid, bias, linear, factors)
+      val Row(intercept: Double, linear: Vector, factors: Matrix) =
+        data.select("intercept", "linear", "factors").head()
+      val model = new FMClassificationModel(metadata.uid, intercept, linear, factors)
       metadata.getAndSetParams(model)
       model
     }

@@ -48,7 +48,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[ml] trait FactorizationMachinesParams
   extends PredictorParams
-  with HasMaxIter with HasStepSize with HasTol with HasSolver with HasSeed {
+  with HasMaxIter with HasStepSize with HasTol with HasSolver with HasSeed with HasFitIntercept {
 
   /**
    * Param for dimensionality of the factors (&gt;= 0)
@@ -63,18 +63,6 @@ private[ml] trait FactorizationMachinesParams
   /** @group getParam */
   @Since("3.0.0")
   final def getFactorSize: Int = $(factorSize)
-
-  /**
-   * Param for whether to fit global bias term
-   * @group param
-   */
-  @Since("3.0.0")
-  final val fitBias: BooleanParam = new BooleanParam(this, "fitBias",
-    "whether to fit global bias term")
-
-  /** @group getParam */
-  @Since("3.0.0")
-  final def getFitBias: Boolean = $(fitBias)
 
   /**
    * Param for whether to fit linear term (aka 1-way term)
@@ -147,7 +135,7 @@ private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
       OldVectors.dense(
         Array.fill($(factorSize) * numFeatures)(rnd.nextGaussian() * $(initStd)) ++
         (if ($(fitLinear)) new Array[Double](numFeatures) else Array.emptyDoubleArray) ++
-        (if ($(fitBias)) new Array[Double](1) else Array.emptyDoubleArray))
+        (if ($(fitIntercept)) new Array[Double](1) else Array.emptyDoubleArray))
     initialCoefficients
   }
 
@@ -162,7 +150,7 @@ private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
     val coefficientsSize = initialCoefficients.size
 
     // optimize coefficients with gradient descent
-    val gradient = parseLoss(loss, $(factorSize), $(fitBias), $(fitLinear), numFeatures)
+    val gradient = parseLoss(loss, $(factorSize), $(fitIntercept), $(fitLinear), numFeatures)
 
     val updater = parseSolver($(solver), coefficientsSize)
 
@@ -209,16 +197,16 @@ private[ml] object FactorizationMachines {
   def parseLoss(
       lossFunc: String,
       factorSize: Int,
-      fitBias: Boolean,
+      fitIntercept: Boolean,
       fitLinear: Boolean,
       numFeatures: Int
     ): BaseFactorizationMachinesGradient = {
 
     lossFunc match {
       case LogisticLoss =>
-        new LogisticFactorizationMachinesGradient(factorSize, fitBias, fitLinear, numFeatures)
+        new LogisticFactorizationMachinesGradient(factorSize, fitIntercept, fitLinear, numFeatures)
       case SquaredError =>
-        new MSEFactorizationMachinesGradient(factorSize, fitBias, fitLinear, numFeatures)
+        new MSEFactorizationMachinesGradient(factorSize, fitIntercept, fitLinear, numFeatures)
       case _ => throw new IllegalArgumentException(s"loss function type $lossFunc is invalidation")
     }
   }
@@ -227,16 +215,16 @@ private[ml] object FactorizationMachines {
       coefficients: Vector,
       numFeatures: Int,
       factorSize: Int,
-      fitBias: Boolean,
+      fitIntercept: Boolean,
       fitLinear: Boolean
     ): (Double, Vector, Matrix) = {
 
     val coefficientsSize = numFeatures * factorSize +
-      (if (fitLinear) numFeatures else 0) + (if (fitBias) 1 else 0)
+      (if (fitLinear) numFeatures else 0) + (if (fitIntercept) 1 else 0)
     require(coefficientsSize == coefficients.size,
       s"coefficients.size did not match the excepted size ${coefficientsSize}")
 
-    val bias = if (fitBias) coefficients(coefficients.size - 1) else 0.0
+    val intercept = if (fitIntercept) coefficients(coefficients.size - 1) else 0.0
     val linear: Vector = if (fitLinear) {
       new DenseVector(coefficients.toArray.slice(
         numFeatures * factorSize, numFeatures * factorSize + numFeatures))
@@ -245,30 +233,30 @@ private[ml] object FactorizationMachines {
     }
     val factors = new DenseMatrix(numFeatures, factorSize,
       coefficients.toArray.slice(0, numFeatures * factorSize), true)
-    (bias, linear, factors)
+    (intercept, linear, factors)
   }
 
   def combineCoefficients(
-      bias: Double,
+      intercept: Double,
       linear: Vector,
       factors: Matrix,
-      fitBias: Boolean,
+      fitIntercept: Boolean,
       fitLinear: Boolean
     ): Vector = {
 
     val coefficients = factors.toDense.values ++
       (if (fitLinear) linear.toArray else Array.emptyDoubleArray) ++
-      (if (fitBias) Array(bias) else Array.emptyDoubleArray)
+      (if (fitIntercept) Array(intercept) else Array.emptyDoubleArray)
     new DenseVector(coefficients)
   }
 
   def getRawPrediction(
       features: Vector,
-      bias: Double,
+      intercept: Double,
       linear: Vector,
       factors: Matrix
     ): Double = {
-    var rawPrediction = bias + features.dot(linear)
+    var rawPrediction = intercept + features.dot(linear)
     (0 until factors.numCols).foreach { f =>
       var sumSquare = 0.0
       var sum = 0.0
@@ -332,14 +320,14 @@ class FMRegressor @Since("3.0.0") (
   setDefault(factorSize -> 8)
 
   /**
-   * Set whether to fit global bias term.
+   * Set whether to fit intercept term.
    * Default is true.
    *
    * @group setParam
    */
   @Since("3.0.0")
-  def setFitBias(value: Boolean): this.type = set(fitBias, value)
-  setDefault(fitBias -> true)
+  def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
+  setDefault(fitIntercept -> true)
 
   /**
    * Set whether to fit linear term.
@@ -445,7 +433,7 @@ class FMRegressor @Since("3.0.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, factorSize, fitBias, fitLinear, regParam,
+    instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
 
     val numFeatures = data.first()._2.size
@@ -453,12 +441,12 @@ class FMRegressor @Since("3.0.0") (
 
     val coefficients = trainImpl(data, numFeatures, SquaredError)
 
-    val (bias, linear, factors) = splitCoefficients(
-      coefficients, numFeatures, $(factorSize), $(fitBias), $(fitLinear))
+    val (intercept, linear, factors) = splitCoefficients(
+      coefficients, numFeatures, $(factorSize), $(fitIntercept), $(fitLinear))
 
     if (handlePersistence) data.unpersist()
 
-    copyValues(new FMRegressionModel(uid, bias, linear, factors))
+    copyValues(new FMRegressionModel(uid, intercept, linear, factors))
   }
 
   @Since("3.0.0")
@@ -478,7 +466,7 @@ object FMRegressor extends DefaultParamsReadable[FMRegressor] {
 @Since("3.0.0")
 class FMRegressionModel private[regression] (
     @Since("3.0.0") override val uid: String,
-    @Since("3.0.0") val bias: Double,
+    @Since("3.0.0") val intercept: Double,
     @Since("3.0.0") val linear: Vector,
     @Since("3.0.0") val factors: Matrix)
   extends PredictionModel[Vector, FMRegressionModel]
@@ -488,12 +476,12 @@ class FMRegressionModel private[regression] (
   override val numFeatures: Int = linear.size
 
   override def predict(features: Vector): Double = {
-    getRawPrediction(features, bias, linear, factors)
+    getRawPrediction(features, intercept, linear, factors)
   }
 
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMRegressionModel = {
-    copyValues(new FMRegressionModel(uid, bias, linear, factors), extra)
+    copyValues(new FMRegressionModel(uid, intercept, linear, factors), extra)
   }
 
   @Since("3.0.0")
@@ -503,7 +491,7 @@ class FMRegressionModel private[regression] (
   override def toString: String = {
     s"FMRegressionModel: " +
       s"uid=${super.toString}, numFeatures=$numFeatures, " +
-      s"factorSize=${$(factorSize)}, fitLinear=${$(fitLinear)}, fitBias=${$(fitBias)}"
+      s"factorSize=${$(factorSize)}, fitLinear=${$(fitLinear)}, fitIntercept=${$(fitIntercept)}"
   }
 }
 
@@ -521,13 +509,13 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
       instance: FMRegressionModel) extends MLWriter with Logging {
 
     private case class Data(
-        bias: Double,
+        intercept: Double,
         linear: Vector,
         factors: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.bias, instance.linear, instance.factors)
+      val data = Data(instance.intercept, instance.linear, instance.factors)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -542,9 +530,9 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val Row(bias: Double, linear: Vector, factors: Matrix) = data
-        .select("bias", "linear", "factors").head()
-      val model = new FMRegressionModel(metadata.uid, bias, linear, factors)
+      val Row(intercept: Double, linear: Vector, factors: Matrix) = data
+        .select("intercept", "linear", "factors").head()
+      val model = new FMRegressionModel(metadata.uid, intercept, linear, factors)
       metadata.getAndSetParams(model)
       model
     }
@@ -597,7 +585,7 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
  */
 private[ml] abstract class BaseFactorizationMachinesGradient(
     factorSize: Int,
-    fitBias: Boolean,
+    fitIntercept: Boolean,
     fitLinear: Boolean,
     numFeatures: Int) extends Gradient {
 
@@ -625,7 +613,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
     var rawPrediction = 0.0
     val vWeightsSize = numFeatures * factorSize
 
-    if (fitBias) rawPrediction += weights(weights.size - 1)
+    if (fitIntercept) rawPrediction += weights(weights.size - 1)
     if (fitLinear) {
       data.foreachActive { case (index, value) =>
         rawPrediction += weights(vWeightsSize + index) * value
@@ -657,7 +645,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
       case data: OldLinalg.SparseVector =>
         val gardSize = data.indices.length * factorSize +
           (if (fitLinear) data.indices.length else 0) +
-          (if (fitBias) 1 else 0)
+          (if (fitIntercept) 1 else 0)
         val gradIndex = Array.fill(gardSize)(0)
         val gradValue = Array.fill(gardSize)(0.0)
         var gradI = 0
@@ -677,7 +665,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
             gradI += 1
           }
         }
-        if (fitBias) {
+        if (fitIntercept) {
           gradIndex(gradI) = weights.size - 1
           gradValue(gradI) = 1.0
         }
@@ -687,7 +675,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
         val gradient = Array.fill(weights.size)(0.0)
         val vWeightsSize = numFeatures * factorSize
 
-        if (fitBias) gradient(weights.size - 1) += 1.0
+        if (fitIntercept) gradient(weights.size - 1) += 1.0
         if (fitLinear) {
           data.foreachActive { case (index, value) =>
             gradient(vWeightsSize + index) += value
@@ -724,12 +712,12 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
  */
 private[ml] class LogisticFactorizationMachinesGradient(
     factorSize: Int,
-    fitBias: Boolean,
+    fitIntercept: Boolean,
     fitLinear: Boolean,
     numFeatures: Int)
   extends BaseFactorizationMachinesGradient(
     factorSize: Int,
-    fitBias: Boolean,
+    fitIntercept: Boolean,
     fitLinear: Boolean,
     numFeatures: Int) with Logging {
 
@@ -766,12 +754,12 @@ private[ml] class LogisticFactorizationMachinesGradient(
  */
 private[ml] class MSEFactorizationMachinesGradient(
     factorSize: Int,
-    fitBias: Boolean,
+    fitIntercept: Boolean,
     fitLinear: Boolean,
     numFeatures: Int)
   extends BaseFactorizationMachinesGradient(
     factorSize: Int,
-    fitBias: Boolean,
+    fitIntercept: Boolean,
     fitLinear: Boolean,
     numFeatures: Int) with Logging {
 

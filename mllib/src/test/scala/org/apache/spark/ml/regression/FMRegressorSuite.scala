@@ -62,8 +62,8 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
       (true, false, Array(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 0.1)),
       (false, false, Array(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1)))
 
-    expectList.foreach { case (fitBias, fitLinear, expectCoeffs) =>
-      assert(combineCoefficients(b, w, v, fitBias, fitLinear) === Vectors.dense(expectCoeffs))
+    expectList.foreach { case (fitIntercept, fitLinear, expectCoeffs) =>
+      assert(combineCoefficients(b, w, v, fitIntercept, fitLinear) === Vectors.dense(expectCoeffs))
     }
   }
 
@@ -83,30 +83,30 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
       (true, false, b, emptyW, v, Array(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 0.1)),
       (false, false, emptyB, emptyW, v, Array(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1)))
 
-    expectList.foreach { case (fitBias, fitLinear, b1, w1, v1, coeffs) =>
+    expectList.foreach { case (fitIntercept, fitLinear, b1, w1, v1, coeffs) =>
       val (b2, w2, v2) = splitCoefficients(Vectors.dense(coeffs),
-        numFeatures, factorSize, fitBias, fitLinear)
+        numFeatures, factorSize, fitIntercept, fitLinear)
       assert(b1 === b2)
       assert(w1 === w2)
       assert(v1 === v2)
     }
   }
 
-  def checkMSE(fitBias: Boolean, fitLinear: Boolean): Unit = {
+  def checkMSE(fitIntercept: Boolean, fitLinear: Boolean): Unit = {
     val numFeatures = 3
     val numSamples = 200
     val factorSize = 2
     val (data, coefficients) = generateFactorInteractionInput(
-      spark, factorSize, numFeatures, numSamples, seed, fitBias, fitLinear)
+      spark, factorSize, numFeatures, numSamples, seed, fitIntercept, fitLinear)
     val (b, w, v) = splitCoefficients(new DenseVector(coefficients),
-      numFeatures, factorSize, fitBias, fitLinear)
+      numFeatures, factorSize, fitIntercept, fitLinear)
 
     val fm = new FMRegressor()
       .setSolver("adamW")
       .setFeaturesCol("features")
       .setLabelCol("label")
       .setFactorSize(factorSize)
-      .setFitBias(fitBias)
+      .setFitIntercept(fitIntercept)
       .setFitLinear(fitLinear)
       .setInitStd(0.01)
       .setMaxIter(100)
@@ -125,7 +125,7 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
     assert(mse ~== 0.0 absTol 1E-4)
 
     // check coefficients
-    assert(b ~== fmModel.bias absTol 1E-2)
+    assert(b ~== fmModel.intercept absTol 1E-2)
     assert(w ~== fmModel.linear absTol 1E-2)
     (0 until numFeatures).foreach { i =>
       ((i + 1) until numFeatures).foreach { j =>
@@ -141,19 +141,19 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  test("MSE with bias and linear") {
+  test("MSE with intercept and linear") {
     checkMSE(true, true)
   }
 
-  test("MSE with bias but without linear") {
+  test("MSE with intercept but without linear") {
     checkMSE(true, false)
   }
 
-  test("MSE with linear but without bias") {
+  test("MSE with linear but without intercept") {
     checkMSE(false, true)
   }
 
-  test("MSE without bias or linear") {
+  test("MSE without intercept or linear") {
     checkMSE(false, false)
   }
 
@@ -162,7 +162,7 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
       model: FMRegressionModel,
       model2: FMRegressionModel
     ): Unit = {
-      assert(model.bias === model2.bias)
+      assert(model.intercept === model2.intercept)
       assert(model.linear.toArray === model2.linear.toArray)
       assert(model.factors.toArray === model2.factors.toArray)
       assert(model.numFeatures === model2.numFeatures)
@@ -188,7 +188,7 @@ object FMRegressorSuite {
     "labelCol" -> "myLabel",
     "predictionCol" -> "prediction",
     "factorSize" -> 2,
-    "fitBias" -> false,
+    "fitIntercept" -> false,
     "fitLinear" -> false,
     "regParam" -> 0.01,
     "miniBatchFraction" -> 0.1,
@@ -206,7 +206,7 @@ object FMRegressorSuite {
     numFeatures: Int,
     numSamples: Int,
     seed: Int,
-    fitBias: Boolean,
+    fitIntercept: Boolean,
     fitLinear: Boolean
   ): (DataFrame, Array[Double]) = {
     import spark.implicits._
@@ -215,10 +215,10 @@ object FMRegressorSuite {
     // generate FM coefficients randomly
     val rnd = new Random(seed)
     val coefficientsSize = factorSize * numFeatures +
-      (if (fitLinear) numFeatures else 0) + (if (fitBias) 1 else 0)
+      (if (fitLinear) numFeatures else 0) + (if (fitIntercept) 1 else 0)
     val coefficients = Array.fill(coefficientsSize)(rnd.nextDouble() - 0.5)
-    val (bias, linear, factors) = splitCoefficients(
-      Vectors.dense(coefficients), numFeatures, factorSize, fitBias, fitLinear)
+    val (intercept, linear, factors) = splitCoefficients(
+      Vectors.dense(coefficients), numFeatures, factorSize, fitIntercept, fitLinear)
 
     // generate samples randomly
     val X: DataFrame = sc.parallelize(0 until numSamples).map { i =>
@@ -228,9 +228,9 @@ object FMRegressorSuite {
 
     // calculate FM prediction
     val fmModel = new FMRegressionModel(
-      "fmr_test", bias, linear, factors)
+      "fmr_test", intercept, linear, factors)
     fmModel.set(fmModel.factorSize, factorSize)
-    fmModel.set(fmModel.fitBias, fitBias)
+    fmModel.set(fmModel.fitIntercept, fitIntercept)
     fmModel.set(fmModel.fitLinear, fitLinear)
     val data = fmModel.transform(X)
       .withColumnRenamed("prediction", "label")
