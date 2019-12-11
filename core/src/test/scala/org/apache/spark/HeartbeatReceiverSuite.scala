@@ -29,7 +29,7 @@ import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.DYN_ALLOCATION_TESTING
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -167,7 +167,8 @@ class HeartbeatReceiverSuite
     val rpcEnv = sc.env.rpcEnv
     val fakeClusterManager = new FakeClusterManager(rpcEnv, conf)
     val fakeClusterManagerRef = rpcEnv.setupEndpoint("fake-cm", fakeClusterManager)
-    val fakeSchedulerBackend = new FakeSchedulerBackend(scheduler, rpcEnv, fakeClusterManagerRef)
+    val fakeSchedulerBackend =
+      new FakeSchedulerBackend(scheduler, rpcEnv, fakeClusterManagerRef, sc.resourceProfileManager)
     when(sc.schedulerBackend).thenReturn(fakeSchedulerBackend)
 
     // Register fake executors with our fake scheduler backend
@@ -277,8 +278,9 @@ private class FakeExecutorEndpoint(override val rpcEnv: RpcEnv) extends RpcEndpo
 private class FakeSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     rpcEnv: RpcEnv,
-    clusterManagerEndpoint: RpcEndpointRef)
-  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
+    clusterManagerEndpoint: RpcEndpointRef,
+    resourceProfileManager: ResourceProfileManager)
+  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv, resourceProfileManager) {
 
   protected override def doRequestTotalExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {

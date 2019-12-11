@@ -550,10 +550,11 @@ class SparkContext(config: SparkConf) extends Logging {
     _resourceProfileManager = new ResourceProfileManager(conf)
 
     // Create and start the scheduler
-    val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
+    val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode,
+      resourceProfileManager)
     _schedulerBackend = sched
     _taskScheduler = ts
-    _dagScheduler = new DAGScheduler(this)
+    _dagScheduler = new DAGScheduler(this, resourceProfileManager)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
     // create and start the heartbeater for collecting memory metrics
@@ -1640,13 +1641,14 @@ class SparkContext(config: SparkConf) extends Logging {
       case b: ExecutorAllocationClient =>
         // this is being applied to the default resource profile, would need to add api to support
         // others
+        val defaultProf = resourceProfileManager.getDefaultResourceProfile
         val hostToLocalTaskCountWithResourceProfileId =
-          Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> hostToLocalTaskCount).toMap
+          Map(defaultProf.id -> hostToLocalTaskCount).toMap
         val localityAwareTasksWithResourceProfileId =
-          Map[Int, Int](localityAwareTasks -> ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+          Map[Int, Int](localityAwareTasks -> defaultProf.id)
         b.requestTotalExecutors(localityAwareTasksWithResourceProfileId.toMap,
           hostToLocalTaskCountWithResourceProfileId,
-          Map(ResourceProfile.getOrCreateDefaultProfile(conf) -> numExecutors).toMap)
+          Map(defaultProf-> numExecutors).toMap)
       case _ =>
         logWarning("Requesting executors is not supported by current scheduler.")
         false
@@ -2767,7 +2769,8 @@ object SparkContext extends Logging {
   private def createTaskScheduler(
       sc: SparkContext,
       master: String,
-      deployMode: String): (SchedulerBackend, TaskScheduler) = {
+      deployMode: String,
+      resourceProfileManager: ResourceProfileManager): (SchedulerBackend, TaskScheduler) = {
     import SparkMasterRegex._
 
     // When running locally, don't try to re-execute tasks on failure.
@@ -2853,7 +2856,8 @@ object SparkContext extends Logging {
     master match {
       case "local" =>
         checkResourcesPerTask(clusterMode = false, Some(1))
-        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
+        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES,
+          resourceProfileManager, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, 1)
         scheduler.initialize(backend)
         (backend, scheduler)
@@ -2866,7 +2870,8 @@ object SparkContext extends Logging {
           throw new SparkException(s"Asked to run locally with $threadCount threads")
         }
         checkResourcesPerTask(clusterMode = false, Some(threadCount))
-        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
+        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, resourceProfileManager,
+          isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
@@ -2877,14 +2882,15 @@ object SparkContext extends Logging {
         // local[N, M] means exactly N threads with M failures
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
         checkResourcesPerTask(clusterMode = false, Some(threadCount))
-        val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
+        val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, resourceProfileManager,
+          isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
 
       case SPARK_REGEX(sparkUrl) =>
         checkResourcesPerTask(clusterMode = true, None)
-        val scheduler = new TaskSchedulerImpl(sc)
+        val scheduler = new TaskSchedulerImpl(sc, resourceProfileManager)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
         val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
@@ -2900,7 +2906,7 @@ object SparkContext extends Logging {
               memoryPerSlaveInt, sc.executorMemory))
         }
 
-        val scheduler = new TaskSchedulerImpl(sc)
+        val scheduler = new TaskSchedulerImpl(sc, resourceProfileManager)
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt, sc.conf)
         val masterUrls = localCluster.start()
@@ -2918,7 +2924,7 @@ object SparkContext extends Logging {
           case None => throw new SparkException("Could not parse Master URL: '" + master + "'")
         }
         try {
-          val scheduler = cm.createTaskScheduler(sc, masterUrl)
+          val scheduler = cm.createTaskScheduler(sc, masterUrl, resourceProfileManager)
           val backend = cm.createSchedulerBackend(sc, masterUrl, scheduler)
           cm.initialize(scheduler, backend)
           (backend, scheduler)

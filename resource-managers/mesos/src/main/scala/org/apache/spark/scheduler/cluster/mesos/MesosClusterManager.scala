@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster.mesos
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 
 /**
@@ -32,8 +33,11 @@ private[spark] class MesosClusterManager extends ExternalClusterManager {
     masterURL.startsWith("mesos")
   }
 
-  override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    new TaskSchedulerImpl(sc)
+  override def createTaskScheduler(
+      sc: SparkContext,
+      masterURL: String,
+      resourceProfileManager: ResourceProfileManager): TaskScheduler = {
+    new TaskSchedulerImpl(sc, new ResourceProfileManager(sc.getConf))
   }
 
   override def createSchedulerBackend(sc: SparkContext,

@@ -53,7 +53,6 @@ private[spark] class AppStatusListener(
   private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
-  private var coresPerTask: Int = 1
 
   // How often to update live entities. -1 means "never update" when replaying applications,
   // meaning only the last write will happen. For live applications, this avoids a few
@@ -163,10 +162,6 @@ private[spark] class AppStatusListener(
       details.getOrElse("System Properties", Nil),
       details.getOrElse("Classpath Entries", Nil))
 
-    coresPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toInt)
-      .getOrElse(coresPerTask)
-
-
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
   }
 
@@ -201,8 +196,7 @@ private[spark] class AppStatusListener(
     exec.isActive = true
     exec.totalCores = event.executorInfo.totalCores
     val rpId = event.executorInfo.resourceProfileId
-    val rp = resourceProfileManager.resourceProfileFromId(rpId)
-    val cpusPerTask = rp.map(_.getExecutorCores.getOrElse(coresPerTask)).getOrElse(coresPerTask)
+    val cpusPerTask = resourceProfileManager.getTaskCpusForProfileId(rpId)
     exec.maxTasks = event.executorInfo.totalCores / cpusPerTask
     exec.executorLogs = event.executorInfo.logUrlMap
     exec.resources = event.executorInfo.resourcesInfo

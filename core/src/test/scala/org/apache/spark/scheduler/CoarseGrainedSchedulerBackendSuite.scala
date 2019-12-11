@@ -34,7 +34,7 @@ import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceProfileManager}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
@@ -285,7 +285,8 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
 
   override def createTaskScheduler(
       sc: SparkContext,
-      masterURL: String): TaskScheduler = {
+      masterURL: String,
+      resourceProfileManager: ResourceProfileManager): TaskScheduler = {
     ts = mock[TaskSchedulerImpl]
     when(ts.sc).thenReturn(sc)
     when(ts.applicationId()).thenReturn("appid1")
@@ -314,8 +315,11 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
 }
 
 private[spark]
-class TestCoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, override val rpcEnv: RpcEnv)
-  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
+class TestCoarseGrainedSchedulerBackend(
+    scheduler: TaskSchedulerImpl,
+    override val rpcEnv: RpcEnv,
+    resourceProfileManager: ResourceProfileManager)
+  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv, resourceProfileManager) {
 
   def getTaskSchedulerImpl(): TaskSchedulerImpl = scheduler
 }

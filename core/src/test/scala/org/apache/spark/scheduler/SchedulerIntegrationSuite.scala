@@ -35,8 +35,8 @@ import org.apache.spark._
 import org.apache.spark.TaskState._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_REVIVE_INTERVAL
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
 /**
@@ -487,7 +487,8 @@ private class MockExternalClusterManager extends ExternalClusterManager {
 
   def createTaskScheduler(
       sc: SparkContext,
-      masterURL: String): TaskScheduler = {
+      masterURL: String,
+      resourceProfileManager: ResourceProfileManager): TaskScheduler = {
     new TestTaskScheduler(sc)
  }
 

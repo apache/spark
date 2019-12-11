@@ -27,6 +27,7 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubern
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.util.{SystemClock, ThreadUtils}
 
@@ -34,8 +35,11 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
   override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
 
-  override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    new TaskSchedulerImpl(sc)
+  override def createTaskScheduler(
+      sc: SparkContext,
+      masterURL: String,
+      resourceProfileManager: ResourceProfileManager): TaskScheduler = {
+    new TaskSchedulerImpl(sc, resourceProfileManager)
   }
 
   override def createSchedulerBackend(

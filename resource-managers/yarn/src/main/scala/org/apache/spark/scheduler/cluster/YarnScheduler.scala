@@ -21,10 +21,14 @@ import org.apache.hadoop.net.NetworkTopology
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.SparkRackResolver
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
-private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+private[spark] class YarnScheduler(
+    sc: SparkContext,
+    resourceProfileManager: ResourceProfileManager)
+  extends TaskSchedulerImpl(sc, resourceProfileManager) {
 
   override val defaultRackValue: Option[String] = Some(NetworkTopology.DEFAULT_RACK)
 

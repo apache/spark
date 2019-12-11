@@ -530,25 +530,18 @@ private[spark] class ExecutorAllocationManager(
         val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
           (executorMonitor.executorCountWithResourceProfile(rpId) -
             executorMonitor.pendingRemovalCountPerResourceProfileId(rpId)))
-        val rpOption = resourceProfileManager.resourceProfileFromId(rpId)
-        rpOption match {
-          case Some(rp) =>
-            if (newExecutorTotal - 1 < minNumExecutors) {
-              logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
-                s"are only $newExecutorTotal executor(s) left (minimum number of executor limit " +
-                s"$minNumExecutors)")
-            } else if (newExecutorTotal - 1 < numExecutorsTargetPerResourceProfile(rp)) {
-              logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
-                s"are only $newExecutorTotal executor(s) left (number of executor " +
-                s"target ${numExecutorsTargetPerResourceProfile(rp)})")
-            } else {
-              executorIdsToBeRemoved += executorIdToBeRemoved
-              numExecutorsTotalPerRpId(rpId) -= 1
-            }
-          case None =>
-            // log an error but continue
-            logError(s"Trying to remove an Executor $executorIdsToBeRemoved from nonexistent " +
-              s"ResourceProfile with id: $rpId")
+        val rp = resourceProfileManager.resourceProfileFromId(rpId)
+        if (newExecutorTotal - 1 < minNumExecutors) {
+          logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
+            s"are only $newExecutorTotal executor(s) left (minimum number of executor limit " +
+            s"$minNumExecutors)")
+        } else if (newExecutorTotal - 1 < numExecutorsTargetPerResourceProfile(rp)) {
+          logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
+            s"are only $newExecutorTotal executor(s) left (number of executor " +
+            s"target ${numExecutorsTargetPerResourceProfile(rp)})")
+        } else {
+          executorIdsToBeRemoved += executorIdToBeRemoved
+          numExecutorsTotalPerRpId(rpId) -= 1
         }
       }
     }
@@ -660,17 +653,13 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToNumTasks(stageAttempt) = numTasks
         allocationManager.onSchedulerBacklogged()
         // need to keep stage task requirements to ask for the right containers
-        val stageResourceProf = stageSubmitted.stageInfo.resourceProfile.getOrElse(defaultProfile)
-        logInfo("stage resource profile is: " + stageResourceProf)
-        val profId = stageResourceProf.id
+        val profId = stageSubmitted.stageInfo.resourceProfileId
+        logInfo("stage resource profile id is: " + profId)
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
         logInfo("adding to execResourceReqsToNumTasks: " + numTasks)
         numExecutorsToAddPerResourceProfileId.getOrElseUpdate(profId, 1)
-        // Note we never remove profiles from resourceProfileIdToResourceProfile
-        // TODO - shouldn't need this if added rdd.withResources
-        resourceProfileManager.addResourceProfile(stageResourceProf)
-        // resourceProfileIdToResourceProfile.getOrElseUpdate(profId, stageResourceProf)
+        val stageResourceProf = resourceProfileManager.resourceProfileFromId(profId)
         numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, initialNumExecutors)
 
         // Compute the number of tasks requested by the stage on each host
@@ -688,7 +677,7 @@ private[spark] class ExecutorAllocationManager(
 
         stageAttemptToExecutorPlacementHints.put(stageAttempt,
           (numTasksPending, hostToLocalTaskCountPerStage.toMap,
-            stageSubmitted.stageInfo.resourceProfile.getOrElse(defaultProfile).id))
+            stageSubmitted.stageInfo.resourceProfileId))
 
         // Update the executor placement hints
         updateExecutorPlacementHints()

@@ -105,6 +105,10 @@ class ResourceProfile() extends Serializable {
     executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
   }
 
+  def getTaskCpus: Option[Int] = {
+    taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
+  }
+
   // figure out what is the current limiting resource based on executor and task resources
   // TODO - how expensive is this?
   // TODO - when do we call this? needs SparkConf or default cpus per task

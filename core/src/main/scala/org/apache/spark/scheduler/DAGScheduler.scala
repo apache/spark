@@ -38,7 +38,7 @@ import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -117,20 +117,27 @@ private[spark] class DAGScheduler(
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv,
-    clock: Clock = new SystemClock())
+    clock: Clock = new SystemClock(),
+    resourceProfileManager: ResourceProfileManager)
   extends Logging {
 
-  def this(sc: SparkContext, taskScheduler: TaskScheduler) = {
+  def this(
+      sc: SparkContext,
+      taskScheduler: TaskScheduler,
+      resourceProfileManager: ResourceProfileManager) = {
     this(
       sc,
       taskScheduler,
       sc.listenerBus,
       sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
       sc.env.blockManager.master,
-      sc.env)
+      sc.env,
+      resourceProfileManager = resourceProfileManager)
   }
 
-  def this(sc: SparkContext) = this(sc, sc.taskScheduler)
+  def this(sc: SparkContext, resourceProfileManager: ResourceProfileManager) = {
+    this(sc, sc.taskScheduler, resourceProfileManager = resourceProfileManager)
+  }
 
   private[spark] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)
 
@@ -389,9 +396,11 @@ private[spark] class DAGScheduler(
     // TODO - need to make sure RDD across stages get profile in both - like groupby
     // is this a ShuffledRDD?
     val resourceProfile = mergeResourceProfilesForStage(rdd)
+    // this ResourceProfile could be different if it was merged so we have to add it to
+    // our ResourceProfileManager
+    resourceProfileManager.addResourceProfile(resourceProfile)
     checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd,
-      resourceProfile.getOrElse(ResourceProfile.getOrCreateDefaultProfile(sc.getConf)))
+    checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
 
     val numTasks = rdd.partitions.length
@@ -399,7 +408,7 @@ private[spark] class DAGScheduler(
     val id = nextStageId.getAndIncrement()
     val stage = new ShuffleMapStage(
       id, rdd, numTasks, parents, jobId, rdd.creationSite, shuffleDep, mapOutputTracker,
-      resourceProfile)
+      resourceProfile.id)
 
     stageIdToStage(id) = stage
     shuffleIdToMapStage(shuffleDep.shuffleId) = stage
@@ -471,19 +480,15 @@ private[spark] class DAGScheduler(
     */
   }
 
-  private def mergeResourceProfilesForStage(rdd: RDD[_]): Option[ResourceProfile] = {
+  private def mergeResourceProfilesForStage(rdd: RDD[_]): ResourceProfile = {
     val stageResourceProfiles = getResourceProfilesForRDDsInStage(rdd)
     val resourceProfile = if (stageResourceProfiles.size > 1) {
       if (sc.getConf.get(config.RESOURCE_PROFILE_MERGE_CONFLICTS)) {
         // need to resolve conflicts if multiple
-        var mergedProfile: Option[ResourceProfile] = None
+        var mergedProfile: ResourceProfile = stageResourceProfiles.head
         logInfo("create  stage, resource profiles: " + stageResourceProfiles)
         for (profile <- stageResourceProfiles) {
-          if (mergedProfile.isEmpty) {
-            mergedProfile = Some(profile)
-          } else {
-            mergedProfile = Some(mergeResourceProfiles(mergedProfile.get, profile))
-          }
+          mergedProfile = mergeResourceProfiles(mergedProfile, profile)
         }
         mergedProfile
       } else {
@@ -494,7 +499,11 @@ private[spark] class DAGScheduler(
           "the conflicts.")
       }
     } else {
-      if (stageResourceProfiles.size == 1) Some(stageResourceProfiles.head) else None
+      if (stageResourceProfiles.size == 1) {
+        stageResourceProfiles.head
+      } else {
+        resourceProfileManager.getDefaultResourceProfile
+      }
     }
     resourceProfile
   }
@@ -509,17 +518,19 @@ private[spark] class DAGScheduler(
       jobId: Int,
       callSite: CallSite): ResultStage = {
     val resourceProfile = mergeResourceProfilesForStage(rdd)
+    // this ResourceProfile could be different if it was merged so we have to add it to
+    // our ResourceProfileManager
+    resourceProfileManager.addResourceProfile(resourceProfile)
 
     checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd,
-      resourceProfile.getOrElse(ResourceProfile.getOrCreateDefaultProfile(sc.getConf)))
+    checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
 
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
     logInfo("creating result stage with profile: " + resourceProfile)
     val stage = new ResultStage(id, rdd, func, partitions, parents, jobId,
-      callSite, resourceProfile)
+      callSite, resourceProfile.id)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
     stage
@@ -1342,7 +1353,7 @@ private[spark] class DAGScheduler(
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
-        stage.resourceProfile))
+        stage.resourceProfileId))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run

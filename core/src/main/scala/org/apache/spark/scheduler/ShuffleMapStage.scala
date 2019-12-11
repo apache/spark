@@ -44,8 +44,8 @@ private[spark] class ShuffleMapStage(
     callSite: CallSite,
     val shuffleDep: ShuffleDependency[_, _, _],
     mapOutputTrackerMaster: MapOutputTrackerMaster,
-    resourceProfile: Option[ResourceProfile])
-  extends Stage(id, rdd, numTasks, parents, firstJobId, callSite, resourceProfile) {
+    resourceProfileId: Int)
+  extends Stage(id, rdd, numTasks, parents, firstJobId, callSite, resourceProfileId) {
 
   private[this] var _mapStageJobs: List[ActiveJob] = Nil
 

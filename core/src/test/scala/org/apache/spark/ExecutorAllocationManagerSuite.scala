@@ -1259,7 +1259,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       rp: ResourceProfile = defaultProfile
     ): StageInfo = {
     new StageInfo(stageId, attemptId, "name", numTasks, Seq.empty, Seq.empty, "no details",
-      taskLocalityPreferences = taskLocalityPreferences, resourceProfile = Some(rp))
+      taskLocalityPreferences = taskLocalityPreferences, resourceProfileId = rp.id)
   }
 
   private def createTaskInfo(

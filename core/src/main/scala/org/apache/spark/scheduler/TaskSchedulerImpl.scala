@@ -31,7 +31,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceUtils}
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceProfileManager, ResourceUtils}
 import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
@@ -61,13 +61,14 @@ import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
+    resourceProfileManager: ResourceProfileManager,
     isLocal: Boolean = false)
   extends TaskScheduler with Logging {
 
   import TaskSchedulerImpl._
 
-  def this(sc: SparkContext) = {
-    this(sc, sc.conf.get(config.TASK_MAX_FAILURES))
+  def this(sc: SparkContext, resourceProfileManager: ResourceProfileManager) = {
+    this(sc, sc.conf.get(config.TASK_MAX_FAILURES), resourceProfileManager)
   }
 
   // Lazily initializing blacklistTrackerOpt to avoid getting empty ExecutorAllocationClient,
@@ -342,15 +343,13 @@ private[spark] class TaskSchedulerImpl(
       val host = shuffledOffers(i).host
       // the specific resource assignments that would be given to a task
       val taskResAssignments = HashMap[String, ResourceInformation]()
-      // TODO - find better way to get taskCpus
-      val defaultProf = ResourceProfile.getOrCreateDefaultProfile(conf)
-      val taskSetProf = taskSet.taskSet.resources.getOrElse(defaultProf)
-      val taskCpus = taskSetProf.taskResources.get(ResourceProfile.CPUS)
-        .map(_.amount.toInt).getOrElse(CPUS_PER_TASK)
+      val taskSetRpID = taskSet.taskSet.resourceProfileId
+      val taskCpus = resourceProfileManager.getTaskCpusForProfileId(taskSetRpID)
       if (resourcesMeetTaskRequirements(taskSet, availableCpus(i), availableResources(i),
         taskResAssignments)) {
         try {
-          for (task <- taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments.toMap)) {
+          for (task <- taskSet.resourceOffer(execId, host, maxLocality, taskCpus,
+            taskResAssignments.toMap)) {
             tasks(i) += task
             val tid = task.taskId
             taskIdToTaskSetManager.put(tid, taskSet)
@@ -398,13 +397,12 @@ private[spark] class TaskSchedulerImpl(
       availWorkerResources: Map[String, Buffer[String]],
       taskResourceAssignments: HashMap[String, ResourceInformation]): Boolean = {
 
-    val defaultProf = ResourceProfile.getOrCreateDefaultProfile(conf)
-    val taskSetProf = taskSet.taskSet.resources.getOrElse(defaultProf)
+    val rpId = taskSet.taskSet.resourceProfileId
+    val taskSetProf = resourceProfileManager.resourceProfileFromId(rpId)
 
     logInfo("task set resources is: " + taskSetProf)
 
-    val taskCpus = taskSetProf.taskResources.get(ResourceProfile.CPUS)
-      .map(_.amount.toInt).getOrElse(CPUS_PER_TASK)
+    val taskCpus = resourceProfileManager.getTaskCpusForProfileId(rpId)
 
     // check is ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) {
@@ -456,8 +454,8 @@ private[spark] class TaskSchedulerImpl(
       resourceProfileIds: Array[Int],
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Buffer[String]]],
-      rp: Option[ResourceProfile]): Int = {
-    val resourceProfile = rp.getOrElse(ResourceProfile.getOrCreateDefaultProfile(sc.getConf))
+      rpId: Int): Int = {
+    val resourceProfile = resourceProfileManager.resourceProfileFromId(rpId)
     val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter(_ == resourceProfile.id)
     val limitingResource = resourceProfile.limitingResource(sc.getConf)
     val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).getOrElse(
@@ -535,7 +533,7 @@ private[spark] class TaskSchedulerImpl(
       // value is -1
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
         calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
-          taskSet.taskSet.resources)
+          taskSet.taskSet.resourceProfileId)
       } else {
         -1
       }

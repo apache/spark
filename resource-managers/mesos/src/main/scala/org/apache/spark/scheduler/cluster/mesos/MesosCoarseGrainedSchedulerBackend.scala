@@ -59,7 +59,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     sc: SparkContext,
     master: String,
     securityManager: SecurityManager)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv, sc.resourceProfileManager)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
   // Blacklist a slave after this many failures

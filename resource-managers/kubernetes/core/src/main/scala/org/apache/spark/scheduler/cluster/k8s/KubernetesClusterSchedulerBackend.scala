@@ -43,7 +43,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
-    extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
+    extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv, sc.resourceProfileManager) {
 
   protected override val minRegisteredRatio =
     if (conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {

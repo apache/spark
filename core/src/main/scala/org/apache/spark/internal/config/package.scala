@@ -1455,7 +1455,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
       .timeConf(TimeUnit.MILLISECONDS)

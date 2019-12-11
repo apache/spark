@@ -33,8 +33,7 @@ import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
-import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.resource.ResourceRequirement
+import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -50,7 +49,10 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
  * (spark.deploy.*).
  */
 private[spark]
-class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
+class CoarseGrainedSchedulerBackend(
+    scheduler: TaskSchedulerImpl,
+    val rpcEnv: RpcEnv,
+    resourceProfileManager: ResourceProfileManager)
   extends ExecutorAllocationClient with SchedulerBackend with Logging {
 
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
@@ -744,21 +746,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       logInfo(s"Actual list of executor(s) to be killed is ${executorsToKill.mkString(", ")}")
 
-      val executorsToKillWithRpId =
-        executorsToKill.map(e => (e, executorDataMap(e).resourceProfileId))
-
-      // TODO - use resourceProfileManager
-      val idToResourceProfile =
-        requestedTotalExecutorsPerResourceProfile.map { case (rp, _) => (rp.id, rp) }
-
       // If we do not wish to replace the executors we kill, sync the target number of executors
       // with the cluster manager to avoid allocating new ones. When computing the new target,
       // take into account executors that are pending to be added or removed.
       val adjustTotalExecutors =
         if (adjustTargetNumExecutors) {
-          executorsToKillWithRpId.foreach { case (exec, rpId) =>
-            val rp =
-              idToResourceProfile.getOrElse(rpId, ResourceProfile.getOrCreateDefaultProfile(conf))
+          executorsToKill.foreach { exec =>
+            val rpId = executorDataMap(exec).resourceProfileId
+            val rp = resourceProfileManager.resourceProfileFromId(rpId)
             if (requestedTotalExecutorsPerResourceProfile.isEmpty) {
               // Assume that we are killing an executor that was started by default and
               // not through the request api

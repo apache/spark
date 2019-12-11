@@ -19,12 +19,16 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.ApplicationMaster
+import org.apache.spark.resource.ResourceProfileManager
 
 /**
  * This is a simple extension to YarnScheduler - to ensure that appropriate initialization of
  * ApplicationMaster, etc is done
  */
-private[spark] class YarnClusterScheduler(sc: SparkContext) extends YarnScheduler(sc) {
+private[spark] class YarnClusterScheduler(
+    sc: SparkContext,
+    resourceProfileManager: ResourceProfileManager)
+  extends YarnScheduler(sc, resourceProfileManager) {
 
   logInfo("Created YarnClusterScheduler")
 
