@@ -27,13 +27,14 @@ abstract class FileScanBuilder(
     dataSchema: StructType) extends ScanBuilder with SupportsPushDownRequiredColumns {
   private val partitionSchema = fileIndex.partitionSchema
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-  protected val supportsNestedSchemaPruning: Boolean = false
+  protected val supportsNestedSchemaPruning = false
   protected var requiredSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
-    // [SPARK-30107] While the passed `requiredSchema` always have pruned nested columns, the actual
-    // data schema of this scan is determined in `readDataSchema`. File formats that don't support
-    // nested schema pruning, use `requiredSchema` as a reference and perform the pruning partially.
+    // [SPARK-30107] While `requiredSchema` might have pruned nested columns,
+    // the actual data schema of this scan is determined in `readDataSchema`.
+    // File formats that don't support nested schema pruning,
+    // use `requiredSchema` as a reference and prune only top-level columns.
     this.requiredSchema = requiredSchema
   }
 

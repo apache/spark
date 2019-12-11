@@ -101,6 +101,14 @@ abstract class SchemaPruningSuite
       Nil)
   }
 
+  testSchemaPruning("select a single complex field with disabled nested schema pruning") {
+    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "false") {
+      val query = sql("select name.middle from contacts")
+      checkScan(query, "struct<name:struct<first:string,middle:string,last:string>>")
+      checkAnswer(query.orderBy("id"), Row("X.") :: Row("Y.") :: Row(null) :: Row(null) :: Nil)
+    }
+  }
+
   testSchemaPruning("select only input_file_name()") {
     val query = sql("select input_file_name() from contacts")
     checkScan(query, "struct<>")
