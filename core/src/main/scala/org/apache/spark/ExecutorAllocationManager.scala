@@ -120,12 +120,6 @@ private[spark] class ExecutorAllocationManager(
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.get(DYN_ALLOCATION_TESTING)
 
-  // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
-  // allocation is only supported for YARN and the default number of cores per executor in YARN is
-  // 1, but it might need to be attained differently for different cluster managers
-  private val tasksPerExecutorForFullParallelism =
-    conf.get(EXECUTOR_CORES) / conf.get(CPUS_PER_TASK)
-
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
@@ -275,12 +269,15 @@ private[spark] class ExecutorAllocationManager(
    * The maximum number of executors we would need under the current load to satisfy all running
    * and pending tasks, rounded up.
    */
-  private def maxNumExecutorsNeededPerResourceProfileId(rp: Int): Int = {
-    val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp) +
-      listener.totalRunningTasksPerResourceProfile(rp)
-    logWarning(s"max needed executor rp: $rp numpending $numRunningOrPendingTasks")
+  private def maxNumExecutorsNeededPerResourceProfile(rp: ResourceProfile): Int = {
+    val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp.id) +
+      listener.totalRunningTasksPerResourceProfile(rp.id)
+    val executorCores = rp.getExecutorCores.getOrElse(conf.get(EXECUTOR_CORES))
+    val tasksPerExecutor = ResourceProfile.numTasksPerExecutor(executorCores, rp, conf)
+    logWarning(s"max needed executor rpId: $rp.id numpending $numRunningOrPendingTasks," +
+      s" tasksperexecutor $tasksPerExecutor")
     math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
-      tasksPerExecutorForFullParallelism).toInt
+      tasksPerExecutor).toInt
   }
 
   private def totalRunningTasksPerResourceProfile(id: Int): Int = synchronized {
@@ -333,7 +330,7 @@ private[spark] class ExecutorAllocationManager(
 
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
       listener.resourceProfileIdToResourceProfile.foreach { case (rProfId, resourceProfile) =>
-        val maxNeeded = maxNumExecutorsNeededPerResourceProfileId(rProfId)
+        val maxNeeded = maxNumExecutorsNeededPerResourceProfile(resourceProfile)
         val targetExecs =
           numExecutorsTargetPerResourceProfile.getOrElseUpdate(resourceProfile, initialNumExecutors)
         if (maxNeeded < targetExecs) {
@@ -389,7 +386,6 @@ private[spark] class ExecutorAllocationManager(
       updates: Map[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates],
       now: Long): Int = {
     // Only call cluster manager if target has changed.
-    logWarning("in do Request update: " + updates)
     if (updates.size > 0) {
       val requestAcknowledged = try {
         logInfo("requesting updates: " + updates)
@@ -484,7 +480,7 @@ private[spark] class ExecutorAllocationManager(
 
     // Boost our target with the number to add for this round:
     numExecutorsTargetPerResourceProfile(rp) +=
-      numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rp.id, 0)
+      numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rp.id, 1)
 
     // Ensure that our target doesn't exceed what we need at the present moment:
     numExecutorsTargetPerResourceProfile(rp) =
@@ -652,8 +648,7 @@ private[spark] class ExecutorAllocationManager(
         allocationManager.onSchedulerBacklogged()
         // need to keep stage task requirements to ask for the right containers
         val stageResourceProf = stageSubmitted.stageInfo.resourceProfile.getOrElse(defaultProfile)
-        logInfo("stage reosurce profile is: " + stageResourceProf)
-        // stageAttemptToResourceProfile(stageAttempt) = stageResourceProf
+        logInfo("stage resource profile is: " + stageResourceProf)
         val profId = stageResourceProf.id
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
@@ -661,8 +656,7 @@ private[spark] class ExecutorAllocationManager(
         numExecutorsToAddPerResourceProfileId.getOrElseUpdate(profId, 1)
         // Note we never remove profiles from resourceProfileIdToResourceProfile
         resourceProfileIdToResourceProfile.getOrElseUpdate(profId, stageResourceProf)
-        numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, 0)
-
+        numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, initialNumExecutors)
 
         // Compute the number of tasks requested by the stage on each host
         var numTasksPending = 0
@@ -918,7 +912,7 @@ private[spark] class ExecutorAllocationManager(
     registerGauge("numberAllExecutors", executorMonitor.executorCount, 0)
     registerGauge("numberTargetExecutors", numExecutorsTargetPerResourceProfile(defaultProfile), 0)
     registerGauge("numberMaxNeededExecutors",
-      maxNumExecutorsNeededPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
+      maxNumExecutorsNeededPerResourceProfile(defaultProfile), 0)
   }
 }
 

@@ -58,6 +58,11 @@ class ResourceProfile() extends Serializable {
    */
   def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = _executorResources.asJava
 
+  // utility functions to make it easier to access certain things
+  def getExecutorCores: Option[Int] = {
+    executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
+  }
+
   def reset(): Unit = {
     _taskResources.clear()
     _executorResources.clear()
