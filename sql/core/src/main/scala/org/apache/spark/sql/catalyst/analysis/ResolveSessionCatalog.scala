@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -473,6 +473,19 @@ class ResolveSessionCatalog(
       ShowTablePropertiesCommand(
         tbl.asTableIdentifier,
         propertyKey)
+
+    case DescribeFunctionStatement(CatalogAndIdentifier(catalog, functionIdent), extended) =>
+      val functionIdentifier = if (isSessionCatalog(catalog)) {
+        functionIdent.asMultipartIdentifier match {
+          case Seq(db, fn) => FunctionIdentifier(fn, Some(db))
+          case Seq(fn) => FunctionIdentifier(fn, None)
+          case _ =>
+            throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
+        }
+      } else {
+        throw new AnalysisException ("DESCRIBE FUNCTION is only supported in v1 catalog")
+      }
+      DescribeFunctionCommand(functionIdentifier, extended)
 
     case ShowFunctionsStatement(userScope, systemScope, pattern, fun) =>
       val (database, function) = fun match {
