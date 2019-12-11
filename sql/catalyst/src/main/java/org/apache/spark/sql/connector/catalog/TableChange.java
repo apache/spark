@@ -323,7 +323,7 @@ public interface TableChange {
   /**
    * Column position AFTER means the specified column should be put after the given `column`.
    * Note that, the specified column may be a nested field, and then the given `column` refers to
-   * a nested field in the same struct.
+   * a field in the same struct.
    */
   final class After implements ColumnPosition {
     private final String column;
