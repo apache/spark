@@ -80,18 +80,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
-  test("describe function") {
-    assertEqual("describe function bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = None), isExtended = false))
-    assertEqual("describe function extended bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = None), isExtended = true))
-    assertEqual("describe function foo.bar",
-      DescribeFunctionCommand(
-        FunctionIdentifier("bar", database = Some("foo")), isExtended = false))
-    assertEqual("describe function extended f.bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = Some("f")), isExtended = true))
-  }
-
   private def createTableUsing(
       table: String,
       database: Option[String] = None,
