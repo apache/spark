@@ -46,9 +46,9 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Params for Factorization Machines
  */
-private[ml] trait FactorizationMachinesParams
-  extends PredictorParams
-  with HasMaxIter with HasStepSize with HasTol with HasSolver with HasSeed with HasFitIntercept {
+private[ml] trait FactorizationMachinesParams extends PredictorParams
+  with HasMaxIter with HasStepSize with HasTol with HasSolver with HasSeed
+  with HasFitIntercept with HasRegParam {
 
   /**
    * Param for dimensionality of the factors (&gt;= 0)
@@ -75,18 +75,6 @@ private[ml] trait FactorizationMachinesParams
   /** @group getParam */
   @Since("3.0.0")
   final def getFitLinear: Boolean = $(fitLinear)
-
-  /**
-   * Param for L2 regularization parameter (&gt;= 0)
-   * @group param
-   */
-  @Since("3.0.0")
-  final val regParam: DoubleParam = new DoubleParam(this, "regParam",
-    "the magnitude of L2-regularization", ParamValidators.gtEq(0))
-
-  /** @group getParam */
-  @Since("3.0.0")
-  final def getRegParam: Double = $(regParam)
 
   /**
    * Param for mini-batch fraction, must be in range (0, 1]

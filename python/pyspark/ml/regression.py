@@ -2128,8 +2128,8 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
 
 
 @inherit_doc
-class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver, HasSeed, HasFitIntercept,
-                  JavaMLWritable, JavaMLReadable):
+class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver, HasSeed,
+                  HasFitIntercept, HasRegParam, JavaMLWritable, JavaMLReadable):
     """
     Factorization Machines learning algorithm for regression.
 
@@ -2156,11 +2156,17 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver, Has
     +--------+-------------------+
     |features|prediction         |
     +--------+-------------------+
-    |[-2.0]  |-1.9999901956420845|
-    |[0.5]   |0.4999976361236511 |
-    |[1.0]   |0.9999952024767982 |
-    |[4.0]   |3.999980600595681  |
+    |[-2.0]  |-1.9989237712341565|
+    |[0.5]   |0.4956682219523814 |
+    |[1.0]   |0.994586620589689  |
+    |[4.0]   |3.9880970124135344 |
     +--------+-------------------+
+    >>> model.intercept
+    -0.0032501766849261557
+    >>> model.linear
+    DenseVector([0.9978])
+    >>> model.factors
+    DenseMatrix(1, 2, [0.0146, -0.0078], 1)
 
     .. versionadded:: 3.0.0
     """
@@ -2171,9 +2177,6 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver, Has
 
     fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
                       typeConverter=TypeConverters.toBoolean)
-
-    regParam = Param(Params._dummy(), "regParam", "the magnitude of L2-regularization",
-                     typeConverter=TypeConverters.toFloat)
 
     miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
                               "set that should be used for one iteration of gradient descent",

@@ -2364,7 +2364,7 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
 
 @inherit_doc
 class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol, HasSolver,
-                   HasSeed, HasFitIntercept, JavaMLWritable, JavaMLReadable):
+                   HasSeed, HasFitIntercept, HasRegParam, JavaMLWritable, JavaMLReadable):
     """
     Factorization Machines learning algorithm for classification.
 
@@ -2394,6 +2394,12 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     |[1.0]   |[5.491554426243495E-4,0.9994508445573757] |
     |[2.0]   |[2.005766663870645E-10,0.9999999997994233]|
     +--------+------------------------------------------+
+    >>> model.intercept
+    -7.316665276826291
+    >>> model.linear
+    DenseVector([14.8232])
+    >>> model.factors
+    DenseMatrix(1, 2, [0.0028, 0.0048], 1)
 
     .. versionadded:: 3.0.0
     """
@@ -2404,9 +2410,6 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
 
     fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
                       typeConverter=TypeConverters.toBoolean)
-
-    regParam = Param(Params._dummy(), "regParam", "the magnitude of L2-regularization",
-                     typeConverter=TypeConverters.toFloat)
 
     miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
                               "set that should be used for one iteration of gradient descent",
