@@ -38,7 +38,7 @@ private[sql] trait LookupCatalog extends Logging {
    *
    * This does not substitute the default catalog if no catalog is set in the identifier.
    */
-  private object CatalogAndIdentifier {
+  private object CatalogAndMultipartIdentifier {
     def unapply(parts: Seq[String]): Some[(Option[CatalogPlugin], Seq[String])] = parts match {
       case Seq(_) =>
         Some((None, parts))
@@ -57,7 +57,7 @@ private[sql] trait LookupCatalog extends Logging {
    */
   object CatalogObjectIdentifier {
     def unapply(parts: Seq[String]): Some[(CatalogPlugin, Identifier)] = parts match {
-      case CatalogAndIdentifier(maybeCatalog, nameParts) =>
+      case CatalogAndMultipartIdentifier(maybeCatalog, nameParts) =>
         Some((
             maybeCatalog.getOrElse(currentCatalog),
             Identifier.of(nameParts.init.toArray, nameParts.last)
@@ -88,19 +88,51 @@ private[sql] trait LookupCatalog extends Logging {
   }
 
   /**
-   * Extract catalog and namespace from a multi-part identifier with the current catalog if needed.
+   * Extract catalog and namespace from a multi-part name with the current catalog if needed.
    * Catalog name takes precedence over namespaces.
    */
   object CatalogAndNamespace {
-    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Option[Seq[String]])] = parts match {
-      case Seq(catalogName, tail @ _*) =>
+    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
+      assert(nameParts.nonEmpty)
+      try {
+        Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+      } catch {
+        case _: CatalogNotFoundException =>
+          Some((currentCatalog, nameParts))
+      }
+    }
+  }
+
+  /**
+   * Extract catalog and identifier from a multi-part name with the current catalog if needed.
+   * Catalog name takes precedence over identifier, but for a single-part name, identifier takes
+   * precedence over catalog name.
+   */
+  object CatalogAndIdentifier {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
+    private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+
+    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Identifier)] = {
+      assert(nameParts.nonEmpty)
+      if (nameParts.length == 1) {
+        Some((currentCatalog, Identifier.of(Array(), nameParts.head)))
+      } else if (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(globalTempDB)) {
+        // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
+        // API does not support view yet, and we have to use v1 commands to deal with global temp
+        // views. To simplify the implementation, we put global temp views in a special namespace
+        // in the session catalog. The special namespace has higher priority during name resolution.
+        // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
+        // this custom catalog can't be accessed.
+        Some((catalogManager.v2SessionCatalog, nameParts.asIdentifier))
+      } else {
         try {
-          Some(
-            (catalogManager.catalog(catalogName), if (tail.isEmpty) { None } else { Some(tail) }))
+          Some((catalogManager.catalog(nameParts.head), nameParts.tail.asIdentifier))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((currentCatalog, Some(parts)))
+            Some((currentCatalog, nameParts.asIdentifier))
         }
+      }
     }
   }
 
@@ -111,7 +143,8 @@ private[sql] trait LookupCatalog extends Logging {
    */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndIdentifier(None, names) if CatalogV2Util.isSessionCatalog(currentCatalog) =>
+      case CatalogAndMultipartIdentifier(None, names)
+          if CatalogV2Util.isSessionCatalog(currentCatalog) =>
         names match {
           case Seq(name) =>
             Some(TableIdentifier(name))
@@ -130,39 +163,12 @@ private[sql] trait LookupCatalog extends Logging {
    */
   object AsTemporaryViewIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndIdentifier(None, Seq(table)) =>
+      case CatalogAndMultipartIdentifier(None, Seq(table)) =>
         Some(TableIdentifier(table))
-      case CatalogAndIdentifier(None, Seq(database, table)) =>
+      case CatalogAndMultipartIdentifier(None, Seq(database, table)) =>
         Some(TableIdentifier(table, Some(database)))
       case _ =>
         None
-    }
-  }
-
-  /**
-   * Extract catalog and the rest name parts from a multi-part identifier.
-   */
-  object CatalogAndIdentifierParts {
-    private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-
-    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = {
-      assert(nameParts.nonEmpty)
-      try {
-        // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
-        // API does not support view yet, and we have to use v1 commands to deal with global temp
-        // views. To simplify the implementation, we put global temp views in a special namespace
-        // in the session catalog. The special namespace has higher priority during name resolution.
-        // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
-        // this custom catalog can't be accessed.
-        if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
-          Some((catalogManager.v2SessionCatalog, nameParts))
-        } else {
-          Some((catalogManager.catalog(nameParts.head), nameParts.tail))
-        }
-      } catch {
-        case _: CatalogNotFoundException =>
-          Some((currentCatalog, nameParts))
-      }
     }
   }
 }

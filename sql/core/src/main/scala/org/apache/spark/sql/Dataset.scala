@@ -522,27 +522,49 @@ class Dataset[T] private[sql](
   // scalastyle:on println
 
   /**
-   * Prints the plans (logical and physical) to the console for debugging purposes.
+   * Prints the plans (logical and physical) with a format specified by a given explain mode.
    *
    * @group basic
-   * @since 1.6.0
+   * @since 3.0.0
    */
-  def explain(extended: Boolean): Unit = {
+  def explain(mode: ExplainMode): Unit = {
     // Because temporary views are resolved during analysis when we create a Dataset, and
     // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
     // `ExplainCommand` here will probably output different query plans, compared to the results
     // of evaluation of the Dataset. So just output QueryExecution's query plans here.
     val qe = ExplainCommandUtil.explainedQueryExecution(sparkSession, logicalPlan, queryExecution)
 
-    val outputString =
-      if (extended) {
-        qe.toString
-      } else {
+    val outputString = mode match {
+      case ExplainMode.Simple =>
         qe.simpleString
-      }
+      case ExplainMode.Extended =>
+        qe.toString
+      case ExplainMode.Codegen =>
+        try {
+          org.apache.spark.sql.execution.debug.codegenString(queryExecution.executedPlan)
+        } catch {
+          case e: AnalysisException => e.toString
+        }
+      case ExplainMode.Cost =>
+        qe.stringWithStats
+      case ExplainMode.Formatted =>
+        qe.simpleString(formatted = true)
+    }
     // scalastyle:off println
     println(outputString)
     // scalastyle:on println
+  }
+
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purposes.
+   *
+   * @group basic
+   * @since 1.6.0
+   */
+  def explain(extended: Boolean): Unit = if (extended) {
+    explain(ExplainMode.Extended)
+  } else {
+    explain(ExplainMode.Simple)
   }
 
   /**
@@ -551,7 +573,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def explain(): Unit = explain(extended = false)
+  def explain(): Unit = explain(ExplainMode.Simple)
 
   /**
    * Returns all column names and their data types as an array.

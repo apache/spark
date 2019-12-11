@@ -2179,7 +2179,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case ("smallint" | "short", Nil) => ShortType
       case ("int" | "integer", Nil) => IntegerType
       case ("bigint" | "long", Nil) => LongType
-      case ("float", Nil) => FloatType
+      case ("float" | "real", Nil) => FloatType
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => TimestampType
@@ -2187,9 +2187,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
       case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
       case ("binary", Nil) => BinaryType
-      case ("decimal" | "dec", Nil) => DecimalType.USER_DEFAULT
-      case ("decimal" | "dec", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
-      case ("decimal" | "dec", precision :: scale :: Nil) =>
+      case ("decimal" | "dec" | "numeric", Nil) => DecimalType.USER_DEFAULT
+      case ("decimal" | "dec" | "numeric", precision :: Nil) =>
+        DecimalType(precision.getText.toInt, 0)
+      case ("decimal" | "dec" | "numeric", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
       case ("interval", Nil) => CalendarIntervalType
       case (dt, params) =>
