@@ -41,7 +41,7 @@ import org.apache.spark.util.random.BernoulliCellSampler
 @Since("0.8.0")
 object MLUtils extends Logging {
 
-  private[mllib] lazy val EPSILON = {
+  private[spark] lazy val EPSILON = {
     var eps = 1.0
     while ((1.0 + (eps / 2.0)) != 1.0) {
       eps /= 2.0
