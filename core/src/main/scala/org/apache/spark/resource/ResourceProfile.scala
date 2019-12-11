@@ -43,10 +43,20 @@ class ResourceProfile() extends Serializable {
   private val _id = ResourceProfile.getNextProfileId
   private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
   private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
+  private var _limitingResource = ""
 
   def id: Int = _id
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.toMap
   def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.toMap
+  // TODO - would be nice to get rid of SparkConf param
+  def limitingResource(sparkConf: SparkConf): String = {
+    if (_limitingResource.nonEmpty) {
+      _limitingResource
+    } else {
+      _limitingResource = calculateLimitingResource(sparkConf)
+      _limitingResource
+    }
+  }
 
   /**
    * (Java-specific) gets a Java Map of resources to TaskResourceRequest
@@ -88,6 +98,40 @@ class ResourceProfile() extends Serializable {
   override def toString(): String = {
     s"Profile: id = ${_id}, executor resources: ${_executorResources}, " +
       s"task resources: ${_taskResources}"
+  }
+
+  // utility functions to make it easier to access certain things
+  def getExecutorCores: Option[Int] = {
+    executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
+  }
+
+  // figure out what is the current limiting resource based on executor and task resources
+  // TODO - how expensive is this?
+  // TODO - when do we call this? needs SparkConf or default cpus per task
+  private def calculateLimitingResource(sparkConf: SparkConf): String = {
+    var maxSlots = -1.0
+    var limitingResource = ""
+    executorResources.foreach { case (name, req) =>
+      if (taskResources.contains(name)) {
+        val execAmount = req.amount
+        // this handles fractional resources
+        val taskAmount = taskResources.get(name).get.amount
+        val (amount, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskAmount)
+        val slots = Math.floor(execAmount * parts / amount).toInt
+        if (maxSlots == -1.0 || slots < maxSlots) {
+          maxSlots = slots
+          limitingResource = name
+        }
+      } else if (name == ResourceProfile.CPUS) {
+        // CPUS are special cased to use cluster default if not specified
+        val slots = req.amount / sparkConf.get(CPUS_PER_TASK)
+        if (maxSlots == -1.0 || slots < maxSlots) {
+          maxSlots = slots
+          limitingResource = name
+        }
+      }
+    }
+    limitingResource
   }
 }
 

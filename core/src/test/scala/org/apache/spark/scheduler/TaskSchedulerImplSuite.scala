@@ -31,6 +31,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.ManualClock
@@ -40,7 +41,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def stop(): Unit = {}
   def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
-  def maxNumConcurrentTasks(): Int = 0
+  def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach

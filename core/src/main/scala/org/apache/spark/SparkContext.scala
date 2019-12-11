@@ -53,7 +53,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
-import org.apache.spark.resource.{ResourceID, ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.{ResourceID, ResourceInformation, ResourceProfile, ResourceProfileManager}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
@@ -222,6 +222,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
   private var _shuffleDriverComponents: ShuffleDriverComponents = _
   private var _plugins: Option[PluginContainer] = None
+  private var _resourceProfileManager: ResourceProfileManager = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -343,6 +344,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def executorAllocationManager: Option[ExecutorAllocationManager] =
     _executorAllocationManager
 
+  private[spark] def resourceProfileManager: ResourceProfileManager = _resourceProfileManager
+
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
 
   private[spark] var checkpointDir: Option[String] = None
@@ -455,7 +458,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Initialize the app status store and listener before SparkEnv is created so that it gets
     // all events.
     val appStatusSource = AppStatusSource.createSource(conf)
-    _statusStore = AppStatusStore.createLiveStore(conf, appStatusSource)
+    _statusStore = AppStatusStore.createLiveStore(conf, resourceProfileManager, appStatusSource)
     listenerBus.addToStatusQueue(_statusStore.listener.get)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
@@ -544,6 +547,8 @@ class SparkContext(config: SparkConf) extends Logging {
     // Initialize any plugins before the task scheduler is initialized.
     _plugins = PluginContainer(this)
 
+    _resourceProfileManager = new ResourceProfileManager(conf)
+
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
@@ -604,7 +609,7 @@ class SparkContext(config: SparkConf) extends Logging {
           case b: ExecutorAllocationClient =>
             Some(new ExecutorAllocationManager(
               schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
-              cleaner = cleaner))
+              cleaner = cleaner, resourceProfileManager = resourceProfileManager))
           case _ =>
             None
         }
@@ -1600,13 +1605,17 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Get the max number of tasks that can be concurrent launched currently.
+   * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
+   * being used.
    * Note that please don't cache the value returned by this method, because the number can change
    * due to add/remove executors.
    *
+   * @param rp ResourceProfile which to use to calculate max concurrent tasks.
    * @return The max number of tasks that can be concurrent launched currently.
    */
-  private[spark] def maxNumConcurrentTasks(): Int = schedulerBackend.maxNumConcurrentTasks()
+  private[spark] def maxNumConcurrentTasks(rp: ResourceProfile): Int = {
+    schedulerBackend.maxNumConcurrentTasks(rp)
+  }
 
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
@@ -2764,7 +2773,7 @@ object SparkContext extends Logging {
     // When running locally, don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
 
-    // Ensure that executor's resources satisfies one or more tasks requirement.
+    // Ensure that default executor's resources satisfies one or more tasks requirement.
     def checkResourcesPerTask(clusterMode: Boolean, executorCores: Option[Int]): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
       val execCores = if (clusterMode) {

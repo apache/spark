@@ -28,6 +28,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.internal.config.Status._
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
@@ -45,6 +46,7 @@ private[spark] class AppStatusListener(
     kvstore: ElementTrackingStore,
     conf: SparkConf,
     live: Boolean,
+    resourceProfileManager: ResourceProfileManager,
     appStatusSource: Option[AppStatusSource] = None,
     lastUpdateTime: Option[Long] = None) extends SparkListener with Logging {
 
@@ -164,6 +166,7 @@ private[spark] class AppStatusListener(
     coresPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toInt)
       .getOrElse(coresPerTask)
 
+
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
   }
 
@@ -197,7 +200,10 @@ private[spark] class AppStatusListener(
     exec.host = event.executorInfo.executorHost
     exec.isActive = true
     exec.totalCores = event.executorInfo.totalCores
-    exec.maxTasks = event.executorInfo.totalCores / coresPerTask
+    val rpId = event.executorInfo.resourceProfileId
+    val rp = resourceProfileManager.resourceProfileFromId(rpId)
+    val cpusPerTask = rp.map(_.getExecutorCores.getOrElse(coresPerTask)).getOrElse(coresPerTask)
+    exec.maxTasks = event.executorInfo.totalCores / cpusPerTask
     exec.executorLogs = event.executorInfo.logUrlMap
     exec.resources = event.executorInfo.resourcesInfo
     exec.attributes = event.executorInfo.attributes

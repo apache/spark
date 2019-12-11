@@ -1717,8 +1717,9 @@ abstract class RDD[T: ClassTag](
 
   // @Experimental
   // @Since("3.0.0")
-  def withResources(stageResources: ResourceProfile): this.type = {
-    resourceProfile = Some(stageResources)
+  def withResources(rp: ResourceProfile): this.type = {
+    resourceProfile = Some(rp)
+    sc.resourceProfileManager.addResourceProfile(rp)
     logInfo("adding resource profile to rdd: " + resourceProfile)
     this
   }

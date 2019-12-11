@@ -385,13 +385,14 @@ private[spark] class DAGScheduler(
   def createShuffleMapStage[K, V, C](
       shuffleDep: ShuffleDependency[K, V, C], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
-    checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd)
-    checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
 
     // TODO - need to make sure RDD across stages get profile in both - like groupby
     // is this a ShuffledRDD?
     val resourceProfile = mergeResourceProfilesForStage(rdd)
+    checkBarrierStageWithDynamicAllocation(rdd)
+    checkBarrierStageWithNumSlots(rdd,
+      resourceProfile.getOrElse(ResourceProfile.getOrCreateDefaultProfile(sc.getConf)))
+    checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
 
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(rdd, jobId)
@@ -438,9 +439,9 @@ private[spark] class DAGScheduler(
    * the check fails consecutively beyond a configured number for a job, then fail current job
    * submission.
    */
-  private def checkBarrierStageWithNumSlots(rdd: RDD[_]): Unit = {
+  private def checkBarrierStageWithNumSlots(rdd: RDD[_], rp: ResourceProfile): Unit = {
     val numPartitions = rdd.getNumPartitions
-    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks
+    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks(rp)
     if (rdd.isBarrier() && numPartitions > maxNumConcurrentTasks) {
       throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
     }
@@ -506,11 +507,12 @@ private[spark] class DAGScheduler(
       partitions: Array[Int],
       jobId: Int,
       callSite: CallSite): ResultStage = {
-    checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd)
-    checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
-
     val resourceProfile = mergeResourceProfilesForStage(rdd)
+
+    checkBarrierStageWithDynamicAllocation(rdd)
+    checkBarrierStageWithNumSlots(rdd,
+      resourceProfile.getOrElse(ResourceProfile.getOrCreateDefaultProfile(sc.getConf)))
+    checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
 
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()

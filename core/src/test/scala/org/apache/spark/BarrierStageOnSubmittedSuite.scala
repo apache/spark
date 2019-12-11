@@ -259,4 +259,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     testSubmitJob(sc, rdd,
       message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
   }
+
+  // TODO - add barrier test with ResourceProfile to make sure max calculated properly
+
 }

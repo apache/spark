@@ -125,6 +125,21 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
+  // Used to take a fraction amount from a task resource requirement and split into a real
+  // integer amount and the number of parts expected. For instance, if the amount is 0.5,
+  // the we get (1, 2) back out.
+  def calculateAmountAndPartsForFraction(amount: Double): (Int, Int) = {
+    val parts = if (amount <= 0.5) {
+      Math.floor(1.0 / amount).toInt
+    } else if (amount % 1 != 0) {
+      throw new SparkException(
+        s"The resource amount ${amount} must be either <= 0.5, or a whole number.")
+    } else {
+      1
+    }
+    (Math.ceil(amount).toInt, parts)
+  }
+
   def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
     : Seq[ResourceRequirement] = {
     listResourceIds(sparkConf, componentName).map { resourceId =>
@@ -133,15 +148,7 @@ private[spark] object ResourceUtils extends Logging {
         throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
       ).toDouble
       val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
-        val parts = if (amountDouble <= 0.5) {
-          Math.floor(1.0 / amountDouble).toInt
-        } else if (amountDouble % 1 != 0) {
-          throw new SparkException(
-            s"The resource amount ${amountDouble} must be either <= 0.5, or a whole number.")
-        } else {
-          1
-        }
-        (Math.ceil(amountDouble).toInt, parts)
+        calculateAmountAndPartsForFraction(amountDouble)
       } else if (amountDouble % 1 != 0) {
         throw new SparkException(
           s"Only tasks support fractional resources, please check your $componentName settings")

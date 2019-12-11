@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils
@@ -553,9 +554,11 @@ private[spark] object AppStatusStore {
    */
   def createLiveStore(
       conf: SparkConf,
+      resourceProfileManager: ResourceProfileManager,
       appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
     val store = new ElementTrackingStore(new InMemoryStore(), conf)
-    val listener = new AppStatusListener(store, conf, true, appStatusSource)
+    val listener = new AppStatusListener(store, conf, true, resourceProfileManager,
+      appStatusSource)
     new AppStatusStore(store, listener = Some(listener))
   }
 }

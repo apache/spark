@@ -19,6 +19,7 @@ package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler.{TaskInfo, TaskLocality}
 import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore._
@@ -81,7 +82,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
   private def createAppStore(disk: Boolean, live: Boolean): AppStatusStore = {
     val conf = new SparkConf()
     if (live) {
-      return AppStatusStore.createLiveStore(conf)
+      val resourceProfileManager = new ResourceProfileManager(conf)
+      return AppStatusStore.createLiveStore(conf, resourceProfileManager)
     }
 
     val store: KVStore = if (disk) {

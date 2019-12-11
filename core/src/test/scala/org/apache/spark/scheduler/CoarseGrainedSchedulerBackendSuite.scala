@@ -72,7 +72,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       // Ensure all executors have been launched.
       assert(sc.getExecutorIds().length == 4)
     }
-    assert(sc.maxNumConcurrentTasks() == 12)
+    assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 12)
   }
 
   test("compute max number of concurrent tasks can be launched when spark.task.cpus > 1") {
@@ -86,7 +86,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       assert(sc.getExecutorIds().length == 4)
     }
     // Each executor can only launch one task since `spark.task.cpus` is 2.
-    assert(sc.maxNumConcurrentTasks() == 4)
+    assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
   }
 
   test("compute max number of concurrent tasks can be launched when some executors are busy") {
@@ -126,7 +126,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         assert(taskStarted.get())
         assert(taskEnded.get() == false)
         // Assert we count in slots on both busy and free executors.
-        assert(sc.maxNumConcurrentTasks() == 4)
+        assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
       }
     } finally {
       sc.removeSparkListener(listener)
@@ -189,8 +189,10 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   test("extra resources from executor") {
     import TestUtils._
 
+    val execCores = 3
+    val taskCpus = 1
     val conf = new SparkConf()
-      .set(EXECUTOR_CORES, 3)
+      .set(EXECUTOR_CORES, execCores)
       .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
       .setMaster(
       "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
@@ -237,7 +239,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     var taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
-      "t1", 0, 1, mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
+      "t1", 0, 1, taskCpus, mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
       new Properties(), taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenReturn(taskDescs)
@@ -251,7 +253,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     }
 
     backend.driverEndpoint.send(
-      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskResources))
+      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskCpus, taskResources))
 
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")

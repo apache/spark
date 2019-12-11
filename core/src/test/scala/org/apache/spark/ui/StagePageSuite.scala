@@ -27,6 +27,7 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.Status._
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{AccumulableInfo => UIAccumulableInfo, StageData, StageStatus}
@@ -38,7 +39,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
 
   test("ApiHelper.COLUMN_TO_INDEX should match headers of the task table") {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    val statusStore = AppStatusStore.createLiveStore(conf)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val statusStore = AppStatusStore.createLiveStore(conf, resourceProfileManager)
     try {
       val stageData = new StageData(
         status = StageStatus.ACTIVE,
@@ -115,7 +117,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
    */
   private def renderStagePage(): Seq[Node] = {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    val statusStore = AppStatusStore.createLiveStore(conf)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val statusStore = AppStatusStore.createLiveStore(conf, resourceProfileManager)
     val listener = statusStore.listener.get
 
     try {

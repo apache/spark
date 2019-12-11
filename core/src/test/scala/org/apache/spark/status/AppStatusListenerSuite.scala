@@ -30,6 +30,7 @@ import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.metrics.ExecutorMetricType
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.api.v1
@@ -62,7 +63,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("environment info") {
-    val listener = new AppStatusListener(store, conf, true)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val listener = new AppStatusListener(store, conf, true, resourceProfileManager)
 
     val details = Map(
       "JVM Information" -> Seq(
@@ -102,7 +104,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("scheduler events") {
-    val listener = new AppStatusListener(store, conf, true)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val listener = new AppStatusListener(store, conf, true, resourceProfileManager)
 
     listener.onOtherEvent(SparkListenerLogStart("TestSparkVersion"))
 
@@ -680,7 +683,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("storage events") {
-    val listener = new AppStatusListener(store, conf, true)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val listener = new AppStatusListener(store, conf, true, resourceProfileManager)
     val maxMemory = 42L
 
     // Register a couple of block managers.
@@ -997,7 +1001,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       .set(MAX_RETAINED_STAGES, 2)
       .set(MAX_RETAINED_TASKS_PER_STAGE, 2)
       .set(MAX_RETAINED_DEAD_EXECUTORS, 1)
-    val listener = new AppStatusListener(store, testConf, true)
+    val resourceProfileManager = new ResourceProfileManager(testConf)
+    val listener = new AppStatusListener(store, testConf, true, resourceProfileManager)
 
     // Start 3 jobs, all should be kept. Stop one, it should be evicted.
     time += 1
@@ -1112,7 +1117,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("eviction should respect job completion time") {
     val testConf = conf.clone().set(MAX_RETAINED_JOBS, 2)
-    val listener = new AppStatusListener(store, testConf, true)
+
+    val resourceProfileManager = new ResourceProfileManager(testConf)
+    val listener = new AppStatusListener(store, testConf, true, resourceProfileManager)
 
     // Start job 1 and job 2
     time += 1
@@ -1137,7 +1144,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("eviction should respect stage completion time") {
     val testConf = conf.clone().set(MAX_RETAINED_STAGES, 2)
-    val listener = new AppStatusListener(store, testConf, true)
+    val resourceProfileManager = new ResourceProfileManager(testConf)
+    val listener = new AppStatusListener(store, testConf, true, resourceProfileManager)
 
     val stage1 = new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1")
     val stage2 = new StageInfo(2, 0, "stage2", 4, Nil, Nil, "details2")
@@ -1170,7 +1178,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("skipped stages should be evicted before completed stages") {
     val testConf = conf.clone().set(MAX_RETAINED_STAGES, 2)
-    val listener = new AppStatusListener(store, testConf, true)
+    val resourceProfileManager = new ResourceProfileManager(testConf)
+    val listener = new AppStatusListener(store, testConf, true, resourceProfileManager)
 
     val stage1 = new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1")
     val stage2 = new StageInfo(2, 0, "stage2", 4, Nil, Nil, "details2")
@@ -1206,7 +1215,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("eviction should respect task completion time") {
     val testConf = conf.clone().set(MAX_RETAINED_TASKS_PER_STAGE, 2)
-    val listener = new AppStatusListener(store, testConf, true)
+    val resourceProfileManager = new ResourceProfileManager(testConf)
+    val listener = new AppStatusListener(store, testConf, true, resourceProfileManager)
 
     val stage1 = new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1")
     stage1.submissionTime = Some(time)
@@ -1240,7 +1250,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("lastStageAttempt should fail when the stage doesn't exist") {
     val testConf = conf.clone().set(MAX_RETAINED_STAGES, 1)
-    val listener = new AppStatusListener(store, testConf, true)
+    val resourceProfileManager = new ResourceProfileManager(testConf)
+    val listener = new AppStatusListener(store, testConf, true, resourceProfileManager)
     val appStore = new AppStatusStore(store)
 
     val stage1 = new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1")
@@ -1272,7 +1283,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-24415: update metrics for tasks that finish late") {
-    val listener = new AppStatusListener(store, conf, true)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val listener = new AppStatusListener(store, conf, true, resourceProfileManager)
 
     val stage1 = new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1")
     val stage2 = new StageInfo(2, 0, "stage2", 4, Nil, Nil, "details2")
@@ -1336,7 +1348,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         conf.clone().set(LIVE_ENTITY_UPDATE_PERIOD, -1L)
       }
 
-      val listener = new AppStatusListener(store, testConf, live)
+      val resourceProfileManager = new ResourceProfileManager(testConf)
+      val listener = new AppStatusListener(store, testConf, live, resourceProfileManager)
 
       listener.onExecutorAdded(createExecutorAddedEvent(1))
       listener.onExecutorAdded(createExecutorAddedEvent(2))
@@ -1395,7 +1408,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("driver logs") {
-    val listener = new AppStatusListener(store, conf, true)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val listener = new AppStatusListener(store, conf, true, resourceProfileManager)
 
     val driver = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "localhost", 42)
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(time, driver, 42L))
@@ -1413,7 +1427,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("executor metrics updates") {
-    val listener = new AppStatusListener(store, conf, true)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val listener = new AppStatusListener(store, conf, true, resourceProfileManager)
 
     val driver = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "localhost", 42)
 
@@ -1510,7 +1525,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("stage executor metrics") {
     // simulate reading in StageExecutorMetrics events from the history log
-    val listener = new AppStatusListener(store, conf, false)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val listener = new AppStatusListener(store, conf, false, resourceProfileManager)
     val driver = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "localhost", 42)
 
     listener.onExecutorAdded(createExecutorAddedEvent(1))
@@ -1559,7 +1575,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("storage information on executor lost/down") {
-    val listener = new AppStatusListener(store, conf, true)
+    val resourceProfileManager = new ResourceProfileManager(conf)
+    val listener = new AppStatusListener(store, conf, true, resourceProfileManager)
     val maxMemory = 42L
 
     // Register a couple of block managers.

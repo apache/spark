@@ -379,6 +379,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
+      taskCpus: Int,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
     : Option[TaskDescription] =
   {
@@ -444,19 +445,6 @@ private[spark] class TaskSetManager(
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
-        /*
-        val extraResources = sched.resourcesReqsPerTask.map { taskReq =>
-          val rName = taskReq.resourceName
-          val count = taskReq.amount
-          val rAddresses = availableResources.getOrElse(rName, Seq.empty)
-          assert(rAddresses.size >= count, s"Required $count $rName addresses, but only " +
-            s"${rAddresses.size} available.")
-          // We'll drop the allocated addresses later inside TaskSchedulerImpl.
-          val allocatedAddresses = rAddresses.take(count)
-          (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
-        }.toMap
-        */
-
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(
           taskId,
@@ -465,6 +453,7 @@ private[spark] class TaskSetManager(
           taskName,
           index,
           task.partitionId,
+          taskCpus,
           addedFiles,
           addedJars,
           task.localProperties,

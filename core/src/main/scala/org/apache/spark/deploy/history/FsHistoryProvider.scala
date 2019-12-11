@@ -47,6 +47,7 @@ import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
@@ -953,8 +954,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
     val trackingStore = new ElementTrackingStore(store, replayConf)
     val replayBus = new ReplayListenerBus()
+    // TODO - is this the right sparkConf though?
+    // we may want to not create default profile until we read the conf from the history file
+    val resourceProfileManager = new ResourceProfileManager(conf)
     val listener = new AppStatusListener(trackingStore, replayConf, false,
-      lastUpdateTime = Some(lastUpdated))
+      resourceProfileManager = resourceProfileManager, lastUpdateTime = Some(lastUpdated))
     replayBus.addListener(listener)
 
     for {

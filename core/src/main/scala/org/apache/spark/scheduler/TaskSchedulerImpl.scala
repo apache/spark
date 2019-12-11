@@ -342,16 +342,21 @@ private[spark] class TaskSchedulerImpl(
       val host = shuffledOffers(i).host
       // the specific resource assignments that would be given to a task
       val taskResAssignments = HashMap[String, ResourceInformation]()
+      // TODO - find better way to get taskCpus
+      val defaultProf = ResourceProfile.getOrCreateDefaultProfile(conf)
+      val taskSetProf = taskSet.taskSet.resources.getOrElse(defaultProf)
+      val taskCpus = taskSetProf.taskResources.get(ResourceProfile.CPUS)
+        .map(_.amount.toInt).getOrElse(CPUS_PER_TASK)
       if (resourcesMeetTaskRequirements(taskSet, availableCpus(i), availableResources(i),
         taskResAssignments)) {
         try {
-          for (task <- taskSet.resourceOffer(execId, host, maxLocality, taskResAssignments.toMap)) {
+          for (task <- taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments.toMap)) {
             tasks(i) += task
             val tid = task.taskId
             taskIdToTaskSetManager.put(tid, taskSet)
             taskIdToExecutorId(tid) = execId
             executorIdToRunningTaskIds(execId).add(tid)
-            availableCpus(i) -= CPUS_PER_TASK
+            availableCpus(i) -= task.cpus
             assert(availableCpus(i) >= 0)
             task.resources.foreach { case (rName, rInfo) =>
               // Remove the first n elements from availableResources addresses, these removed
@@ -446,6 +451,28 @@ private[spark] class TaskSchedulerImpl(
     true
   }
 
+  // TODO - how expensive is this?
+  private def calculateAvailableSlots(
+      resourceProfileIds: Array[Int],
+      availableCpus: Array[Int],
+      availableResources: Array[Map[String, Buffer[String]]],
+      rp: Option[ResourceProfile]): Int = {
+    val resourceProfile = rp.getOrElse(ResourceProfile.getOrCreateDefaultProfile(sc.getConf))
+    val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter(_ == resourceProfile.id)
+    val limitingResource = resourceProfile.limitingResource(sc.getConf)
+    val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).getOrElse(
+      throw new SparkException("limitingResource returns from ResourceProfile" +
+        s" $resourceProfile.id doesn't actually contain that task resource!")
+    )
+    offersForResourceProfile.map { case (o, index) =>
+      if (limitingResource == ResourceProfile.CPUS) {
+        availableCpus(index) / taskLimit.toInt
+      } else {
+        availableResources(index).get(limitingResource).map(_.size).getOrElse(0)
+      }
+    }.sum
+  }
+
   /**
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
@@ -486,9 +513,11 @@ private[spark] class TaskSchedulerImpl(
 
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
+    // TODO - need to update per ResourceProfile - just estimate on size so maybe doesn't matter?
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
     val availableResources = shuffledOffers.map(_.resources).toArray
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
+    val resourceProfileIds = shuffledOffers.map(o => o.resourceProfileId).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -498,19 +527,26 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
+    // Take each TaskSet in our scheduling order, and then offer it to each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     for (taskSet <- sortedTaskSets) {
-      val availableSlots = availableCpus.map(c => c / CPUS_PER_TASK).sum
+      // we only need to calculate available slots if using barrier scheduling, otherwise the
+      // value is -1
+      val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
+        calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
+          taskSet.taskSet.resources)
+      } else {
+        -1
+      }
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
-      if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {
-        // Skip the launch process.
-        // TODO SPARK-24819 If the job requires more slots than available (both busy and free
-        // slots), fail the job on submit.
-        logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
-          s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
-          s"number of available slots is $availableSlots.")
+      if (taskSet.isBarrier && numBarrierSlotsAvailable < taskSet.numTasks) {
+          // Skip the launch process.
+          // TODO SPARK-24819 If the job requires more slots than available (both busy and free
+          // slots), fail the job on submit.
+          logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
+            s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
+            s"number of available slots is $numBarrierSlotsAvailable.")
       } else {
         var launchedAnyTask = false
         // Record all the executor IDs assigned barrier tasks on.

@@ -70,6 +70,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
   private val createTimeNs = System.nanoTime()
 
+  // TODO - update for ResourceProfiles
   private val taskResourceNumParts: Map[String, Int] =
     if (scheduler.resourcesReqsPerTask != null) {
       scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req.numParts).toMap
@@ -86,6 +87,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Number of executors for the default ResourceProfile requested by the
   // cluster manager, [[ExecutorAllocationManager]]
+  // TODO - we are storing this twice - once here and once in ExecutorAllocationManager
+  // can we optimize?
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private var requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
 
@@ -156,13 +159,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case StatusUpdate(executorId, taskId, state, data, resources) =>
+      case StatusUpdate(executorId, taskId, state, data, taskCpus, resources) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
-              // TODO - need to update this for resourceProfiles
-              executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              executorInfo.freeCores += taskCpus
               resources.foreach { case (k, v) =>
                 executorInfo.resourcesInfo.get(k).foreach { r =>
                   r.release(v.addresses)
@@ -243,6 +245,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
              new ExecutorResourceInfo(v.name, v.addresses,
                // tell the executor it can schedule resources up to numParts times,
                // as configured by the user, or set to 1 as that is the default (1 task/resource)
+               // TODO - update for ResourceProfile
                taskResourceNumParts.getOrElse(v.name, 1)))
           }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
@@ -310,7 +313,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               Some(executorData.executorAddress.hostPort),
               executorData.resourcesInfo.map { case (rName, rInfo) =>
                 (rName, rInfo.availableAddrs.toBuffer)
-              })
+              }, executorData.resourceProfileId)
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers)
       }
@@ -339,7 +342,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               Some(executorData.executorAddress.hostPort),
               executorData.resourcesInfo.map { case (rName, rInfo) =>
                 (rName, rInfo.availableAddrs.toBuffer)
-              }))
+              }, executorData.resourceProfileId))
           scheduler.resourceOffers(workOffers)
         } else {
           Seq.empty
@@ -376,8 +379,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val executorData = executorDataMap(task.executorId)
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
-          // TODO - need to update this for resourceProfiles
-          executorData.freeCores -= scheduler.CPUS_PER_TASK
+          executorData.freeCores -= task.cpus
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.resourcesInfo.contains(rName))
             executorData.resourcesInfo(rName).acquire(rInfo.addresses)
@@ -587,10 +589,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.contains(id) && !executorsPendingToRemove.contains(id)
   }
 
-  // TODO - need to update this for resourceProfiles
-  override def maxNumConcurrentTasks(): Int = synchronized {
-    executorDataMap.values.map { executor =>
-      executor.totalCores / scheduler.CPUS_PER_TASK
+  override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
+    val cpusPerTask = rp.taskResources.get(ResourceProfile.CPUS)
+      .map(_.amount.toInt).getOrElse(scheduler.CPUS_PER_TASK)
+    val executorsWithResourceProfile = executorDataMap.filter { case (e, data) =>
+      data.resourceProfileId == rp.id
+    }
+    executorsWithResourceProfile.values.map { executor =>
+      executor.totalCores / cpusPerTask
     }.sum
   }
 
@@ -741,6 +747,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val executorsToKillWithRpId =
         executorsToKill.map(e => (e, executorDataMap(e).resourceProfileId))
 
+      // TODO - use resourceProfileManager
       val idToResourceProfile =
         requestedTotalExecutorsPerResourceProfile.map { case (rp, _) => (rp.id, rp) }
 

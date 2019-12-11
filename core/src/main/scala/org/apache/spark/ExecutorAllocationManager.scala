@@ -29,7 +29,7 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.dynalloc.ExecutorMonitor
@@ -98,7 +98,8 @@ private[spark] class ExecutorAllocationManager(
     listenerBus: LiveListenerBus,
     conf: SparkConf,
     cleaner: Option[ContextCleaner] = None,
-    clock: Clock = new SystemClock())
+    clock: Clock = new SystemClock(),
+    resourceProfileManager: ResourceProfileManager)
   extends Logging {
 
   allocationManager =>
@@ -120,16 +121,10 @@ private[spark] class ExecutorAllocationManager(
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.get(DYN_ALLOCATION_TESTING)
 
-  // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
-  // allocation is only supported for YARN and the default number of cores per executor in YARN is
-  // 1, but it might need to be attained differently for different cluster managers
-  private val tasksPerExecutorForFullParallelism =
-    conf.get(EXECUTOR_CORES) / conf.get(CPUS_PER_TASK)
-
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
-  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(conf)
+  private val defaultProfile = resourceProfileManager.getDefaultResourceProfile
 
   validateSettings()
 
@@ -139,7 +134,11 @@ private[spark] class ExecutorAllocationManager(
 
   // The desired number of executors at this moment in time. If all our executors were to die, this
   // is the number of executors we would immediately want from the cluster manager.
-  // private var numExecutorsTarget = initialNumExecutors
+  // Use the actual ResourceProfile here rather then id because this is used directly by cluster
+  // manager who may not have access to the  ResourceProfileManager. TODO - but we could
+  // get rid of because CoarseGrainedSchedulerBackend has the same data structure, if we used
+  // rpId here and then in CoarseGrainedSchedulerBAckend store id => map[resourceprofile, int],
+  // question is it worth it memory wise?
   private val numExecutorsTargetPerResourceProfile = new mutable.HashMap[ResourceProfile, Int]
   numExecutorsTargetPerResourceProfile(defaultProfile) = initialNumExecutors
 
@@ -275,12 +274,14 @@ private[spark] class ExecutorAllocationManager(
    * The maximum number of executors we would need under the current load to satisfy all running
    * and pending tasks, rounded up.
    */
-  private def maxNumExecutorsNeededPerResourceProfileId(rp: Int): Int = {
-    val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp) +
-      listener.totalRunningTasksPerResourceProfile(rp)
-    logWarning(s"max needed executor rp: $rp numpending $numRunningOrPendingTasks")
+  private def maxNumExecutorsNeededPerResourceProfileId(rp: ResourceProfile): Int = {
+    val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp.id) +
+      listener.totalRunningTasksPerResourceProfile(rp.id)
+    val executorCores = rp.getExecutorCores.getOrElse(conf.get(EXECUTOR_CORES))
+    val tasksPerExecutor = ResourceProfile.numTasksPerExecutor(executorCores, rp, conf)
+    logWarning(s"max needed executor rpId: $rp.id numpending $numRunningOrPendingTasks")
     math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
-      tasksPerExecutorForFullParallelism).toInt
+      tasksPerExecutor).toInt
   }
 
   private def totalRunningTasksPerResourceProfile(id: Int): Int = synchronized {
@@ -332,8 +333,8 @@ private[spark] class ExecutorAllocationManager(
         ExecutorAllocationManager.TargetNumUpdates]
 
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
-      listener.resourceProfileIdToResourceProfile.foreach { case (rProfId, resourceProfile) =>
-        val maxNeeded = maxNumExecutorsNeededPerResourceProfileId(rProfId)
+      resourceProfileManager.getAllProfiles.foreach { case (rProfId, resourceProfile) =>
+        val maxNeeded = maxNumExecutorsNeededPerResourceProfileId(resourceProfile)
         val targetExecs =
           numExecutorsTargetPerResourceProfile.getOrElseUpdate(resourceProfile, initialNumExecutors)
         if (maxNeeded < targetExecs) {
@@ -529,18 +530,25 @@ private[spark] class ExecutorAllocationManager(
         val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
           (executorMonitor.executorCountWithResourceProfile(rpId) -
             executorMonitor.pendingRemovalCountPerResourceProfileId(rpId)))
-        val rp = listener.resourceProfileIdToResourceProfile(rpId)
-        if (newExecutorTotal - 1 < minNumExecutors) {
-          logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
-            s"are only $newExecutorTotal executor(s) left (minimum number of executor limit " +
-            s"$minNumExecutors)")
-        } else if (newExecutorTotal - 1 < numExecutorsTargetPerResourceProfile(rp)) {
-          logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
-            s"$newExecutorTotal executor(s) left (number of executor " +
-            s"target ${numExecutorsTargetPerResourceProfile(rp)})")
-        } else {
-          executorIdsToBeRemoved += executorIdToBeRemoved
-          numExecutorsTotalPerRpId(rpId) -= 1
+        val rpOption = resourceProfileManager.resourceProfileFromId(rpId)
+        rpOption match {
+          case Some(rp) =>
+            if (newExecutorTotal - 1 < minNumExecutors) {
+              logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
+                s"are only $newExecutorTotal executor(s) left (minimum number of executor limit " +
+                s"$minNumExecutors)")
+            } else if (newExecutorTotal - 1 < numExecutorsTargetPerResourceProfile(rp)) {
+              logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
+                s"are only $newExecutorTotal executor(s) left (number of executor " +
+                s"target ${numExecutorsTargetPerResourceProfile(rp)})")
+            } else {
+              executorIdsToBeRemoved += executorIdToBeRemoved
+              numExecutorsTotalPerRpId(rpId) -= 1
+            }
+          case None =>
+            // log an error but continue
+            logError(s"Trying to remove an Executor $executorIdsToBeRemoved from nonexistent " +
+              s"ResourceProfile with id: $rpId")
         }
       }
     }
@@ -628,10 +636,11 @@ private[spark] class ExecutorAllocationManager(
 
     private val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
-    val resourceProfileIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
+    // TODO - use resourceProfileManager
+    // val resourceProfileIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
 
     // initialize default ResourceProfile
-    resourceProfileIdToResourceProfile(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = defaultProfile
+    // resourceProfileIdToResourceProfile(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = defaultProfile
 
     // stageAttempt to tuple (the number of task with locality preferences, a map where each pair
     // is a node and the number of tasks that would like to be scheduled on that node, and
@@ -660,7 +669,9 @@ private[spark] class ExecutorAllocationManager(
         logInfo("adding to execResourceReqsToNumTasks: " + numTasks)
         numExecutorsToAddPerResourceProfileId.getOrElseUpdate(profId, 1)
         // Note we never remove profiles from resourceProfileIdToResourceProfile
-        resourceProfileIdToResourceProfile.getOrElseUpdate(profId, stageResourceProf)
+        // TODO - shouldn't need this if added rdd.withResources
+        resourceProfileManager.addResourceProfile(stageResourceProf)
+        // resourceProfileIdToResourceProfile.getOrElseUpdate(profId, stageResourceProf)
         numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, 0)
 
 
@@ -918,7 +929,7 @@ private[spark] class ExecutorAllocationManager(
     registerGauge("numberAllExecutors", executorMonitor.executorCount, 0)
     registerGauge("numberTargetExecutors", numExecutorsTargetPerResourceProfile(defaultProfile), 0)
     registerGauge("numberMaxNeededExecutors",
-      maxNumExecutorsNeededPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
+      maxNumExecutorsNeededPerResourceProfileId(defaultProfile), 0)
   }
 }
 
