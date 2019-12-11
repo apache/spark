@@ -454,3 +454,14 @@ case class ShowTableProperties(
     AttributeReference("key", StringType, nullable = false)(),
     AttributeReference("value", StringType, nullable = false)())
 }
+
+/**
+ * The logical plan of the COMMENT ON (DATABASE|SCHEMA|NAMESPACE) ... IS ... command that works for
+ * v2 catalogs.
+ */
+case class CommentOnNamespace(namespace: Seq[String], comment: String) extends Command
+
+/**
+ * The logical plan of the COMMENT ON TABLE ... IS ... command that works for v2 catalogs.
+ */
+case class CommentOnTable(namespace: Seq[String], comment: String) extends Command

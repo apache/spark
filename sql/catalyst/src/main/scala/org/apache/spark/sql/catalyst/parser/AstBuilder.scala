@@ -3374,4 +3374,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val functionName = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     ShowFunctionsStatement(userScope, systemScope, pattern, functionName)
   }
+
+  override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    val comment = ctx.kind.getType match {
+      case SqlBaseParser.NULL => ""
+      case _ => string(ctx.STRING)
+    }
+    CommentOnNamespace(visitMultipartIdentifier(ctx.multipartIdentifier), comment)
+  }
+
+  override def visitCommentTable(ctx: CommentTableContext): LogicalPlan = withOrigin(ctx) {
+    val comment = ctx.kind.getType match {
+      case SqlBaseParser.NULL => ""
+      case _ => string(ctx.STRING)
+    }
+    CommentOnTable(visitMultipartIdentifier(ctx.multipartIdentifier), comment)
+  }
 }

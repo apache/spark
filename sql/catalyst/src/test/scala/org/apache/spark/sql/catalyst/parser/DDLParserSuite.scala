@@ -1889,4 +1889,22 @@ class DDLParserSuite extends AnalysisTest {
       }
     }
   }
+
+  test("comment on") {
+    comparePlans(
+      parsePlan("COMMENT ON DATABASE a.b.c IS NULL"),
+      CommentOnNamespace(Seq("a", "b", "c"), ""))
+
+    comparePlans(
+      parsePlan("COMMENT ON DATABASE a.b.c IS 'NULL'"),
+      CommentOnNamespace(Seq("a", "b", "c"), "NULL"))
+
+    comparePlans(
+      parsePlan("COMMENT ON NAMESPACE a.b.c IS ''"),
+      CommentOnNamespace(Seq("a", "b", "c"), ""))
+
+    comparePlans(
+      parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
+      CommentOnTable(Seq("a", "b", "c"), "xYz"))
+  }
 }
