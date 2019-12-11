@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.IntegerType
  * aggregation in which the regular aggregation expressions and every distinct clause is aggregated
  * in a separate group. The results are then combined in a second aggregate.
  *
- * First example: queried without filter clauses (in scala):
+ * First example: query without filter clauses (in scala):
  * {{{
  *   val data = Seq(
  *     (1, "a", "ca1", "cb1", 10),

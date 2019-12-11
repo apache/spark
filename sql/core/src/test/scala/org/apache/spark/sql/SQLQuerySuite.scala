@@ -2838,8 +2838,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   test("Support filter clause for aggregate function with hash") {
     Seq(("APPROX_COUNT_DISTINCT(a)", 3), ("COUNT(a)", 3), ("FIRST(a)", 1), ("LAST(a)", 3),
       ("MAX(a)", 3), ("AVG(a)", 2.0), ("MIN(a)", 1), ("SUM(a)", 6), ("PERCENTILE(a, 1)", 3),
-        ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0), ("COLLECT_LIST(a)", Seq(1, 2, 3)),
-        ("COLLECT_SET(a)", Seq(1, 2, 3))).foreach { funcToResult =>
+      ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0), ("COLLECT_LIST(a)", Seq(1, 2, 3)),
+      ("COLLECT_SET(a)", Seq(1, 2, 3))).foreach { funcToResult =>
       val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
       val df = sql(query)
       val physical = df.queryExecution.sparkPlan
@@ -2862,19 +2862,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0),
         ("COLLECT_LIST(a)", Seq(1, 2, 3)),
         ("COLLECT_SET(a)", Seq(1, 2, 3))).foreach { funcToResult =>
-          val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
-          val df = sql(query)
-          val physical = df.queryExecution.sparkPlan
-          val aggregateExpressions = physical.collectFirst {
-            case agg: SortAggregateExec => agg.aggregateExpressions
-          }
-          assert(aggregateExpressions.isDefined)
-          assert(aggregateExpressions.get.size == 1)
-          aggregateExpressions.get.foreach { expr =>
-            assert(expr.filter.isDefined)
-          }
-          checkAnswer(df, Row(funcToResult._2) :: Nil)
+        val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
+        val df = sql(query)
+        val physical = df.queryExecution.sparkPlan
+        val aggregateExpressions = physical.collectFirst {
+          case agg: SortAggregateExec => agg.aggregateExpressions
         }
+        assert(aggregateExpressions.isDefined)
+        assert(aggregateExpressions.get.size == 1)
+        aggregateExpressions.get.foreach { expr =>
+          assert(expr.filter.isDefined)
+        }
+        checkAnswer(df, Row(funcToResult._2) :: Nil)
+      }
     }
   }
 
