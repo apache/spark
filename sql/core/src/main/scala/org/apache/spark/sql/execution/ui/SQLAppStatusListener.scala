@@ -53,7 +53,7 @@ class SQLAppStatusListener(
     liveExecutions.isEmpty && stageMetrics.isEmpty
   }
 
-  kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get(UI_RETAINED_EXECUTIONS)) { count =>
+  kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get[Int](UI_RETAINED_EXECUTIONS)) { count =>
     cleanupExecutions(count)
   }
 
