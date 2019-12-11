@@ -1643,12 +1643,9 @@ class Analyzer(
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
                 case wf: AggregateWindowFunction =>
-                  val notSupportedWords = (if (isDistinct) "DISTINCT" :: Nil else Nil) ++
-                    (if (filter.isDefined) "FILTER predicate" :: Nil else Nil)
-                  if (notSupportedWords.nonEmpty) {
-                    failAnalysis(
-                      s"${notSupportedWords.mkString(" and ")} specified, but ${wf.prettyName} " +
-                        "is not an aggregate function")
+                  if (isDistinct || filter.isDefined) {
+                    failAnalysis("DISTINCT or FILTER specified, " +
+                      s"but ${wf.prettyName} is not an aggregate function")
                   } else {
                     wf
                   }
@@ -1657,12 +1654,9 @@ class Analyzer(
                   AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
-                  val notSupportedWords = (if (isDistinct) "DISTINCT" :: Nil else Nil) ++
-                    (if (filter.isDefined) "FILTER predicate" :: Nil else Nil)
-                  if (notSupportedWords.nonEmpty) {
-                    failAnalysis(
-                      s"${notSupportedWords.mkString(" and ")} specified, but ${other.prettyName}" +
-                        " is not an aggregate function")
+                  if (isDistinct || filter.isDefined) {
+                    failAnalysis("DISTINCT or FILTER specified, " +
+                      s"but ${other.prettyName} is not an aggregate function")
                   } else {
                     other
                   }

@@ -77,9 +77,17 @@ import org.apache.spark.sql.types.IntegerType
  *
  * Second example: aggregate function without distinct and with filter clauses (in sql):
  * {{{
- *   select count(distinct cat1) as cat1_cnt, count(distinct cat2) as cat2_cnt,
- *     sum(value) filter (where id > 1) as total
- *   from data group by key
+ *   SELECT 
+ *     COUNT(DISTINCT cat1) as cat1_cnt, 
+ *     COUNT(DISTINCT cat2) as cat2_cnt, 
+ *     SUM(value) FILTER (
+ *       WHERE 
+ *         id > 1
+ *     ) AS total 
+ *  FROM 
+ *    data 
+ *  GROUP BY 
+ *    key
  * }}}
  *
  * This translates to the following (pseudo) logical plan:
@@ -115,9 +123,17 @@ import org.apache.spark.sql.types.IntegerType
  *
  * Third example: aggregate function with distinct and filter clauses (in sql):
  * {{{
- *   select count(distinct cat1) filter (where id > 1) as cat1_cnt,
- *     count(distinct cat2) as cat2_cnt, sum(value) as total
- *   from data group by key
+ *   SELECT 
+ *     COUNT(DISTINCT cat1) FILTER (
+ *       WHERE 
+ *         id > 1
+ *     ) as cat1_cnt, 
+ *     COUNT(DISTINCT cat2) as cat2_cnt, 
+ *     SUM(value) as total
+ *   FROM 
+ *     data 
+ *   GROUP BY 
+ *     key
  * }}}
  *
  * This translates to the following (pseudo) logical plan:
@@ -228,11 +244,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }
 
       // Setup unique distinct aggregate children.
-      val distinctAggFunChildren = distinctAggGroups.keySet.flatten.toSeq
-      val distinctAggFilterChildren = distinctAggGroups.values.flatten.toSeq
-        .flatMap(ae => ae.filter.map(_.children.filter(!_.foldable)))
-        .flatten
-      val distinctAggChildren = (distinctAggFunChildren ++ distinctAggFilterChildren).distinct
+      val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq
       val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
 
@@ -241,10 +253,16 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)
+          val filterExpressions = expressions.filter(_.filter.isDefined).map(_.filter.get)
 
           // Expand projection
           val projection = distinctAggChildren.map {
-            case e if group.contains(e) || distinctAggFilterChildren.contains(e) => e
+            case e if group.contains(e) =>
+              if (filterExpressions.isEmpty) {
+                e
+              } else {
+                If(filterExpressions(0), e, nullify(e))
+              }
             case e => nullify(e)
           } :+ id
 
@@ -254,11 +272,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val naf = patchAggregateFunctionChildren(af) { x =>
               distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _))
             }
-            val filterOpt = e.filter.map { fe =>
-              val newChildren = fe.children.map(c => distinctAggChildAttrLookup.getOrElse(c, c))
-              fe.withNewChildren(newChildren)
-            }
-            (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = filterOpt))
+            // [[Expand]] will use filter of the aggregate expression to filter data rows first,
+            // so remove it from the aggregate expression
+            (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = None))
           }
 
           (projection, operators)
