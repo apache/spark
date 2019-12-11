@@ -173,7 +173,7 @@ class RobustScaler (override val uid: String)
     ).map { case ((_, i), s) => (i, s)
     }.reduceByKey { case (s1, s2) => s1.compress.merge(s2.compress)
     }.mapValues { s =>
-        // confirm compression before query
+      // confirm compression before query
       val s2 = s.compress
       val range = s2.query(localUpper).get - s2.query(localLower).get
       val median = s2.query(0.5).get
