@@ -61,7 +61,7 @@ class InMemoryFileIndex(
   override val rootPaths =
     rootPathsSpecified.filterNot(FileStreamSink.ancestorIsMetadataDirectory(_, hadoopConf))
 
-  var _metadataOpsTimeNs: Option[Long] = None
+  private var _metadataOpsTimeNs: Option[Long] = None
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
