@@ -392,10 +392,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
       () => new KafkaScan(options)
 
-    override def newWriteBuilder(
-        options: CaseInsensitiveStringMap,
-        info: LogicalWriteInfo): WriteBuilder = {
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
       new WriteBuilder {
+        private val options = info.options
         private val inputSchema: StructType = info.schema()
         private val topic = Option(options.get(TOPIC_OPTION_KEY)).map(_.trim)
         private val producerParams =

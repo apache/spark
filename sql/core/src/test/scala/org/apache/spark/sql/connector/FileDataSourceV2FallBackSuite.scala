@@ -74,9 +74,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
 
   override def schema(): StructType = StructType(Nil)
 
-  override def newWriteBuilder(
-      options: CaseInsensitiveStringMap,
-      info: LogicalWriteInfo): WriteBuilder =
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
     throw new AnalysisException("Dummy file writer")
 
   override def capabilities(): java.util.Set[TableCapability] =

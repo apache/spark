@@ -25,7 +25,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * A mix-in interface of {@link Table}, to indicate that it's writable. This adds
- * {@link #newWriteBuilder(CaseInsensitiveStringMap, LogicalWriteInfo)} that is used to create a
+ * {@link #newWriteBuilder(LogicalWriteInfo)} that is used to create a
  * write for batch or streaming.
  */
 @Experimental
@@ -35,5 +35,5 @@ public interface SupportsWrite extends Table {
    * Returns a {@link WriteBuilder} which can be used to create {@link BatchWrite}. Spark will call
    * this method to configure each data source write.
    */
-  WriteBuilder newWriteBuilder(CaseInsensitiveStringMap options, LogicalWriteInfo info);
+  WriteBuilder newWriteBuilder(LogicalWriteInfo info);
 }

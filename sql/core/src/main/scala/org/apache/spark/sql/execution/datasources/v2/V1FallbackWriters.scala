@@ -100,8 +100,9 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
   protected def newWriteBuilder(): V1WriteBuilder = {
     val info = LogicalWriteInfoImpl(
       queryId = UUID.randomUUID().toString,
-      schema = plan.schema)
-    val writeBuilder = table.newWriteBuilder(writeOptions, info)
+      schema = plan.schema,
+      options = writeOptions)
+    val writeBuilder = table.newWriteBuilder(info)
 
     writeBuilder.asV1Builder
   }

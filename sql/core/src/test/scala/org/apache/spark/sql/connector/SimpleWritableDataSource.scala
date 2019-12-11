@@ -139,9 +139,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
       new MyScanBuilder(new Path(path).toUri.toString, conf)
     }
 
-    override def newWriteBuilder(
-        options: CaseInsensitiveStringMap,
-        info: LogicalWriteInfo): WriteBuilder = {
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
       new MyWriteBuilder(path, info)
     }
 

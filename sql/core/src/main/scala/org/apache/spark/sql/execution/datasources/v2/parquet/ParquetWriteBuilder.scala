@@ -30,15 +30,13 @@ import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class ParquetWriteBuilder(
-    options: CaseInsensitiveStringMap,
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
     info: LogicalWriteInfo)
-  extends FileWriteBuilder(options, paths, formatName, supportsDataType, info) with Logging {
+  extends FileWriteBuilder(paths, formatName, supportsDataType, info) with Logging {
 
   override def prepareWrite(
       sqlConf: SQLConf,

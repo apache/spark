@@ -86,8 +86,9 @@ case class CreateTableAsSelectExec(
         case table: SupportsWrite =>
           val info = LogicalWriteInfoImpl(
             queryId = UUID.randomUUID().toString,
-            schema)
-          val writeBuilder = table.newWriteBuilder(writeOptions, info)
+            schema,
+            writeOptions)
+          val writeBuilder = table.newWriteBuilder(info)
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
@@ -182,8 +183,9 @@ case class ReplaceTableAsSelectExec(
         case table: SupportsWrite =>
           val info = LogicalWriteInfoImpl(
             queryId = UUID.randomUUID().toString,
-            schema)
-          val writeBuilder = table.newWriteBuilder(writeOptions, info)
+            schema,
+            writeOptions)
+          val writeBuilder = table.newWriteBuilder(info)
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
@@ -339,8 +341,9 @@ trait BatchWriteHelper {
   def newWriteBuilder(): WriteBuilder = {
     val info = LogicalWriteInfoImpl(
       queryId = UUID.randomUUID().toString,
-      query.schema)
-    table.newWriteBuilder(writeOptions, info)
+      query.schema,
+      writeOptions)
+    table.newWriteBuilder(info)
   }
 }
 
@@ -486,8 +489,9 @@ private[v2] trait AtomicTableWriteExec extends V2TableWriteExec with SupportsV1W
         case table: SupportsWrite =>
           val info = LogicalWriteInfoImpl(
             queryId = UUID.randomUUID().toString,
-            query.schema)
-          val writeBuilder = table.newWriteBuilder(writeOptions, info)
+            query.schema,
+            writeOptions)
+          val writeBuilder = table.newWriteBuilder(info)
 
           val writtenRows = writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())

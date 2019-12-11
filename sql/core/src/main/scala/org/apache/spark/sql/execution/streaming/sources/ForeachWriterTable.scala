@@ -31,7 +31,6 @@ import org.apache.spark.sql.connector.write.{DataWriter, LogicalWriteInfo, Physi
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.python.PythonForeachWriter
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A write-only table for forwarding data into the specified [[ForeachWriter]].
@@ -54,9 +53,7 @@ case class ForeachWriterTable[T](
     Set(TableCapability.STREAMING_WRITE).asJava
   }
 
-  override def newWriteBuilder(
-      options: CaseInsensitiveStringMap,
-      info: LogicalWriteInfo): WriteBuilder = {
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private var inputSchema: StructType = info.schema()
 

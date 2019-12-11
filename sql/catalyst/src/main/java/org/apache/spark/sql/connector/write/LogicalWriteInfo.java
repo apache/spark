@@ -19,9 +19,10 @@ package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
- * This interface contains write information that data sources can use when generating a
+ * This interface contains logical write information that data sources can use when generating a
  * {@link WriteBuilder}.
  */
 @Evolving
@@ -37,4 +38,9 @@ public interface LogicalWriteInfo {
    * the schema of the input data from Spark to data source.
    */
   StructType schema();
+
+  /**
+   * the options that the user specified when writing the dataset
+   */
+  CaseInsensitiveStringMap options();
 }

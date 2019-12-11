@@ -71,9 +71,7 @@ object ConsoleTable extends Table with SupportsWrite {
     Set(TableCapability.STREAMING_WRITE).asJava
   }
 
-  override def newWriteBuilder(
-      options: CaseInsensitiveStringMap,
-      info: LogicalWriteInfo): WriteBuilder = {
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private val inputSchema: StructType = info.schema()
 
@@ -82,7 +80,7 @@ object ConsoleTable extends Table with SupportsWrite {
 
       override def buildForStreaming(): StreamingWrite = {
         assert(inputSchema != null)
-        new ConsoleWrite(inputSchema, options)
+        new ConsoleWrite(inputSchema, info.options)
       }
     }
   }

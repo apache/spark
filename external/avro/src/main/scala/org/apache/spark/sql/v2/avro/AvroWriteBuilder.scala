@@ -24,15 +24,13 @@ import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AvroWriteBuilder(
-    options: CaseInsensitiveStringMap,
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
     info: LogicalWriteInfo)
-  extends FileWriteBuilder(options, paths, formatName, supportsDataType, info) {
+  extends FileWriteBuilder(paths, formatName, supportsDataType, info) {
   override def prepareWrite(
       sqlConf: SQLConf,
       job: Job,

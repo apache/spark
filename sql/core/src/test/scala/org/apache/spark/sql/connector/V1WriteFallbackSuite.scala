@@ -234,8 +234,8 @@ class InMemoryV1Provider
       return getRelation
     }
     val writer = table.newWriteBuilder(
-      new CaseInsensitiveStringMap(parameters.asJava),
-      LogicalWriteInfoImpl("", StructType(Seq.empty)))
+      LogicalWriteInfoImpl(
+        "", StructType(Seq.empty), new CaseInsensitiveStringMap(parameters.asJava)))
     if (mode == SaveMode.Overwrite) {
       writer.asInstanceOf[SupportsTruncate].truncate()
     }
@@ -269,10 +269,8 @@ class InMemoryTableWithV1Fallback(
 
   def getData: Seq[Row] = dataMap.values.flatten.toSeq
 
-  override def newWriteBuilder(
-      options: CaseInsensitiveStringMap,
-      info: LogicalWriteInfo): WriteBuilder = {
-    new FallbackWriteBuilder(options)
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    new FallbackWriteBuilder(info.options)
   }
 
   private class FallbackWriteBuilder(options: CaseInsensitiveStringMap)

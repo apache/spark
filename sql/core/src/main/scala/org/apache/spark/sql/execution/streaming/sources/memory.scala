@@ -37,7 +37,6 @@ import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory, Logi
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
@@ -53,9 +52,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
     Set(TableCapability.STREAMING_WRITE).asJava
   }
 
-  override def newWriteBuilder(
-      options: CaseInsensitiveStringMap,
-      info: LogicalWriteInfo): WriteBuilder = {
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private var needTruncate: Boolean = false
       private val inputSchema: StructType = info.schema()

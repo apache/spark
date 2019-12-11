@@ -35,18 +35,17 @@ import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, Da
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.SerializableConfiguration
 
 abstract class FileWriteBuilder(
-    options: CaseInsensitiveStringMap,
     paths: Seq[String],
     formatName: String,
     supportsDataType: DataType => Boolean,
     info: LogicalWriteInfo) extends WriteBuilder {
   private val schema = info.schema()
   private val queryId = info.queryId()
+  private val options = info.options()
   private var mode: SaveMode = _
 
   def mode(mode: SaveMode): WriteBuilder = {

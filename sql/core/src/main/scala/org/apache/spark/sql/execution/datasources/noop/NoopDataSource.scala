@@ -39,9 +39,7 @@ class NoopDataSource extends TableProvider with DataSourceRegister {
 }
 
 private[noop] object NoopTable extends Table with SupportsWrite {
-  override def newWriteBuilder(
-      options: CaseInsensitiveStringMap,
-      info: LogicalWriteInfo): WriteBuilder = NoopWriteBuilder
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = NoopWriteBuilder
   override def name(): String = "noop-table"
   override def schema(): StructType = new StructType()
   override def capabilities(): util.Set[TableCapability] = {

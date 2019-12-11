@@ -18,7 +18,9 @@
 package org.apache.spark.sql.connector.write
 
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] case class LogicalWriteInfoImpl(
     queryId: String,
-    schema: StructType) extends LogicalWriteInfo
+    schema: StructType,
+    options: CaseInsensitiveStringMap) extends LogicalWriteInfo
