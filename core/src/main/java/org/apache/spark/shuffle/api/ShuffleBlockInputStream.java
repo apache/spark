@@ -24,7 +24,7 @@ import java.io.InputStream;
 
 /**
  * :: Experimental ::
- * An object defining the shuffle block and length metadata associated with the block.
+ * A FilterInputStream that wraps the BlockId
  * @since 3.0.0
  */
 public class ShuffleBlockInputStream extends FilterInputStream {

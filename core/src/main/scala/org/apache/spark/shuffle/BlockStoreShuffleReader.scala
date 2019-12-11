@@ -75,11 +75,9 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    logError(s"I am here")
     val streamsIterator =
       shuffleExecutorComponents.getPartitionReaders(new Iterable[ShuffleBlockInfo] {
         override def iterator: Iterator[ShuffleBlockInfo] = {
-          logError(s"now I am here")
           val blockByAddress = mapIndex match {
             case (Some(mapId)) =>
               mapOutputTracker
@@ -94,7 +92,6 @@ private[spark] class BlockStoreShuffleReader[K, C](
             case (_) => throw new IllegalArgumentException(
               "mapId should be both set or unset")
           }
-          logError(s"I have a few of these: ${blockByAddress.nonEmpty}")
           blockByAddress
             .flatMap { shuffleLocationInfo =>
               shuffleLocationInfo._2.map { blockInfo =>
