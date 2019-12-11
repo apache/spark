@@ -787,25 +787,25 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("SPARK-19526 Support ignore nulls keywords for first and last") {
-    assertEqual("first(a ignore nulls)", new First('a, Literal(true)).toAggregateExpression())
-    assertEqual("first(a)", new First('a, Literal(false)).toAggregateExpression())
-    assertEqual("last(a ignore nulls)", new Last('a, Literal(true)).toAggregateExpression())
-    assertEqual("last(a)", new Last('a, Literal(false)).toAggregateExpression())
+    assertEqual("first(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
+    assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
+    assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 
   test("Support respect nulls keywords for first_value and last_value") {
     assertEqual("first_value(a ignore nulls)",
-      new First('a, Literal(true)).toAggregateExpression())
+      First('a, Literal(true)).toAggregateExpression())
     assertEqual("first_value(a respect nulls)",
-      new First('a, Literal(false)).toAggregateExpression())
+      First('a, Literal(false)).toAggregateExpression())
     assertEqual("first_value(a)",
-      new First('a, Literal(false)).toAggregateExpression())
+      First('a, Literal(false)).toAggregateExpression())
     assertEqual("last_value(a ignore nulls)",
-      new Last('a, Literal(true)).toAggregateExpression())
+      Last('a, Literal(true)).toAggregateExpression())
     assertEqual("last_value(a respect nulls)",
-      new Last('a, Literal(false)).toAggregateExpression())
+      Last('a, Literal(false)).toAggregateExpression())
     assertEqual("last_value(a)",
-      new Last('a, Literal(false)).toAggregateExpression())
+      Last('a, Literal(false)).toAggregateExpression())
   }
 
   test("timestamp literals") {

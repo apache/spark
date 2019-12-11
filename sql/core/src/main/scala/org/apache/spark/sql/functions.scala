@@ -431,7 +431,7 @@ object functions {
    * @since 2.0.0
    */
   def first(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
-    new First(e.expr, Literal(ignoreNulls))
+    First(e.expr, Literal(ignoreNulls))
   }
 
   /**
@@ -556,7 +556,7 @@ object functions {
    * @since 2.0.0
    */
   def last(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
-    new Last(e.expr, Literal(ignoreNulls))
+    Last(e.expr, Literal(ignoreNulls))
   }
 
   /**

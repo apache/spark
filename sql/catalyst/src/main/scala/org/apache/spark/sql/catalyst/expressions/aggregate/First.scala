@@ -47,10 +47,6 @@ import org.apache.spark.sql.types._
 case class First(funcName: String, child: Expression, ignoreNullsExpr: Expression)
   extends DeclarativeAggregate with ExpectsInputTypes {
 
-  def this(child: Expression, ignoreNullsExpr: Expression) = this("first", child, ignoreNullsExpr)
-
-  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
-
   def this(funcName: String, child: Expression) =
     this(funcName, child, Literal.create(false, BooleanType))
 
@@ -121,4 +117,13 @@ case class First(funcName: String, child: Expression, ignoreNullsExpr: Expressio
   override def nodeName: String = funcName
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
+}
+
+object First {
+
+  def apply(child: Expression, ignoreNullsExpr: Expression): First =
+    First("first", child, ignoreNullsExpr)
+
+  def apply(child: Expression): First =
+    First("first", child)
 }

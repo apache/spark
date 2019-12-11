@@ -1539,7 +1539,7 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
         if (keyExprIds.contains(attr.exprId)) {
           attr
         } else {
-          Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
+          Alias(First(attr).toAggregateExpression(), attr.name)(attr.exprId)
         }
       }
       // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping

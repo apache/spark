@@ -47,10 +47,6 @@ import org.apache.spark.sql.types._
 case class Last(funcName: String, child: Expression, ignoreNullsExpr: Expression)
   extends DeclarativeAggregate with ExpectsInputTypes {
 
-  def this(child: Expression, ignoreNullsExpr: Expression) = this("last", child, ignoreNullsExpr)
-
-  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
-
   def this(funcName: String, child: Expression) =
     this(funcName, child, Literal.create(false, BooleanType))
 
@@ -117,4 +113,13 @@ case class Last(funcName: String, child: Expression, ignoreNullsExpr: Expression
   override lazy val evaluateExpression: AttributeReference = last
 
   override def toString: String = s"$funcName($child)${if (ignoreNulls) " ignore nulls"}"
+}
+
+object Last {
+
+  def apply(child: Expression, ignoreNullsExpr: Expression): Last =
+    Last("last", child, ignoreNullsExpr)
+
+  def apply(child: Expression): Last =
+    Last("last", child)
 }
