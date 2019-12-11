@@ -456,12 +456,25 @@ case class ShowTableProperties(
 }
 
 /**
- * The logical plan of the COMMENT ON (DATABASE|SCHEMA|NAMESPACE) ... IS ... command that works for
- * v2 catalogs.
+ * The logical plan that defines or changes the comment of an NAMESPACE for v2 catalogs.
+ *
+ * {{{
+ *   COMMENT ON (DATABASE|SCHEMA|NAMESPACE) namespaceIdentifier IS ('text' | NULL)
+ * }}}
+ *
+ * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
+ *
  */
 case class CommentOnNamespace(namespace: Seq[String], comment: String) extends Command
 
 /**
- * The logical plan of the COMMENT ON TABLE ... IS ... command that works for v2 catalogs.
+ * The logical plan that defines or changes the comment of an TABLE for v2 catalogs.
+ *
+ * {{{
+ *   COMMENT ON TABLE tableIdentifier IS ('text' | NULL)
+ * }}}
+ *
+ * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
+ *
  */
 case class CommentOnTable(namespace: Seq[String], comment: String) extends Command
