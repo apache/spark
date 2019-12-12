@@ -22,9 +22,9 @@ struct<min(unique1):int>
 -- !query 2
 select sum(1/ten) filter (where ten > 0) from tenk1
 -- !query 2 schema
-struct<sum((1 div ten)):bigint>
+struct<sum((CAST(1 AS DOUBLE) / CAST(ten AS DOUBLE))):double>
 -- !query 2 output
-1000
+2828.9682539682954
 
 
 -- !query 3
