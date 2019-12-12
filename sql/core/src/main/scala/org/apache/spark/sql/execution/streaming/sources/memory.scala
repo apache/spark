@@ -185,14 +185,14 @@ class MemoryDataWriter(partition: Int, schema: StructType)
   }
 
   override def commit(): MemoryWriterCommitMessage = {
-    MemoryWriterCommitMessage(partition, data.clone())
+    val msg = MemoryWriterCommitMessage(partition, data.clone())
+    data.clear()
+    msg
   }
 
   override def abort(): Unit = {}
 
-  override def close(): Unit = {
-    data.clear()
-  }
+  override def close(): Unit = {}
 }
 
 

@@ -139,7 +139,15 @@ class ForeachDataWriter[T](
 
   override def write(record: InternalRow): Unit = {
     if (!opened) return
-    writer.process(rowConverter(record))
+
+    try {
+      writer.process(rowConverter(record))
+    } catch {
+      case t: Throwable =>
+        errorOrNull = t
+        throw t
+    }
+
   }
 
   override def commit(): WriterCommitMessage = {
@@ -147,7 +155,9 @@ class ForeachDataWriter[T](
   }
 
   override def abort(): Unit = {
-    errorOrNull = new SparkException("Foreach writer has been aborted due to a task failure")
+    if (errorOrNull == null) {
+      errorOrNull = new SparkException("Foreach writer has been aborted due to a task failure")
+    }
   }
 
   override def close(): Unit = {
