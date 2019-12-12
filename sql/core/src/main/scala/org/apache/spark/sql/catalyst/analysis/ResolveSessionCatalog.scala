@@ -96,15 +96,15 @@ class ResolveSessionCatalog(
             builder.build())
           AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName(0), newColumn)
       }.getOrElse {
-        val nameParts = colName.toArray
+        val colNameArray = colName.toArray
         val typeChange = dataType.map { newDataType =>
-          TableChange.updateColumnType(nameParts, newDataType, true)
+          TableChange.updateColumnType(colNameArray, newDataType, true)
         }
         val commentChange = comment.map { newComment =>
-          TableChange.updateColumnComment(nameParts, newComment)
+          TableChange.updateColumnComment(colNameArray, newComment)
         }
         val positionChange = pos.map { newPosition =>
-          TableChange.updateColumnPosition(nameParts, newPosition)
+          TableChange.updateColumnPosition(colNameArray, newPosition)
         }
         createAlterTable(
           nameParts,

@@ -104,15 +104,21 @@ trait AlterTableTests extends SharedSparkSession {
   test("AlterTable: add column with position") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      val e1 = intercept[UnsupportedOperationException] {
-        sql(s"ALTER TABLE $t ADD COLUMN data string FIRST")
-      }
-      assert(e1.getMessage.contains("column position is not supported"))
-      val e2 = intercept[UnsupportedOperationException] {
-        sql(s"ALTER TABLE $t ADD COLUMN data string AFTER id")
-      }
-      assert(e2.getMessage.contains("column position is not supported"))
+      sql(s"CREATE TABLE $t (id struct<x: int>) USING $v2Format")
+
+      sql(s"ALTER TABLE $t ADD COLUMN a string FIRST")
+      assert(getTableMetadata(t).schema.names.toSeq == Seq("a", "id"))
+
+      sql(s"ALTER TABLE $t ADD COLUMN b string AFTER a")
+      assert(getTableMetadata(t).schema.names.toSeq == Seq("a", "b", "id"))
+
+      sql(s"ALTER TABLE $t ADD COLUMN id.y string FIRST")
+      assert(getTableMetadata(t).schema.last.dataType.asInstanceOf[StructType].names.toSeq ==
+        Seq("y", "x"))
+
+      sql(s"ALTER TABLE $t ADD COLUMN id.z string AFTER y")
+      assert(getTableMetadata(t).schema.last.dataType.asInstanceOf[StructType].names.toSeq ==
+        Seq("y", "z", "x"))
     }
   }
 
@@ -489,15 +495,21 @@ trait AlterTableTests extends SharedSparkSession {
   test("AlterTable: update column position") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
-      sql(s"CREATE TABLE $t (a int, b int) USING $v2Format")
-      val e1 = intercept[UnsupportedOperationException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN b FIRST")
-      }
-      assert(e1.getMessage.contains("column position is not supported"))
-      val e2 = intercept[UnsupportedOperationException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN a AFTER b")
-      }
-      assert(e2.getMessage.contains("column position is not supported"))
+      sql(s"CREATE TABLE $t (a int, b struct<x: int, y: int>) USING $v2Format")
+
+      sql(s"ALTER TABLE $t ALTER COLUMN b FIRST")
+      assert(getTableMetadata(t).schema().names.toSeq == Seq("b", "a"))
+
+      sql(s"ALTER TABLE $t ALTER COLUMN b AFTER a")
+      assert(getTableMetadata(t).schema().names.toSeq == Seq("a", "b"))
+
+      sql(s"ALTER TABLE $t ALTER COLUMN b.y FIRST")
+      assert(getTableMetadata(t).schema.apply("b").dataType.asInstanceOf[StructType].names.toSeq ==
+        Seq("y", "x"))
+
+      sql(s"ALTER TABLE $t ALTER COLUMN b.y AFTER x")
+      assert(getTableMetadata(t).schema.apply("b").dataType.asInstanceOf[StructType].names.toSeq ==
+        Seq("x", "y"))
     }
   }
 

@@ -102,32 +102,18 @@ private[sql] object CatalogV2Util {
     changes.foldLeft(schema) { (schema, change) =>
       change match {
         case add: AddColumn =>
-          if (add.position != null) {
-            throw new UnsupportedOperationException("column position is not supported yet.")
-          }
-
           add.fieldNames match {
             case Array(name) =>
-              val newField = StructField(name, add.dataType, nullable = add.isNullable)
-              Option(add.comment) match {
-                case Some(comment) =>
-                  schema.add(newField.withComment(comment))
-                case _ =>
-                  schema.add(newField)
-              }
+              val field = StructField(name, add.dataType, nullable = add.isNullable)
+              val newField = Option(add.comment).map(field.withComment).getOrElse(field)
+              addField(schema, newField, add.position())
 
             case names =>
               replace(schema, names.init, parent => parent.dataType match {
                 case parentType: StructType =>
                   val field = StructField(names.last, add.dataType, nullable = add.isNullable)
-                  val newParentType = Option(add.comment) match {
-                    case Some(comment) =>
-                      parentType.add(field.withComment(comment))
-                    case None =>
-                      parentType.add(field)
-                  }
-
-                  Some(StructField(parent.name, newParentType, parent.nullable, parent.metadata))
+                  val newField = Option(add.comment).map(field.withComment).getOrElse(field)
+                  Some(parent.copy(dataType = addField(parentType, newField, add.position())))
 
                 case _ =>
                   throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
@@ -151,8 +137,24 @@ private[sql] object CatalogV2Util {
           replace(schema, update.fieldNames, field =>
             Some(field.withComment(update.newComment)))
 
-        case _: UpdateColumnPosition =>
-          throw new UnsupportedOperationException("column position is not supported yet.")
+        case update: UpdateColumnPosition =>
+          def updateFieldPos(struct: StructType, name: String): StructType = {
+            val oldField = struct.fields.find(_.name == name).getOrElse {
+              throw new IllegalArgumentException("field not found: " + name)
+            }
+            val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
+            addField(withFieldRemoved, oldField, update.position())
+          }
+
+          update.fieldNames() match {
+            case Array(name) =>
+              updateFieldPos(schema, name)
+            case names =>
+              replace(schema, names.init, parent => parent.dataType match {
+                case parentType: StructType =>
+                  Some(parent.copy(dataType = updateFieldPos(parentType, names.last)))
+              })
+          }
 
         case delete: DeleteColumn =>
           replace(schema, delete.fieldNames, _ => None)
@@ -161,6 +163,21 @@ private[sql] object CatalogV2Util {
           // ignore non-schema changes
           schema
       }
+    }
+  }
+
+  private def addField(
+      schema: StructType,
+      field: StructField,
+      position: ColumnPosition): StructType = {
+    if (position == null) {
+      schema.add(field)
+    } else if (position.isInstanceOf[First]) {
+      StructType(field +: schema.fields)
+    } else {
+      val afterCol = position.asInstanceOf[After].column()
+      val (before, after) = schema.fields.span(_.name == afterCol)
+      StructType(before ++ (field +: after))
     }
   }
 
