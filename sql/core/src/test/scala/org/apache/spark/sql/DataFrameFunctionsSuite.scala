@@ -854,10 +854,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
        """.stripMargin.replace("\n", " ").trim()
     assert(e1.message.contains(errorMsg1))
 
-    checkAnswer(
-      OneRowRelation().selectExpr("array_contains(array(1), 'foo')"),
-      Seq(Row(false))
-    )
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function array_contains should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
 
     checkAnswer(
       sql("select array_contains(array(1.10), 1.1)"),
