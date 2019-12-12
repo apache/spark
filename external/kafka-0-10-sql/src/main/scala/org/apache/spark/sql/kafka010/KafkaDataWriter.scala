@@ -63,12 +63,5 @@ private[kafka010] class KafkaDataWriter(
 
   def abort(): Unit = {}
 
-  def close(): Unit = {
-    checkForErrors()
-    if (producer != null) {
-      producer.flush()
-      checkForErrors()
-      CachedKafkaProducer.close(producerParams)
-    }
-  }
+  def close(): Unit = {}
 }
