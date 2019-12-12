@@ -152,19 +152,19 @@ import org.apache.spark.sql.types.IntegerType
  * {{{
  * Aggregate(
  *    key = ['key]
- *    functions = [count(if (('gid = 1)) 'cat1 else null) with FILTER('id > 1),
+ *    functions = [count(if (('gid = 1)) 'cat1 else null),
  *                 count(if (('gid = 2)) 'cat2 else null),
  *                 first(if (('gid = 0)) 'total else null) ignore nulls]
  *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
  *   Aggregate(
- *      key = ['key, 'cat1, 'id, 'cat2, 'gid]
+ *      key = ['key, 'cat1, 'cat2, 'gid]
  *      functions = [sum('value)]
- *      output = ['key, 'cat1, 'id, 'cat2, 'gid, 'total])
+ *      output = ['key, 'cat1, 'cat2, 'gid, 'total])
  *     Expand(
- *        projections = [('key, null, null, null, 0, cast('value as bigint)),
- *                       ('key, 'cat1, 'id, null, 1, null),
- *                       ('key, null, null, 'cat2, 2, null)]
- *        output = ['key, 'cat1, 'id, 'cat2, 'gid, 'value])
+ *        projections = [('key, null, null, 0, cast('value as bigint)),
+ *                       ('key, if ('id > 1) 'cat1 else null, null, 1, null),
+ *                       ('key, null, 'cat2, 2, null)]
+ *        output = ['key, 'cat1, 'cat2, 'gid, 'value])
  *       LocalTableScan [...]
  * }}}
  *
