@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.continuous
 
 import java.util.UUID
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.UnaryOperator
 
@@ -420,6 +420,7 @@ class ContinuousExecution(
   /**
    * Stops the query execution thread to terminate the query.
    */
+  @throws[TimeoutException]
   override def stop(): Unit = {
     // Set the state to TERMINATED so that the batching thread knows that it was interrupted
     // intentionally
