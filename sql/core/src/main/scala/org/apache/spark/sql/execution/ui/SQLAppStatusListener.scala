@@ -128,7 +128,7 @@ class SQLAppStatusListener(
       if (stage.attemptId != event.stageInfo.attemptNumber) {
         stageMetrics.put(event.stageInfo.stageId,
           new LiveStageMetrics(event.stageInfo.stageId, event.stageInfo.attemptNumber,
-            stage.numTasks, stage.accumulatorIds))
+            stage.numTasks, stage.accumIdsToMetricType))
       }
     }
   }
@@ -463,7 +463,7 @@ private class LiveStageMetrics(
     val stageId: Int,
     val attemptId: Int,
     val numTasks: Int,
-    val accumulatorIds: Map[Long, String]) {
+    val accumIdsToMetricType: Map[Long, String]) {
 
   /**
    * Mapping of task IDs to their respective index. Note this may contain more elements than the
@@ -510,7 +510,7 @@ private class LiveStageMetrics(
     }
 
     accumUpdates
-      .filter { acc => acc.update.isDefined && accumulatorIds.contains(acc.id) }
+      .filter { acc => acc.update.isDefined && accumIdsToMetricType.contains(acc.id) }
       .foreach { acc =>
         // In a live application, accumulators have Long values, but when reading from event
         // logs, they have String values. For now, assume all accumulators are Long and convert
@@ -522,9 +522,9 @@ private class LiveStageMetrics(
         }
 
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
-        metricValues(taskIdx) = (value)
+        metricValues(taskIdx) = value
 
-        if (SQLMetrics.metricNeedsMax(accumulatorIds(acc.id))) {
+        if (SQLMetrics.metricNeedsMax(accumIdsToMetricType(acc.id))) {
           val maxMetricsTaskId = metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value,
             taskId))
 
