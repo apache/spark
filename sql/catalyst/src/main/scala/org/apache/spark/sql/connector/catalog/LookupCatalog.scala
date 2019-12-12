@@ -53,24 +53,11 @@ private[sql] trait LookupCatalog extends Logging {
   }
 
   /**
-   * Extract catalog and identifier from a multi-part identifier with the current catalog if needed.
-   */
-  object CatalogObjectIdentifier {
-    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Identifier)] = parts match {
-      case CatalogAndMultipartIdentifier(maybeCatalog, nameParts) =>
-        Some((
-            maybeCatalog.getOrElse(currentCatalog),
-            Identifier.of(nameParts.init.toArray, nameParts.last)
-        ))
-    }
-  }
-
-  /**
    * Extract session catalog and identifier from a multi-part identifier.
    */
   object SessionCatalogAndIdentifier {
     def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = parts match {
-      case CatalogObjectIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
+      case CatalogAndIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
         Some(catalog, ident)
       case _ => None
     }
@@ -81,7 +68,7 @@ private[sql] trait LookupCatalog extends Logging {
    */
   object NonSessionCatalogAndIdentifier {
     def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = parts match {
-      case CatalogObjectIdentifier(catalog, ident) if !CatalogV2Util.isSessionCatalog(catalog) =>
+      case CatalogAndIdentifier(catalog, ident) if !CatalogV2Util.isSessionCatalog(catalog) =>
         Some(catalog, ident)
       case _ => None
     }
@@ -117,7 +104,7 @@ private[sql] trait LookupCatalog extends Logging {
       assert(nameParts.nonEmpty)
       if (nameParts.length == 1) {
         Some((currentCatalog, Identifier.of(Array(), nameParts.head)))
-      } else if (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(globalTempDB)) {
+      } else if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
         // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
         // API does not support view yet, and we have to use v1 commands to deal with global temp
         // views. To simplify the implementation, we put global temp views in a special namespace
@@ -139,7 +126,7 @@ private[sql] trait LookupCatalog extends Logging {
   /**
    * Extract legacy table identifier from a multi-part identifier.
    *
-   * For legacy support only. Please use [[CatalogObjectIdentifier]] instead on DSv2 code paths.
+   * For legacy support only. Please use [[CatalogAndIdentifier]] instead on DSv2 code paths.
    */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
