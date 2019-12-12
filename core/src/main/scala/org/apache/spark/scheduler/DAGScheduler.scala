@@ -38,7 +38,7 @@ import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
-import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -117,27 +117,20 @@ private[spark] class DAGScheduler(
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv,
-    clock: Clock = new SystemClock(),
-    resourceProfileManager: ResourceProfileManager)
+    clock: Clock = new SystemClock())
   extends Logging {
 
-  def this(
-      sc: SparkContext,
-      taskScheduler: TaskScheduler,
-      resourceProfileManager: ResourceProfileManager) = {
+  def this(sc: SparkContext, taskScheduler: TaskScheduler) = {
     this(
       sc,
       taskScheduler,
       sc.listenerBus,
       sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
       sc.env.blockManager.master,
-      sc.env,
-      resourceProfileManager = resourceProfileManager)
+      sc.env)
   }
 
-  def this(sc: SparkContext, resourceProfileManager: ResourceProfileManager) = {
-    this(sc, sc.taskScheduler, resourceProfileManager = resourceProfileManager)
-  }
+  def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
   private[spark] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)
 
@@ -398,7 +391,7 @@ private[spark] class DAGScheduler(
     val resourceProfile = mergeResourceProfilesForStage(rdd)
     // this ResourceProfile could be different if it was merged so we have to add it to
     // our ResourceProfileManager
-    resourceProfileManager.addResourceProfile(resourceProfile)
+    sc.resourceProfileManager.addResourceProfile(resourceProfile)
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
@@ -502,7 +495,7 @@ private[spark] class DAGScheduler(
       if (stageResourceProfiles.size == 1) {
         stageResourceProfiles.head
       } else {
-        resourceProfileManager.getDefaultResourceProfile
+        sc.resourceProfileManager.defaultResourceProfile
       }
     }
     resourceProfile
@@ -520,7 +513,7 @@ private[spark] class DAGScheduler(
     val resourceProfile = mergeResourceProfilesForStage(rdd)
     // this ResourceProfile could be different if it was merged so we have to add it to
     // our ResourceProfileManager
-    resourceProfileManager.addResourceProfile(resourceProfile)
+    sc.resourceProfileManager.addResourceProfile(resourceProfile)
 
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd, resourceProfile)

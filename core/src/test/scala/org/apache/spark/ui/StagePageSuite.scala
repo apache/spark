@@ -27,10 +27,10 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.Status._
-import org.apache.spark.resource.ResourceProfileManager
+import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
-import org.apache.spark.status.api.v1.{AccumulableInfo => UIAccumulableInfo, StageData, StageStatus}
+import org.apache.spark.status.api.v1.{StageData, StageStatus, AccumulableInfo => UIAccumulableInfo}
 import org.apache.spark.ui.jobs.{ApiHelper, StagePage, StagesTab, TaskPagedTable}
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
@@ -134,7 +134,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
       val page = new StagePage(tab, statusStore)
 
       // Simulate a stage in job progress listener
-      val stageInfo = new StageInfo(0, 0, "dummy", 1, Seq.empty, Seq.empty, "details")
+      val stageInfo = new StageInfo(0, 0, "dummy", 1, Seq.empty, Seq.empty, "details",
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       // Simulate two tasks to test PEAK_EXECUTION_MEMORY correctness
       (1 to 2).foreach {
         taskId =>

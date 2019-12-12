@@ -28,7 +28,7 @@ import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientL
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
-import org.apache.spark.resource.{ResourceUtils, ResourceProfile}
+import org.apache.spark.resource.{ResourceProfile, ResourceUtils}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
@@ -40,7 +40,7 @@ private[spark] class StandaloneSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     masters: Array[String])
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv, sc.resourceProfileManager)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with StandaloneAppClientListener
   with Logging {
 
@@ -199,8 +199,8 @@ private[spark] class StandaloneSchedulerBackend(
     // resources profiles not supported
     Option(client) match {
       case Some(c) =>
-        val rp = ResourceProfile.getOrCreateDefaultProfile(sc.conf)
-        val numExecs = resourceProfileToTotalExecs.getOrElse(rp, 0)
+        val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+        val numExecs = resourceProfileToTotalExecs.getOrElse(defaultProf, 0)
         c.requestTotalExecutors(numExecs)
       case None =>
         logWarning("Attempted to request executors before driver fully initialized.")

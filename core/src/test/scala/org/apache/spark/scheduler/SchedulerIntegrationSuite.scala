@@ -487,8 +487,7 @@ private class MockExternalClusterManager extends ExternalClusterManager {
 
   def createTaskScheduler(
       sc: SparkContext,
-      masterURL: String,
-      resourceProfileManager: ResourceProfileManager): TaskScheduler = {
+      masterURL: String): TaskScheduler = {
     new TestTaskScheduler(sc)
  }
 

@@ -59,7 +59,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     sc: SparkContext,
     master: String,
     securityManager: SecurityManager)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv, sc.resourceProfileManager)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
   // Blacklist a slave after this many failures
@@ -767,7 +767,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = Future.successful {
     // We don't truly know if we can fulfill the full amount of executors
     // since at coarse grain it depends on the amount of slaves available.
-    val rp = ResourceProfile.getOrCreateDefaultProfile(sc.conf)
+    val rp = sc.resourceProfileManager.defaultResourceProfile
     val numExecs = resourceProfileToTotalExecs.getOrElse(rp, 0)
     logInfo("Capping the total amount of executors to " + numExecs)
     executorLimitOption = Some(numExecs)

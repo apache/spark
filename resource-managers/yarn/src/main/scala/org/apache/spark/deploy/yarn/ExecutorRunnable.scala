@@ -41,7 +41,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
+import org.apache.spark.util.Utils
 
 private[yarn] class ExecutorRunnable(
     container: Option[Container],
@@ -55,7 +55,7 @@ private[yarn] class ExecutorRunnable(
     appId: String,
     securityMgr: SecurityManager,
     localResources: Map[String, LocalResource],
-    resourceProfileId: Int) extends Logging {
+    resourceProfile: ResourceProfile) extends Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
@@ -188,9 +188,7 @@ private[yarn] class ExecutorRunnable(
     */
 
     // add the extra resources from the resource profile to javaOpts.
-    // Using default one for now until the ResourceProfile stuff is fully supported in YARN
-    val defaultResourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    val rpMap = ResourceProfile.createResourceProfileInternalConfs(defaultResourceProfile)
+    val rpMap = ResourceProfile.createResourceProfileInternalConfs(resourceProfile)
     javaOpts ++= rpMap.map { case (key, value) => s"-D$key=$value" }.toSeq
 
     // For log4j configuration to reference
@@ -216,7 +214,7 @@ private[yarn] class ExecutorRunnable(
         "--hostname", hostname,
         "--cores", executorCores.toString,
         "--app-id", appId,
-        "--resourceProfileId", resourceProfileId.toString) ++
+        "--resourceProfileId", resourceProfile.id.toString) ++
       userClassPath ++
       Seq(
         s"1>${ApplicationConstants.LOG_DIR_EXPANSION_VAR}/stdout",

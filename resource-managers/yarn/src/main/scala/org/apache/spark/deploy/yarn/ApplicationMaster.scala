@@ -457,7 +457,7 @@ private[spark] class ApplicationMaster(
       val executorCores = _sparkConf.get(EXECUTOR_CORES)
       val dummyRunner = new ExecutorRunnable(None, yarnConf, _sparkConf, driverUrl, "<executorId>",
         "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+         ResourceProfile.getOrCreateDefaultProfile(sparkConf))
       dummyRunner.launchContextDebugInfo()
     }
 
@@ -769,8 +769,6 @@ private[spark] class ApplicationMaster(
    */
   private class AMEndpoint(override val rpcEnv: RpcEnv, driver: RpcEndpointRef)
     extends RpcEndpoint with Logging {
-
-    private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))

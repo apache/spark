@@ -31,7 +31,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceProfileManager, ResourceUtils}
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceUtils}
 import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
@@ -61,14 +61,13 @@ import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    resourceProfileManager: ResourceProfileManager,
     isLocal: Boolean = false)
   extends TaskScheduler with Logging {
 
   import TaskSchedulerImpl._
 
-  def this(sc: SparkContext, resourceProfileManager: ResourceProfileManager) = {
-    this(sc, sc.conf.get(config.TASK_MAX_FAILURES), resourceProfileManager)
+  def this(sc: SparkContext) = {
+    this(sc, sc.conf.get(config.TASK_MAX_FAILURES))
   }
 
   // Lazily initializing blacklistTrackerOpt to avoid getting empty ExecutorAllocationClient,
@@ -344,7 +343,7 @@ private[spark] class TaskSchedulerImpl(
       // the specific resource assignments that would be given to a task
       val taskResAssignments = HashMap[String, ResourceInformation]()
       val taskSetRpID = taskSet.taskSet.resourceProfileId
-      val taskCpus = resourceProfileManager.getTaskCpusForProfileId(taskSetRpID)
+      val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
       if (resourcesMeetTaskRequirements(taskSet, availableCpus(i), availableResources(i),
         taskResAssignments)) {
         try {
@@ -398,11 +397,10 @@ private[spark] class TaskSchedulerImpl(
       taskResourceAssignments: HashMap[String, ResourceInformation]): Boolean = {
 
     val rpId = taskSet.taskSet.resourceProfileId
-    val taskSetProf = resourceProfileManager.resourceProfileFromId(rpId)
+    val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
+    val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(rpId)
 
     logInfo("task set resources is: " + taskSetProf)
-
-    val taskCpus = resourceProfileManager.getTaskCpusForProfileId(rpId)
 
     // check is ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) {
@@ -412,14 +410,12 @@ private[spark] class TaskSchedulerImpl(
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
     // SPARK internal scheduler will only base it off the counts, if
     // user is trying to use something else they will have to write their own plugin
-
     if (taskSetProf.taskResources.isEmpty) {
       return true
     }
 
     val tsResources = taskSetProf.taskResources
     logInfo("task resources are: " + tsResources)
-
     for (rName <- tsResources.keys) {
       val resourceReqs = tsResources.get(rName).get
       val taskReqAmount = resourceReqs.amount
@@ -455,7 +451,7 @@ private[spark] class TaskSchedulerImpl(
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Buffer[String]]],
       rpId: Int): Int = {
-    val resourceProfile = resourceProfileManager.resourceProfileFromId(rpId)
+    val resourceProfile = sc.resourceProfileManager.resourceProfileFromId(rpId)
     val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter(_ == resourceProfile.id)
     val limitingResource = resourceProfile.limitingResource(sc.getConf)
     val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).getOrElse(

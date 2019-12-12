@@ -33,7 +33,7 @@ import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
-import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -51,8 +51,7 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
 private[spark]
 class CoarseGrainedSchedulerBackend(
     scheduler: TaskSchedulerImpl,
-    val rpcEnv: RpcEnv,
-    resourceProfileManager: ResourceProfileManager)
+    val rpcEnv: RpcEnv)
   extends ExecutorAllocationClient with SchedulerBackend with Logging {
 
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
@@ -75,6 +74,7 @@ class CoarseGrainedSchedulerBackend(
   // TODO - update for ResourceProfiles
   private val taskResourceNumParts: Map[String, Int] =
     if (scheduler.resourcesReqsPerTask != null) {
+      // parses ResourceRequirements to get numParts
       scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req.numParts).toMap
     } else {
       Map.empty
@@ -89,8 +89,6 @@ class CoarseGrainedSchedulerBackend(
 
   // Number of executors for the default ResourceProfile requested by the
   // cluster manager, [[ExecutorAllocationManager]]
-  // TODO - we are storing this twice - once here and once in ExecutorAllocationManager
-  // can we optimize?
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private var requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
 
@@ -242,6 +240,8 @@ class CoarseGrainedSchedulerBackend(
           addressToExecutorId(executorAddress) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
+          val numParts = scheduler.sc.resourceProfileManager
+            .resourceProfileFromId(resourceProfileId)
           val resourcesInfo = resources.map{ case (k, v) =>
             (v.name,
              new ExecutorResourceInfo(v.name, v.addresses,
@@ -260,18 +260,6 @@ class CoarseGrainedSchedulerBackend(
             if (currentExecutorIdCounter < executorId.toInt) {
               currentExecutorIdCounter = executorId.toInt
             }
-            /*
-            // TODO - need to store these or have generic way rpid -> rp
-            val idToResourceProfile =
-              requestedTotalExecutorsPerResourceProfile.map { case (rp, _) => (rp.id, rp) }
-            val rp = idToResourceProfile(resourceProfileId)
-            if (numPendingExecutorsPerResourceProfile(rp) > 0) {
-              numPendingExecutorsPerResourceProfile(rp) -= 1
-              logDebug(s"Decremented number of pending executors for $resourceProfileId " +
-                s"(${numPendingExecutorsPerResourceProfile(rp)} left)")
-
-            }
-            */
           }
           executorRef.send(RegisteredExecutor)
           // Note: some tests expect the reply to come after we put the executor in the map
@@ -519,7 +507,6 @@ class CoarseGrainedSchedulerBackend(
   protected def reset(): Unit = {
     val executors: Set[String] = synchronized {
       requestedTotalExecutorsPerResourceProfile.clear()
-      // numPendingExecutorsPerResourceProfile.clear()
       executorsPendingToRemove.clear()
       executorDataMap.keys.toSet
     }
@@ -629,27 +616,10 @@ class CoarseGrainedSchedulerBackend(
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
 
     val response = synchronized {
-      val defaultProf = ResourceProfile.getOrCreateDefaultProfile(conf)
+      val defaultProf = scheduler.sc.resourceProfileManager.defaultResourceProfile
       val numExisting = requestedTotalExecutorsPerResourceProfile.getOrElse(defaultProf, 0)
       requestedTotalExecutorsPerResourceProfile(defaultProf) = numExisting + numAdditionalExecutors
-      /* numPendingExecutorsPerResourceProfile(defaultProf) += numAdditionalExecutors
-      logDebug("Number of pending executors is now " +
-        s"${numPendingExecutorsPerResourceProfile(defaultProf)}") */
-      // TODO - do we want to replace this debug statement?
-      /*
-      if (requestedTotalExecutors !=
-          (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)) {
-        // TODO - these are just for default ResourceProfile - update?
-        logDebug(
-          s"""requestExecutors($numAdditionalExecutors): Executor request doesn't match:
-             |requestedTotalExecutors  = $requestedTotalExecutors
-             |numExistingExecutors     = $numExistingExecutors
-             |numPendingExecutors      = $numPendingExecutors
-             |executorsPendingToRemove = ${executorsPendingToRemove.size}""".stripMargin)
-      } */
-
       // Account for executors pending to be added or removed
-
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
 
@@ -659,11 +629,20 @@ class CoarseGrainedSchedulerBackend(
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
-   * @param numExecutors The total number of executors we'd like to have. The cluster manager
-   *                     shouldn't kill any running executor to reach this number, but,
-   *                     if all existing executors were to die, this is the number of executors
-   *                     we'd want to be allocated.
-   * TODO - update
+   *
+   * @param numLocalityAwareTasksPerResourceProfileId The number of tasks in all active stages that
+   *                                                  have a locality preferences per
+   *                                                  ResourceProfile. This includes running,
+   *                                                  pending, and completed tasks.
+   * @param hostToLocalTaskCount A map of hosts to the number of tasks from all active stages
+   *                             that would like to like to run on that host.
+   *                             This includes running, pending, and completed tasks.
+   * @param resourceProfileToNumExecutors The total number of executors we'd like to have per
+   *                                      ResourceProfile. The cluster manager shouldn't kill any
+   *                                      running executor to reach this number, but, if all
+   *                                      existing executors were to die, this is the number
+   *                                      of executors we'd want to be allocated.
+   *
    * @return whether the request is acknowledged by the cluster manager.
    */
   final override def requestTotalExecutors(
@@ -677,27 +656,16 @@ class CoarseGrainedSchedulerBackend(
         "Attempted to request a negative number of executor(s) " +
           s"$totalExecs from the cluster manager. Please specify a positive number!")
     }
-
     val resourceProfileToNumExecutors = resourceProfileIdToNumExecutors.map { case (rpid, num) =>
-      (resourceProfileManager.resourceProfileFromId(rpid), num)
+      (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)
     }
-
     val response = synchronized {
       this.requestedTotalExecutorsPerResourceProfile =
         new HashMap[ResourceProfile, Int] ++= resourceProfileToNumExecutors
-
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
-
-     /* this.requestedTotalExecutorsPerResourceProfile.map { case (rp, total) =>
-        // TODO this is not right - need  pending per rp
-        this.numPendingExecutorsPerResourceProfile(rp) =
-          math.max(total - numExistingExecutorsForRpId(rp.id) + executorsPendingToRemove.size, 0)
-      } */
-
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
-
     defaultAskTimeout.awaitResult(response)
   }
 
@@ -757,7 +725,7 @@ class CoarseGrainedSchedulerBackend(
         if (adjustTargetNumExecutors) {
           executorsToKill.foreach { exec =>
             val rpId = executorDataMap(exec).resourceProfileId
-            val rp = resourceProfileManager.resourceProfileFromId(rpId)
+            val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
             if (requestedTotalExecutorsPerResourceProfile.isEmpty) {
               // Assume that we are killing an executor that was started by default and
               // not through the request api
@@ -767,27 +735,8 @@ class CoarseGrainedSchedulerBackend(
               requestedTotalExecutorsPerResourceProfile(rp) = math.max(requestedTotalForRp - 1, 0)
             }
           }
-          // TODO - do we need to replace this?  More logic with resourceprofiles
-          /*
-          if (requestedTotalExecutors !=
-            (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)) {
-            logDebug(
-              s"""killExecutors($executorIds, $adjustTargetNumExecutors, $countFailures, $force):
-                 |Executor counts do not match:
-                 |requestedTotalExecutors  = $requestedTotalExecutors
-                 |numExistingExecutors     = $numExistingExecutors
-                 |numPendingExecutors      = $numPendingExecutors
-                 |executorsPendingToRemove = ${executorsPendingToRemove.size}""".stripMargin)
-          } */
           doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
         } else {
-          /*
-          executorsToKillWithRpId.foreach { case (exec, rpId) =>
-            val rp =
-              idToResourceProfile.getOrElse(rpId, ResourceProfile.getOrCreateDefaultProfile(conf))
-            numPendingExecutorsPerResourceProfile(rp) += 1
-          }
-          */
           Future.successful(true)
         }
 

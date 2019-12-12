@@ -285,8 +285,7 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
 
   override def createTaskScheduler(
       sc: SparkContext,
-      masterURL: String,
-      resourceProfileManager: ResourceProfileManager): TaskScheduler = {
+      masterURL: String): TaskScheduler = {
     ts = mock[TaskSchedulerImpl]
     when(ts.sc).thenReturn(sc)
     when(ts.applicationId()).thenReturn("appid1")
@@ -319,7 +318,7 @@ class TestCoarseGrainedSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     override val rpcEnv: RpcEnv,
     resourceProfileManager: ResourceProfileManager)
-  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv, resourceProfileManager) {
+  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
 
   def getTaskSchedulerImpl(): TaskSchedulerImpl = scheduler
 }

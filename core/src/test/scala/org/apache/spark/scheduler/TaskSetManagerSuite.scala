@@ -31,7 +31,7 @@ import org.scalatest.Assertions._
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.SerializerInstance
@@ -479,7 +479,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL, 1).isEmpty)
       assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL, 1).isEmpty)
       assert(manager.resourceOffer("exec1", "host1", RACK_LOCAL, 1).isEmpty)
-      assert(manager.resourceOffer("exec1", "host1", ANY,1).isEmpty)
+      assert(manager.resourceOffer("exec1", "host1", ANY, 1).isEmpty)
     }
 
     // Run the task on exec1.1 - should work, and then fail it on exec1.1
@@ -649,7 +649,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
 
-    val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0, null)
+    val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0,
+      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     assert(!manager.emittedTaskSizeWarning)
@@ -664,7 +665,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
 
     val taskSet = new TaskSet(
-      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
+      0, 0, 0, null,  ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     intercept[TaskNotSerializableException] {
@@ -735,7 +737,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val singleTask = new ShuffleMapTask(0, 0, null, new Partition {
         override def index: Int = 0
       }, Seq(TaskLocation("host1", "execA")), new Properties, null)
-    val taskSet = new TaskSet(Array(singleTask), 0, 0, 0, null)
+    val taskSet = new TaskSet(Array(singleTask), 0, 0, 0,
+      null,  ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // Offer host1, which should be accepted as a PROCESS_LOCAL location

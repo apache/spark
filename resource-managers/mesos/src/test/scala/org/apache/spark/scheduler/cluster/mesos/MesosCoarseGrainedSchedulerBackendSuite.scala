@@ -640,7 +640,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val defaultProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     backend.requestTotalExecutors(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> Map("hosts10" -> 1, "hosts11" -> 1)),
-      Map(defaultResourceProfile -> 2))
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(1, false)
@@ -659,7 +659,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.requestTotalExecutors(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
         Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1)),
-      Map(defaultResourceProfile -> 3))
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 3))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
@@ -671,7 +671,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.requestTotalExecutors(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
         Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1, "hosts13" -> 1)),
-      Map(defaultResourceProfile -> 4))
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)

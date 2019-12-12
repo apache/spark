@@ -124,7 +124,7 @@ private[spark] class ExecutorAllocationManager(
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
-  private val defaultProfile = resourceProfileManager.getDefaultResourceProfile
+  private val defaultProfile = resourceProfileManager.defaultResourceProfile
 
   validateSettings()
 
@@ -134,11 +134,6 @@ private[spark] class ExecutorAllocationManager(
 
   // The desired number of executors at this moment in time. If all our executors were to die, this
   // is the number of executors we would immediately want from the cluster manager.
-  // Use the actual ResourceProfile here rather then id because this is used directly by cluster
-  // manager who may not have access to the  ResourceProfileManager. TODO - but we could
-  // get rid of because CoarseGrainedSchedulerBackend has the same data structure, if we used
-  // rpId here and then in CoarseGrainedSchedulerBAckend store id => map[resourceprofile, int],
-  // question is it worth it memory wise?
   private val numExecutorsTargetPerResourceProfileId = new mutable.HashMap[Int, Int]
   numExecutorsTargetPerResourceProfileId(defaultProfile.id) = initialNumExecutors
 
@@ -277,12 +272,11 @@ private[spark] class ExecutorAllocationManager(
   private def maxNumExecutorsNeededPerResourceProfile(rp: ResourceProfile): Int = {
     val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp.id) +
       listener.totalRunningTasksPerResourceProfile(rp.id)
-    val executorCores = rp.getExecutorCores.getOrElse(conf.get(EXECUTOR_CORES))
-    val tasksPerExecutor = ResourceProfile.numTasksPerExecutor(executorCores, rp, conf)
-    logWarning(s"max needed executor rpId: $rp.id numpending $numRunningOrPendingTasks," +
-      s" tasksperexecutor $tasksPerExecutor")
-    math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
-      tasksPerExecutor).toInt
+    val tasksPerExecutor =
+      resourceProfileManager.resourceProfileFromId(rp.id).maxTasksPerExecutor(conf)
+    logDebug(s"max needed executor rpId: $rp.id numpending: $numRunningOrPendingTasks," +
+      s" tasksperexecutor: $tasksPerExecutor")
+    math.ceil(numRunningOrPendingTasks * executorAllocationRatio / tasksPerExecutor).toInt
   }
 
   private def totalRunningTasksPerResourceProfile(id: Int): Int = synchronized {
@@ -333,7 +327,7 @@ private[spark] class ExecutorAllocationManager(
       val updatesNeeded = new mutable.HashMap[Int, ExecutorAllocationManager.TargetNumUpdates]
 
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
-      resourceProfileManager.getAllProfiles.foreach { case (rProfId, resourceProfile) =>
+      resourceProfileManager.allProfiles.foreach { case (rProfId, resourceProfile) =>
         val maxNeeded = maxNumExecutorsNeededPerResourceProfile(resourceProfile)
         val targetExecs =
           numExecutorsTargetPerResourceProfileId.getOrElseUpdate(rProfId, initialNumExecutors)

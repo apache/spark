@@ -38,24 +38,69 @@ import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
  * this will become public.
  */
 @Evolving
-class ResourceProfile() extends Serializable {
+class ResourceProfile() extends Serializable with Logging {
 
   private val _id = ResourceProfile.getNextProfileId
   private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
   private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
-  private var _limitingResource = ""
+  private var _limitingResource: Option[String] = None
+  private var _maxTasksPerExecutor: Option[Int] = None
 
   def id: Int = _id
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.toMap
   def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.toMap
-  // TODO - would be nice to get rid of SparkConf param
-  def limitingResource(sparkConf: SparkConf): String = {
-    if (_limitingResource.nonEmpty) {
-      _limitingResource
-    } else {
-      _limitingResource = calculateLimitingResource(sparkConf)
-      _limitingResource
+
+  def getExecutorCores: Option[Int] = {
+    executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
+  }
+
+  def getTaskCpus: Option[Int] = {
+    taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
+  }
+
+  // maximum tasks you could put on an executor with this profile based on the limiting resource
+  private[spark] def maxTasksPerExecutor(sparkConf: SparkConf): Int = {
+    _maxTasksPerExecutor.getOrElse {
+      calculateTasksAndLimitingResource(sparkConf)
+      _maxTasksPerExecutor.get
     }
+  }
+
+  private[spark] def limitingResource(sparkConf: SparkConf): String = {
+    _limitingResource.getOrElse {
+      calculateTasksAndLimitingResource(sparkConf)
+      _limitingResource.get
+    }
+  }
+
+  /**
+   * Utility function to calculate the number of tasks you can run on a single Executor based
+   * on the task and executor resource requests in the ResourceProfile. This will be based
+   * off the resource that is most restrictive. For instance, if the executor
+   * request is for 4 cpus and 2 gpus and your task request is for 1 cpu and 1 gpu each, the
+   * limiting resource is gpu, and this function will return 2.
+   */
+  private def calculateTasksAndLimitingResource(sparkConf: SparkConf): Unit = synchronized {
+    val coresPerExecutor = getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
+    val cpusPerTask = taskResources.get(ResourceProfile.CPUS)
+      .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
+    val tasksBasedOnCores = coresPerExecutor / cpusPerTask
+    var limitingResource = "CPUS"
+    var taskLimit = tasksBasedOnCores
+    executorResources.foreach { case (rName, request) =>
+      val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
+      if (taskReq > 0.0) {
+        val (parts, numPerTask) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
+        val numTasks = ((request.amount * parts) / numPerTask).toInt
+        if (numTasks < taskLimit) {
+          limitingResource = rName
+          taskLimit = numTasks
+        }
+      }
+    }
+    logInfo(s"Limiting resource is $limitingResource at $taskLimit tasks per executor")
+    _maxTasksPerExecutor = Some(taskLimit)
+    _limitingResource = Some(limitingResource)
   }
 
   /**
@@ -99,47 +144,9 @@ class ResourceProfile() extends Serializable {
     s"Profile: id = ${_id}, executor resources: ${_executorResources}, " +
       s"task resources: ${_taskResources}"
   }
-
-  // utility functions to make it easier to access certain things
-  def getExecutorCores: Option[Int] = {
-    executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
-  }
-
-  def getTaskCpus: Option[Int] = {
-    taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
-  }
-
-  // figure out what is the current limiting resource based on executor and task resources
-  // TODO - how expensive is this?
-  // TODO - when do we call this? needs SparkConf or default cpus per task
-  private def calculateLimitingResource(sparkConf: SparkConf): String = {
-    var maxSlots = -1.0
-    var limitingResource = ""
-    executorResources.foreach { case (name, req) =>
-      if (taskResources.contains(name)) {
-        val execAmount = req.amount
-        // this handles fractional resources
-        val taskAmount = taskResources.get(name).get.amount
-        val (amount, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskAmount)
-        val slots = Math.floor(execAmount * parts / amount).toInt
-        if (maxSlots == -1.0 || slots < maxSlots) {
-          maxSlots = slots
-          limitingResource = name
-        }
-      } else if (name == ResourceProfile.CPUS) {
-        // CPUS are special cased to use cluster default if not specified
-        val slots = req.amount / sparkConf.get(CPUS_PER_TASK)
-        if (maxSlots == -1.0 || slots < maxSlots) {
-          maxSlots = slots
-          limitingResource = name
-        }
-      }
-    }
-    limitingResource
-  }
 }
 
-private[spark] object ResourceProfile extends Logging {
+private[spark] object ResourceProfile {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
@@ -284,47 +291,5 @@ private[spark] object ResourceProfile extends Logging {
       ResourceRequest(resourceId, amount, discoveryScript, vendor)
     }
     resourceReqs
-  }
-
-  /**
-   * Utility function to calculate the number of tasks you can run on a single Executor based
-   * on the task and executor resource requests in the ResourceProfile. This will be based
-   * off the resource that is most restrictive. For instance, if the executor
-   * request is for 4 cpus and 2 gpus and your task request is for 1 cpu and 1 gpu each, the
-   * limiting resource is gpu, and this function will return 2.
-   *
-   * @param coresPerExecutor Number of cores per Executor
-   * @param resourceProf ResourceProfile
-   * @param sparkConf SparkConf
-   * @return number of tasks that could be run on a single Executor
-   */
-  def numTasksPerExecutor(
-      coresPerExecutor: Int,
-      resourceProf: ResourceProfile,
-      sparkConf: SparkConf): Int = {
-    val cpusPerTask = resourceProf.taskResources.get(ResourceProfile.CPUS)
-      .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
-    val tasksBasedOnCores = coresPerExecutor / cpusPerTask
-    var limitingResource = "CPUS"
-    var taskLimit = tasksBasedOnCores
-    // assumes the task resources are specified
-    resourceProf.executorResources.foreach { case (rName, request) =>
-      val taskReq = resourceProf.taskResources.get(rName).map(_.amount).getOrElse(0.0)
-      if (taskReq > 0.0) {
-        var parts = 1
-        var numPerTask = taskReq
-        if (taskReq < 1.0) {
-          parts = Math.floor(1.0 / taskReq).toInt
-          numPerTask = Math.ceil(taskReq)
-        }
-        val numTasks = ((request.amount * parts) / numPerTask).toInt
-        if (numTasks < taskLimit) {
-          limitingResource = rName
-          taskLimit = numTasks
-        }
-      }
-    }
-    logInfo(s"Limiting resource is $limitingResource at $taskLimit tasks per Executor")
-    taskLimit
   }
 }

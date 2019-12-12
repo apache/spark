@@ -114,7 +114,7 @@ private[streaming] class ExecutorAllocationManager(
       math.max(math.min(maxNumExecutors, allExecIds.size + numNewExecutors), minNumExecutors)
     // Just map the targetTotalExecutors to the default ResourceProfile
     client.requestTotalExecutors(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0), Map.empty,
-      Map(ResourceProfile.getOrCreateDefaultProfile(conf) -> targetTotalExecutors))
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> targetTotalExecutors))
     logInfo(s"Requested total $targetTotalExecutors executors")
   }
 

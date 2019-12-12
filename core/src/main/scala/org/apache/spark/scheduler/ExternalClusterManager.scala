@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.SparkContext
-import org.apache.spark.resource.ResourceProfileManager
 
 /**
  * A cluster manager interface to plugin external scheduler.
@@ -37,13 +36,11 @@ private[spark] trait ExternalClusterManager {
    * Create a task scheduler instance for the given SparkContext
    * @param sc SparkContext
    * @param masterURL the master URL
-   * @param resourceProfileManager a manager of ResourceProfiles
    * @return TaskScheduler that will be responsible for task handling
    */
   def createTaskScheduler(
       sc: SparkContext,
-      masterURL: String,
-      resourceProfileManager: ResourceProfileManager): TaskScheduler
+      masterURL: String): TaskScheduler
 
   /**
    * Create a scheduler backend for the given SparkContext and scheduler. This is

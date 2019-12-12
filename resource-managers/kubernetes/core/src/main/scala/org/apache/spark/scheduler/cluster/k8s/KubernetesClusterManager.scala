@@ -37,9 +37,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
   override def createTaskScheduler(
       sc: SparkContext,
-      masterURL: String,
-      resourceProfileManager: ResourceProfileManager): TaskScheduler = {
-    new TaskSchedulerImpl(sc, resourceProfileManager)
+      masterURL: String): TaskScheduler = {
+    new TaskSchedulerImpl(sc)
   }
 
   override def createSchedulerBackend(

@@ -159,7 +159,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       numTasksPending: Int,
       resource: Resource,
       rp: ResourceProfile): Int = {
-    val tasksPerExec = ResourceProfile.numTasksPerExecutor(resource.getVirtualCores, rp, sparkConf)
+    val tasksPerExec = rp.maxTasksPerExecutor(sparkConf)
     math.ceil(numTasksPending / tasksPerExec.toDouble).toInt
   }
 

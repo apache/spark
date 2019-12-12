@@ -43,7 +43,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
-    extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv, sc.resourceProfileManager) {
+    extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
   protected override val minRegisteredRatio =
     if (conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {
@@ -120,7 +120,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   override def doRequestTotalExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
     podAllocator.setTotalExpectedExecutors(
-      resourceProfileToTotalExecs(ResourceProfile.getOrCreateDefaultProfile(sc.conf)))
+      resourceProfileToTotalExecs(scheduler.sc.resourceProfileManager.defaultResourceProfile))
     Future.successful(true)
   }
 

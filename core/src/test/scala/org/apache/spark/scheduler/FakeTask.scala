@@ -20,7 +20,9 @@ package org.apache.spark.scheduler
 import java.util.Properties
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.resource.ResourceProfile
 
 class FakeTask(
     stageId: Int,
@@ -65,7 +67,8 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil)
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   def createShuffleMapTaskSet(
@@ -91,7 +94,8 @@ object FakeTask {
       }, prefLocs(i), new Properties,
         SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array())
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   def createBarrierTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
@@ -110,6 +114,7 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil, isBarrier = true)
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 }

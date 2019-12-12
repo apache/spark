@@ -154,7 +154,7 @@ private[yarn] class YarnAllocator(
     0
   }
   // Number of cores per executor.
-  protected val executorCores = sparkConf.get(EXECUTOR_CORES)
+  protected val defaultExecutorCores = sparkConf.get(EXECUTOR_CORES)
 
   private val executorResourceRequests =
     getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
@@ -163,7 +163,8 @@ private[yarn] class YarnAllocator(
   // Resource capability requested for each executor
   private[yarn] val resource: Resource = {
     val resource: Resource = Resource.newInstance(
-      executorMemory + executorOffHeapMemory + memoryOverhead + pysparkWorkerMemory, executorCores)
+      executorMemory + executorOffHeapMemory + memoryOverhead + pysparkWorkerMemory,
+      defaultExecutorCores)
     ResourceRequestHelper.setResourceRequests(executorResourceRequests, resource)
     logDebug(s"Created resource capability: $resource")
     resource
@@ -172,7 +173,7 @@ private[yarn] class YarnAllocator(
   private[yarn] val rpIdToYarnResource = new mutable.HashMap[Int, Resource]
   rpIdToYarnResource(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = resource
 
-  // TODO - do we want to add removal of profiles?
+  // note currently we don't remove ResourceProfiles
   private[yarn] val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
   rpIdToResourceProfile(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     ResourceProfile.getOrCreateDefaultProfile(sparkConf)
@@ -286,7 +287,7 @@ private[yarn] class YarnAllocator(
     var offHeapMem = executorOffHeapMemory.toLong // TODO - do we want to add to ExecutorResource?
     var overheadMem = memoryOverhead.toLong
     var pysparkMem = pysparkWorkerMemory.toLong
-    var cores = executorCores
+    var cores = defaultExecutorCores
     val customResources = new mutable.HashMap[String, String]
     resourceProfileToTotalExecs.foreach { case (rp, num) =>
       if (!rpIdToYarnResource.contains(rp.id)) {
@@ -713,8 +714,7 @@ private[yarn] class YarnAllocator(
       val rp = rpIdToResourceProfile(rpId)
       val containerMem = rp.executorResources.get(ResourceProfile.MEMORY).
         map(_.amount.toInt).getOrElse(executorMemory)
-      val containerCores = rp.executorResources.get(ResourceProfile.CORES).
-        map(_.amount.toInt).getOrElse(executorCores)
+      val containerCores = rp.getExecutorCores.getOrElse(defaultExecutorCores)
       val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size()
       if (rpRunningExecs < getTargetNumExecutorsForRPId(rpId)) {
         getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
@@ -733,7 +733,7 @@ private[yarn] class YarnAllocator(
                 appAttemptId.getApplicationId.toString,
                 securityMgr,
                 localResources,
-                rpId
+                rp
               ).run()
               updateInternalState()
             } catch {

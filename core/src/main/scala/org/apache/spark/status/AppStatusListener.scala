@@ -196,7 +196,7 @@ private[spark] class AppStatusListener(
     exec.isActive = true
     exec.totalCores = event.executorInfo.totalCores
     val rpId = event.executorInfo.resourceProfileId
-    val cpusPerTask = resourceProfileManager.getTaskCpusForProfileId(rpId)
+    val cpusPerTask = resourceProfileManager.taskCpusForProfileId(rpId)
     exec.maxTasks = event.executorInfo.totalCores / cpusPerTask
     exec.executorLogs = event.executorInfo.logUrlMap
     exec.resources = event.executorInfo.resourcesInfo

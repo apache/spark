@@ -35,9 +35,8 @@ private[spark] class MesosClusterManager extends ExternalClusterManager {
 
   override def createTaskScheduler(
       sc: SparkContext,
-      masterURL: String,
-      resourceProfileManager: ResourceProfileManager): TaskScheduler = {
-    new TaskSchedulerImpl(sc, new ResourceProfileManager(sc.getConf))
+      masterURL: String): TaskScheduler = {
+    new TaskSchedulerImpl(sc)
   }
 
   override def createSchedulerBackend(sc: SparkContext,
