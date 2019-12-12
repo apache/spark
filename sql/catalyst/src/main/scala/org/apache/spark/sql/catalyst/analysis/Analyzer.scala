@@ -773,6 +773,21 @@ class Analyzer(
           .map(rel => show.copy(table = rel))
           .getOrElse(show)
 
+      case delete @ DeleteFromTable(u: UnresolvedV2Relation, _) =>
+        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+          .map(rel => delete.copy(table = rel))
+          .getOrElse(delete)
+
+      case update @ UpdateTable(u: UnresolvedV2Relation, _, _) =>
+        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+          .map(rel => update.copy(table = rel))
+          .getOrElse(update)
+
+      case merge @ MergeIntoTable(u: UnresolvedV2Relation, _, _, _, _) =>
+        CatalogV2Util.loadRelation(u.catalog, u.tableName)
+          .map(rel => merge.copy(targetTable = rel))
+          .getOrElse(merge)
+
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }

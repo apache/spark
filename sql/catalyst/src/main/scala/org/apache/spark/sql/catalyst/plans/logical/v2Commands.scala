@@ -304,31 +304,27 @@ case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Comm
  * The logical plan of the DELETE FROM command that works for v2 tables.
  */
 case class DeleteFromTable(
-    table: LogicalPlan,
-    condition: Option[Expression]) extends Command with SupportsSubquery {
-  override def children: Seq[LogicalPlan] = table :: Nil
-}
+    table: NamedRelation,
+    condition: Option[Expression]) extends Command with SupportsSubquery
 
 /**
  * The logical plan of the UPDATE TABLE command that works for v2 tables.
  */
 case class UpdateTable(
-    table: LogicalPlan,
+    table: NamedRelation,
     assignments: Seq[Assignment],
-    condition: Option[Expression]) extends Command with SupportsSubquery {
-  override def children: Seq[LogicalPlan] = table :: Nil
-}
+    condition: Option[Expression]) extends Command with SupportsSubquery
 
 /**
  * The logical plan of the MERGE INTO command that works for v2 tables.
  */
 case class MergeIntoTable(
-    targetTable: LogicalPlan,
+    targetTable: NamedRelation,
     sourceTable: LogicalPlan,
     mergeCondition: Expression,
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction]) extends Command with SupportsSubquery {
-  override def children: Seq[LogicalPlan] = Seq(targetTable, sourceTable)
+  override def children: Seq[LogicalPlan] = Seq(sourceTable)
 }
 
 sealed abstract class MergeAction(
