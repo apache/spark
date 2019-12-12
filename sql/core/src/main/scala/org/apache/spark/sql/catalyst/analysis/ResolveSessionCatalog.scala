@@ -505,17 +505,17 @@ class ResolveSessionCatalog(
       ShowFunctionsCommand(database, function, userScope, systemScope)
 
     case DropFunctionStatement(CatalogAndIdentifier(catalog, functionIdent), ifExists, isTemp) =>
-        if (isSessionCatalog(catalog)) {
-          val (database, function) = functionIdent.asMultipartIdentifier match {
-            case Seq (db, fn) => (Some(db), fn)
-            case Seq (fn) => (None, fn)
-            case _ =>
-              throw new AnalysisException (s"Unsupported function name '${functionIdent.quoted}'")
-          }
-          DropFunctionCommand(database, function, ifExists, isTemp)
-        } else {
-          throw new AnalysisException ("DROP FUNCTION is only supported in v1 catalog")
+      if (isSessionCatalog(catalog)) {
+        val (database, function) = functionIdent.asMultipartIdentifier match {
+          case Seq(db, fn) => (Some(db), fn)
+          case Seq(fn) => (None, fn)
+          case _ =>
+            throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
         }
+        DropFunctionCommand(database, function, ifExists, isTemp)
+      } else {
+        throw new AnalysisException("DROP FUNCTION is only supported in v1 catalog")
+      }
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {

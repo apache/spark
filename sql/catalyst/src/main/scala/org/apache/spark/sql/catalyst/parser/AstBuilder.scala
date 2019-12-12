@@ -3393,7 +3393,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DropFunctionCommand]] statement.
+   * Create a DROP FUNCTION statement.
    *
    * For example:
    * {{{
