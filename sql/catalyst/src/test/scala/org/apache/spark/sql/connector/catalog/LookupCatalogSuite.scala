@@ -26,6 +26,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FakeV2SessionCatalog
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private case class DummyCatalogPlugin(override val name: String) extends CatalogPlugin {
@@ -36,7 +37,9 @@ private case class DummyCatalogPlugin(override val name: String) extends Catalog
 class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
   import CatalystSqlParser._
 
-  private val catalogs = Seq("prod", "test").map(x => x -> DummyCatalogPlugin(x)).toMap
+  private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+  private val catalogs =
+    Seq("prod", "test", globalTempDB).map(x => x -> DummyCatalogPlugin(x)).toMap
   private val sessionCatalog = FakeV2SessionCatalog
 
   override val catalogManager: CatalogManager = {
@@ -46,13 +49,16 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
     })
     when(manager.currentCatalog).thenReturn(sessionCatalog)
+    when(manager.v2SessionCatalog).thenReturn(sessionCatalog)
     manager
   }
 
-  test("catalog object identifier") {
+  test("catalog and identifier") {
     Seq(
       ("tbl", sessionCatalog, Seq.empty, "tbl"),
       ("db.tbl", sessionCatalog, Seq("db"), "tbl"),
+      (s"$globalTempDB.tbl", sessionCatalog, Seq(globalTempDB), "tbl"),
+      (s"$globalTempDB.ns1.ns2.tbl", sessionCatalog, Seq(globalTempDB, "ns1", "ns2"), "tbl"),
       ("prod.func", catalogs("prod"), Seq.empty, "func"),
       ("ns1.ns2.tbl", sessionCatalog, Seq("ns1", "ns2"), "tbl"),
       ("prod.db.tbl", catalogs("prod"), Seq("db"), "tbl"),
@@ -64,7 +70,7 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
         Seq("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json")).foreach {
       case (sql, expectedCatalog, namespace, name) =>
         inside(parseMultipartIdentifier(sql)) {
-          case CatalogObjectIdentifier(catalog, ident) =>
+          case CatalogAndIdentifier(catalog, ident) =>
             catalog shouldEqual expectedCatalog
             ident shouldEqual Identifier.of(namespace.toArray, name)
         }
@@ -156,7 +162,7 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
           Seq("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json")).foreach {
       case (sql, expectedCatalog, namespace, name) =>
         inside(parseMultipartIdentifier(sql)) {
-          case CatalogObjectIdentifier(catalog, ident) =>
+          case CatalogAndIdentifier(catalog, ident) =>
             catalog shouldEqual expectedCatalog
             ident shouldEqual Identifier.of(namespace.toArray, name)
         }

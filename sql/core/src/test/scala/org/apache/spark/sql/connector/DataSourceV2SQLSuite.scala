@@ -1845,6 +1845,18 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-30104: v2 catalog named global_temp will be masked") {
+    val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+
+    val e = intercept[AnalysisException] {
+      // Since the following multi-part name starts with `globalTempDB`, it is resolved to
+      // the session catalog, not the `gloabl_temp` v2 catalog.
+      sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
+    }
+    assert(e.message.contains("global_temp.ns1.ns2.tbl is not a valid TableIdentifier"))
+  }
+
   test("table name same as catalog can be used") {
     withTable("testcat.testcat") {
       sql(s"CREATE TABLE testcat.testcat (id bigint, data string) USING foo")
