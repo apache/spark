@@ -170,44 +170,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(parsed5, expected5)
   }
 
-  test("drop function") {
-    val sql1 = "DROP TEMPORARY FUNCTION helloworld"
-    val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS helloworld"
-    val sql3 = "DROP FUNCTION hello.world"
-    val sql4 = "DROP FUNCTION IF EXISTS hello.world"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
-    val parsed4 = parser.parsePlan(sql4)
-
-    val expected1 = DropFunctionCommand(
-      None,
-      "helloworld",
-      ifExists = false,
-      isTemp = true)
-    val expected2 = DropFunctionCommand(
-      None,
-      "helloworld",
-      ifExists = true,
-      isTemp = true)
-    val expected3 = DropFunctionCommand(
-      Some("hello"),
-      "world",
-      ifExists = false,
-      isTemp = false)
-    val expected4 = DropFunctionCommand(
-      Some("hello"),
-      "world",
-      ifExists = true,
-      isTemp = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-  }
-
   test("create hive table - table file format") {
     val allSources = Seq("parquet", "parquetfile", "orc", "orcfile", "avro", "avrofile",
       "sequencefile", "rcfile", "textfile")

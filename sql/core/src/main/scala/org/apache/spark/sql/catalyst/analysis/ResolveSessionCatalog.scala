@@ -504,8 +504,7 @@ class ResolveSessionCatalog(
       }
       ShowFunctionsCommand(database, function, userScope, systemScope)
 
-    case DropFunctionStatement(
-      CatalogAndIdentifier(catalog, functionIdent), ifExists, isTemp) =>
+    case DropFunctionStatement(CatalogAndIdentifier(catalog, functionIdent), ifExists, isTemp) =>
         if (isSessionCatalog(catalog)) {
           val (database, function) = functionIdent.asMultipartIdentifier match {
             case Seq (db, fn) => (Some(db), fn)
