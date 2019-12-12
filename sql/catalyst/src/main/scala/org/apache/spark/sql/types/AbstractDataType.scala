@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Locale
+
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Stable
@@ -47,6 +49,8 @@ private[sql] abstract class AbstractDataType {
 
   /** Readable string representation for the type. */
   private[sql] def simpleString: String
+
+  def sql: String = simpleString.toUpperCase(Locale.ROOT)
 }
 
 
