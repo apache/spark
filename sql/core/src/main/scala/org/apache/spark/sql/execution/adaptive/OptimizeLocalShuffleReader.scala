@@ -88,7 +88,7 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     }
     val numReducers = shuffleDep.partitioner.numPartitions
     val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
-    val numMappers = shuffleDep.rdd.getNumPartitions
+    val numMappers = math.max(1, shuffleDep.rdd.getNumPartitions)
     Array.fill(numMappers) {
       equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
     }
