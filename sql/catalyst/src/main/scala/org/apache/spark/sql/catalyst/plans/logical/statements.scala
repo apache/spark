@@ -501,3 +501,11 @@ case class ShowFunctionsStatement(
     systemScope: Boolean,
     pattern: Option[String],
     functionName: Option[Seq[String]]) extends ParsedStatement
+
+/**
+ *  DROP FUNCTION statement, as parsed from SQL
+ */
+case class DropFunctionStatement(
+    functionName: Seq[String],
+    ifExists: Boolean,
+    isTemp: Boolean) extends ParsedStatement

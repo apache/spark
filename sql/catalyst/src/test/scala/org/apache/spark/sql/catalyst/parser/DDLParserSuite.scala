@@ -1840,6 +1840,25 @@ class DDLParserSuite extends AnalysisTest {
     intercept(sql, s"$sql not supported")
   }
 
+  test("DROP FUNCTION") {
+    comparePlans(
+      parsePlan("DROP FUNCTION a"),
+      DropFunctionStatement(Seq("a"), false, false))
+    comparePlans(
+      parsePlan("DROP FUNCTION a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), false, false))
+    comparePlans(
+      parsePlan("DROP TEMPORARY FUNCTION a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), false, true))
+    comparePlans(
+      parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), true, false))
+    comparePlans(
+      parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), true, true))
+
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],
