@@ -38,6 +38,8 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
       case _ => TypeCheckResult.TypeCheckSuccess
     }
   }
+
+  override def flatArguments: Iterator[Any] = Iterator(arg)
 }
 
 @ExpressionDescription(

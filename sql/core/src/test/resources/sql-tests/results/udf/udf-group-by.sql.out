@@ -293,7 +293,7 @@ struct<>
 -- !query 31
 SELECT udf(every(v)), udf(some(v)), any(v) FROM test_agg WHERE 1 = 0
 -- !query 31 schema
-struct<CAST(udf(cast(every(every, v) as string)) AS BOOLEAN):boolean,CAST(udf(cast(some(some, v) as string)) AS BOOLEAN):boolean,any(v):boolean>
+struct<CAST(udf(cast(every(v) as string)) AS BOOLEAN):boolean,CAST(udf(cast(some(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
 -- !query 31 output
 NULL	NULL	NULL
 
@@ -301,7 +301,7 @@ NULL	NULL	NULL
 -- !query 32
 SELECT udf(every(udf(v))), some(v), any(v) FROM test_agg WHERE k = 4
 -- !query 32 schema
-struct<CAST(udf(cast(every(every, cast(udf(cast(v as string)) as boolean)) as string)) AS BOOLEAN):boolean,some(v):boolean,any(v):boolean>
+struct<CAST(udf(cast(every(cast(udf(cast(v as string)) as boolean)) as string)) AS BOOLEAN):boolean,some(v):boolean,any(v):boolean>
 -- !query 32 output
 NULL	NULL	NULL
 
@@ -309,7 +309,7 @@ NULL	NULL	NULL
 -- !query 33
 SELECT every(v), udf(some(v)), any(v) FROM test_agg WHERE k = 5
 -- !query 33 schema
-struct<every(v):boolean,CAST(udf(cast(some(some, v) as string)) AS BOOLEAN):boolean,any(v):boolean>
+struct<every(v):boolean,CAST(udf(cast(some(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
 -- !query 33 output
 false	true	true
 
@@ -317,7 +317,7 @@ false	true	true
 -- !query 34
 SELECT udf(k), every(v), udf(some(v)), any(v) FROM test_agg GROUP BY udf(k)
 -- !query 34 schema
-struct<CAST(udf(cast(k as string)) AS INT):int,every(v):boolean,CAST(udf(cast(some(some, v) as string)) AS BOOLEAN):boolean,any(v):boolean>
+struct<CAST(udf(cast(k as string)) AS INT):int,every(v):boolean,CAST(udf(cast(some(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
 -- !query 34 output
 1	false	true	true
 2	true	true	true
@@ -339,7 +339,7 @@ struct<CAST(udf(cast(k as string)) AS INT):int,every(v):boolean>
 -- !query 36
 SELECT udf(k), udf(every(v)) FROM test_agg GROUP BY udf(k) HAVING every(v) IS NULL
 -- !query 36 schema
-struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(every(every, v) as string)) AS BOOLEAN):boolean>
+struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(every(v) as string)) AS BOOLEAN):boolean>
 -- !query 36 output
 4	NULL
 
