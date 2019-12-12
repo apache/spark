@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.google.common.base.Preconditions;
@@ -53,8 +54,9 @@ class IdentifierImpl implements Identifier {
 
   @Override
   public String toString() {
-    return CatalogV2Implicits.quoteNameParts(Stream.concat(
-      Stream.of(namespace), Stream.of(name)).toArray(String[]::new));
+    return Stream.concat(Stream.of(namespace), Stream.of(name))
+      .map(CatalogV2Implicits::quote)
+      .collect(Collectors.joining("."));
   }
 
   @Override

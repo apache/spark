@@ -89,7 +89,13 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class IdentifierHelper(ident: Identifier) {
-    def quoted: String = ident.toString
+    def quoted: String = {
+      if (ident.namespace.nonEmpty) {
+        ident.namespace.map(quote).mkString(".") + "." + quote(ident.name)
+      } else {
+        quote(ident.name)
+      }
+    }
 
     def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
   }
@@ -109,14 +115,10 @@ private[sql] object CatalogV2Implicits {
           s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
     }
 
-    def quoted: String = quoteNameParts(parts.toArray)
+    def quoted: String = parts.map(quote).mkString(".")
   }
 
-  def quoteNameParts(nameParts: Array[String]): String = {
-    nameParts.map(quote).mkString(".")
-  }
-
-  private def quote(part: String): String = {
+  def quote(part: String): String = {
     if (part.contains(".") || part.contains("`")) {
       s"`${part.replace("`", "``")}`"
     } else {

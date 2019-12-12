@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, Loc
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{createAfter, FIRST}
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
@@ -542,13 +542,13 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int FIRST"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, None, Some(FIRST))
+        QualifiedColType(Seq("x"), IntegerType, None, Some(first()))
       )))
 
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int AFTER y"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, None, Some(createAfter("y")))
+        QualifiedColType(Seq("x"), IntegerType, None, Some(after("y")))
       )))
   }
 
@@ -565,7 +565,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc', a.b string FIRST"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
         QualifiedColType(Seq("x", "y", "z"), IntegerType, Some("doc"), None),
-        QualifiedColType(Seq("a", "b"), StringType, None, Some(FIRST))
+        QualifiedColType(Seq("a", "b"), StringType, None, Some(first()))
       )))
   }
 
@@ -632,7 +632,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq("a", "b", "c"),
         None,
         None,
-        Some(FIRST)))
+        Some(first())))
   }
 
   test("alter table: update column type, comment and position") {
@@ -644,7 +644,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq("a", "b", "c"),
         Some(LongType),
         Some("new comment"),
-        Some(createAfter("d"))))
+        Some(after("d"))))
   }
 
   test("alter table: drop column") {
