@@ -155,7 +155,7 @@ trait StreamingQuery {
    *
    * @since 2.0.0
    */
-  @throws[TimeoutException]
+  @throws[java.util.concurrent.TimeoutException]
   def stop(): Unit
 
   /**
