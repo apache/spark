@@ -97,17 +97,17 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
           // number of output partitions.
           case stage: ShuffleQueryStageExec if(!visitedStage.contains(stage)) =>
             visitedStage += stage
+            val excludedPartitions =
+              ShuffleQueryStageExec.getShuffleStage(stage).excludedPartitions
             val partitionIndices = estimatePartitionStartAndEndIndices(
-              validMetrics.toArray, (0 until (validMetrics(0).bytesByPartitionId.length)).toArray)
+              validMetrics.toArray, excludedPartitions)
+            visitedStage += stage
             CoalescedShuffleReaderExec(stage, partitionIndices)
           case partialReader: PartialShuffleReader =>
             visitedStage += partialReader.child
             val optimizedPartitionIndices = estimatePartitionStartAndEndIndices(
-              validMetrics.toArray, partialReader.partitionRanges.unzip._1)
+              validMetrics.toArray, partialReader.excludedPartitions)
             CoalescedShuffleReaderExec(partialReader.child, optimizedPartitionIndices)
-          case skewedReader: SkewedShufflePartitionReader =>
-            visitedStage += skewedReader.child
-            skewedReader
         }
       } else {
         plan
@@ -123,7 +123,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
   // visible for testing.
   private[sql] def estimatePartitionStartAndEndIndices(
       mapOutputStatistics: Array[MapOutputStatistics],
-      validPartitions: Array[Int]): Array[(Int, Int)] = {
+      excludedPartitions: Set[Int] = Set.empty): Array[(Int, Int)] = {
     val minNumPostShufflePartitions = conf.minNumPostShufflePartitions
     val advisoryTargetPostShuffleInputSize = conf.targetPostShuffleInputSize
     // If minNumPostShufflePartitions is defined, it is possible that we need to use a
@@ -159,12 +159,13 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
     val partitionStartIndices = ArrayBuffer[Int]()
     val partitionEndIndices = ArrayBuffer[Int]()
-
-    val firstStartIndex = validPartitions(0)
+    val numPartitions = mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).head
+    val includedPartitions = (0 until numPartitions).filter(!excludedPartitions.contains(_))
+    val firstStartIndex = includedPartitions(0)
     partitionStartIndices += firstStartIndex
     var postShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId(firstStartIndex)).sum
     var i = firstStartIndex
-    validPartitions.filter(_ != firstStartIndex).foreach {
+    includedPartitions.filter(_ != firstStartIndex).foreach {
       nextPartitionIndices =>
         var nextShuffleInputSize =
           mapOutputStatistics.map(_.bytesByPartitionId(nextPartitionIndices)).sum

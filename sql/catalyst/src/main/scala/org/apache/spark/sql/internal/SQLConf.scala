@@ -462,8 +462,8 @@ object SQLConf {
     buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionSizeThreshold")
       .doc("Configures the minimum size in bytes for a partition that is considered as a skewed " +
         "partition in adaptive skewed join.")
-      .longConf
-      .createWithDefault(64 * 1024 * 1024L)
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(64 * 1024 * 1024)
 
   val ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR =
     buildConf("spark.sql.adaptive.optimizeSkewedJoin.skewedPartitionFactor")

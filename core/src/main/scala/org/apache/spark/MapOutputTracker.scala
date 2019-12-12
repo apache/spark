@@ -708,7 +708,7 @@ private[spark] class MapOutputTrackerMaster(
       shuffleStatus.withMapStatuses { statuses =>
         if (startMapId < endMapId && (startMapId >= 0 && endMapId < statuses.length)) {
           val statusesPicked = statuses.slice(startMapId, endMapId).filter(_ != null)
-          statusesPicked.map { status => status.location.host}.toSeq
+          statusesPicked.map(_.location.host).toSeq
         } else {
           Nil
         }
@@ -1015,5 +1015,4 @@ private[spark] object MapOutputTracker extends Logging {
 
     splitsByAddress.iterator
   }
-
 }

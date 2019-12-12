@@ -134,25 +134,23 @@ class ShuffledRowRDD(
       (0 until numPreShufflePartitions).toArray
   }
 
+  private[this] val part: Partitioner =
+    new CoalescedPartitioner(dependency.partitioner, partitionStartIndices)
+
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
-  override val partitioner: Option[Partitioner] = specifiedPartitionIndices match {
-    case Some(indices) => None
-    case None => Some(new CoalescedPartitioner(dependency.partitioner, partitionStartIndices))
-  }
+  override val partitioner: Option[Partitioner] = Some(part)
 
   override def getPartitions: Array[Partition] = {
-    Array.tabulate[Partition](partitionStartIndices.length) { i =>
-      val startIndex = partitionStartIndices(i)
-      val endIndex = specifiedPartitionIndices match {
-        case Some(indices) => indices(i)._2
-        case None => if (i < partitionStartIndices.length - 1) {
-          partitionStartIndices(i + 1)
-        } else {
-          numPreShufflePartitions
+    specifiedPartitionIndices match {
+      case Some(indices) =>
+        Array.tabulate[Partition](indices.length) { i =>
+          new ShuffledRowRDDPartition(i, indices(i)._1, indices(i)._2)
         }
-      }
-      new ShuffledRowRDDPartition(i, startIndex, endIndex)
+      case None =>
+        Array.tabulate[Partition](numPreShufflePartitions) { i =>
+          new ShuffledRowRDDPartition(i, i, i + 1)
+        }
     }
   }
 

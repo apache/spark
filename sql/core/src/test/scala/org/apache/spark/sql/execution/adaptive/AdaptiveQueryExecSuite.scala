@@ -99,7 +99,7 @@ class AdaptiveQueryExecSuite
     val exchanges = adaptivePlan.collect {
       case e: Exchange => e
     }
-   // assert(exchanges.isEmpty, "The final plan should not contain any Exchange node.")
+    assert(exchanges.isEmpty, "The final plan should not contain any Exchange node.")
     (dfAdaptive.queryExecution.sparkPlan, adaptivePlan)
   }
 

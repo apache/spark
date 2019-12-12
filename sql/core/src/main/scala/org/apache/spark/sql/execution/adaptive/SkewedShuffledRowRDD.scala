@@ -28,10 +28,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsRe
  * (`preShufflePartitionIndex` from `startMapId` to `endMapId - 1`, inclusive).
  */
 private final class SkewedShuffledRowRDDPartition(
-    val postShufflePartitionIndex: Int,
-    val preShufflePartitionIndex: Int,
-    val startMapId: Int,
-    val endMapId: Int) extends Partition{
+    val postShufflePartitionIndex: Int) extends Partition {
   override val index: Int = postShufflePartitionIndex
 }
 
@@ -55,19 +52,16 @@ class SkewedShuffledRowRDD(
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
   override def getPartitions: Array[Partition] = {
     Array.tabulate[Partition](1) { i =>
-      new SkewedShuffledRowRDDPartition(i, partitionIndex, startMapId, endMapId)
+      new SkewedShuffledRowRDDPartition(i)
     }
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    val skewedPartition = partition.asInstanceOf[SkewedShuffledRowRDDPartition]
-    tracker.getMapLocation(dependency, skewedPartition.startMapId, skewedPartition.endMapId)
+    tracker.getMapLocation(dependency, startMapId, endMapId)
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-    val skewedPartition = split.asInstanceOf[SkewedShuffledRowRDDPartition]
-
     val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
     // `SQLShuffleReadMetricsReporter` will update its own metrics for SQL exchange operator,
     // as well as the `tempMetrics` for basic shuffle metrics.
@@ -75,10 +69,10 @@ class SkewedShuffledRowRDD(
 
     val reader = SparkEnv.get.shuffleManager.getReaderForRange(
       dependency.shuffleHandle,
-      skewedPartition.startMapId,
-      skewedPartition.endMapId,
-      skewedPartition.preShufflePartitionIndex,
-      skewedPartition.preShufflePartitionIndex + 1,
+      startMapId,
+      endMapId,
+      partitionIndex,
+      partitionIndex + 1,
       context,
       sqlMetricsReporter)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
