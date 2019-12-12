@@ -143,19 +143,20 @@ trait StreamingQuery {
   def processAllAvailable(): Unit
 
   /**
-   * Stops the execution of this query if it is running. This awaits the termination of the query
-   * execution threads or a timeout is hit.
+   * Stops the execution of this query if it is running. This waits until the termination of the
+   * query execution threads or until a timeout is hit.
    *
-   * By default stop will block indefinitely. You can make it timeout (ms) by setting the
-   * configuration `spark.sql.streaming.stopTimeout`. A timeout of 0 (or negative) milliseconds
-   * will block indefinitely.
+   * By default stop will block indefinitely. You can configure the timeout by the configuration
+   * `spark.sql.streaming.stopTimeout`. A timeout of 0 (or negative) milliseconds will block
+   * indefinitely. If a timeout exception is thrown, users can retry stopping the stream. If the
+   * issue persists, it is advisable to kill the Spark application.
    *
    * @throws TimeoutException If the thread cannot be stopped within a timeout greater than 0
    *                          milliseconds
    *
    * @since 2.0.0
    */
-  @throws[java.util.concurrent.TimeoutException]
+  @throws[TimeoutException]
   def stop(): Unit
 
   /**
