@@ -253,10 +253,18 @@ class DataFrame(object):
         print(self._jdf.schema().treeString())
 
     @since(1.3)
-    def explain(self, extended=False):
+    def explain(self, extended=None, mode=None):
         """Prints the (logical and physical) plans to the console for debugging purpose.
 
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+        :param mode: specifies the expected output format of plans.
+
+            * ``simple``: Print only a physical plan.
+            * ``extended``: Print both logical and physical plans.
+            * ``codegen``: Print a physical plan and generated codes if they are available.
+            * ``cost``: Print a logical plan and statistics if they are available.
+            * ``formatted``: Split explain output into two sections: a physical plan outline \
+                and node details.
 
         >>> df.explain()
         == Physical Plan ==
@@ -271,11 +279,38 @@ class DataFrame(object):
         ...
         == Physical Plan ==
         ...
+
+        >>> df.explain(mode="formatted")
+        == Physical Plan ==
+        * Scan ExistingRDD (1)
+        <BLANKLINE>
+        <BLANKLINE>
+        (1) Scan ExistingRDD [codegen id : 1]
+        Output: [age#0, name#1]
+        <BLANKLINE>
+        <BLANKLINE>
+
+        .. versionchanged:: 3.0.0
+           Added optional argument `mode` to specify the expected output format of plans.
         """
-        if extended:
-            print(self._jdf.queryExecution().toString())
+        if extended is not None and mode is not None:
+            raise Exception("extended and mode can not be specified simultaneously")
+
+        # Handle a case with no argument first: df.explain()
+        if extended is None and mode is None:
+            print(self._jdf.toExplainString("simple"))
         else:
-            print(self._jdf.queryExecution().simpleString())
+            # For df.explain(extended=`bool`)
+            if extended is not None and isinstance(extended, bool):
+                print(self._jdf.toExplainString("extended" if extended else "simple"))
+            elif extended is not None:
+                raise TypeError("extended should be provided as boolean, "
+                    "got {0}".format(type(extended)))
+            # For df.explain(mode=`str`)
+            elif mode is not None and isinstance(mode, basestring):
+                print(self._jdf.toExplainString(mode))
+            else:
+                raise TypeError("mode should be provided as string, got {0}".format(type(mode)))
 
     @since(2.4)
     def exceptAll(self, other):

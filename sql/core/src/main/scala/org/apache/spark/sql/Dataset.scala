@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -522,19 +523,19 @@ class Dataset[T] private[sql](
   // scalastyle:on println
 
   /**
-   * Prints the plans (logical and physical) with a format specified by a given explain mode.
+   * Returns the plan (logical and physical) string with a format specified by a given explain mode.
    *
    * @group basic
    * @since 3.0.0
    */
-  def explain(mode: ExplainMode): Unit = {
+  def toExplainString(mode: ExplainMode): String = {
     // Because temporary views are resolved during analysis when we create a Dataset, and
     // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
     // `ExplainCommand` here will probably output different query plans, compared to the results
     // of evaluation of the Dataset. So just output QueryExecution's query plans here.
     val qe = ExplainCommandUtil.explainedQueryExecution(sparkSession, logicalPlan, queryExecution)
 
-    val outputString = mode match {
+    mode match {
       case ExplainMode.Simple =>
         qe.simpleString
       case ExplainMode.Extended =>
@@ -550,8 +551,35 @@ class Dataset[T] private[sql](
       case ExplainMode.Formatted =>
         qe.simpleString(formatted = true)
     }
+  }
+
+  /**
+   * Returns the plan (logical and physical) string with a format specified by a given explain mode.
+   *
+   * @group basic
+   * @since 3.0.0
+   */
+  def toExplainString(mode: String): String = {
+    mode.toLowerCase(Locale.ROOT) match {
+      case "simple" => toExplainString(ExplainMode.Simple)
+      case "extended" => toExplainString(ExplainMode.Extended)
+      case "codegen" => toExplainString(ExplainMode.Codegen)
+      case "cost" => toExplainString(ExplainMode.Cost)
+      case "formatted" => toExplainString(ExplainMode.Formatted)
+      case _ => throw new IllegalArgumentException(s"Unknown explain mode: $mode. Accepted " +
+        "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
+    }
+  }
+
+  /**
+   * Prints the plans (logical and physical) with a format specified by a given explain mode.
+   *
+   * @group basic
+   * @since 3.0.0
+   */
+  def explain(mode: ExplainMode): Unit = {
     // scalastyle:off println
-    println(outputString)
+    println(toExplainString(mode))
     // scalastyle:on println
   }
 
