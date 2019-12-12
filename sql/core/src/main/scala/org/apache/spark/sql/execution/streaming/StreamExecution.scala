@@ -435,9 +435,8 @@ abstract class StreamExecution(
   }
 
   /**
-   * Interrupts the query execution thread and awaits its termination until the
-   * `spark.sql.streaming.stopTimeout`. A timeout of 0 or negative milliseconds will
-   * block indefinitely.
+   * Interrupts the query execution thread and awaits its termination until until it exceeds the
+   * timeout. The timeout can be set on "spark.sql.streaming.stopTimeout".
    *
    * @throws TimeoutException If the thread cannot be stopped within the timeout
    */

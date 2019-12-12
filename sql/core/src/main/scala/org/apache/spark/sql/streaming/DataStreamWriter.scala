@@ -18,9 +18,9 @@
 package org.apache.spark.sql.streaming
 
 import java.util.Locale
+import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
-import scala.concurrent.TimeoutException
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
@@ -241,12 +241,15 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
    * the stream.
    *
-   * @throws TimeoutException If another run of the same streaming query (a streaming query sharing
-   *                          the same checkpoint location) is already active on the same Spark
-   *                          cluster, the SQL configuration
-   *                          `spark.sql.streaming.stopActiveRunOnRestart` is enabled, and the
-   *                          active run cannot be stopped within the timeout controlled by the
-   *                          SQL configuration, we throw a TimeoutException.
+   * @throws TimeoutException A timeout exception will be thrown if the following conditions are
+   *                          met:
+   *                           - Another run of the same streaming query, that is a streaming query
+   *                             sharing the same checkpoint location, is already active on the same
+   *                             Spark Driver
+   *                           - The SQL configuration `spark.sql.streaming.stopActiveRunOnRestart`
+   *                             is enabled
+   *                           - The active run cannot be stopped within the timeout controlled by
+   *                             the SQL configuration `spark.sql.streaming.stopTimeout`
    *
    * @since 2.0.0
    */
