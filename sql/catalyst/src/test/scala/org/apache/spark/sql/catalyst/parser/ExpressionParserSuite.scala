@@ -20,6 +20,8 @@ import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 
+import scala.language.implicitConversions
+
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
