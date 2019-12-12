@@ -150,15 +150,21 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
   }
 
   test("FileScan description") {
-    withTempPath { path =>
-      val dir = path.getCanonicalPath
-      spark.range(0, 10).write.orc(dir)
-      val df = spark.read.orc(dir)
+    Seq("json", "orc", "parquet").foreach { format =>
+      withTempPath { path =>
+        val dir = path.getCanonicalPath
+        spark.range(0, 10).write.format(format).save(dir)
+        val df = spark.read.format(format).load(dir)
 
-      assert(isIncluded(df.queryExecution, "ReadSchema"))
-      assert(isIncluded(df.queryExecution, "BatchScan"))
-      assert(isIncluded(df.queryExecution, "PushedFilters"))
-      assert(isIncluded(df.queryExecution, "Location"))
+        withClue(s"Source '$format':") {
+          assert(isIncluded(df.queryExecution, "ReadSchema"))
+          assert(isIncluded(df.queryExecution, "BatchScan"))
+          if (Seq("orc", "parquet").contains(format)) {
+            assert(isIncluded(df.queryExecution, "PushedFilters"))
+          }
+          assert(isIncluded(df.queryExecution, "Location"))
+        }
+      }
     }
   }
 }
