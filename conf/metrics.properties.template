@@ -214,8 +214,10 @@
 #*.sink.prometheusPushGateWay.job=spark
 #*.sink.prometheusPushGateWay.host=127.0.0.1
 #*.sink.prometheusPushGateWay.port=9091
-#*.sink.prometheusPushGateWay.groupKey=job=spark;instance=spark
+#*.sink.prometheusPushGateWay.groupKey=job=spark;type=spark
+#*.sink.prometheusPushGateWay.deleteOnShutdown=true
 #driver.sink.prometheusPushGateWay.job=spark
 #driver.sink.prometheusPushGateWay.host=127.0.0.1
 #driver.sink.prometheusPushGateWay.port=9091
 #driver.sink.prometheusPushGateWay.groupKey=job=spark;type=spark
+#driver.sink.prometheusPushGateWay.deleteOnShutdown=true

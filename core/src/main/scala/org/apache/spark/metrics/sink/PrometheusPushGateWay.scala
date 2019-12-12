@@ -31,21 +31,22 @@ import org.apache.spark.SecurityManager
  * PrometheusPushGateWay that exports Metric Metrics via Prometheus PushGateway.
  */
 private[spark] class PrometheusPushGateWay(
-     val property: Properties,
-     val registry: MetricRegistry,
-     securityMgr: SecurityManager)
+    val property: Properties,
+    val registry: MetricRegistry,
+    securityMgr: SecurityManager)
   extends Sink {
   val PROMETHEUS_DEFAULT_PREFIX = ""
   val PROMETHEUS_DEFAULT_GROUP_KEY = "job=spark;instance=spark"
+  val PROMETHEUS_DEFAULT_ON_SHUTDOWN = "true"
 
   val PROMETHEUS_KEY_JOBNAME = "job"
   val PROMETHEUS_KEY_HOST = "host"
   val PROMETHEUS_KEY_PORT = "port"
   val PROMETHEUS_KEY_PREFIX = "prefix"
   val PROMETHEUS_KEY_GROUP_KEY = "groupKey"
+  val PROMETHEUS_KEY_DELETE_ON_SHUTDOWN = "deleteOnShutdown"
 
   var groupingKey: util.Map[String, String] = _
-  var deleteOnShutdown = false
   var pushGateway: PushGateway = _
 
   def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
@@ -62,10 +63,13 @@ private[spark] class PrometheusPushGateWay(
     throw new Exception("Prometheus sink requires 'port' property.")
   }
 
-  val jobName = propertyToOption(PROMETHEUS_KEY_JOBNAME).get
-  val host = propertyToOption(PROMETHEUS_KEY_HOST).get
-  val port = propertyToOption(PROMETHEUS_KEY_PORT).get.toInt
-  val prefix = propertyToOption(PROMETHEUS_KEY_PREFIX).getOrElse(PROMETHEUS_DEFAULT_PREFIX)
+  val jobName: String = propertyToOption(PROMETHEUS_KEY_JOBNAME).get
+  val host: String = propertyToOption(PROMETHEUS_KEY_HOST).get
+  val port: Int = propertyToOption(PROMETHEUS_KEY_PORT).get.toInt
+  val prefix: String =
+    propertyToOption(PROMETHEUS_KEY_PREFIX).getOrElse(PROMETHEUS_DEFAULT_PREFIX)
+  val deleteOnShutdown: Boolean = propertyToOption(PROMETHEUS_KEY_DELETE_ON_SHUTDOWN)
+    .getOrElse(PROMETHEUS_DEFAULT_ON_SHUTDOWN).toBoolean
 
   groupingKey = parseGroupingKey(
     propertyToOption(PROMETHEUS_KEY_GROUP_KEY).getOrElse(PROMETHEUS_DEFAULT_GROUP_KEY))
