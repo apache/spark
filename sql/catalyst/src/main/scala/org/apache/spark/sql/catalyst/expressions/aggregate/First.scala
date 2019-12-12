@@ -117,6 +117,8 @@ case class First(funcName: String, child: Expression, ignoreNullsExpr: Expressio
   override def nodeName: String = funcName
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
+
+  override def flatArguments: Iterator[Any] = Iterator(child, ignoreNullsExpr)
 }
 
 object First {

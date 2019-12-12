@@ -112,7 +112,11 @@ case class Last(funcName: String, child: Expression, ignoreNullsExpr: Expression
 
   override lazy val evaluateExpression: AttributeReference = last
 
-  override def toString: String = s"$funcName($child)${if (ignoreNulls) " ignore nulls"}"
+  override def nodeName: String = funcName
+
+  override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
+
+  override def flatArguments: Iterator[Any] = Iterator(child, ignoreNullsExpr)
 }
 
 object Last {
