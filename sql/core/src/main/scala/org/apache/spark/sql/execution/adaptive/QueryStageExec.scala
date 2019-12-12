@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import scala.concurrent.Future
+
 import org.apache.spark.{FutureAction, MapOutputStatistics}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
