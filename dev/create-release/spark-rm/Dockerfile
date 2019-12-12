@@ -69,11 +69,6 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   update-alternatives --set python /usr/bin/python3.6 && \
   pip3 install $BASE_PIP_PKGS && \
   pip3 install $PIP_PKGS && \
-  cd && \
-  python /opt/p35 && \
-  . /opt/p35/bin/activate && \
-  pip3 install $BASE_PIP_PKGS && \
-  pip3 install $PIP_PKGS && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
   $APT_INSTALL r-base r-base-dev && \
