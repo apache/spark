@@ -339,6 +339,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
             }
           case other => operationNotAllowed(s"LIST with resource type '$other'", ctx)
         }
+      case SqlBaseParser.DELETE =>
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
+          case "file" => DeleteFileCommand(mayebePaths)
+          case other => operationNotAllowed(s"DELETE with resource type '$other'", ctx)
+        }
       case _ => operationNotAllowed(s"Other types of operation on resources", ctx)
     }
   }

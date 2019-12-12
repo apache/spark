@@ -1514,6 +1514,26 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Deletes the file from the addedFiles map
+   * @param path
+   */
+  def deleteFile(path: String): Unit = {
+    val uri = new URI(path)
+    val schemeCorrectedPath = uri.getScheme match {
+      case null | "local" => new File(path).getCanonicalFile.toURI.toString
+      case _ => path
+    }
+    val scheme = new URI(schemeCorrectedPath).getScheme
+    val fileName = new File(uri.getPath)
+    // this logic is inline with addFile semantics
+    val key = if (!isLocal && scheme == "file") {
+      env.rpcEnv.fileServer.deleteFile(fileName.getName())
+    } else {
+      schemeCorrectedPath
+    }
+    addedFiles.remove(key)
+  }
+  /**
    * Returns a list of file paths that are added to resources.
    */
   def listFiles(): Seq[String] = addedFiles.keySet.toSeq

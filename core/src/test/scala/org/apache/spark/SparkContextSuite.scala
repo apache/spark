@@ -936,6 +936,22 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
     }
   }
+
+  test("SPARK-30137: test delete file API using SparkContext") {
+    withTempDir { dir =>
+      val file = File.createTempFile("SPARK-30137", "deleteFile", dir)
+      try {
+        Files.write("testing the delete API", file, StandardCharsets.UTF_8)
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc.addFile(file.getAbsolutePath)
+        assert(sc.listFiles().filter(_.contains("deleteFile")).size == 1)
+        sc.deleteFile(file.getAbsolutePath)
+        assert(sc.listFiles().filter(_.contains("deleteFile")).size == 0)
+      } finally {
+        sc.stop()
+      }
+    }
+  }
 }
 
 object SparkContextSuite {

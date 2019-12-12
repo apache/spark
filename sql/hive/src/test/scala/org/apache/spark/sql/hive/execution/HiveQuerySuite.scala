@@ -1224,6 +1224,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       }
     }
   }
+
+  test("SPARK-30137: test delete file API using sql") {
+    val testFile = TestHive.getHiveFile("data/files/v1.txt").toURI
+    sql(s"ADD FILE $testFile")
+    assert(sql(s"LIST FILE $testFile").count() == 1)
+    sql(s"DELETE FILE $testFile")
+    assert(sql(s"LIST FILE $testFile").count() == 0)
+  }
 }
 
 // for SPARK-2180 test

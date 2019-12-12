@@ -73,6 +73,11 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     s"${rpcEnv.address.toSparkURL}/files/${Utils.encodeFileNameToURIRawPath(file.getName())}"
   }
 
+  override def deleteFile(fileName: String): String = {
+    files.remove(fileName)
+    s"${rpcEnv.address.toSparkURL}/files/${Utils.encodeFileNameToURIRawPath(fileName)}"
+  }
+
   override def addJar(file: File): String = {
     val existingPath = jars.putIfAbsent(file.getName, file)
     require(existingPath == null || existingPath == file,
