@@ -40,6 +40,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   @transient var bernoulliDataset: Dataset[_] = _
   @transient var gaussianDataset: Dataset[_] = _
   @transient var gaussianDataset2: Dataset[_] = _
+  @transient var complementDataset: Dataset[_] = _
 
   private val seed = 42
 
@@ -70,8 +71,12 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       Array(0.10, 0.10, 0.10, 0.50)  // label 2: variance
     )
     gaussianDataset = generateGaussianNaiveBayesInput(pi, theta2, sigma, 1000, seed).toDF()
+
     gaussianDataset2 = spark.read.format("libsvm")
       .load("../data/mllib/sample_multiclass_classification_data.txt")
+
+    complementDataset = spark.read.format("libsvm")
+        .load("../data/mllib/sample_libsvm_data.txt")
   }
 
   def validatePrediction(predictionAndLabels: Seq[Row]): Unit = {
@@ -91,8 +96,8 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     assert(Vectors.dense(model.pi.toArray.map(math.exp)) ~==
       Vectors.dense(piData.toArray.map(math.exp)) absTol 0.05, "pi mismatch")
     assert(model.theta.map(math.exp) ~== thetaData.map(math.exp) absTol 0.05, "theta mismatch")
-    if (sigmaData == null) {
-      assert(model.sigma == null, "sigma mismatch")
+    if (sigmaData === Matrices.zeros(0, 0)) {
+      assert(model.sigma === Matrices.zeros(0, 0), "sigma mismatch")
     } else {
       assert(model.sigma.map(math.exp) ~== sigmaData.map(math.exp) absTol 0.05,
         "sigma mismatch")
@@ -154,13 +159,14 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     assert(Multinomial === "multinomial")
     assert(Bernoulli === "bernoulli")
     assert(Gaussian === "gaussian")
+    assert(Complement === "complement")
   }
 
   test("params") {
     ParamsSuite.checkParams(new NaiveBayes)
     val model = new NaiveBayesModel("nb", pi = Vectors.dense(Array(0.2, 0.8)),
       theta = new DenseMatrix(2, 3, Array(0.1, 0.2, 0.3, 0.4, 0.6, 0.4)),
-      sigma = null)
+      sigma = Matrices.zeros(0, 0))
     ParamsSuite.checkParams(model)
   }
 
@@ -189,7 +195,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
     val model = nb.fit(testDataset)
 
-    validateModelFit(pi, theta, null, model)
+    validateModelFit(pi, theta, Matrices.zeros(0, 0), model)
     assert(model.hasParent)
     MLTestingUtils.checkCopyAndUids(nb, model)
 
@@ -218,8 +224,6 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       Array(0.10, 0.70, 0.10, 0.10), // label 1
       Array(0.10, 0.10, 0.70, 0.10)  // label 2
     ).map(_.map(math.log))
-    val pi = Vectors.dense(piArray)
-    val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
 
     val trainDataset =
       generateNaiveBayesInput(piArray, thetaArray, nPoints, seed, "multinomial").toDF()
@@ -245,6 +249,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val testParams = Seq[(String, Dataset[_])](
       ("bernoulli", bernoulliDataset),
       ("multinomial", dataset),
+      ("complement", dataset),
       ("gaussian", gaussianDataset)
     )
     testParams.foreach { case (family, dataset) =>
@@ -276,7 +281,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("bernoulli")
     val model = nb.fit(testDataset)
 
-    validateModelFit(pi, theta, null, model)
+    validateModelFit(pi, theta, Matrices.zeros(0, 0), model)
     assert(model.hasParent)
 
     val validationDataset =
@@ -428,19 +433,75 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
 
     val thetaRows = model.theta.rowIter.toArray
     assert(thetaRows(0) ~=
-      Vectors.dense(0.27111101, -0.18833335, 0.54305072, 0.60500005)relTol 1E-5)
+      Vectors.dense(0.27111101, -0.18833335, 0.54305072, 0.60500005) relTol 1E-5)
     assert(thetaRows(1) ~=
-      Vectors.dense(-0.60777778, 0.18166667, -0.84271174, -0.88000014)relTol 1E-5)
+      Vectors.dense(-0.60777778, 0.18166667, -0.84271174, -0.88000014) relTol 1E-5)
     assert(thetaRows(2) ~=
-      Vectors.dense(-0.09111114, -0.35833336, 0.10508474, 0.0216667)relTol 1E-5)
+      Vectors.dense(-0.09111114, -0.35833336, 0.10508474, 0.0216667) relTol 1E-5)
 
     val sigmaRows = model.sigma.rowIter.toArray
     assert(sigmaRows(0) ~=
-      Vectors.dense(0.12230125, 0.07078052, 0.03430001, 0.05133607)relTol 1E-5)
+      Vectors.dense(0.12230125, 0.07078052, 0.03430001, 0.05133607) relTol 1E-5)
     assert(sigmaRows(1) ~=
-      Vectors.dense(0.03758145, 0.0988028, 0.0033903, 0.00782224)relTol 1E-5)
+      Vectors.dense(0.03758145, 0.0988028, 0.0033903, 0.00782224) relTol 1E-5)
     assert(sigmaRows(2) ~=
-      Vectors.dense(0.08058764, 0.06701387, 0.02486641, 0.02661392)relTol 1E-5)
+      Vectors.dense(0.08058764, 0.06701387, 0.02486641, 0.02661392) relTol 1E-5)
+  }
+
+  test("Naive Bayes Complement") {
+    /*
+     Using the following Python code to verify the correctness.
+
+     import numpy as np
+     from sklearn.naive_bayes import ComplementNB
+     from sklearn.datasets import load_svmlight_file
+
+     path = "./data/mllib/sample_libsvm_data.txt"
+     X, y = load_svmlight_file(path)
+     X = X.toarray()
+     clf = ComplementNB()
+     clf.fit(X, y)
+
+     >>> clf.feature_log_prob_[:, -5:]
+     array([[ 7.2937608 , 10.26577655, 13.73151245, 13.73151245, 13.73151245],
+            [ 6.99678043,  7.51387415,  7.74399483,  8.32904552,  9.53119848]])
+     >>> clf.predict_log_proba(X[:5])
+     array([[     0.        , -74732.70765355],
+            [-36018.30169185,      0.        ],
+            [-37126.4015229 ,      0.        ],
+            [-27649.81038619,      0.        ],
+            [-28767.84075587,      0.        ]])
+     >>> clf.predict_proba(X[:5])
+     array([[1., 0.],
+            [0., 1.],
+            [0., 1.],
+            [0., 1.],
+            [0., 1.]])
+    */
+
+    val cnb = new NaiveBayes().setModelType(Complement)
+    val model = cnb.fit(complementDataset)
+
+    val thetaRows = model.theta.rowIter.map(vec => Vectors.dense(vec.toArray.takeRight(5))).toArray
+    assert(thetaRows(0) ~=
+      Vectors.dense(7.2937608, 10.26577655, 13.73151245, 13.73151245, 13.73151245) relTol 1E-5)
+    assert(thetaRows(1) ~=
+      Vectors.dense(6.99678043, 7.51387415, 7.74399483, 8.32904552, 9.53119848) relTol 1E-5)
+
+    val preds = model.transform(complementDataset)
+      .select("rawPrediction", "probability")
+      .as[(Vector, Vector)]
+      .take(5)
+    assert(preds(0)._1 ~= Vectors.dense(0.0, -74732.70765355) relTol 1E-5)
+    assert(preds(0)._2 ~= Vectors.dense(1.0, 0.0) relTol 1E-5)
+    assert(preds(1)._1 ~= Vectors.dense(-36018.30169185, 0.0) relTol 1E-5)
+    assert(preds(1)._2 ~= Vectors.dense(0.0, 1.0) relTol 1E-5)
+    assert(preds(2)._1 ~= Vectors.dense(-37126.4015229, 0.0) relTol 1E-5)
+    assert(preds(2)._2 ~= Vectors.dense(0.0, 1.0) relTol 1E-5)
+    assert(preds(3)._1 ~= Vectors.dense(-27649.81038619, 0.0) relTol 1E-5)
+    assert(preds(3)._2 ~= Vectors.dense(0.0, 1.0) relTol 1E-5)
+    assert(preds(4)._1 ~= Vectors.dense(-28767.84075587, 0.0) relTol 1E-5)
+    assert(preds(4)._2 ~= Vectors.dense(0.0, 1.0) relTol 1E-5)
   }
 
   test("read/write") {
@@ -451,7 +512,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       if (model.getModelType == "gaussian") {
         assert(model.sigma === model2.sigma)
       } else {
-        assert(model.sigma === null && model2.sigma === null)
+        assert(model.sigma === Matrices.zeros(0, 0) && model2.sigma === Matrices.zeros(0, 0))
       }
     }
     val nb = new NaiveBayes()
@@ -470,7 +531,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       nb, spark) { (expected, actual) =>
         assert(expected.pi === actual.pi)
         assert(expected.theta === actual.theta)
-        assert(expected.sigma === null && actual.sigma === null)
+        assert(expected.sigma === Matrices.zeros(0, 0) && actual.sigma === Matrices.zeros(0, 0))
       }
   }
 }

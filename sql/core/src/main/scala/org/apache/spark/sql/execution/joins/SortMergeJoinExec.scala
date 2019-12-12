@@ -175,7 +175,7 @@ case class SortMergeJoinExec(
       }
 
       // An ordering that can be used to compare keys from both sides.
-      val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
+      val keyOrdering = RowOrdering.createNaturalAscendingOrdering(leftKeys.map(_.dataType))
       val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {

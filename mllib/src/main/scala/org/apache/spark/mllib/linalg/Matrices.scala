@@ -1130,7 +1130,7 @@ object Matrices {
       new DenseMatrix(numRows, numCols, matrices.flatMap(_.toArray))
     } else {
       var startCol = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
         val nCols = mat.numCols
         mat match {
           case spMat: SparseMatrix =>
@@ -1141,7 +1141,7 @@ object Matrices {
               cnt += 1
             }
             startCol += nCols
-            data
+            data.toSeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1150,7 +1150,7 @@ object Matrices {
               }
             }
             startCol += nCols
-            data
+            data.toSeq
         }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
@@ -1189,7 +1189,6 @@ object Matrices {
       val allValues = new Array[Double](numRows * numCols)
       var startRow = 0
       matrices.foreach { mat =>
-        var j = 0
         val nRows = mat.numRows
         mat.foreachActive { (i, j, v) =>
           val indStart = j * numRows + startRow
@@ -1200,7 +1199,7 @@ object Matrices {
       new DenseMatrix(numRows, numCols, allValues)
     } else {
       var startRow = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
         val nRows = mat.numRows
         mat match {
           case spMat: SparseMatrix =>
@@ -1211,7 +1210,7 @@ object Matrices {
               cnt += 1
             }
             startRow += nRows
-            data
+            data.toSeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1220,7 +1219,7 @@ object Matrices {
               }
             }
             startRow += nRows
-            data
+            data.toSeq
         }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)

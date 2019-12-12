@@ -21,9 +21,14 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
+import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
+import com.fasterxml.jackson.databind.`type`.TypeFactory
+import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
+import org.json4s.jackson.{JValueDeserializer, JValueSerializer}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
@@ -40,7 +45,10 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
+
 @Stable
+@JsonSerialize(using = classOf[DataTypeJsonSerializer])
+@JsonDeserialize(using = classOf[DataTypeJsonDeserializer])
 abstract class DataType extends AbstractDataType {
   /**
    * Enables matching against DataType for expressions:
@@ -473,5 +481,32 @@ object DataType {
         addError(s"Cannot write '$context': $w is incompatible with $r")
         false
     }
+  }
+}
+
+/**
+ * Jackson serializer for [[DataType]]. Internally this delegates to json4s based serialization.
+ */
+class DataTypeJsonSerializer extends JsonSerializer[DataType] {
+  private val delegate = new JValueSerializer
+  override def serialize(
+      value: DataType,
+      gen: JsonGenerator,
+      provider: SerializerProvider): Unit = {
+    delegate.serialize(value.jsonValue, gen, provider)
+  }
+}
+
+/**
+ * Jackson deserializer for [[DataType]]. Internally this delegates to json4s based deserialization.
+ */
+class DataTypeJsonDeserializer extends JsonDeserializer[DataType] {
+  private val delegate = new JValueDeserializer(classOf[Any])
+
+  override def deserialize(
+      jsonParser: JsonParser,
+      deserializationContext: DeserializationContext): DataType = {
+    val json = delegate.deserialize(jsonParser, deserializationContext)
+    DataType.parseDataType(json.asInstanceOf[JValue])
   }
 }

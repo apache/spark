@@ -741,7 +741,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
         longArray.set(pos * 2 + 1, keyHashcode);
         isDefined = true;
 
-        if (numKeys >= growthThreshold && longArray.size() < MAX_CAPACITY) {
+        // We use two array entries per key, so the array size is twice the capacity.
+        // We should compare the current capacity of the array, instead of its size.
+        if (numKeys >= growthThreshold && longArray.size() / 2 < MAX_CAPACITY) {
           try {
             growAndRehash();
           } catch (SparkOutOfMemoryError oom) {

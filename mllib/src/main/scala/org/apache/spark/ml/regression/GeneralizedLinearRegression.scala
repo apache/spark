@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim._
@@ -213,7 +213,9 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
     }
 
     if (hasLinkPredictionCol) {
-      SchemaUtils.appendColumn(newSchema, $(linkPredictionCol), DoubleType)
+      val attr = NumericAttribute.defaultAttr
+        .withName($(linkPredictionCol))
+      SchemaUtils.appendColumn(newSchema, attr.toStructField())
     } else {
       newSchema
     }
@@ -1043,6 +1045,8 @@ class GeneralizedLinearRegressionModel private[ml] (
   }
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+
     val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
     var outputData = dataset
     var numColsOutput = 0
@@ -1050,17 +1054,20 @@ class GeneralizedLinearRegressionModel private[ml] (
     if (hasLinkPredictionCol) {
       val predLinkUDF = udf((features: Vector, offset: Double) => predictLink(features, offset))
       outputData = outputData
-        .withColumn($(linkPredictionCol), predLinkUDF(col($(featuresCol)), offset))
+        .withColumn($(linkPredictionCol), predLinkUDF(col($(featuresCol)), offset),
+          outputSchema($(linkPredictionCol)).metadata)
       numColsOutput += 1
     }
 
     if ($(predictionCol).nonEmpty) {
       if (hasLinkPredictionCol) {
         val predUDF = udf((eta: Double) => familyAndLink.fitted(eta))
-        outputData = outputData.withColumn($(predictionCol), predUDF(col($(linkPredictionCol))))
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(linkPredictionCol))),
+          outputSchema($(predictionCol)).metadata)
       } else {
         val predUDF = udf((features: Vector, offset: Double) => predict(features, offset))
-        outputData = outputData.withColumn($(predictionCol), predUDF(col($(featuresCol)), offset))
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(featuresCol)), offset),
+          outputSchema($(predictionCol)).metadata)
       }
       numColsOutput += 1
     }

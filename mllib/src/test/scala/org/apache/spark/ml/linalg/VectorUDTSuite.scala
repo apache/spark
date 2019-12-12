@@ -17,15 +17,12 @@
 
 package org.apache.spark.ml.linalg
 
-import java.util.Arrays
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.JavaTypeInference
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class VectorUDTSuite extends QueryTest with SharedSparkSession {
+class VectorUDTSuite extends SparkFunSuite {
 
   test("preloaded VectorUDT") {
     val dv1 = Vectors.dense(Array.empty[Double])
@@ -46,12 +43,5 @@ class VectorUDTSuite extends QueryTest with SharedSparkSession {
     val (dataType, _) = JavaTypeInference.inferDataType(classOf[LabeledPoint])
     assert(dataType.asInstanceOf[StructType].fields.map(_.dataType)
       === Seq(new VectorUDT, DoubleType))
-  }
-
-  test("typeof Vector") {
-    val data = Arrays.asList(Row(Vectors.dense(1.0, 2.0)))
-    val schema = new StructType().add("v", new VectorUDT)
-    checkAnswer(spark.createDataFrame(data, schema).selectExpr("typeof(v)"),
-      Seq(Row("struct<type:tinyint,size:int,indices:array<int>,values:array<double>>")))
   }
 }

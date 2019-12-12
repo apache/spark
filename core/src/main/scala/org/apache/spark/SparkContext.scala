@@ -42,7 +42,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.deploy.StandaloneResourceUtils._
-import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.executor.{ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -444,7 +444,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _eventLogCodec = {
       val compress = _conf.get(EVENT_LOG_COMPRESS)
       if (compress && isEventLogEnabled) {
-        Some(CompressionCodec.getCodecName(_conf)).map(CompressionCodec.getShortName)
+        Some(_conf.get(EVENT_LOG_COMPRESSION_CODEC)).map(CompressionCodec.getShortName)
       } else {
         None
       }
@@ -551,9 +551,16 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
+    val _executorMetricsSource =
+      if (_conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
+        Some(new ExecutorMetricsSource)
+      } else {
+        None
+      }
+
     // create and start the heartbeater for collecting memory metrics
     _heartbeater = new Heartbeater(
-      () => SparkContext.this.reportHeartBeat(),
+      () => SparkContext.this.reportHeartBeat(_executorMetricsSource),
       "driver-heartbeater",
       conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
     _heartbeater.start()
@@ -622,6 +629,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _env.metricsSystem.registerSource(new JVMCPUSource())
+    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
     }
@@ -2473,8 +2481,10 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** Reports heartbeat metrics for the driver. */
-  private def reportHeartBeat(): Unit = {
+  private def reportHeartBeat(executorMetricsSource: Option[ExecutorMetricsSource]): Unit = {
     val currentMetrics = ExecutorMetrics.getCurrentMetrics(env.memoryManager)
+    executorMetricsSource.foreach(_.updateMetricsSnapshot(currentMetrics))
+
     val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]
     // In the driver, we do not track per-stage metrics, so use a dummy stage for the key
     driverUpdates.put(EventLoggingListener.DRIVER_STAGE_KEY, new ExecutorMetrics(currentMetrics))
@@ -2883,6 +2893,14 @@ object SparkContext extends Logging {
             "Asked to launch cluster with %d MiB RAM / worker but requested %d MiB/worker".format(
               memoryPerSlaveInt, sc.executorMemory))
         }
+
+        // For host local mode setting the default of SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED
+        // to false because this mode is intended to be used for testing and in this case all the
+        // executors are running on the same host. So if host local reading was enabled here then
+        // testing of the remote fetching would be secondary as setting this config explicitly to
+        // false would be required in most of the unit test (despite the fact that remote fetching
+        // is much more frequent in production).
+        sc.conf.setIfMissing(SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
 
         val scheduler = new TaskSchedulerImpl(sc)
         val localCluster = new LocalSparkCluster(

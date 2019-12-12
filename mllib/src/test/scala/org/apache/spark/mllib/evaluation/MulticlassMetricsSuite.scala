@@ -254,4 +254,35 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     val metrics2 = new MulticlassMetrics(rdd2)
     assert(metrics2.logLoss() ~== 0.9682005730687164 relTol delta)
   }
+
+  test("MulticlassMetrics supports hammingLoss") {
+    /*
+     Using the following Python code to verify the correctness.
+
+     from sklearn.metrics import hamming_loss
+     y_true = [2, 2, 3, 4]
+     y_pred = [1, 2, 3, 4]
+     weights = [1.5, 2.0, 1.0, 0.5]
+
+     >>> hamming_loss(y_true, y_pred)
+     0.25
+     >>> hamming_loss(y_true, y_pred, sample_weight=weights)
+     0.3
+    */
+
+    val preds = Seq(1.0, 2.0, 3.0, 4.0)
+    val labels = Seq(2.0, 2.0, 3.0, 4.0)
+    val weights = Seq(1.5, 2.0, 1.0, 0.5)
+
+    val rdd = sc.parallelize(preds.zip(labels))
+    val metrics = new MulticlassMetrics(rdd)
+    assert(metrics.hammingLoss ~== 0.25 relTol delta)
+
+    val rdd2 = sc.parallelize(preds.zip(labels).zip(weights))
+      .map { case ((pred, label), weight) =>
+        (pred, label, weight)
+      }
+    val metrics2 = new MulticlassMetrics(rdd2)
+    assert(metrics2.hammingLoss ~== 0.3 relTol delta)
+  }
 }

@@ -37,7 +37,7 @@ SHOW TBLPROPERTIES table_identifier
     with a database name.<br><br>
     <b>Syntax:</b>
       <code>
-        [database_name.]table_name
+        [ database_name. ] table_name
       </code>
   </dd>
   <dt><code><em>unquoted_property_key</em></code></dt>
@@ -46,7 +46,7 @@ SHOW TBLPROPERTIES table_identifier
     parts separated by dot.<br><br>
     <b>Syntax:</b>
       <code>
-        [key_part1][.key_part2][...]
+        [ key_part1 ] [ .key_part2 ] [ ... ]
       </code>
   </dd>   
   <dt><code><em>property_key_as_string_literal</em></code></dt>

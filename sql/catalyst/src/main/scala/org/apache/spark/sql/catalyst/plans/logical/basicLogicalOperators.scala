@@ -45,9 +45,17 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
 /**
  * This node is inserted at the top of a subquery when it is optimized. This makes sure we can
  * recognize a subquery as such, and it allows us to write subquery aware transformations.
+ *
+ * @param correlated flag that indicates the subquery is correlated, and will be rewritten into a
+ *                   join during analysis.
  */
-case class Subquery(child: LogicalPlan) extends OrderPreservingUnaryNode {
+case class Subquery(child: LogicalPlan, correlated: Boolean) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
+}
+
+object Subquery {
+  def fromExpression(s: SubqueryExpression): Subquery =
+    Subquery(s.plan, SubqueryExpression.hasCorrelatedSubquery(s))
 }
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
@@ -963,3 +971,25 @@ case class Deduplicate(
  * This is used to whitelist such commands in the subquery-related checks.
  */
 trait SupportsSubquery extends LogicalPlan
+
+/**
+ * Collect arbitrary (named) metrics from a dataset. As soon as the query reaches a completion
+ * point (batch query completes or streaming query epoch completes) an event is emitted on the
+ * driver which can be observed by attaching a listener to the spark session. The metrics are named
+ * so we can collect metrics at multiple places in a single dataset.
+ *
+ * This node behaves like a global aggregate. All the metrics collected must be aggregate functions
+ * or be literals.
+ */
+case class CollectMetrics(
+    name: String,
+    metrics: Seq[NamedExpression],
+    child: LogicalPlan)
+  extends UnaryNode {
+
+  override lazy val resolved: Boolean = {
+    name.nonEmpty && metrics.nonEmpty && metrics.forall(_.resolved) && childrenResolved
+  }
+
+  override def output: Seq[Attribute] = child.output
+}
