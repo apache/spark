@@ -21,7 +21,6 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.write.BatchWrite;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.WriteBuilder;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * A mix-in interface of {@link Table}, to indicate that it's writable. This adds
