@@ -523,17 +523,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("new partitions should be added to catalog after writing to catalog table") {
     val table = "partitioned_catalog_table"
-    val numParts = 35
-    withSQLConf(SQLConf.PARTITION_BATCH_SIZE.key -> "10") {
-      withTable(table) {
-        val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
-        val tempTable = "partitioned_catalog_temp_table"
-        df.createOrReplaceTempView(tempTable)
-        sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
-        sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
-        val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
-        assert(partitions.size == numParts)
-      }
+    val numParts = 210
+    withTable(table) {
+      val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
+      val tempTable = "partitioned_catalog_temp_table"
+      df.createOrReplaceTempView(tempTable)
+      sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
+      sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
+      val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
+      assert(partitions.size == numParts)
     }
   }
 
