@@ -876,6 +876,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case DeleteFromTable(_: DataSourceV2Relation, None) =>
         case _ => fail("Expect DeleteFromTable, bug got:\n" + parsed1.treeString)
       }
+      assert(parsed1.children.isEmpty, "The target table should not be a child")
 
       parsed2 match {
         case DeleteFromTable(
@@ -941,6 +942,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
         case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
       }
+      assert(parsed1.children.isEmpty, "The target table should not be a child")
 
       parsed2 match {
         case UpdateTable(
@@ -1157,6 +1159,8 @@ class PlanResolutionSuite extends AnalysisTest {
 
           case _ => fail("Expect MergeIntoTable, but got:\n" + parsed1.treeString)
         }
+        val childName = parsed1.children.map(_.asInstanceOf[SubqueryAlias].name.identifier)
+        assert(childName === Seq("source"), "The source relation should be a child of the node")
 
         parsed2 match {
           case MergeIntoTable(
