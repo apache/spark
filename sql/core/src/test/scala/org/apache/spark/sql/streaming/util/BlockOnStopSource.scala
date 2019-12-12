@@ -42,8 +42,17 @@ object BlockOnStopSourceProvider extends StreamSourceProvider with TableProvider
   val schema: StructType = new StructType().add("id", LongType)
 
   /** Set the latch that we will use to block the streaming query thread. */
-  def setLatch(latch: CountDownLatch): Unit = {
-    _latch = latch
+  def enableBlocking(): Unit = {
+    if (_latch == null || _latch.getCount == 0) {
+      _latch = new CountDownLatch(1)
+    }
+  }
+
+  def disableBlocking(): Unit = {
+    if (_latch != null) {
+      _latch.countDown()
+      _latch = null
+    }
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {

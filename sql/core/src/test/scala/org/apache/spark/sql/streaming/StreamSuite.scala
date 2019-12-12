@@ -1131,8 +1131,7 @@ class StreamSuite extends StreamTest {
   // ContinuousExecution
   Seq(Trigger.ProcessingTime("1 second"), Trigger.Continuous("1 second")).foreach { trigger =>
     test(s"SPARK-30143: stop waits until timeout if blocked - trigger: $trigger") {
-      val latch = new CountDownLatch(1)
-      BlockOnStopSourceProvider.setLatch(latch)
+      BlockOnStopSourceProvider.enableBlocking()
       val sq = spark.readStream.format(BlockOnStopSourceProvider.getClass.getName)
         .load()
         .writeStream
@@ -1150,7 +1149,7 @@ class StreamSuite extends StreamTest {
         assert(duration >= 2000 * 1e6,
           s"Should have waited more than 2000 millis, but waited $duration millis")
 
-        latch.countDown()
+        BlockOnStopSourceProvider.disableBlocking()
         withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "0") {
           sq.stop()
         }
