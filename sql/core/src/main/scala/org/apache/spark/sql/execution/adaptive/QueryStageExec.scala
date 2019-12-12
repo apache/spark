@@ -129,21 +129,14 @@ case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: ShuffleExchangeExec) extends QueryStageExec {
 
-  @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
-    if (plan.inputRDD.getNumPartitions == 0) {
-      Future.successful(null)
-    } else {
-      sparkContext.submitMapStage(plan.shuffleDependency)
-    }
-  }
-
   override def doMaterialize(): Future[Any] = {
-    mapOutputStatisticsFuture
+    plan.mapOutputStatisticsFuture
   }
 
   override def cancel(): Unit = {
-    mapOutputStatisticsFuture match {
-      case action: FutureAction[MapOutputStatistics] if !mapOutputStatisticsFuture.isCompleted =>
+    plan.mapOutputStatisticsFuture match {
+      case action: FutureAction[MapOutputStatistics]
+        if !plan.mapOutputStatisticsFuture.isCompleted =>
         action.cancel()
       case _ =>
     }

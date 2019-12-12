@@ -313,11 +313,11 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expression[BoolAnd]("every"),
-    expression[BoolAnd]("bool_and"),
-    expression[BoolOr]("any"),
-    expression[BoolOr]("some"),
-    expression[BoolOr]("bool_or"),
+    expressionWithAlias[BoolAnd]("every"),
+    expressionWithAlias[BoolAnd]("bool_and"),
+    expressionWithAlias[BoolOr]("any"),
+    expressionWithAlias[BoolOr]("some"),
+    expressionWithAlias[BoolOr]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -490,7 +490,8 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method"),
-    expression[Version]("version"),
+    expression[SparkVersion]("version"),
+    expression[TypeOf]("typeof"),
 
     // grouping sets
     expression[Cube]("cube"),
@@ -589,12 +590,12 @@ object FunctionRegistry {
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
-          case Success(e) => e
-          case Failure(e) =>
-            // the exception is an invocation exception. To get a meaningful message, we need the
-            // cause.
-            throw new AnalysisException(e.getCause.getMessage)
+        try {
+          varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
@@ -617,16 +618,52 @@ object FunctionRegistry {
           }
           throw new AnalysisException(invalidArgumentsMsg)
         }
-        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
-          case Success(e) => e
-          case Failure(e) =>
-            // the exception is an invocation exception. To get a meaningful message, we need the
-            // cause.
-            throw new AnalysisException(e.getCause.getMessage)
+        try {
+          f.newInstance(expressions : _*).asInstanceOf[Expression]
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       }
     }
 
+    (name, (expressionInfo[T](name), builder))
+  }
+
+  private def expressionWithAlias[T <: Expression](name: String)
+      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val constructors = tag.runtimeClass.getConstructors
+      .filter(_.getParameterTypes.head == classOf[String])
+    assert(constructors.length == 1)
+    val builder = (expressions: Seq[Expression]) => {
+      val params = classOf[String] +: Seq.fill(expressions.size)(classOf[Expression])
+      val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
+        val validParametersCount = constructors
+          .filter(_.getParameterTypes.tail.forall(_ == classOf[Expression]))
+          .map(_.getParameterCount - 1).distinct.sorted
+        val invalidArgumentsMsg = if (validParametersCount.length == 0) {
+          s"Invalid arguments for function $name"
+        } else {
+          val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+            validParametersCount.head.toString
+          } else {
+            validParametersCount.init.mkString("one of ", ", ", " and ") +
+              validParametersCount.last
+          }
+          s"Invalid number of arguments for function $name. " +
+            s"Expected: $expectedNumberOfParameters; Found: ${expressions.size}"
+        }
+        throw new AnalysisException(invalidArgumentsMsg)
+      }
+      try {
+        f.newInstance(name.toString +: expressions: _*).asInstanceOf[Expression]
+      } catch {
+        // the exception is an invocation exception. To get a meaningful message, we need the
+        // cause.
+        case e: Exception => throw new AnalysisException(e.getCause.getMessage)
+      }
+    }
     (name, (expressionInfo[T](name), builder))
   }
 

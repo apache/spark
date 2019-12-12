@@ -184,6 +184,19 @@ private class LiveTask(
       info.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis()))
     }
 
+    val hasMetrics = metrics.executorDeserializeTime >= 0
+
+    /**
+     * SPARK-26260: For non successful tasks, store the metrics as negative to avoid
+     * the calculation in the task summary. `toApi` method in the `TaskDataWrapper` will make
+     * it actual value.
+     */
+    val taskMetrics: v1.TaskMetrics = if (hasMetrics && !info.successful) {
+      makeNegative(metrics)
+    } else {
+      metrics
+    }
+
     new TaskDataWrapper(
       info.taskId,
       info.index,
@@ -199,30 +212,31 @@ private class LiveTask(
       newAccumulatorInfos(info.accumulables),
       errorMessage,
 
-      metrics.executorDeserializeTime,
-      metrics.executorDeserializeCpuTime,
-      metrics.executorRunTime,
-      metrics.executorCpuTime,
-      metrics.resultSize,
-      metrics.jvmGcTime,
-      metrics.resultSerializationTime,
-      metrics.memoryBytesSpilled,
-      metrics.diskBytesSpilled,
-      metrics.peakExecutionMemory,
-      metrics.inputMetrics.bytesRead,
-      metrics.inputMetrics.recordsRead,
-      metrics.outputMetrics.bytesWritten,
-      metrics.outputMetrics.recordsWritten,
-      metrics.shuffleReadMetrics.remoteBlocksFetched,
-      metrics.shuffleReadMetrics.localBlocksFetched,
-      metrics.shuffleReadMetrics.fetchWaitTime,
-      metrics.shuffleReadMetrics.remoteBytesRead,
-      metrics.shuffleReadMetrics.remoteBytesReadToDisk,
-      metrics.shuffleReadMetrics.localBytesRead,
-      metrics.shuffleReadMetrics.recordsRead,
-      metrics.shuffleWriteMetrics.bytesWritten,
-      metrics.shuffleWriteMetrics.writeTime,
-      metrics.shuffleWriteMetrics.recordsWritten,
+      hasMetrics,
+      taskMetrics.executorDeserializeTime,
+      taskMetrics.executorDeserializeCpuTime,
+      taskMetrics.executorRunTime,
+      taskMetrics.executorCpuTime,
+      taskMetrics.resultSize,
+      taskMetrics.jvmGcTime,
+      taskMetrics.resultSerializationTime,
+      taskMetrics.memoryBytesSpilled,
+      taskMetrics.diskBytesSpilled,
+      taskMetrics.peakExecutionMemory,
+      taskMetrics.inputMetrics.bytesRead,
+      taskMetrics.inputMetrics.recordsRead,
+      taskMetrics.outputMetrics.bytesWritten,
+      taskMetrics.outputMetrics.recordsWritten,
+      taskMetrics.shuffleReadMetrics.remoteBlocksFetched,
+      taskMetrics.shuffleReadMetrics.localBlocksFetched,
+      taskMetrics.shuffleReadMetrics.fetchWaitTime,
+      taskMetrics.shuffleReadMetrics.remoteBytesRead,
+      taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk,
+      taskMetrics.shuffleReadMetrics.localBytesRead,
+      taskMetrics.shuffleReadMetrics.recordsRead,
+      taskMetrics.shuffleWriteMetrics.bytesWritten,
+      taskMetrics.shuffleWriteMetrics.writeTime,
+      taskMetrics.shuffleWriteMetrics.recordsWritten,
 
       stageId,
       stageAttemptId)
@@ -708,6 +722,46 @@ private object LiveEntityHelpers {
   /** Subtract m2 values from m1. */
   def subtractMetrics(m1: v1.TaskMetrics, m2: v1.TaskMetrics): v1.TaskMetrics = {
     addMetrics(m1, m2, -1)
+  }
+
+  /**
+   * Convert all the metric values to negative as well as handle zero values.
+   * This method assumes that all the metric values are greater than or equal to zero
+   */
+  def makeNegative(m: v1.TaskMetrics): v1.TaskMetrics = {
+    // To handle 0 metric value, add  1 and make the metric negative.
+    // To recover actual value do `math.abs(metric + 1)`
+    // Eg: if the metric values are (5, 3, 0, 1) => Updated metric values will be (-6, -4, -1, -2)
+    // To get actual metric value, do math.abs(metric + 1) => (5, 3, 0, 1)
+    def updateMetricValue(metric: Long): Long = {
+      metric * -1L - 1L
+    }
+
+    createMetrics(
+      updateMetricValue(m.executorDeserializeTime),
+      updateMetricValue(m.executorDeserializeCpuTime),
+      updateMetricValue(m.executorRunTime),
+      updateMetricValue(m.executorCpuTime),
+      updateMetricValue(m.resultSize),
+      updateMetricValue(m.jvmGcTime),
+      updateMetricValue(m.resultSerializationTime),
+      updateMetricValue(m.memoryBytesSpilled),
+      updateMetricValue(m.diskBytesSpilled),
+      updateMetricValue(m.peakExecutionMemory),
+      updateMetricValue(m.inputMetrics.bytesRead),
+      updateMetricValue(m.inputMetrics.recordsRead),
+      updateMetricValue(m.outputMetrics.bytesWritten),
+      updateMetricValue(m.outputMetrics.recordsWritten),
+      updateMetricValue(m.shuffleReadMetrics.remoteBlocksFetched),
+      updateMetricValue(m.shuffleReadMetrics.localBlocksFetched),
+      updateMetricValue(m.shuffleReadMetrics.fetchWaitTime),
+      updateMetricValue(m.shuffleReadMetrics.remoteBytesRead),
+      updateMetricValue(m.shuffleReadMetrics.remoteBytesReadToDisk),
+      updateMetricValue(m.shuffleReadMetrics.localBytesRead),
+      updateMetricValue(m.shuffleReadMetrics.recordsRead),
+      updateMetricValue(m.shuffleWriteMetrics.bytesWritten),
+      updateMetricValue(m.shuffleWriteMetrics.writeTime),
+      updateMetricValue(m.shuffleWriteMetrics.recordsWritten))
   }
 
   private def addMetrics(m1: v1.TaskMetrics, m2: v1.TaskMetrics, mult: Int): v1.TaskMetrics = {

@@ -111,18 +111,7 @@ class PCAModel private[spark] (
    */
   @Since("1.4.0")
   override def transform(vector: Vector): Vector = {
-    vector match {
-      case dv: DenseVector =>
-        pc.transpose.multiply(dv)
-      case SparseVector(size, indices, values) =>
-        /* SparseVector -> single row SparseMatrix */
-        val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
-        val projection = sm.multiply(pc)
-        Vectors.dense(projection.values)
-      case _ =>
-        throw new IllegalArgumentException("Unsupported vector format. Expected " +
-          s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
-    }
+    pc.transpose.multiply(vector)
   }
 }
 

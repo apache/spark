@@ -53,10 +53,9 @@ true
 -- !query 6
 SELECT boolean('test') AS error
 -- !query 6 schema
-struct<>
+struct<error:boolean>
 -- !query 6 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: test
+NULL
 
 
 -- !query 7
@@ -70,10 +69,9 @@ false
 -- !query 8
 SELECT boolean('foo') AS error
 -- !query 8 schema
-struct<>
+struct<error:boolean>
 -- !query 8 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: foo
+NULL
 
 
 -- !query 9
@@ -95,10 +93,9 @@ true
 -- !query 11
 SELECT boolean('yeah') AS error
 -- !query 11 schema
-struct<>
+struct<error:boolean>
 -- !query 11 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: yeah
+NULL
 
 
 -- !query 12
@@ -120,10 +117,9 @@ false
 -- !query 14
 SELECT boolean('nay') AS error
 -- !query 14 schema
-struct<>
+struct<error:boolean>
 -- !query 14 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: nay
+NULL
 
 
 -- !query 15
@@ -131,7 +127,7 @@ SELECT boolean('on') AS true
 -- !query 15 schema
 struct<true:boolean>
 -- !query 15 output
-true
+NULL
 
 
 -- !query 16
@@ -139,7 +135,7 @@ SELECT boolean('off') AS `false`
 -- !query 16 schema
 struct<false:boolean>
 -- !query 16 output
-false
+NULL
 
 
 -- !query 17
@@ -147,34 +143,31 @@ SELECT boolean('of') AS `false`
 -- !query 17 schema
 struct<false:boolean>
 -- !query 17 output
-false
+NULL
 
 
 -- !query 18
 SELECT boolean('o') AS error
 -- !query 18 schema
-struct<>
+struct<error:boolean>
 -- !query 18 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: o
+NULL
 
 
 -- !query 19
 SELECT boolean('on_') AS error
 -- !query 19 schema
-struct<>
+struct<error:boolean>
 -- !query 19 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: on_
+NULL
 
 
 -- !query 20
 SELECT boolean('off_') AS error
 -- !query 20 schema
-struct<>
+struct<error:boolean>
 -- !query 20 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: off_
+NULL
 
 
 -- !query 21
@@ -188,10 +181,9 @@ true
 -- !query 22
 SELECT boolean('11') AS error
 -- !query 22 schema
-struct<>
+struct<error:boolean>
 -- !query 22 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: 11
+NULL
 
 
 -- !query 23
@@ -205,19 +197,17 @@ false
 -- !query 24
 SELECT boolean('000') AS error
 -- !query 24 schema
-struct<>
+struct<error:boolean>
 -- !query 24 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: 000
+NULL
 
 
 -- !query 25
 SELECT boolean('') AS error
 -- !query 25 schema
-struct<>
+struct<error:boolean>
 -- !query 25 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean:
+NULL
 
 
 -- !query 26
@@ -320,19 +310,17 @@ true	false
 -- !query 38
 SELECT boolean(string('  tru e ')) AS invalid
 -- !query 38 schema
-struct<>
+struct<invalid:boolean>
 -- !query 38 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean: tru e
+NULL
 
 
 -- !query 39
 SELECT boolean(string('')) AS invalid
 -- !query 39 schema
-struct<>
+struct<invalid:boolean>
 -- !query 39 output
-java.lang.IllegalArgumentException
-invalid input syntax for type boolean:
+NULL
 
 
 -- !query 40

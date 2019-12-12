@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.UUID
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -132,13 +131,15 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
  * (but do NOT actually execute it).
  *
  * {{{
- *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
+ *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED) SELECT * FROM ...
  * }}}
  *
  * @param logicalPlan plan to explain
  * @param extended whether to do extended explain or not
  * @param codegen whether to output generated code from whole-stage codegen or not
  * @param cost whether to show cost information for operators.
+ * @param formatted whether to split explain output into two sections: a physical plan outline
+ *                  and node details.
  */
 case class ExplainCommand(
     logicalPlan: LogicalPlan,

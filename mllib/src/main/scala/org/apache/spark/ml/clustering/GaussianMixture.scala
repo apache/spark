@@ -112,7 +112,7 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
     var outputData = dataset
@@ -120,17 +120,20 @@ class GaussianMixtureModel private[ml] (
 
     if ($(probabilityCol).nonEmpty) {
       val probUDF = udf((vector: Vector) => predictProbability(vector))
-      outputData = outputData.withColumn($(probabilityCol), probUDF(vectorCol))
+      outputData = outputData.withColumn($(probabilityCol), probUDF(vectorCol),
+        outputSchema($(probabilityCol)).metadata)
       numColsOutput += 1
     }
 
     if ($(predictionCol).nonEmpty) {
       if ($(probabilityCol).nonEmpty) {
         val predUDF = udf((vector: Vector) => vector.argmax)
-        outputData = outputData.withColumn($(predictionCol), predUDF(col($(probabilityCol))))
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(probabilityCol))),
+          outputSchema($(predictionCol)).metadata)
       } else {
         val predUDF = udf((vector: Vector) => predict(vector))
-        outputData = outputData.withColumn($(predictionCol), predUDF(vectorCol))
+        outputData = outputData.withColumn($(predictionCol), predUDF(vectorCol),
+          outputSchema($(predictionCol)).metadata)
       }
       numColsOutput += 1
     }
@@ -144,7 +147,16 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), weights.length)
+    }
+    if ($(probabilityCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(probabilityCol), weights.length)
+    }
+    outputSchema
   }
 
   @Since("3.0.0")

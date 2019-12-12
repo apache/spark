@@ -99,7 +99,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   test("multiple joins") {
     verifyJoinHint(
-      df1.join(df2.hint("broadcast").join(df3, 'b1 === 'c1).hint("broadcast"), 'a1 === 'c1),
+      df1.join(df2.hint("broadcast").join(df3, $"b1" === $"c1").hint("broadcast"), $"a1" === $"c1"),
       JoinHint(
         None,
         Some(HintInfo(strategy = Some(BROADCAST)))) ::
@@ -108,7 +108,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
           None) :: Nil
     )
     verifyJoinHint(
-      df1.hint("broadcast").join(df2, 'a1 === 'b1).hint("broadcast").join(df3, 'a1 === 'c1),
+      df1.hint("broadcast").join(df2, $"a1" === $"b1").hint("broadcast").join(df3, $"a1" === $"c1"),
       JoinHint(
         Some(HintInfo(strategy = Some(BROADCAST))),
         None) ::
@@ -180,8 +180,8 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
         )
 
         verifyJoinHint(
-          df1.join(df2, 'a1 === 'b1 && 'a1 > 5).hint("broadcast")
-            .join(df3, 'b1 === 'c1 && 'a1 < 10),
+          df1.join(df2, $"a1" === $"b1" && $"a1" > 5).hint("broadcast")
+            .join(df3, $"b1" === $"c1" && $"a1" < 10),
           JoinHint(
             Some(HintInfo(strategy = Some(BROADCAST))),
             None) ::
@@ -189,9 +189,9 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
         )
 
         verifyJoinHint(
-          df1.join(df2, 'a1 === 'b1 && 'a1 > 5).hint("broadcast")
-            .join(df3, 'b1 === 'c1 && 'a1 < 10)
-            .join(df, 'b1 === 'id),
+          df1.join(df2, $"a1" === $"b1" && $"a1" > 5).hint("broadcast")
+            .join(df3, $"b1" === $"c1" && $"a1" < 10)
+            .join(df, $"b1" === $"id"),
           JoinHint.NONE ::
             JoinHint(
               Some(HintInfo(strategy = Some(BROADCAST))),
@@ -222,7 +222,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   test("hint merge") {
     verifyJoinHintWithWarnings(
-      df.hint("broadcast").filter('id > 2).hint("broadcast").join(df, "id"),
+      df.hint("broadcast").filter($"id" > 2).hint("broadcast").join(df, "id"),
       JoinHint(
         Some(HintInfo(strategy = Some(BROADCAST))),
         None) :: Nil,
@@ -236,7 +236,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
       Nil
     )
     verifyJoinHintWithWarnings(
-      df.hint("merge").filter('id > 2).hint("shuffle_hash").join(df, "id").hint("broadcast"),
+      df.hint("merge").filter($"id" > 2).hint("shuffle_hash").join(df, "id").hint("broadcast"),
       JoinHint(
         Some(HintInfo(strategy = Some(SHUFFLE_HASH))),
         None) :: Nil,
@@ -312,13 +312,13 @@ class JoinHintSuite extends PlanTest with SharedSparkSession {
 
   test("nested hint") {
     verifyJoinHint(
-      df.hint("broadcast").hint("broadcast").filter('id > 2).join(df, "id"),
+      df.hint("broadcast").hint("broadcast").filter($"id" > 2).join(df, "id"),
       JoinHint(
         Some(HintInfo(strategy = Some(BROADCAST))),
         None) :: Nil
     )
     verifyJoinHint(
-      df.hint("shuffle_hash").hint("broadcast").hint("merge").filter('id > 2).join(df, "id"),
+      df.hint("shuffle_hash").hint("broadcast").hint("merge").filter($"id" > 2).join(df, "id"),
       JoinHint(
         Some(HintInfo(strategy = Some(SHUFFLE_MERGE))),
         None) :: Nil

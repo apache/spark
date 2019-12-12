@@ -41,7 +41,7 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
       // Trigger a sort
       // Range has range partitioning in its output now. To have a range shuffle, we
       // need to run a repartition first.
-      val data = spark.range(0, n, 1, 1).repartition(10).sort('id.desc)
+      val data = spark.range(0, n, 1, 1).repartition(10).sort($"id".desc)
         .selectExpr("SPARK_PARTITION_ID() pid", "id").as[(Int, Long)].collect()
 
       // Compute histogram for the number of records per partition post sort

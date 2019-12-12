@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Test basic expression parsing.
@@ -42,6 +42,8 @@ import org.apache.spark.unsafe.types.CalendarInterval
 class ExpressionParserSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
+
+  implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
 
   val defaultParser = CatalystSqlParser
 
@@ -184,6 +186,18 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
   }
 
+  test("like escape expressions") {
+    val message = "Escape string must contains only one character."
+    assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", '#'))
+    assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", '\"'))
+    intercept("a like 'pattern%' escape '##'", message)
+    intercept("a like 'pattern%' escape ''", message)
+    assertEqual("a not like 'pattern%' escape '#'", !('a.like("pattern%", '#')))
+    assertEqual("a not like 'pattern%' escape '\"'", !('a.like("pattern%", '\"')))
+    intercept("a not like 'pattern%' escape '\"/'", message)
+    intercept("a not like 'pattern%' escape ''", message)
+  }
+
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
     val conf = new SQLConf()
     conf.setConfString(SQLConf.ESCAPED_STRING_LITERALS.key, "true")
@@ -224,10 +238,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("unary arithmetic expressions") {
-    assertEqual("+a", 'a)
+    assertEqual("+a", +'a)
     assertEqual("-a", -'a)
     assertEqual("~a", ~'a)
-    assertEqual("-+~~a", -(~(~'a)))
+    assertEqual("-+~~a", -( +(~(~'a))))
   }
 
   test("cast expressions") {
@@ -434,13 +448,13 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
     // Interval.
-    val intervalLiteral = Literal(IntervalUtils.fromString("interval 3 month 1 hour"))
+    val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
     intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
     assertEqual(
       "-interval '3 month 1 hour'",
-      Literal(IntervalUtils.fromString("interval -3 month -1 hour")))
+      UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
@@ -471,13 +485,15 @@ class ExpressionParserSuite extends AnalysisTest {
     // Decimal
     testDecimal("7873247234798249279371.2334")
 
-    // Scientific Decimal
-    testDecimal("9.0e1")
-    testDecimal(".9e+2")
-    testDecimal("0.9e+2")
-    testDecimal("900e-1")
-    testDecimal("900.0E-1")
-    testDecimal("9.e+1")
+    // SPARK-29956: Scientific Decimal is parsed as Double by default.
+    assertEqual("9.0e1", Literal(90.toDouble))
+    assertEqual(".9e+2", Literal(90.toDouble))
+    assertEqual("0.9e+2", Literal(90.toDouble))
+
+    // Scientific Decimal with suffix BD should still be parsed as Decimal
+    assertEqual("900e-1BD", Literal(BigDecimal("900e-1").underlying()))
+    assertEqual("900.0E-1BD", Literal(BigDecimal("900.0E-1").underlying()))
+    assertEqual("9.e+1BD", Literal(BigDecimal("9.e+1").underlying()))
     intercept(".e3")
 
     // Tiny Int Literal
@@ -504,6 +520,21 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
     intercept("1.20E-38BD", "decimal can only support precision up to 38")
+  }
+
+  test("SPARK-29956: scientific decimal should be parsed as Decimal in legacy mode") {
+    def testDecimal(value: String, parser: ParserInterface): Unit = {
+      assertEqual(value, Literal(BigDecimal(value).underlying), parser)
+    }
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED, true)
+    val parser = new CatalystSqlParser(conf)
+    testDecimal("9e1", parser)
+    testDecimal("9e-1", parser)
+    testDecimal("-9e1", parser)
+    testDecimal("9.0e1", parser)
+    testDecimal(".9e+2", parser)
+    testDecimal("0.9e+2", parser)
   }
 
   test("strings") {
@@ -602,15 +633,14 @@ class ExpressionParserSuite extends AnalysisTest {
     MICROSECOND)
 
   def intervalLiteral(u: IntervalUnit, s: String): Literal = {
-    Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
+    Literal(IntervalUtils.stringToInterval(s + " " + u.toString))
   }
 
   test("intervals") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
       Seq(
         "" -> expected,
-        "-" -> expected.copy(
-          value = IntervalUtils.negate(expected.value.asInstanceOf[CalendarInterval]))
+        "-" -> UnaryMinus(expected)
       ).foreach { case (sign, expectedLiteral) =>
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
 
@@ -651,7 +681,8 @@ class ExpressionParserSuite extends AnalysisTest {
         0,
         0,
         13 * MICROS_PER_SECOND + 123 * MICROS_PER_MILLIS + 456)))
-    checkIntervals("1.001 second", Literal(IntervalUtils.fromString("1 second 1 millisecond")))
+    checkIntervals("1.001 second",
+      Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
 
     // Non Existing unit
     intercept("interval 10 nanoseconds",
@@ -685,7 +716,7 @@ class ExpressionParserSuite extends AnalysisTest {
       "0:0:0",
       "0:0:1")
     hourTimeValues.foreach { value =>
-      val result = Literal(IntervalUtils.fromDayTimeString(value))
+      val result = Literal(IntervalUtils.fromDayTimeString(value, HOUR, SECOND))
       checkIntervals(s"'$value' hour to second", result)
     }
 

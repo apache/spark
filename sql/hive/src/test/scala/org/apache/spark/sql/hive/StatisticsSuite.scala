@@ -158,7 +158,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     // Non-partitioned table
     val nonPartTable = "non_part_table"
     withTable(nonPartTable) {
-      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING)")
+      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING) USING hive")
       sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
       sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
 
@@ -840,7 +840,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("alter table should not have the side effect to store statistics in Spark side") {
     val table = "alter_table_side_effect"
     withTable(table) {
-      sql(s"CREATE TABLE $table (i string, j string)")
+      sql(s"CREATE TABLE $table (i string, j string) USING hive")
       sql(s"INSERT INTO TABLE $table SELECT 'a', 'b'")
       val catalogTable1 = getCatalogTable(table)
       val hiveSize1 = BigInt(catalogTable1.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
