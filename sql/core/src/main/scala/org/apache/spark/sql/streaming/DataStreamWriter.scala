@@ -241,15 +241,18 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
    * the stream.
    *
-   * @throws TimeoutException A timeout exception will be thrown if the following conditions are
-   *                          met:
-   *                           - Another run of the same streaming query, that is a streaming query
-   *                             sharing the same checkpoint location, is already active on the same
-   *                             Spark Driver
-   *                           - The SQL configuration `spark.sql.streaming.stopActiveRunOnRestart`
-   *                             is enabled
-   *                           - The active run cannot be stopped within the timeout controlled by
-   *                             the SQL configuration `spark.sql.streaming.stopTimeout`
+   * @throws java.util.concurrent.TimeoutException A timeout exception will be thrown if the
+   *                                               following conditions are met:
+   *                                                - Another run of the same streaming query,
+   *                                                  that is a streaming query sharing the same
+   *                                                  checkpoint location, is already active on the
+   *                                                  same Spark Driver
+   *                                                - The SQL configuration
+   *                                                  `spark.sql.streaming.stopActiveRunOnRestart`
+   *                                                  is enabled
+   *                                                - The active run cannot be stopped within the
+   *                                                  timeout controlled by the SQL configuration
+   *                                                  `spark.sql.streaming.stopTimeout`
    *
    * @since 2.0.0
    */
