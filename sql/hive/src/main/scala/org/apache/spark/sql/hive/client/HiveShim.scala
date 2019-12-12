@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, IntegralType, StringType}
+import org.apache.spark.sql.types.{AtomicType, DataType, IntegralType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -677,8 +677,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
           case attr: Attribute
-              if attr.dataType == StringType || IntegralType.acceptsType(attr.dataType) =>
-                Some(attr)
+              if isFilteringColTypeSupported(attr.dataType) => Some(attr)
           case Cast(child @ AtomicType(), dt: AtomicType, _)
               if Cast.canSafeCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
@@ -732,6 +731,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       throw new UnsupportedOperationException(
         """Partition filter cannot have both `"` and `'` characters""")
     }
+  }
+
+  private def isFilteringColTypeSupported(colType: DataType): Boolean = {
+    // SPARK-30181: Filtering is supported only on partition keys of type string or integral.
+    colType == StringType || IntegralType.acceptsType(colType)
   }
 
   override def getPartitionsByFilter(
