@@ -66,6 +66,7 @@ case class ShuffleExchangeExec(
 
   @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
 
+  // 'mapOutputStatisticsFuture' is only needed when enable AQE.
   @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
     if (inputRDD.getNumPartitions == 0) {
       Future.successful(null)
