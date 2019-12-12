@@ -440,6 +440,7 @@ abstract class StreamExecution(
    *
    * @throws TimeoutException If the thread cannot be stopped within the timeout
    */
+  @throws[TimeoutException]
   protected def interruptAndAwaitExecutionThreadTermination(): Unit = {
     val timeout = math.max(
       sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_TIMEOUT), 0)

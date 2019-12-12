@@ -151,8 +151,8 @@ trait StreamingQuery {
    * indefinitely. If a timeout exception is thrown, users can retry stopping the stream. If the
    * issue persists, it is advisable to kill the Spark application.
    *
-   * @throws java.util.concurrent.TimeoutException If the thread cannot be stopped within a
-   *                                               timeout greater than 0 milliseconds
+   * @throws TimeoutException If the thread cannot be stopped within a timeout greater than 0
+   *                          milliseconds
    *
    * @since 2.0.0
    */
