@@ -239,7 +239,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
-   * the stream. Throws a [[TimeoutException]] if the following conditions are met:
+   * the stream. Throws a `TimeoutException` if the following conditions are met:
    *  - Another run of the same streaming query, that is a streaming query
    *    sharing the same checkpoint location, is already active on the same
    *    Spark Driver

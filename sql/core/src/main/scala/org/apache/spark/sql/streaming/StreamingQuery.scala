@@ -148,7 +148,7 @@ trait StreamingQuery {
    *
    * By default stop will block indefinitely. You can configure a timeout by the configuration
    * `spark.sql.streaming.stopTimeout`. A timeout of 0 (or negative) milliseconds will block
-   * indefinitely. If a [[TimeoutException]] is thrown, users can retry stopping the stream. If the
+   * indefinitely. If a `TimeoutException` is thrown, users can retry stopping the stream. If the
    * issue persists, it is advisable to kill the Spark application.
    *
    * @since 2.0.0
