@@ -44,10 +44,34 @@ class Diff(options: DiffOptions) {
         s"Left extra columns: ${leftExtraSchema.map(t => s"${t._1} (${t._2})").mkString(", ")}\n" +
         s"Right extra columns: ${rightExtraSchema.map(t => s"${t._1} (${t._2})").mkString(", ")}")
 
-    val missingIdColumns = idColumns.diff(left.columns)
+    val pkColumns = if (idColumns.isEmpty) left.columns.toList else idColumns
+    val missingIdColumns = pkColumns.diff(left.columns)
     require(missingIdColumns.isEmpty,
       s"Some id columns do not exist: ${missingIdColumns.mkString(", ")}")
+
+    require(!pkColumns.contains(options.diffColumn),
+      s"The id columns must not contain the diff column name '${options.diffColumn}': " +
+        s"${pkColumns.mkString(", ")}")
+
+    val nonIdColumns = left.columns.diff(pkColumns)
+    val diffValueColumns = getDiffValueColumns(nonIdColumns)
+
+    require(!diffValueColumns.contains(options.diffColumn),
+      s"The column prefixes '${options.leftColumnPrefix}' and '${options.rightColumnPrefix}', " +
+        s"together with these non-id columns " +
+        s"must not produce the diff column name '${options.diffColumn}': " +
+        s"${nonIdColumns.mkString(", ")}")
+
+    require(diffValueColumns.forall(column => !pkColumns.contains(column)),
+      s"The column prefixes '${options.leftColumnPrefix}' and '${options.rightColumnPrefix}', " +
+        s"together with these non-id columns " +
+        s"must not produce any id column name '${pkColumns.mkString("', '")}': " +
+        s"${nonIdColumns.mkString(", ")}")
   }
+
+  def getDiffValueColumns(nonIdColumns: Seq[String]): Seq[String] =
+    Seq(options.leftColumnPrefix, options.rightColumnPrefix)
+      .flatMap(prefix => nonIdColumns.map(column => s"${prefix}_$column"))
 
   def of[T](left: Dataset[T], right: Dataset[T], idColumns: String*): DataFrame = {
     checkSchema(left, right, idColumns: _*)
@@ -55,7 +79,7 @@ class Diff(options: DiffOptions) {
     val pkColumns = if (idColumns.isEmpty) left.columns.toList else idColumns
     val otherColumns = left.columns.diff(pkColumns)
 
-    val existsColumnName = "exists" // make it not exist in schema T
+    val existsColumnName = Diff.distinctStringNameFor(left.columns)
     val l = left.withColumn(existsColumnName, lit(1))
     val r = right.withColumn(existsColumnName, lit(1))
     val joinCondition = pkColumns.map(c => l(c) <=> r(c)).reduce(_ && _)
@@ -88,7 +112,15 @@ class Diff(options: DiffOptions) {
 
   def ofAs[T, U](left: Dataset[T], right: Dataset[T],
                  diffEncoder: Encoder[U], idColumns: String*): Dataset[U] = {
-    // TODO: require schema of encoder to be correct
+    val nonIdColumns = left.columns.diff(if (idColumns.isEmpty) left.columns.toList else idColumns)
+    val encColumns = diffEncoder.schema.fields.map(_.name)
+    val diffColumns = Seq(options.diffColumn) ++ idColumns ++ getDiffValueColumns(nonIdColumns)
+    val extraColumns = encColumns.diff(diffColumns)
+
+    require(extraColumns.isEmpty,
+      s"Diff encoder's columns must be part of the diff result schema, " +
+        s"these columns are unexpected: ${extraColumns.mkString(", ")}")
+
     of(left, right, idColumns: _*).as[U](diffEncoder)
   }
 
@@ -100,6 +132,15 @@ class Diff(options: DiffOptions) {
 object Diff {
   val default = new Diff(DiffOptions.default)
 
+  /**
+   * Provides a string  that is distinct w.r.t. the given strings.
+   * @param existing strings
+   * @return distinct string w.r.t. existing
+   */
+  def distinctStringNameFor(existing: Seq[String]): String = {
+    "_" * (existing.map(_.length).reduceOption(_ max _).getOrElse(0) + 1)
+  }
+
   def of[T](left: Dataset[T], right: Dataset[T], idColumns: String*): DataFrame =
     default.of(left, right, idColumns: _*)
 
@@ -110,4 +151,5 @@ object Diff {
   def ofAs[T, U](left: Dataset[T], right: Dataset[T],
                  diffEncoder: Encoder[U], idColumns: String*): Dataset[U] =
     default.ofAs(left, right, diffEncoder, idColumns: _*)
+
 }

@@ -2359,7 +2359,6 @@ class Dataset[T] private[sql](
    *
    * The returned DataFrame has the `diff` column as the first column.
    * This holds the `"N"`, `"C"`, `"I"` or `"D"` strings. The id columns follow.
-   * For all non-id columns
    *
    * The id columns are in order as given to the method.
    * If none are given, in the order of this Dataset.
@@ -2393,6 +2392,8 @@ class Dataset[T] private[sql](
    *
    * See `diff(Dataset[T], String*`.
    *
+   * This requires an additional implicit `Encoder[U]` for the return type `Dataset[U]`.
+   *
    * @group typedrel
    * @since 3.0.0
    */
@@ -2408,6 +2409,7 @@ class Dataset[T] private[sql](
    * See `diff(Dataset[T], String*)`.
    *
    * This requires an additional implicit `Encoder[U]` for the return type `Dataset[U]`.
+   * The schema of the returned Dataset can be configured by the given `DiffOptions`.
    *
    * @group typedrel
    * @since 3.0.0
@@ -2436,7 +2438,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset that contains the differences
    * between this and the other Dataset of the same type `T`.
    *
-   * See `diff(Dataset[T], DiffOptions, String*`.
+   * See `diff(Dataset[T], String*`.
    *
    * This requires an additional explicit `Encoder[U]` for the return type `Dataset[U]`.
    * The schema of the returned Dataset can be configured by the given `DiffOptions`.

@@ -19,15 +19,16 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, Diff, DiffOptions, Encoders, Row}
-import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 case class Empty()
 case class Value(id: Int, value: Option[String])
 case class Value2(id: Int, seq: Option[Int], value: Option[String])
+case class Value3(id: Int, left_value: String, right_value: String, value: String)
+case class Value4(id: Int, diff: String)
+case class Value5(first_id: Int, id: String)
+case class Value6(id: Int, label: String)
 
 case class DiffAs(diff: String,
                   id: Int,
@@ -37,6 +38,14 @@ case class DiffAsCustom(action: String,
                         id: Int,
                         before_value: Option[String],
                         after_value: Option[String])
+case class DiffAsSubset(diff: String,
+                        id: Int,
+                        left_value: Option[String])
+case class DiffAsExtra(diff: String,
+                       id: Int,
+                       left_value: Option[String],
+                       right_value: Option[String],
+                       extra: String)
 
 class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
 
@@ -67,6 +76,13 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
   lazy val expectedDiffAs: Seq[DiffAs] = expectedDiff.map( r =>
     DiffAs(r.getString(0), r.getInt(1), Option(r.getString(2)), Option(r.getString(3)))
   )
+
+  test("distinct string for") {
+    assert(Diff.distinctStringNameFor(Seq.empty[String]) === "_")
+    assert(Diff.distinctStringNameFor(Seq("a")) === "__")
+    assert(Diff.distinctStringNameFor(Seq("abc")) === "____")
+    assert(Diff.distinctStringNameFor(Seq("a", "bc", "def")) === "____")
+  }
 
   test("diff with no id column") {
     val expected = Seq(
@@ -303,6 +319,78 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
     assert(actual.collect() === expectedDiff)
   }
 
+  test("diff with output columns in T") {
+    val left = Seq(Value3(1, "left", "right", "value")).toDS()
+    val right = Seq(Value3(1, "Left", "Right", "Value")).toDS()
+
+    val actual = left.diff(right, "id")
+    val expectedColumns = Seq(
+      "diff",
+      "id",
+      "left_left_value", "right_left_value",
+      "left_right_value", "right_right_value",
+      "left_value", "right_value"
+    )
+    val expectedDiff = Seq(
+      Row("C", 1, "left", "Left", "right", "Right", "value", "Value")
+    )
+
+    assert(actual.columns === expectedColumns)
+    assert(actual.collect() === expectedDiff)
+  }
+
+  test("diff with id column diff in T") {
+    val left = Seq(Value4(1, "diff")).toDS()
+    val right = Seq(Value4(1, "Diff")).toDS()
+
+    doTestRequirement(left.diff(right),
+      "The id columns must not contain the diff column name 'diff': id, diff")
+    doTestRequirement(left.diff(right, "diff"),
+      "The id columns must not contain the diff column name 'diff': diff")
+    doTestRequirement(left.diff(right, "diff", "id"),
+      "The id columns must not contain the diff column name 'diff': diff, id")
+  }
+
+  test("diff with non-id column diff in T") {
+    val left = Seq(Value4(1, "diff")).toDS()
+    val right = Seq(Value4(1, "Diff")).toDS()
+
+    val actual = left.diff(right, "id")
+    val expectedColumns = Seq(
+      "diff",
+      "id",
+      "left_diff", "right_diff"
+    )
+    val expectedDiff = Seq(
+      Row("C", 1, "diff", "Diff")
+    )
+
+    assert(actual.columns === expectedColumns)
+    assert(actual.collect() === expectedDiff)
+  }
+
+  test("diff where non-id column produces diff column name") {
+    val options = DiffOptions.default.copy(diffColumn = "a_label", leftColumnPrefix = "a", rightColumnPrefix = "b")
+
+    val left = Seq(Value6(1, "label")).toDS()
+    val right = Seq(Value6(1, "Label")).toDS()
+
+    doTestRequirement(left.diff(right, options, "id"),
+      "The column prefixes 'a' and 'b', together with these non-id columns " +
+        "must not produce the diff column name 'a_label': label")
+  }
+
+  test("diff where non-id column produces id column name") {
+    val options = DiffOptions.default.copy(leftColumnPrefix = "first", rightColumnPrefix = "second")
+
+    val left = Seq(Value5(1, "value")).toDS()
+    val right = Seq(Value5(1, "Value")).toDS()
+
+    doTestRequirement(left.diff(right, options, "first_id"),
+      "The column prefixes 'first' and 'second', together with these non-id columns " +
+        "must not produce any id column name 'first_id': id")
+  }
+
   test("diff with custom diff options") {
     val options = DiffOptions("action", "before", "after", "new", "change", "del", "eq")
 
@@ -320,13 +408,55 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
     assert(actual.collect() === expected)
   }
 
+  test("diff options with empty diff column name") {
+    val default = DiffOptions.default
+    doTestRequirement(default.copy(diffColumn = ""),
+      "Diff column name must not be empty")
+  }
+
+  test("diff options left and right prefixes") {
+    val default = DiffOptions.default
+    doTestRequirement(default.copy(leftColumnPrefix = ""),
+      "Left column prefix must not be empty")
+    doTestRequirement(default.copy(rightColumnPrefix = ""),
+      "Right column prefix must not be empty")
+    val prefix = "prefix"
+    doTestRequirement(default.copy(leftColumnPrefix = prefix, rightColumnPrefix = prefix),
+      s"Left and right column prefix must be distinct: $prefix")
+  }
+
+  test("diff options diff value") {
+    val default = DiffOptions.default
+
+    doTestRequirement(default.copy(insertDiffValue = ""),
+      s"Insert diff value must not be empty")
+    doTestRequirement(default.copy(changeDiffValue = ""),
+      s"Change diff value must not be empty")
+    doTestRequirement(default.copy(deleteDiffValue = ""),
+      s"Delete diff value must not be empty")
+    doTestRequirement(default.copy(nochangeDiffValue = ""),
+      s"No-change diff value must not be empty")
+
+    val value = "value"
+    doTestRequirement(default.copy(insertDiffValue = value, changeDiffValue = value),
+      s"Diff values must be distinct: List($value, $value, D, N)")
+    doTestRequirement(default.copy(insertDiffValue = value, deleteDiffValue = value),
+      s"Diff values must be distinct: List($value, C, $value, N)")
+    doTestRequirement(default.copy(insertDiffValue = value, nochangeDiffValue = value),
+      s"Diff values must be distinct: List($value, C, D, $value)")
+    doTestRequirement(default.copy(changeDiffValue = value, deleteDiffValue = value),
+      s"Diff values must be distinct: List(I, $value, $value, N)")
+    doTestRequirement(default.copy(changeDiffValue = value, nochangeDiffValue = value),
+      s"Diff values must be distinct: List(I, $value, D, $value)")
+    doTestRequirement(default.copy(deleteDiffValue = value, nochangeDiffValue = value),
+      s"Diff values must be distinct: List(I, C, $value, $value)")
+  }
+
   test("diff of empty schema") {
     val left = Seq(Empty()).toDS()
     val right = Seq(Empty()).toDS()
 
-    val message = intercept[IllegalArgumentException]{ left.diff(right) }.getMessage
-
-    assert(message === "requirement failed: The schema must not be empty")
+    doTestRequirement(left.diff(right), "The schema must not be empty")
   }
 
   test("diff with different types") {
@@ -334,11 +464,10 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
     val left = Seq((1, "str")).toDF("id", "value")
     val right = Seq((1, 2)).toDF("id", "value")
 
-    val message = intercept[IllegalArgumentException]{ left.diff(right) }.getMessage
-
-    assert(message === "requirement failed: The datasets do not have the same schema.\n" +
-      "Left extra columns: value (StringType)\n" +
-      "Right extra columns: value (IntegerType)")
+    doTestRequirement(left.diff(right),
+      "The datasets do not have the same schema.\n" +
+        "Left extra columns: value (StringType)\n" +
+        "Right extra columns: value (IntegerType)")
   }
 
   test("diff with different nullability") {
@@ -360,21 +489,15 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
     val left = Seq((1, "str")).toDF("id", "value")
     val right = Seq((1, "str")).toDF("id", "comment")
 
-    val message = intercept[IllegalArgumentException] {
-      left.diff(right, "id")
-    }.getMessage
-
-    assert(message === "requirement failed: The datasets do not have the same schema.\n" +
-      "Left extra columns: value (StringType)\n" +
-      "Right extra columns: comment (StringType)")
+    doTestRequirement(left.diff(right, "id"),
+      "The datasets do not have the same schema.\n" +
+        "Left extra columns: value (StringType)\n" +
+        "Right extra columns: comment (StringType)")
   }
 
   test("diff of non-existing id column") {
-    val message = intercept[IllegalArgumentException] {
-      left.diff(right, "does not exists")
-    }.getMessage
-
-    assert(message === "requirement failed: Some id columns do not exist: does not exists")
+    doTestRequirement(left.diff(right, "does not exists"),
+      "Some id columns do not exist: does not exists")
   }
 
   test("diff with different number of column") {
@@ -382,13 +505,10 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
     val left = Seq((1, "str")).toDF("id", "value")
     val right = Seq((1, 1, "str")).toDF("id", "seq", "value")
 
-    val message = intercept[IllegalArgumentException] {
-      left.diff(right, "id")
-    }.getMessage
-
-    assert(message === "requirement failed: The number of columns doesn't match.\n" +
-      "Left column names (2): id, value\n" +
-      "Right column names (3): id, seq, value")
+    doTestRequirement(left.diff(right, "id"),
+      "The number of columns doesn't match.\n" +
+        "Left column names (2): id, value\n" +
+        "Right column names (3): id, seq, value")
   }
 
   test("diff as U") {
@@ -428,6 +548,24 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
 
     assert(actual.columns === Seq("action", "id", "before_value", "after_value"))
     assert(actual.collect() === expected)
+  }
+
+  test("diff as U with subset of columns") {
+    val expected = expectedDiff.map(row => DiffAsSubset(row.getString(0), row.getInt(1), Option(row.getString(2))))
+
+    val actual = left.diffAs[DiffAsSubset](right, "id").orderBy("id")
+
+    assert(Seq("diff", "id", "left_value").forall(column => actual.columns.contains(column)))
+    assert(actual.collect() === expected)
+  }
+
+  test("diff as U with extra column") {
+    doTestRequirement(left.diffAs[DiffAsExtra](right, "id"),
+      "Diff encoder's columns must be part of the diff result schema, these columns are unexpected: extra")
+  }
+
+  def doTestRequirement(f : => Any, expected: String): Unit = {
+    assert(intercept[IllegalArgumentException](f).getMessage === s"requirement failed: $expected")
   }
 
 }
