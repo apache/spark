@@ -1393,7 +1393,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           }
           str.charAt(0)
         }.getOrElse('\\')
-        if (Set('%', '_').contains(escapeChar)) {
+        if ('%' == escapeChar || '_' == escapeChar) {
             throw new ParseException("Invalid escape string." +
               "Escape string can not be '%', '_'.", ctx)
         }
