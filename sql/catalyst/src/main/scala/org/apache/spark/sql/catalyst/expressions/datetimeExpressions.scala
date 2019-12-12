@@ -596,8 +596,8 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-  _FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.
-  See `java.text.SimpleDateFormat` for valid date and time format patterns.
+    _FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.
+    See `java.text.SimpleDateFormat` for valid date and time format patterns.
   """,
   examples = """
     Examples:
