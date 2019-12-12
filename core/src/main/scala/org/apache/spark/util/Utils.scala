@@ -731,7 +731,7 @@ private[spark] object Utils extends Logging {
       case "file" =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
-        val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
+        val sourceFile = if (uri.isAbsolute) new File(uri) else new File(uri.getPath)
         copyFile(url, sourceFile, targetFile, fileOverwrite)
       case _ =>
         val fs = getHadoopFileSystem(uri, hadoopConf)
