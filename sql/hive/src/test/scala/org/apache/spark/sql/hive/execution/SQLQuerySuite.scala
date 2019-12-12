@@ -2310,4 +2310,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("partition pruning should handle date correctly") {
+    withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "2") {
+      withTable("t") {
+        sql("CREATE TABLE t (i INT) PARTITIONED BY (j DATE)")
+        sql("INSERT INTO t PARTITION(j='1990-11-11') SELECT 1")
+        checkAnswer(sql("SELECT i, CAST(j AS STRING) FROM t"), Row(1, "1990-11-11"))
+        checkAnswer(
+          sql(
+            """
+              |SELECT i, CAST(j AS STRING)
+              |FROM t
+              |WHERE j IN (DATE'1990-11-10', DATE'1990-11-11', DATE'1990-11-12')
+              |""".stripMargin),
+          Row(1, "1990-11-11"))
+      }
+    }
+  }
 }
