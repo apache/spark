@@ -283,34 +283,43 @@ class DataFrame(object):
         >>> df.explain(mode="formatted")
         == Physical Plan ==
         * Scan ExistingRDD (1)
-        <BLANKLINE>
-        <BLANKLINE>
         (1) Scan ExistingRDD [codegen id : 1]
         Output: [age#0, name#1]
-        <BLANKLINE>
-        <BLANKLINE>
 
         .. versionchanged:: 3.0.0
            Added optional argument `mode` to specify the expected output format of plans.
         """
+
         if extended is not None and mode is not None:
             raise Exception("extended and mode can not be specified simultaneously")
 
-        # Handle a case with no argument first: df.explain()
-        if extended is None and mode is None:
-            print(self._jdf.toExplainString("simple"))
-        else:
-            # For df.explain(extended=`bool`)
-            if extended is not None and isinstance(extended, bool):
-                print(self._jdf.toExplainString("extended" if extended else "simple"))
-            elif extended is not None:
-                raise TypeError("extended should be provided as boolean, "
-                    "got {0}".format(type(extended)))
-            # For df.explain(mode=`str`)
-            elif mode is not None and isinstance(mode, basestring):
-                print(self._jdf.toExplainString(mode))
-            else:
-                raise TypeError("mode should be provided as string, got {0}".format(type(mode)))
+        # For the no argument case: df.explain()
+        is_no_argument = extended is None and mode is None
+
+        # For the cases below:
+        #   explain(True)
+        #   explain(extended=False)
+        is_extended_case = extended is not None and isinstance(extended, bool)
+
+        # For the mode specified: df.explain(mode="formatted")
+        is_mode_case = mode is not None and isinstance(mode, basestring)
+
+        if not is_no_argument and not (is_extended_case or is_mode_case):
+            argtypes = [
+                str(type(arg)) for arg in [extended, mode] if arg is not None]
+            raise TypeError(
+                "extended (optional) and mode (optional) should be a bool and str; "
+                "however, got [%s]." % ", ".join(argtypes))
+
+        # Sets an explain mode depending on a given argument
+        if is_no_argument:
+            explainMode = "simple"
+        elif is_extended_case:
+            explainMode = "extended" if extended else "simple"
+        elif is_mode_case:
+            explainMode = mode
+
+        print(self._jdf.toExplainString(explainMode))
 
     @since(2.4)
     def exceptAll(self, other):

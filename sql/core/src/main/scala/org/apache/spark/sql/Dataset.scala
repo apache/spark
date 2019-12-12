@@ -522,13 +522,7 @@ class Dataset[T] private[sql](
   def printSchema(level: Int): Unit = println(schema.treeString(level))
   // scalastyle:on println
 
-  /**
-   * Returns the plan (logical and physical) string with a format specified by a given explain mode.
-   *
-   * @group basic
-   * @since 3.0.0
-   */
-  def toExplainString(mode: ExplainMode): String = {
+  private def toExplainString(mode: ExplainMode): String = {
     // Because temporary views are resolved during analysis when we create a Dataset, and
     // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
     // `ExplainCommand` here will probably output different query plans, compared to the results
@@ -553,13 +547,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  /**
-   * Returns the plan (logical and physical) string with a format specified by a given explain mode.
-   *
-   * @group basic
-   * @since 3.0.0
-   */
-  def toExplainString(mode: String): String = {
+  private[sql] def toExplainString(mode: String): String = {
     mode.toLowerCase(Locale.ROOT) match {
       case "simple" => toExplainString(ExplainMode.Simple)
       case "extended" => toExplainString(ExplainMode.Extended)
