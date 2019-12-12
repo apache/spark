@@ -33,7 +33,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
-ARG BASE_PIP_PKGS="setuptools wheel virtualenv"
+ARG BASE_PIP_PKGS="setuptools wheel"
 ARG PIP_PKGS="pyopenssl pypandoc numpy sphinx"
 
 # Install extra needed repos and refresh.
@@ -56,6 +56,10 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   # Install openjdk 8.
   $APT_INSTALL openjdk-8-jdk && \
   update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java && \
+  # Change default python version to python3.
+  update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
+  update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \
+  update-alternatives --set python /usr/bin/python3.6 && \
   # Install build / source control tools
   $APT_INSTALL curl wget git maven ivy subversion make gcc lsof libffi-dev \
     pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev && \
@@ -66,14 +70,10 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   pip3 install $BASE_PIP_PKGS && \
   pip3 install $PIP_PKGS && \
   cd && \
-  virtualenv -p python3 /opt/p35 && \
+  python /opt/p35 && \
   . /opt/p35/bin/activate && \
   pip3 install $BASE_PIP_PKGS && \
   pip3 install $PIP_PKGS && \
-  # Change default python version to python3.
-  update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
-  update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \
-  update-alternatives --set python /usr/bin/python3.6 && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
   $APT_INSTALL r-base r-base-dev && \
