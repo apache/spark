@@ -20,7 +20,6 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) {
       "--hivevar" -> "hivevar",
       "-d" -> "define",
       "--define" -> "define",
-      "--conf" -> "sparkconf"
     )
 
     lazy val showUsage: String = {
@@ -82,8 +81,8 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) {
     }
   }
 
-  lazy val getSparkConfs: Seq[(String, String)] = {
-    parsed.getOrElse("sparkconf", Nil).map {
+  lazy val getHiveConfs: Seq[(String, String)] = {
+    parsed.getOrElse("hiveconf", Nil).map {
       x =>
         Try {
           val auxConfs = x.split("=")
@@ -92,5 +91,10 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) {
     }.filter(_.isSuccess).map(x => x.get)
   }
 
-
+  def getHiveConf(key: String): Option[String] = {
+    parsed.getOrElse("hiveconf", Nil)
+      .filter(_.split("=")(0) == key)
+      .map(_.split("=")(1))
+      .headOption
+  }
 }
