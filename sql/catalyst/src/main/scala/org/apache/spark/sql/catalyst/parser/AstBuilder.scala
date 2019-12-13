@@ -1393,10 +1393,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           }
           str.charAt(0)
         }.getOrElse('\\')
-        if ('%' == escapeChar || '_' == escapeChar) {
-            throw new ParseException("Invalid escape string." +
-              "Escape string can not be '%', '_'.", ctx)
-        }
         invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
