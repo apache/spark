@@ -535,6 +535,8 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("123E10BD", Literal(Decimal(BigDecimal("123E10")), DecimalType(13, 0)))
       assertEqual("123E+10BD", Literal(Decimal(BigDecimal("123E+10")), DecimalType(13, 0)))
       assertEqual("123E-10BD", Literal(Decimal(BigDecimal("123E-10")), DecimalType(10, 10)))
+      assertEqual("1.23E10BD", Literal(Decimal(BigDecimal("1.23E10")), DecimalType(11, 0)))
+      assertEqual("-1.23E10BD", Literal(Decimal(BigDecimal("-1.23E10")), DecimalType(11, 0)))
     }
   }
 
