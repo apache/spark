@@ -547,6 +547,7 @@ class Dataset[T] private[sql](
     }
   }
 
+  // This method intends to be called from PySpark DataFrame
   private[sql] def toExplainString(mode: String): String = {
     mode.toLowerCase(Locale.ROOT) match {
       case "simple" => toExplainString(ExplainMode.Simple)
