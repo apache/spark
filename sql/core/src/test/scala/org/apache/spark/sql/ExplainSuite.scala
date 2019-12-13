@@ -309,6 +309,24 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
         "(1) LocalTableScan [codegen id :" ::
         Nil: _*)
   }
+
+  test("Dataset.toExplainString has mode as string") {
+    val df = spark.range(10).toDF
+    def assertExplainOutput(mode: ExplainMode): Unit = {
+      assert(df.toExplainString(mode.toString).replaceAll("#\\d+", "#x").trim ===
+        getNormalizedExplain(df, mode).trim)
+    }
+    assertExplainOutput(ExplainMode.Simple)
+    assertExplainOutput(ExplainMode.Extended)
+    assertExplainOutput(ExplainMode.Codegen)
+    assertExplainOutput(ExplainMode.Cost)
+    assertExplainOutput(ExplainMode.Formatted)
+
+    val errMsg = intercept[IllegalArgumentException] {
+      df.toExplainString("unknown")
+    }.getMessage
+    assert(errMsg.contains("Unknown explain mode: unknown"))
+  }
 }
 
 case class ExplainSingleData(id: Int)
