@@ -544,7 +544,7 @@ case class WeekDay(child: Expression) extends DayWeek {
   override protected def nullSafeEval(date: Any): Any = {
     val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
     localDate.getDayOfWeek.ordinal()
-  }`
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, days => {
