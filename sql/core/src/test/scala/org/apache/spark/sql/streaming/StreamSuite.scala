@@ -1132,7 +1132,7 @@ class StreamSuite extends StreamTest {
   Seq(Trigger.ProcessingTime("1 second"), Trigger.Continuous("1 second")).foreach { trigger =>
     test(s"SPARK-30143: stop waits until timeout if blocked - trigger: $trigger") {
       BlockOnStopSourceProvider.enableBlocking()
-      val sq = spark.readStream.format(BlockOnStopSourceProvider.getClass.getName)
+      val sq = spark.readStream.format(classOf[BlockOnStopSourceProvider].getName)
         .load()
         .writeStream
         .format("console")
