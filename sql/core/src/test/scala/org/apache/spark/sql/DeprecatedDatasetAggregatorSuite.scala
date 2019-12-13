@@ -22,15 +22,6 @@ import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 
-object RowAgg extends Aggregator[Row, Int, Int] {
-  def zero: Int = 0
-  def reduce(b: Int, a: Row): Int = a.getInt(0) + b
-  def merge(b1: Int, b2: Int): Int = b1 + b2
-  def finish(r: Int): Int = r
-  override def bufferEncoder: Encoder[Int] = Encoders.scalaInt
-  override def outputEncoder: Encoder[Int] = Encoders.scalaInt
-}
-
 @deprecated("This test suite will be removed.", "3.0.0")
 class DeprecatedDatasetAggregatorSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
