@@ -598,7 +598,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
   arguments = """
     Arguments:
-      * timestamp - Date/timestamp or String to be converted to the given format. Default value is current time
+      * timestamp - A date/timestamp or string to be converted to the given format. Default value is current time
       * fmt - Date/time format pattern to follow. See `java.time.format.DateTimeFormatter` for valid date
               and time format patterns.
   """,
@@ -660,14 +660,14 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
  * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the given time.",
+  usage = "_FUNC_(timeExp[, format]) - Returns the UNIX timestamp of the given time.",
   arguments = """
     Arguments:
-      * expr - A date/timestamp or String which is returned as a UNIX timestamp.
+      * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
                Default value is current time
-      * pattern - Date/time format pattern to follow. Ignored if `expr` is not a String.
-                  Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
-                  for valid date and time format patterns.
+      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a String.
+                 Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
+                 for valid date and time format patterns.
   """,
   examples = """
     Examples:
@@ -1486,7 +1486,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   arguments = """
     Arguments:
       * timestamp_str - String to be parsed to timestamp
-      * fmt - Time format pattern to follow. See `java.time.format.DateTimeFormatter` for valid
+      * fmt - Timestamp format pattern to follow. See `java.time.format.DateTimeFormatter` for valid
               date and time format patterns.
   """,
   examples = """
