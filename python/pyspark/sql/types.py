@@ -907,7 +907,7 @@ _type_mappings = {
 }
 
 # Mapping simpleString types to Spark SQL DataType
-_simple_type_map = [
+_simple_type_map = {
     "string": StringType,
     "bool": BooleanType,
     "double": DoubleType,
@@ -918,7 +918,7 @@ _simple_type_map = [
     "smallint": ShortType,
     "udt": UserDefinedType,
     "date": DateType
-]
+}
 
 if sys.version < "3":
     _type_mappings.update({
