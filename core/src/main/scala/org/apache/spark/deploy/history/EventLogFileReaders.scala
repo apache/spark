@@ -228,7 +228,7 @@ class RollingEventLogFilesFileReader(
       idx
     }
 
-    val filesToRead = RollingEventLogFilesFileReader.dropBeforeLastCompactFile(eventLogFiles)
+    val filesToRead = dropBeforeLastCompactFile(eventLogFiles)
     val indices = filesToRead.map { file => getEventLogFileIndex(file.getPath.getName) }
     require((indices.head to indices.last) == indices, "Found missing event log file, expected" +
       s" indices: ${indices.head to indices.last}, actual: ${indices}")
@@ -271,10 +271,8 @@ class RollingEventLogFilesFileReader(
   override def totalSize: Long = eventLogFiles.map(_.getLen).sum
 
   private def lastEventLogFile: FileStatus = eventLogFiles.last
-}
 
-object RollingEventLogFilesFileReader {
-  def dropBeforeLastCompactFile(eventLogFiles: Seq[FileStatus]): Seq[FileStatus] = {
+  private def dropBeforeLastCompactFile(eventLogFiles: Seq[FileStatus]): Seq[FileStatus] = {
     val lastCompactedFileIdx = eventLogFiles.lastIndexWhere { fs =>
       EventLogFileWriter.isCompacted(fs.getPath)
     }
