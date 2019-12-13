@@ -37,7 +37,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /** The V1 and V2 provider of a streaming source, which blocks indefinitely on the call of stop() */
 object BlockOnStopSourceProvider {
   private var _latch: CountDownLatch = _
-  
+
   /** Set the latch that we will use to block the streaming query thread. */
   def enableBlocking(): Unit = {
     if (_latch == null || _latch.getCount == 0) {
