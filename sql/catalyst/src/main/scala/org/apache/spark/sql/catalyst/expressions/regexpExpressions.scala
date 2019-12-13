@@ -168,7 +168,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
         s"""
           String $rightStr = $eval2.toString();
           if ($lastRightStr != $rightStr) {
-            pattern = $patternClass.compile($escapeFunc($rightStr, '$newEscapeChar'));
+            $pattern = $patternClass.compile($escapeFunc($rightStr, '$newEscapeChar'));
             $lastRightStr = $rightStr;
           }
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
