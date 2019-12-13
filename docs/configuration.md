@@ -1110,7 +1110,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.proxyRedirectUri</code></td>
   <td></td>
   <td>
-    URI where to address redirects when Spark is running behind a proxy. This will make Spark
+    Where to address redirects when Spark is running behind a proxy. This will make Spark
     modify redirect responses so they point to the proxy server, instead of the Spark UI's own
     address. This should be only the address of the server, without any prefix paths for the
     application; the prefix should be set either by the proxy server itself (by adding the
