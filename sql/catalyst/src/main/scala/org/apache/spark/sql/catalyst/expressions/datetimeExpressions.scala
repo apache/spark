@@ -1432,8 +1432,8 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(date_str[, fmt]) - Parses the `date_str` expression with the `fmt` expression to
-    a date. Returns null with invalid input. By default, it follows casting rules to a date if
-    the `fmt` is omitted.
+      a date. Returns null with invalid input. By default, it follows casting rules to a date if
+      the `fmt` is omitted.
   """,
   arguments = """
     Arguments:
@@ -1480,8 +1480,8 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 @ExpressionDescription(
   usage = """
     _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp` expression with the `fmt` expression to
-    a timestamp. Returns null with invalid input. By default, it follows casting rules to
-    a timestamp if the `fmt` is omitted.
+      a timestamp. Returns null with invalid input. By default, it follows casting rules to
+      a timestamp if the `fmt` is omitted.
   """,
   arguments = """
     Arguments:
