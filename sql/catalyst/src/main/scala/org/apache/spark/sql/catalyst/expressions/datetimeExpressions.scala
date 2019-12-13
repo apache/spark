@@ -544,7 +544,7 @@ case class WeekDay(child: Expression) extends DayWeek {
   override protected def nullSafeEval(date: Any): Any = {
     val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
     localDate.getDayOfWeek.ordinal()
-  }
+  }`
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, days => {
@@ -598,7 +598,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
   arguments = """
     Arguments:
-      * timestamp - A date/timestamp or string to be converted to the given format. Default value is current time
+      * timestamp - A date/timestamp or string to be converted to the given format.
       * fmt - Date/time format pattern to follow. See `java.time.format.DateTimeFormatter` for valid date
               and time format patterns.
   """,
@@ -664,8 +664,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   arguments = """
     Arguments:
       * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
-               Default value is current time
-      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a String.
+      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
                  Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
                  for valid date and time format patterns.
   """,
@@ -709,8 +708,8 @@ case class ToUnixTimestamp(
   usage = "_FUNC_([timeExp[, format]]) - Returns the UNIX timestamp of current or specified time.",
   arguments = """
     Arguments:
-      * timeExp - A date/timestamp or String. Default value is current time
-      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a String.
+      * timeExp - A date/timestamp or String. If not provided, this defaults to current time.
+      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
                  Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
                  for valid date and time format patterns.
   """,
@@ -889,7 +888,7 @@ abstract class UnixTime extends ToTimestamp {
   usage = "_FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.",
   arguments = """
     Arguments:
-      * unix_time - UNIX Timestamp to be converted to the provided format
+      * unix_time - UNIX Timestamp to be converted to the provided format.
       * format - Date/time format pattern to follow. See `java.time.format.DateTimeFormatter`
                  for valid date and time format patterns.
   """,
@@ -1437,7 +1436,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
   """,
   arguments = """
     Arguments:
-      * date_str - String to be parsed to date
+      * date_str - String to be parsed to date.
       * fmt - Date format pattern to follow. See `java.time.format.DateTimeFormatter` for valid
               date and time format patterns.
   """,
@@ -1485,7 +1484,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   """,
   arguments = """
     Arguments:
-      * timestamp_str - String to be parsed to timestamp
+      * timestamp_str - A string to be parsed to timestamp.
       * fmt - Timestamp format pattern to follow. See `java.time.format.DateTimeFormatter` for valid
               date and time format patterns.
   """,
