@@ -27,7 +27,6 @@ import java.util.zip.ZipOutputStream
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
-import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
