@@ -224,7 +224,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
           _.toString.matches(sizeMetricPattern)
         },
         "spill size total (min, med, max (stageId (attemptId): taskId))" -> {
-          _.toString.matches(sizeMetricDriverPattern)
+          _.toString.matches(sizeMetricPattern)
         })))
     ))
   }
