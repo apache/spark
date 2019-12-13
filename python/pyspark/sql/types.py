@@ -104,9 +104,6 @@ class DataTypeSingleton(type):
         if cls not in cls._instances:
             cls._instances[cls] = super(DataTypeSingleton, cls).__call__()
         return cls._instances[cls]
-    
-def typeForSimpleString(str):
-    
 
 
 class NullType(DataType):
