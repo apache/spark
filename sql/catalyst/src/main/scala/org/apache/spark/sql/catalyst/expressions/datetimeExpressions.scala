@@ -1436,7 +1436,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
   """,
   arguments = """
     Arguments:
-      * date_str - String to be parsed to date.
+      * date_str - A string to be parsed to date.
       * fmt - Date format pattern to follow. See `java.time.format.DateTimeFormatter` for valid
               date and time format patterns.
   """,
