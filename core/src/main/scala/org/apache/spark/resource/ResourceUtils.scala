@@ -128,6 +128,7 @@ private[spark] object ResourceUtils extends Logging {
   // Used to take a fraction amount from a task resource requirement and split into a real
   // integer amount and the number of parts expected. For instance, if the amount is 0.5,
   // the we get (1, 2) back out.
+  // Returns tuple of (amount, numParts)
   def calculateAmountAndPartsForFraction(amount: Double): (Int, Int) = {
     val parts = if (amount <= 0.5) {
       Math.floor(1.0 / amount).toInt

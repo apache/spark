@@ -42,13 +42,13 @@ private[spark] trait ExecutorAllocationClient {
    *
    * @param numLocalityAwareTasksPerResourceProfileId The number of tasks in all active stages that
    *                                                  have a locality preferences per
-   *                                                  ResourceProfile. This includes running,
+   *                                                  ResourceProfile id. This includes running,
    *                                                  pending, and completed tasks.
-   * @param hostToLocalTaskCount A map of hosts to the number of tasks from all active stages
-   *                             that would like to like to run on that host.
-   *                             This includes running, pending, and completed tasks.
-   * @param resourceProfileToNumExecutors The total number of executors we'd like to have per
-   *                                      ResourceProfile. The cluster manager shouldn't kill any
+   * @param hostToLocalTaskCount A map of ResourceProfile id to a map of hosts to the number of
+   *                             tasks from all active stages that would like to like to run on
+   *                             that host. This includes running, pending, and completed tasks.
+   * @param resourceProfileIdToNumExecutors The total number of executors we'd like to have per
+   *                                      ResourceProfile id. The cluster manager shouldn't kill any
    *                                      running executor to reach this number, but, if all
    *                                      existing executors were to die, this is the number
    *                                      of executors we'd want to be allocated.
@@ -57,7 +57,7 @@ private[spark] trait ExecutorAllocationClient {
   private[spark] def requestTotalExecutors(
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
       hostToLocalTaskCount: Map[Int, Map[String, Int]],
-      resourceProfileToNumExecutors: Map[Int, Int]): Boolean
+      resourceProfileIdToNumExecutors: Map[Int, Int]): Boolean
 
   /**
    * Request an additional number of executors from the cluster manager for the default

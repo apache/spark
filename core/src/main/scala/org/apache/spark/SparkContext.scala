@@ -454,6 +454,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     _listenerBus = new LiveListenerBus(_conf)
+    _resourceProfileManager = new ResourceProfileManager(_conf)
 
     // Initialize the app status store and listener before SparkEnv is created so that it gets
     // all events.
@@ -546,8 +547,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Initialize any plugins before the task scheduler is initialized.
     _plugins = PluginContainer(this)
-
-    _resourceProfileManager = new ResourceProfileManager(conf)
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
@@ -2775,6 +2774,7 @@ object SparkContext extends Logging {
     val MAX_LOCAL_TASK_FAILURES = 1
 
     // Ensure that default executor's resources satisfies one or more tasks requirement.
+    // TODO - do we want to check when resourceprofiles added?
     def checkResourcesPerTask(clusterMode: Boolean, executorCores: Option[Int]): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
       val execCores = if (clusterMode) {

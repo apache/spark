@@ -18,12 +18,13 @@
 package org.apache.spark.resource
 
 import java.util.{Map => JMap}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -41,14 +42,15 @@ import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
 class ResourceProfile() extends Serializable with Logging {
 
   private val _id = ResourceProfile.getNextProfileId
-  private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
-  private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
+  private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
+  private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
+  private var _executorResourceNumParts: Option[mutable.HashMap[String, Int]] = None
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
 
   def id: Int = _id
-  def taskResources: Map[String, TaskResourceRequest] = _taskResources.toMap
-  def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.toMap
+  def taskResources: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
+  def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
 
   def getExecutorCores: Option[Int] = {
     executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
@@ -56,6 +58,14 @@ class ResourceProfile() extends Serializable with Logging {
 
   def getTaskCpus: Option[Int] = {
     taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
+  }
+
+  private[spark] def getNumSlotsPerAddress(resource: String, sparkConf: SparkConf): Int = {
+    _executorResourceNumParts.getOrElse {
+      calculateTasksAndLimitingResource(sparkConf)
+    }
+    _executorResourceNumParts.get.getOrElse(resource,
+      throw new SparkException(s"Resource $resource doesn't existing in profile id: $id"))
   }
 
   // maximum tasks you could put on an executor with this profile based on the limiting resource
@@ -85,13 +95,22 @@ class ResourceProfile() extends Serializable with Logging {
     val cpusPerTask = taskResources.get(ResourceProfile.CPUS)
       .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
     val tasksBasedOnCores = coresPerExecutor / cpusPerTask
-    var limitingResource = "CPUS"
+    var limitingResource = ResourceProfile.CPUS
+    _executorResourceNumParts = Some(new mutable.HashMap[String, Int])
+    val numPartsMap = _executorResourceNumParts.get
     var taskLimit = tasksBasedOnCores
+    logInfo(s"in calculateTasksAndLimiting $taskLimit on cores")
     executorResources.foreach { case (rName, request) =>
+      logInfo(s"executor resource $rName")
       val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
+      numPartsMap(rName) = 1
       if (taskReq > 0.0) {
-        val (parts, numPerTask) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
+        val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
+        numPartsMap(rName) = parts
         val numTasks = ((request.amount * parts) / numPerTask).toInt
+        logInfo(s"executor resource $rName num " +
+          s"tasks $numTasks ${request.amount} $parts $numPerTask")
+
         if (numTasks < taskLimit) {
           limitingResource = rName
           taskLimit = numTasks
@@ -106,25 +125,30 @@ class ResourceProfile() extends Serializable with Logging {
   /**
    * (Java-specific) gets a Java Map of resources to TaskResourceRequest
    */
-  def taskResourcesJMap: JMap[String, TaskResourceRequest] = _taskResources.asJava
+  def taskResourcesJMap: JMap[String, TaskResourceRequest] = _taskResources.asScala.asJava
 
   /**
    * (Java-specific) gets a Java Map of resources to ExecutorResourceRequest
    */
-  def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = _executorResources.asJava
+  def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = {
+    _executorResources.asScala.asJava
+  }
 
   def reset(): Unit = {
     _taskResources.clear()
     _executorResources.clear()
+    _executorResourceNumParts = None
+    _maxTasksPerExecutor = None
+    _limitingResource = None
   }
 
   def require(requests: ExecutorResourceRequests): this.type = {
-    _executorResources ++= requests.requests
+    _executorResources.putAll(requests.requests.asJava)
     this
   }
 
   def require(requests: TaskResourceRequests): this.type = {
-    _taskResources ++= requests.requests
+    _taskResources.putAll(requests.requests.asJava)
     this
   }
 
@@ -146,7 +170,7 @@ class ResourceProfile() extends Serializable with Logging {
   }
 }
 
-private[spark] object ResourceProfile {
+private[spark] object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
@@ -196,6 +220,7 @@ private[spark] object ResourceProfile {
     if (defaultProf.executorResources == Map.empty) {
       synchronized {
         val prof = defaultProfileRef.get()
+        logInfo("in get or create Tom")
         if (prof.executorResources == Map.empty) {
           addDefaultTaskResources(prof, conf)
           addDefaultExecutorResources(prof, conf)
@@ -213,7 +238,8 @@ private[spark] object ResourceProfile {
     val taskReq = ResourceUtils.parseResourceRequirements(conf, SPARK_TASK_PREFIX)
     taskReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.resourceName}"
-      treqs.resource(name, req.amount)
+      // TODO - test this - have to handle if fractional and numParts set!!
+      treqs.resource(name, req.amount/req.numParts)
     }
     rprof.require(treqs)
   }
@@ -223,16 +249,21 @@ private[spark] object ResourceProfile {
     ereqs.cores(conf.get(EXECUTOR_CORES))
     ereqs.memory(conf.get(EXECUTOR_MEMORY).toString)
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
+    logInfo(s"add default executor resources $execReq")
     execReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.id.resourceName}"
+      logInfo(s"adding resour with name $name")
       ereqs.resource(name, req.amount, req.discoveryScript.getOrElse(""),
         req.vendor.getOrElse(""))
     }
     rprof.require(ereqs)
   }
 
-  // for testing purposes
-  def resetDefaultProfile(conf: SparkConf): Unit = getOrCreateDefaultProfile(conf).reset()
+  // for testing only
+  def reInitDefaultProfile(conf: SparkConf): Unit = getOrCreateDefaultProfile(conf).reset()
+
+  // for testing only
+  def clearDefaultProfile: Unit = defaultProfileRef.get.reset()
 
   /**
    * Create the ResourceProfile internal confs that are used to pass between Driver and Executors.

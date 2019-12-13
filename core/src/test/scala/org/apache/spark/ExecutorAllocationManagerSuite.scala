@@ -271,7 +271,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val conf = createConf(3, 15)
       .set(config.DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO, divisor)
       .set(config.EXECUTOR_CORES, cores)
-    ResourceProfile.resetDefaultProfile(conf)
+    ResourceProfile.reInitDefaultProfile(conf)
     val manager = createManager(conf)
     post(SparkListenerStageSubmitted(createStageInfo(0, 20)))
     for (i <- 0 to 5) {
@@ -1184,7 +1184,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
       .set(TEST_SCHEDULE_INTERVAL, 10000L)
-    ResourceProfile.resetDefaultProfile(sparkConf)
+    ResourceProfile.reInitDefaultProfile(sparkConf)
     sparkConf
   }
 

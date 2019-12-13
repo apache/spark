@@ -71,15 +71,6 @@ class CoarseGrainedSchedulerBackend(
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
   private val createTimeNs = System.nanoTime()
 
-  // TODO - update for ResourceProfiles
-  private val taskResourceNumParts: Map[String, Int] =
-    if (scheduler.resourcesReqsPerTask != null) {
-      // parses ResourceRequirements to get numParts
-      scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req.numParts).toMap
-    } else {
-      Map.empty
-    }
-
   // Accessing `executorDataMap` in the inherited methods from ThreadSafeRpcEndpoint doesn't need
   // any protection. But accessing `executorDataMap` out of the inherited methods must be
   // protected by `CoarseGrainedSchedulerBackend.this`. Besides, `executorDataMap` should only
@@ -236,19 +227,18 @@ class CoarseGrainedSchedulerBackend(
             } else {
               context.senderAddress
             }
-          logInfo(s"Registered executor $executorRef ($executorAddress) with ID $executorId")
+          logInfo(s"Registered executor $executorRef ($executorAddress) with ID $executorId, " +
+            s" ResourceProfileId $resourceProfileId")
           addressToExecutorId(executorAddress) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
-          val numParts = scheduler.sc.resourceProfileManager
-            .resourceProfileFromId(resourceProfileId)
-          val resourcesInfo = resources.map{ case (k, v) =>
-            (v.name,
-             new ExecutorResourceInfo(v.name, v.addresses,
-               // tell the executor it can schedule resources up to numParts times,
-               // as configured by the user, or set to 1 as that is the default (1 task/resource)
-               // TODO - update for ResourceProfile
-               taskResourceNumParts.getOrElse(v.name, 1)))
+          val resourcesInfo = resources.map { case (rName, info) =>
+            // tell the executor it can schedule resources up to numParts times,
+            // as configured by the user, or set to 1 as that is the default (1 task/resource)
+            val numParts = scheduler.sc.resourceProfileManager
+              .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
+            (info.name,
+             new ExecutorResourceInfo(info.name, info.addresses, numParts))
           }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
@@ -579,8 +569,7 @@ class CoarseGrainedSchedulerBackend(
   }
 
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
-    val cpusPerTask = rp.taskResources.get(ResourceProfile.CPUS)
-      .map(_.amount.toInt).getOrElse(scheduler.CPUS_PER_TASK)
+    val cpusPerTask = rp.getTaskCpus.getOrElse(scheduler.CPUS_PER_TASK)
     val executorsWithResourceProfile = executorDataMap.filter { case (e, data) =>
       data.resourceProfileId == rp.id
     }
@@ -598,7 +587,9 @@ class CoarseGrainedSchedulerBackend(
   // this function is for testing only
   def getExecutorResourceProfileId(executorId: String): Int = synchronized {
     val res = executorDataMap.get(executorId)
-    res.map(_.resourceProfileId).getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+    val ret = res.map(_.resourceProfileId).getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+    logInfo(s"Tom getExecutorResourceProfileId id is $ret")
+    ret
   }
 
   /**

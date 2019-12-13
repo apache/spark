@@ -269,12 +269,12 @@ private[spark] class ExecutorAllocationManager(
    * The maximum number of executors we would need under the current load to satisfy all running
    * and pending tasks, rounded up.
    */
-  private def maxNumExecutorsNeededPerResourceProfile(rp: ResourceProfile): Int = {
-    val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp.id) +
-      listener.totalRunningTasksPerResourceProfile(rp.id)
+  private def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
+    val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rpId) +
+      listener.totalRunningTasksPerResourceProfile(rpId)
     val tasksPerExecutor =
-      resourceProfileManager.resourceProfileFromId(rp.id).maxTasksPerExecutor(conf)
-    logDebug(s"max needed executor rpId: $rp.id numpending: $numRunningOrPendingTasks," +
+      resourceProfileManager.resourceProfileFromId(rpId).maxTasksPerExecutor(conf)
+    logDebug(s"max needed executor rpId: $rpId numpending: $numRunningOrPendingTasks," +
       s" tasksperexecutor: $tasksPerExecutor")
     math.ceil(numRunningOrPendingTasks * executorAllocationRatio / tasksPerExecutor).toInt
   }
@@ -327,10 +327,8 @@ private[spark] class ExecutorAllocationManager(
       val updatesNeeded = new mutable.HashMap[Int, ExecutorAllocationManager.TargetNumUpdates]
 
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
-      resourceProfileManager.allProfiles.foreach { case (rProfId, resourceProfile) =>
-        val maxNeeded = maxNumExecutorsNeededPerResourceProfile(resourceProfile)
-        val targetExecs =
-          numExecutorsTargetPerResourceProfileId.getOrElseUpdate(rProfId, initialNumExecutors)
+      numExecutorsTargetPerResourceProfileId.foreach { case (rProfId, targetExecs) =>
+        val maxNeeded = maxNumExecutorsNeededPerResourceProfile(rProfId)
         if (maxNeeded < targetExecs) {
           // The target number exceeds the number we actually need, so stop adding new
           // executors and inform the cluster manager to cancel the extra pending requests
@@ -903,7 +901,7 @@ private[spark] class ExecutorAllocationManager(
     registerGauge("numberTargetExecutors",
       numExecutorsTargetPerResourceProfileId(defaultProfile.id), 0)
     registerGauge("numberMaxNeededExecutors",
-      maxNumExecutorsNeededPerResourceProfile(defaultProfile), 0)
+      maxNumExecutorsNeededPerResourceProfile(defaultProfile.id), 0)
   }
 }
 

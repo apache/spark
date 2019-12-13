@@ -26,7 +26,7 @@ class ResourceProfileSuite extends SparkFunSuite {
 
   override def afterEach() {
     try {
-      ResourceProfile.resetDefaultProfile(new SparkConf)
+      ResourceProfile.reInitDefaultProfile(new SparkConf)
     } finally {
       super.afterEach()
     }

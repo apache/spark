@@ -203,7 +203,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
 
-    ResourceProfile.resetDefaultProfile(sparkConf)
+    ResourceProfile.reInitDefaultProfile(sparkConf)
   }
 
 
@@ -253,7 +253,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
 
-    ResourceProfile.resetDefaultProfile(sparkConf)
+    ResourceProfile.reInitDefaultProfile(sparkConf)
   }
 
   test("custom resource requested from yarn") {

@@ -31,25 +31,27 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
  */
-private[spark] class TaskResourceRequest(val resourceName: String, val amount: Double)
+private[spark] class TaskResourceRequest(_resourceName: String, val amount: Double)
   extends Serializable {
 
   assert(amount <= 0.5 || amount % 1 == 0,
     s"The resource amount ${amount} must be either <= 0.5, or a whole number.")
 
-  if (!resourceName.equals(ResourceProfile.CPUS) && !resourceName.startsWith(RESOURCE_DOT)) {
-    throw new IllegalArgumentException(s"Task resource not allowed: $resourceName")
+  if (!_resourceName.equals(ResourceProfile.CPUS) && !_resourceName.startsWith(RESOURCE_DOT)) {
+    throw new IllegalArgumentException(s"Task resource not allowed: $_resourceName")
   }
+
+  val resourceName = _resourceName.stripPrefix(s"${ResourceUtils.RESOURCE_PREFIX}.")
 
   override def equals(obj: Any): Boolean = {
     obj match {
       case that: TaskResourceRequest =>
         that.getClass == this.getClass &&
-          that.resourceName == resourceName && that.amount == amount
+          that.resourceName == _resourceName && that.amount == amount
       case _ =>
         false
     }
   }
 
-  override def hashCode(): Int = Seq(resourceName, amount).hashCode()
+  override def hashCode(): Int = Seq(_resourceName, amount).hashCode()
 }

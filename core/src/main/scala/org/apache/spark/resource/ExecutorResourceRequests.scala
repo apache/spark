@@ -17,7 +17,9 @@
 
 package org.apache.spark.resource
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile._
@@ -32,9 +34,11 @@ import org.apache.spark.resource.ResourceProfile._
  */
 private[spark] class ExecutorResourceRequests() extends Serializable {
 
-  private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
+  private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
+  private val _customResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
-  def requests: Map[String, ExecutorResourceRequest] = _executorResources.toMap
+
+  def requests: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
 
   /**
    * Specify heap memory. The value specified will be converted to MiB.
@@ -107,12 +111,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
     // a bit weird but for Java api use empty string as meaning None because empty
     // string is otherwise invalid for those paramters anyway
     val eReq = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
-    _executorResources(resourceName) = eReq
-    this
-  }
-
-  def addRequest(ereq: ExecutorResourceRequest): this.type = {
-    _executorResources(ereq.resourceName) = ereq
+    _customResources(resourceName) = eReq
     this
   }
 

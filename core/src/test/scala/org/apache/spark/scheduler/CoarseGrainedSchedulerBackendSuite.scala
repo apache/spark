@@ -292,7 +292,6 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
     when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
     when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
     when(ts.nodeBlacklist()).thenReturn(Set.empty[String])
-    when(ts.resourcesReqsPerTask).thenReturn(Seq.empty)
     ts
   }
 

@@ -93,9 +93,6 @@ private[spark] class TaskSchedulerImpl(
   // CPUs to request per task
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
-  // Resources to request per task
-  val resourcesReqsPerTask = ResourceUtils.parseResourceRequirements(sc.conf, SPARK_TASK_PREFIX)
-
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
@@ -402,19 +399,16 @@ private[spark] class TaskSchedulerImpl(
 
     logInfo("task set resources is: " + taskSetProf)
 
+    // TODO - do we only need to check limiting Resource?
+    // if we only check limiting one we can't assign them at the same time
+
+    val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
     // check is ResourceProfile has cpus first since that is common case
-    if (availCpus < taskCpus) {
-      return false
-    }
+    if (availCpus < taskCpus) return false
+    if (taskSetProf.taskResources.isEmpty) return true
 
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
-    // SPARK internal scheduler will only base it off the counts, if
-    // user is trying to use something else they will have to write their own plugin
-    if (taskSetProf.taskResources.isEmpty) {
-      return true
-    }
-
-    val tsResources = taskSetProf.taskResources
+    // remove task cpus since we checked already
     logInfo("task resources are: " + tsResources)
     for (rName <- tsResources.keys) {
       val resourceReqs = tsResources.get(rName).get
@@ -441,28 +435,39 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    taskResourceAssignments ++= localTaskReqAssign
+
+    // taskResourceAssignments ++= localTaskReqAssign
     true
   }
 
-  // TODO - how expensive is this?
+  // TODO - add unit test
+  // Use the resource that the resourceProfile has as the limiting resource to calculate the
+  // total number of slots available based on the current offers.
   private def calculateAvailableSlots(
       resourceProfileIds: Array[Int],
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Buffer[String]]],
       rpId: Int): Int = {
     val resourceProfile = sc.resourceProfileManager.resourceProfileFromId(rpId)
-    val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter(_ == resourceProfile.id)
+    val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter { case (id, _) =>
+      (id == resourceProfile.id)
+    }
     val limitingResource = resourceProfile.limitingResource(sc.getConf)
-    val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).getOrElse(
-      throw new SparkException("limitingResource returns from ResourceProfile" +
-        s" $resourceProfile.id doesn't actually contain that task resource!")
-    )
+
     offersForResourceProfile.map { case (o, index) =>
       if (limitingResource == ResourceProfile.CPUS) {
+        val taskLimit = sc.resourceProfileManager.taskCpusForProfileId(rpId)
         availableCpus(index) / taskLimit.toInt
       } else {
-        availableResources(index).get(limitingResource).map(_.size).getOrElse(0)
+        val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).getOrElse(
+          throw new SparkException("limitingResource returns from ResourceProfile" +
+            s" $resourceProfile doesn't actually contain that task resource!")
+        )
+        // available addresses already takes into account if there are fractional
+        // task resource requests
+        val availableAddrs = availableResources(index).get(limitingResource)
+          .map(_.size).getOrElse(0)
+        (availableAddrs / taskLimit).toInt
       }
     }.sum
   }
@@ -507,7 +512,8 @@ private[spark] class TaskSchedulerImpl(
 
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
-    // TODO - need to update per ResourceProfile - just estimate on size so maybe doesn't matter?
+    // Note the size estimate here might be off with different ResourceProfiles but should be
+    // close estimate
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
     val availableResources = shuffledOffers.map(_.resources).toArray
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
@@ -528,9 +534,13 @@ private[spark] class TaskSchedulerImpl(
       // we only need to calculate available slots if using barrier scheduling, otherwise the
       // value is -1
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
-        calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
+        val slots = calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
           taskSet.taskSet.resourceProfileId)
+        logInfo(s"number of slots for barrier is $slots")
+        slots
       } else {
+        logInfo(s"number of slots for barrier is -1")
+
         -1
       }
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
