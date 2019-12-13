@@ -2147,7 +2147,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     MultilayerPerceptronClassificationModel...
     >>> model.getMaxIter()
     100
-    >>> model.modelLayers
+    >>> model.layers
     [2, 2, 2]
     >>> model.weights.size
     12
@@ -2172,7 +2172,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model_path = temp_path + "/mlp_model"
     >>> model.save(model_path)
     >>> model2 = MultilayerPerceptronClassificationModel.load(model_path)
-    >>> model.modelLayers == model2.modelLayers
+    >>> model.layers == model2.layers
     True
     >>> model.weights == model2.weights
     True
@@ -2180,7 +2180,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model3 = mlp2.fit(df)
     >>> model3.weights != model2.weights
     True
-    >>> model3.modelLayers == model.modelLayers
+    >>> model3.layers == model.layers
     True
 
     .. versionadded:: 1.6.0
@@ -2287,7 +2287,7 @@ class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationMod
 
     @property
     @since("1.6.0")
-    def modelLayers(self):
+    def layers(self):
         """
         array of layer sizes including input and output layers.
         """
