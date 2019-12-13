@@ -63,7 +63,10 @@ private[kafka010] class KafkaDataWriter(
 
   def abort(): Unit = {}
 
-  def close(): Unit = {
+  def close(): Unit = {}
+
+  /** explicitly invalidate producer from pool. only for testing. */
+  private[kafka010] def invalidateProducer(): Unit = {
     checkForErrors()
     if (producer != null) {
       producer.flush()
