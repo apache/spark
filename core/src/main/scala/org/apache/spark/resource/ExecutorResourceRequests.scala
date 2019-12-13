@@ -17,28 +17,53 @@
 
 package org.apache.spark.resource
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.resource.ResourceProfile._
 
-/**
- * A set of Executor resource requests. This is used in conjunction with the ResourceProfile to
- * programmatically specify the resources needed for an RDD that will be applied at the
- * stage level.
- *
- * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
- */
-private[spark] class ExecutorResourceRequests() extends Serializable {
 
-  private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
+private[spark] class ExecutorResourceRequestsBuilder() {
   private val _customResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
+  @volatile private var _cores: Int = -1
+  @volatile private var _memory: Long = -1
+  @volatile private var _memoryOverhead: Long = -1
+  @volatile private var _pysparkMemory: Long = -1
 
-  def requests: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
+  /**
+   * Returns the number of cores specified by the user or -1 if not set
+   */
+  def cores: Int = _cores
+
+  /**
+   * Returns the heap memory specified by the user in MiB or -1 if not set
+   */
+  def memory: Long = _memory
+
+  /**
+   * Returns the amount of overhead memory specified by the user in MiB or -1 if not set
+   */
+  def overheadMemory: Long = _memoryOverhead
+
+  /**
+   * Returns the amount of pyspark memory specified by the user in MiB or -1 if not set
+   */
+  def pysparkMemory: Long = _pysparkMemory
+
+  /**
+   * Returns a Map of the custom resources (GPU, FPGA, etc) set by the user
+   */
+  def resources: Map[String, ExecutorResourceRequest] = _customResources.asScala.toMap
+
+  /**
+   * (Java-specific) gets a Java Map of custom resources (GPU, FPGA, etc)
+   */
+  def resourcesJMap: JMap[String, ExecutorResourceRequest] = {
+    _customResources.asScala.toMap.asJava
+  }
 
   /**
    * Specify heap memory. The value specified will be converted to MiB.
@@ -48,8 +73,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def memory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(MEMORY, amountMiB)
-    _executorResources(MEMORY) = rr
+    _memory = amountMiB
     this
   }
 
@@ -61,8 +85,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def memoryOverhead(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(OVERHEAD_MEM, amountMiB)
-    _executorResources(OVERHEAD_MEM) = rr
+    _memoryOverhead = amountMiB
     this
   }
 
@@ -74,8 +97,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def pysparkMemory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(PYSPARK_MEM, amountMiB)
-    _executorResources(PYSPARK_MEM) = rr
+    _pysparkMemory = amountMiB
     this
   }
 
@@ -85,8 +107,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    * @param amount Number of cores to allocate per Executor.
    */
   def cores(amount: Int): this.type = {
-    val t = new ExecutorResourceRequest(CORES, amount)
-    _executorResources(CORES) = t
+    _cores = amount
     this
   }
 
@@ -116,6 +137,28 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
   }
 
   override def toString: String = {
-    s"Executor resource requests: ${_executorResources}"
+    s"Executor cores: ${_cores}, memory: ${_memory}, overhead memory: " +
+      s"${_memoryOverhead}, pyspark memory: ${_pysparkMemory}, " +
+      s"custom resource requests: ${_customResources}"
+  }
+
+  def build(): ExecutorResourceRequests = {
+    new ExecutorResourceRequests(_cores, _memory, _memoryOverhead,
+      _pysparkMemory, _customResources.asScala.toMap)
   }
 }
+
+/**
+ * A set of Executor resource requests. This is used in conjunction with the ResourceProfile to
+ * programmatically specify the resources needed for an RDD that will be applied at the
+ * stage level.
+ *
+ * This api is currently private until the rest of the pieces are in place and then it
+ * will become public.
+ */
+private[spark] class ExecutorResourceRequests(
+    val cores: Int,
+    val memory: Long,
+    val overheadMemory: Long,
+    val pysparkMemory: Long,
+    val resources: Map[String, ExecutorResourceRequest]) extends Serializable

@@ -402,10 +402,10 @@ private[spark] class TaskSchedulerImpl(
     // TODO - do we only need to check limiting Resource?
     // if we only check limiting one we can't assign them at the same time
 
-    val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
+    val tsResources = taskSetProf.taskResources.resources
     // check is ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) return false
-    if (taskSetProf.taskResources.isEmpty) return true
+    if (tsResources.isEmpty) return true
 
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
     // remove task cpus since we checked already
@@ -459,9 +459,9 @@ private[spark] class TaskSchedulerImpl(
         val taskLimit = sc.resourceProfileManager.taskCpusForProfileId(rpId)
         availableCpus(index) / taskLimit.toInt
       } else {
-        val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).getOrElse(
-          throw new SparkException("limitingResource returns from ResourceProfile" +
-            s" $resourceProfile doesn't actually contain that task resource!")
+        val taskLimit = resourceProfile.taskResources.resources.get(limitingResource)
+          .map(_.amount).getOrElse(throw new SparkException("limitingResource returns " +
+          s"from ResourceProfile $resourceProfile doesn't actually contain that task resource!")
         )
         // available addresses already takes into account if there are fractional
         // task resource requests

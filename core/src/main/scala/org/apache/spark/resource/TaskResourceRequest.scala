@@ -38,7 +38,7 @@ private[spark] class TaskResourceRequest(_resourceName: String, val amount: Doub
     s"The resource amount ${amount} must be either <= 0.5, or a whole number.")
 
   if (!_resourceName.equals(ResourceProfile.CPUS) && !_resourceName.startsWith(RESOURCE_DOT)) {
-    throw new IllegalArgumentException(s"Task resource not allowed: $_resourceName")
+    throw new IllegalArgumentException(s"Task resource not allowed: ${_resourceName}")
   }
 
   val resourceName = _resourceName.stripPrefix(s"${ResourceUtils.RESOURCE_PREFIX}.")
