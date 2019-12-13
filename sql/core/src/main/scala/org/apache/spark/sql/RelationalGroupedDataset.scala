@@ -278,7 +278,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
-    aggregateNumericOrIntervalColumns(colNames : _*)(Average)
+    aggregateNumericOrIntervalColumns(colNames : _*)(Average.apply)
   }
 
   /**
@@ -302,7 +302,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    aggregateNumericOrIntervalColumns(colNames : _*)(Average)
+    aggregateNumericOrIntervalColumns(colNames : _*)(Average.apply)
   }
 
   /**

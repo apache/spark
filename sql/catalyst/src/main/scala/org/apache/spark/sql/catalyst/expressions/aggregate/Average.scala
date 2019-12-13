@@ -98,3 +98,7 @@ case class Average(
 
   override def flatArguments: Iterator[Any] = Iterator(child)
 }
+
+object Average{
+  def apply(child: Expression): Average = Average("avg", child)
+}
