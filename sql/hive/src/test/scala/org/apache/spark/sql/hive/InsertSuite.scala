@@ -827,12 +827,13 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
   test("SPARK-30201 HiveOutputWriter standardOI should use ObjectInspectorCopyOption.DEFAULT") {
     withTable("t1", "t2") {
-      withTempPath { file =>
+      withTempDir { dir =>
+        val file = new File(dir, "test.hex")
         val hex = "AABBCC"
         val bs = org.apache.commons.codec.binary.Hex.decodeHex(hex.toCharArray)
         Files.write(bs, file)
         val path = file.getParent
-        sql(s"create table t1 (c string) location $path")
+        sql(s"create table t1 (c string) location '$path'")
         checkAnswer(
           sql("select hex(c) from t1"),
           Row(hex)
