@@ -657,7 +657,10 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
  * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the given time.",
+  usage = """
+    _FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the given time.
+    See `java.time.format.DateTimeFormatter` for valid date and time format patterns.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
@@ -695,7 +698,10 @@ case class ToUnixTimestamp(
  * second parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_([expr[, pattern]]) - Returns the UNIX timestamp of current or specified time.",
+  usage = """
+    _FUNC_([expr[, pattern]]) - Returns the UNIX timestamp of current or specified time.
+    See `java.time.format.DateTimeFormatter` for valid date and time format patterns.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -868,7 +874,10 @@ abstract class UnixTime extends ToTimestamp {
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.",
+  usage = """
+     _FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.
+     See `java.time.format.DateTimeFormatter` for valid date and time format patterns.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
@@ -1409,7 +1418,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
   usage = """
     _FUNC_(date_str[, fmt]) - Parses the `date_str` expression with the `fmt` expression to
       a date. Returns null with invalid input. By default, it follows casting rules to a date if
-      the `fmt` is omitted.
+      the `fmt` is omitted. See `java.time.format.DateTimeFormatter` for valid date and time format patterns.
   """,
   examples = """
     Examples:
@@ -1451,7 +1460,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   usage = """
     _FUNC_(timestamp[, fmt]) - Parses the `timestamp` expression with the `fmt` expression to
       a timestamp. Returns null with invalid input. By default, it follows casting rules to
-      a timestamp if the `fmt` is omitted.
+      a timestamp if the `fmt` is omitted. See `java.time.format.DateTimeFormatter` for valid date and time format patterns.
   """,
   examples = """
     Examples:
