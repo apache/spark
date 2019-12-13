@@ -681,7 +681,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } finally {
       endProcessing(reader.rootPath)
       pendingReplayTasksCount.decrementAndGet()
-      checkAndCleanLog(reader.rootPath.toString)
+      if (conf.get(CLEANER_ENABLED)) {
+        checkAndCleanLog(reader.rootPath.toString)
+      }
     }
   }
 
@@ -823,36 +825,23 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Check and delete specified event log according to the max log age defined by the user.
    */
-  private def checkAndCleanLog(logPath: String): Unit = Utils.tryLog {
+  private[history] def checkAndCleanLog(logPath: String): Unit = Utils.tryLog {
     val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
-    val expiredLog = Try {
-      val log = listing.read(classOf[LogInfo], logPath)
-      if (log.lastProcessed < maxTime) Some(log) else None
-    } match {
-      case Success(log) => log
-      case Failure(_: NoSuchElementException) => None
-      case Failure(e) => throw e
+    val log = listing.read(classOf[LogInfo], logPath)
+
+    if (log.lastProcessed < maxTime && log.appId.isEmpty) {
+      logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
+      deleteLog(fs, new Path(log.logPath))
+      listing.delete(classOf[LogInfo], log.logPath)
     }
 
-    expiredLog.foreach { log =>
-      log.appId.foreach { appId =>
-        listing.view(classOf[ApplicationInfoWrapper])
-          .index("oldestAttempt")
-          .reverse()
-          .first(maxTime)
-          .asScala
-          .filter(_.info.id == appId)
-          .foreach { app =>
-            val (remaining, toDelete) = app.attempts.partition { attempt =>
-              attempt.info.lastUpdated.getTime() >= maxTime
-            }
-            deleteAttemptLogs(app, remaining, toDelete)
-          }
-      }
-      if (log.appId.isEmpty) {
-        logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
-        deleteLog(fs, new Path(log.logPath))
-        listing.delete(classOf[LogInfo], log.logPath)
+    log.appId.foreach { appId =>
+      val appInfo = listing.read(classOf[ApplicationInfoWrapper], appId)
+      if (appInfo.oldestAttempt() < maxTime) {
+        val (remaining, toDelete) = appInfo.attempts.partition { attempt =>
+          attempt.info.lastUpdated.getTime() >= maxTime
+        }
+        deleteAttemptLogs(appInfo, remaining, toDelete)
       }
     }
   }
