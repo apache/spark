@@ -706,11 +706,11 @@ case class ToUnixTimestamp(
  * second parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_([expr[, pattern]]) - Returns the UNIX timestamp of current or specified time.",
+  usage = "_FUNC_([timeExp[, format]]) - Returns the UNIX timestamp of current or specified time.",
   arguments = """
     Arguments:
-      * expr - A date/timestamp or String. Default value is current time
-      * pattern - Date/time format pattern to follow. Ignored if `expr` is not a String.
+      * timeExp - A date/timestamp or String. Default value is current time
+      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a String.
                  Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
                  for valid date and time format patterns.
   """,
