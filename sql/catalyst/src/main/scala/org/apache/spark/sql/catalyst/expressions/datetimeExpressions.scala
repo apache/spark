@@ -1446,7 +1446,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
   """,
   arguments = """
     Arguments:
-      * dateStr - String to be parsed to date
+      * date_str - String to be parsed to date
       * fmt - Date format pattern to follow
   """,
   examples = """
