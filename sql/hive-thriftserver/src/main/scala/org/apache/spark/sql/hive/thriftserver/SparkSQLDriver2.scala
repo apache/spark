@@ -1,10 +1,11 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.{BufferedReader, InputStreamReader}
-import java.util.Arrays
+import java.util.{Arrays, Locale}
 
 import org.apache.commons.lang.StringUtils
 
+import sys.process._
 import scala.collection.JavaConverters._
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
@@ -19,6 +20,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
+
+import scala.util.{Failure, Success, Try}
 
 
 
@@ -44,7 +47,21 @@ private[hive] class SparkSQLDriver2(val context: SQLContext = SparkSQLEnv.sqlCon
   }
 
   def processCmd(cmd: String): Int = {
-    1
+    val cmd_cleaned = cmd.trim.toLowerCase(Locale.ROOT)
+
+    cmd_cleaned
+      .split("\\s+")
+      .toList match {
+      case ("quit" | "exit") :: tail =>
+        System.exit(0)
+        0
+      case "source" :: filepath :: tail =>
+        processFile(filepath)
+      case s :: tail if s startsWith "!" =>
+        processShellCmd(cmd_cleaned.tail)
+      case _ =>
+        processSQLCmd(cmd_cleaned)
+    }
   }
 
   def run(command: String): CommandProcessorResponse = {
@@ -93,16 +110,37 @@ private[hive] class SparkSQLDriver2(val context: SQLContext = SparkSQLEnv.sqlCon
       }
     }
 
-    try {
-      val result = readLines(br, List[String]())
-      processLines(result)
-    } finally {
-      IOUtils.closeStream(br)
-      1
+
+    val resultLines = Try(readLines(br, List[String]()))
+    IOUtils.closeStream(br)
+    resultLines match {
+      case Success(result) => processLines(result)
+      case Failure(exception) =>
+        logError(exception.getMessage)
+        1
+      case _ => 1
     }
   }
 
+  def processSQLCmd(cmd: String): Int = {
+    run(cmd)
+    0
+  }
 
+  def processShellCmd(cmd: String): Int = {
+    lazy val result = cmd.!!
+    Try(result) match {
+      case Success(value) =>
+        println(value)
+        0
+      case Failure(exception) =>
+        println(exception.getMessage)
+        1
+      case _ => 1
+    }
+  }
+
+  def processLine(cmd: String): Int = processLines(List[String](cmd))
 
   def processLines(cmd: List[String]): Int = {
     val trimmed: String = cmd
@@ -111,6 +149,7 @@ private[hive] class SparkSQLDriver2(val context: SQLContext = SparkSQLEnv.sqlCon
       .map(_.replace("\\\\"," "))
       .mkString
       .trim
+
 
     val replacementTag = "''"
     val regexPattern = """(["'])(.*?[^\\])\1""".r
@@ -123,6 +162,7 @@ private[hive] class SparkSQLDriver2(val context: SQLContext = SparkSQLEnv.sqlCon
       .replaceAllIn(trimmed, replacementTag)
       .split(";").toList
 
+
     @scala.annotation.tailrec
     def pushBack(lines: List[String],
                  replacements: List[String],
@@ -133,18 +173,19 @@ private[hive] class SparkSQLDriver2(val context: SQLContext = SparkSQLEnv.sqlCon
       } else {
         if (lines.head.contains(replacementTag) && replacements.nonEmpty) {
           val rep = lines.head.replace(replacementTag, replacements.head)
-          pushBack(lines.tail, replacements.tail, rep +: accum)
+          pushBack(lines.tail, replacements.tail, accum :+ rep)
         } else {
-          pushBack(lines.tail, replacements, accum)
+          pushBack(lines.tail, replacements, accum :+ lines.head)
         }
       }
     }
 
     val cmds = pushBack(allin, replace, List[String]())
-
     @scala.annotation.tailrec
     def runCommands(cmd: List[String], prevResult: Int): Int = {
-      if (prevResult == 1) {
+      if (cmd.isEmpty){
+        prevResult
+      } else if (prevResult == 1) {
         prevResult
       } else {
         runCommands(cmd.tail, processCmd(cmd.head))
@@ -152,7 +193,6 @@ private[hive] class SparkSQLDriver2(val context: SQLContext = SparkSQLEnv.sqlCon
     }
     runCommands(cmds, 0)
   }
-
 }
 
 private[hive] object SparkSQLDriver2 {

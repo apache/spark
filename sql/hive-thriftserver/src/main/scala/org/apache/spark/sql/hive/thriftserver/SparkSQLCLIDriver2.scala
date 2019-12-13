@@ -54,7 +54,7 @@ private[hive] object SparkSQLCLIDriver2 extends Logging with App {
         SparkSQLEnv.sqlContext.setConf(k, v)
     }
 
-    val cli = new SparkSQLCLIDriver2
+    val cli = SparkSQLDriver2(SparkSQLEnv.sqlContext, hadoopConf)
 
     cli.processCmd("source t.q")
 
@@ -71,36 +71,4 @@ private[hive] class SparkSQLCLIDriver2 extends Logging {
         console.printInfo(s"Spark master: $master, Application Id: $appId")
     }
 
-    def processFile(file: String): Int = {
-        SparkSQLDriver2(SparkSQLEnv.sqlContext).processFile(file)
-        1
-        //
-    }
-
-    def processShellCmd(cmd: String): Int = {
-        1
-        //
-    }
-
-    def processLine(cmd: String): Int = {
-        1
-        //
-    }
-
-    def processCmd(cmd: String): Int = {
-        val cmd_cleaned = cmd.trim.toLowerCase(Locale.ROOT)
-        val tokens = cmd_cleaned.split("\\s+").toList
-
-        tokens match {
-            case ("quit" | "exit") :: tail =>
-                System.exit(0)
-                0
-            case "source" :: filepath :: tail =>
-                processFile(filepath)
-            case s :: tail if s startsWith "!" =>
-                processShellCmd(cmd_cleaned.tail)
-            case _ =>
-                processLine(cmd_cleaned)
-        }
-    }
 }
