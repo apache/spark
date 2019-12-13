@@ -20,9 +20,12 @@ package org.apache.spark.sql.types
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal._
 
-class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
+class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper {
   /** Check that a Decimal has the given string representation, precision and scale */
   private def checkDecimal(d: Decimal, string: String, precision: Int, scale: Int): Unit = {
     assert(d.toString === string)
@@ -70,6 +73,20 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkDecimal(Decimal(BigDecimal(1.579e12), 4, -10), "1.58E+12", 4, -10)
     checkDecimal(Decimal(103050709L, 9, -10), "1.03050709E+18", 9, -10)
     checkDecimal(Decimal(1e8.toLong, 10, -10), "1.00000000E+18", 10, -10)
+  }
+
+  test("Negative scale is not allowed under ansi mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      def checkNegativeScaleDecimal(d: => Decimal): Unit = {
+        intercept[AnalysisException](d)
+          .getMessage
+          .contains("Negative scale is not allowed under ansi mode")
+      }
+      checkNegativeScaleDecimal(Decimal(BigDecimal("98765"), 5, -3))
+      checkNegativeScaleDecimal(Decimal(BigDecimal("98765").underlying(), 5, -3))
+      checkNegativeScaleDecimal(Decimal(98765L, 5, -3))
+      checkNegativeScaleDecimal(Decimal.createUnsafe(98765L, 5, -3))
+    }
   }
 
   test("double and long values") {

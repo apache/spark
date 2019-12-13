@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import java.math.{BigDecimal => JavaBigDecimal}
 import java.util.Locale
 
 import scala.reflect.runtime.universe.typeTag
@@ -24,6 +25,7 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The data type representing `java.math.BigDecimal` values.
@@ -40,6 +42,8 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
  */
 @Stable
 case class DecimalType(precision: Int, scale: Int) extends FractionalType {
+
+  DecimalType.checkNegativeScaleIfAnsiEnabled(scale)
 
   if (scale > precision) {
     throw new AnalysisException(
@@ -148,11 +152,26 @@ object DecimalType extends AbstractDataType {
   }
 
   private[sql] def fromBigDecimal(d: BigDecimal): DecimalType = {
-    DecimalType(Math.max(d.precision, d.scale), d.scale)
+    fromJavaBigDecimal(d.underlying())
+  }
+
+  private[sql] def fromJavaBigDecimal(d: JavaBigDecimal): DecimalType = {
+    val (precision, scale) = if (d.scale < 0 && SQLConf.get.ansiEnabled) {
+      (d.precision - d.scale, 0)
+    } else {
+      (d.precision, d.scale)
+    }
+    DecimalType(Math.max(precision, scale), scale)
   }
 
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
+  }
+
+  private[sql] def checkNegativeScaleIfAnsiEnabled(scale: Int): Unit = {
+    if (scale < 0 && SQLConf.get.ansiEnabled) {
+      throw new AnalysisException(s"Negative scale is not allowed under ansi mode: $scale")
+    }
   }
 
   /**
@@ -164,7 +183,8 @@ object DecimalType extends AbstractDataType {
    * This method is used only when `spark.sql.decimalOperations.allowPrecisionLoss` is set to true.
    */
   private[sql] def adjustPrecisionScale(precision: Int, scale: Int): DecimalType = {
-    // Assumption:
+    // Assumptions:
+    checkNegativeScaleIfAnsiEnabled(scale)
     assert(precision >= scale)
 
     if (precision <= MAX_PRECISION) {

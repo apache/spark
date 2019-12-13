@@ -23,6 +23,7 @@ import java.math.{BigInteger, MathContext, RoundingMode}
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A mutable implementation of BigDecimal that can hold a Long if values are small enough.
@@ -87,6 +88,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * and return it, or return null if it cannot be set due to overflow.
    */
   def setOrNull(unscaled: Long, precision: Int, scale: Int): Decimal = {
+    DecimalType.checkNegativeScaleIfAnsiEnabled(scale)
     if (unscaled <= -POW_10(MAX_LONG_DIGITS) || unscaled >= POW_10(MAX_LONG_DIGITS)) {
       // We can't represent this compactly as a long without risking overflow
       if (precision < 19) {
@@ -111,6 +113,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Set this Decimal to the given BigDecimal value, with a given precision and scale.
    */
   def set(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
+    DecimalType.checkNegativeScaleIfAnsiEnabled(scale)
     this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
     if (decimalVal.precision > precision) {
       throw new ArithmeticException(
@@ -134,10 +137,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       // result. For example, the precision of 0.01 equals to 1 based on the definition, but
       // the scale is 2. The expected precision should be 3.
       this._precision = decimal.scale + 1
+      this._scale = decimal.scale
+    } else if (decimal.scale < 0 && SQLConf.get.ansiEnabled) {
+      this._precision = decimal.precision - decimal.scale
+      this._scale = 0
     } else {
       this._precision = decimal.precision
+      this._scale = decimal.scale
     }
-    this._scale = decimal.scale
     this
   }
 
@@ -373,6 +380,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (precision == this.precision && scale == this.scale) {
       return true
     }
+    DecimalType.checkNegativeScaleIfAnsiEnabled(scale)
     // First, update our longVal if we can, or transfer over to using a BigDecimal
     if (decimalVal.eq(null)) {
       if (scale < _scale) {
@@ -581,6 +589,7 @@ object Decimal {
    * Creates a decimal from unscaled, precision and scale without checking the bounds.
    */
   def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal = {
+    DecimalType.checkNegativeScaleIfAnsiEnabled(scale)
     val dec = new Decimal()
     dec.longVal = unscaled
     dec._precision = precision
