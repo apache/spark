@@ -573,7 +573,7 @@ class DataSourceV2SQLSuite
     val ident = Identifier.of(Array(), "tbl")
     sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
     assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
-    sql(s"DROP TABLE spark_catalog.tbl")
+    sql("DROP TABLE spark_catalog.tbl")
     assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === false)
   }
 
