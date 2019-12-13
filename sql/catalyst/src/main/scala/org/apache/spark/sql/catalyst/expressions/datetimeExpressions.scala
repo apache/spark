@@ -599,6 +599,11 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
     _FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.
     See `java.time.format.DateTimeFormatter` for valid date and time format patterns.
   """,
+  arguments = """
+    Arguments:
+      * timestamp - Date/timestamp or String to be converted to the given format. Default value is current time
+      * fmt - Date/time format pattern to follow
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'y');
@@ -661,6 +666,13 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     _FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the given time.
     See `java.time.format.DateTimeFormatter` for valid date and time format patterns.
   """,
+  arguments = """
+    Arguments:
+      * expr - A date/timestamp or String which is returned as a UNIX timestamp.
+               Default value is current time
+      * pattern - Date/time format pattern to follow. Ignored if `expr` is not a String.
+                 Default value is "uuuu-MM-dd HH:mm:ss"
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
@@ -701,6 +713,12 @@ case class ToUnixTimestamp(
   usage = """
     _FUNC_([expr[, pattern]]) - Returns the UNIX timestamp of current or specified time.
     See `java.time.format.DateTimeFormatter` for valid date and time format patterns.
+  """,
+  arguments = """
+    Arguments:
+      * expr - A date/timestamp or String. Default value is current time
+      * pattern - Date/time format pattern to follow. Ignored if `expr` is not a String.
+                 Default value is "uuuu-MM-dd HH:mm:ss"
   """,
   examples = """
     Examples:
@@ -877,6 +895,11 @@ abstract class UnixTime extends ToTimestamp {
   usage = """
      _FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.
      See `java.time.format.DateTimeFormatter` for valid date and time format patterns.
+  """,
+  arguments = """
+    Arguments:
+      * unix_time - UNIX Timestamp to be converted to the provided format
+      * format - Date/time format pattern to follow.
   """,
   examples = """
     Examples:
@@ -1421,6 +1444,11 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
     the `fmt` is omitted. See `java.time.format.DateTimeFormatter` for valid date and time
     format patterns.
   """,
+  arguments = """
+    Arguments:
+      * dateStr - String to be parsed to date
+      * fmt - Date format pattern to follow
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 04:17:52');
@@ -1459,10 +1487,15 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(timestamp[, fmt]) - Parses the `timestamp` expression with the `fmt` expression to
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp` expression with the `fmt` expression to
     a timestamp. Returns null with invalid input. By default, it follows casting rules to
     a timestamp if the `fmt` is omitted. See `java.time.format.DateTimeFormatter` for valid
     date and time format patterns.
+  """,
+  arguments = """
+    Arguments:
+      * timestamp_str - String to be parsed to timestamp
+      * fmt - Time format pattern to follow
   """,
   examples = """
     Examples:
