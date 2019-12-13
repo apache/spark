@@ -77,21 +77,42 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
     withTempDir { dir =>
       val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
 
-      val logPaths = (1 to 5).map { idx => writeDummyEventLogFile(dir, idx) }
+      val logPaths = (1 to 2).map { idx => writeDummyEventLogFile(dir, idx) }
 
-      val fileToCompact = logPaths(2)
+      val fileToCompact = logPaths.head
       val compactedPath = new Path(fileToCompact + EventLogFileWriter.COMPACTED)
       assert(fs.rename(new Path(fileToCompact), compactedPath))
 
-      val newLogPaths = logPaths.take(2) ++ Seq(compactedPath.toString) ++
-        logPaths.takeRight(2)
+      val newLogPaths = Seq(compactedPath.toString) ++ logPaths.tail
 
       val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs)
       val fileStatuses = newLogPaths.map { p => fs.getFileStatus(new Path(p))  }
       val filesToRead = compactor.compact(fileStatuses)
 
-      // filesToRead will start from rightmost compact file, but no new compact file
-      assert(filesToRead.map(_.getPath) === fileStatuses.takeRight(3).map(_.getPath))
+      // there's no compaction
+      assert(filesToRead.map(_.getPath) === fileStatuses.map(_.getPath))
+    }
+  }
+
+  test("compact file exists, number of origin files are same as max files to retain") {
+    withTempDir { dir =>
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val logPaths = (1 to 4).map { idx => writeDummyEventLogFile(dir, idx) }
+
+      val fileToCompact = logPaths.head
+      val compactedPath = new Path(fileToCompact + EventLogFileWriter.COMPACTED)
+      assert(fs.rename(new Path(fileToCompact), compactedPath))
+
+      // compact file in first idx, and same number of normal files as max files to retain
+      val newLogPaths = Seq(compactedPath.toString) ++ logPaths.tail
+
+      val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs)
+      val fileStatuses = newLogPaths.map { p => fs.getFileStatus(new Path(p))  }
+      val filesToRead = compactor.compact(fileStatuses)
+
+      // no compaction will be performed
+      assert(filesToRead.map(_.getPath) === fileStatuses.map(_.getPath))
     }
   }
 
@@ -101,19 +122,18 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
 
       val logPaths = (1 to 10).map { idx => writeDummyEventLogFile(dir, idx) }
 
-      val fileToCompact = logPaths(2)
+      val fileToCompact = logPaths.head
       val compactedPath = new Path(fileToCompact + EventLogFileWriter.COMPACTED)
       assert(fs.rename(new Path(fileToCompact), compactedPath))
 
-      val newLogPaths = logPaths.take(2) ++ Seq(compactedPath.toString) ++
-        logPaths.takeRight(7)
+      val newLogPaths = Seq(compactedPath.toString) ++ logPaths.tail
 
       val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs)
       val fileStatuses = newLogPaths.map { p => fs.getFileStatus(new Path(p))  }
       assertCompaction(fs, fileStatuses, compactor.compact(fileStatuses))
 
-      // compacted files will be removed - we don't check files "before" the rightmost compact file
-      fileStatuses.drop(2).dropRight(3).foreach { status => assert(!fs.exists(status.getPath)) }
+      // compacted files will be removed
+      fileStatuses.dropRight(3).foreach { status => assert(!fs.exists(status.getPath)) }
     }
   }
 

@@ -51,15 +51,17 @@ class EventLogFilterRateCalculator(fs: FileSystem) {
       var filteredInEvents = 0L
 
       eventLogPaths.foreach { path =>
-        EventFilter.applyFilterToFile(fs, filters, path) { case (_, _) =>
-          allEvents += 1
-          filteredInEvents += 1
-        } { case (_, _) =>
-          allEvents += 1
-        } { _ =>
-          allEvents += 1
-          filteredInEvents += 1
-        }
+        EventFilter.applyFilterToFile(fs, filters, path,
+          onAccepted = (_, _) => {
+            allEvents += 1
+            filteredInEvents += 1
+          },
+          onRejected = (_, _) => allEvents += 1,
+          onUnidentified = _ => {
+            allEvents += 1
+            filteredInEvents += 1
+          }
+        )
       }
 
       filteredInEvents.toDouble / allEvents

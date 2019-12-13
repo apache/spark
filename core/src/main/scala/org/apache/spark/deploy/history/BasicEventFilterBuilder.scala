@@ -82,15 +82,8 @@ private[spark] abstract class JobEventFilter(
     stageToTasks: Map[Int, Set[Long]],
     stageToRDDs: Map[Int, Seq[Int]]) extends EventFilter with Logging {
 
-  private val liveTasks: Set[Long] = stageToTasks.values match {
-    case xs if xs.isEmpty => Set.empty[Long]
-    case xs => xs.reduce(_ ++ _).toSet
-  }
-
-  private val liveRDDs: Set[Int] = stageToRDDs.values match {
-    case xs if xs.isEmpty => Set.empty[Int]
-    case xs => xs.reduce(_ ++ _).toSet
-  }
+  private val liveTasks: Set[Long] = stageToTasks.values.flatten.toSet
+  private val liveRDDs: Set[Int] = stageToRDDs.values.flatten.toSet
 
   logDebug(s"jobs : ${jobToStages.keySet}")
   logDebug(s"stages in jobs : ${jobToStages.values.flatten}")

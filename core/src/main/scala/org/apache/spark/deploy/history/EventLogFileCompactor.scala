@@ -38,14 +38,13 @@ import org.apache.spark.scheduler._
  * to accept.
  *
  * This class assumes caller will provide the sorted list of files which are sorted by the index of
- * event log file - caller should keep in mind that this class doesn't care about the semantic of
- * ordering.
+ * event log file, with "at most" one compact file placed first if it exists. Caller should keep in
+ * mind that this class doesn't care about the semantic of ordering.
  *
  * When compacting the files, the range of compaction for given file list is determined as:
- * (rightmost compact file ~ the file where there're `maxFilesToRetain` files on the right side)
+ * (first ~ the file where there're `maxFilesToRetain` files on the right side)
  *
- * If there's no compact file in the list, it starts from the first file. If there're not enough
- * files after rightmost compact file, compaction will be skipped.
+ * If there're not enough files on the range of compaction, compaction will be skipped.
  */
 class EventLogFileCompactor(
     sparkConf: SparkConf,
@@ -55,6 +54,8 @@ class EventLogFileCompactor(
   private val maxFilesToRetain: Int = sparkConf.get(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN)
 
   def compact(eventLogFiles: Seq[FileStatus]): Seq[FileStatus] = {
+    assertPrecondition(eventLogFiles)
+
     if (eventLogFiles.length <= maxFilesToRetain) {
       return eventLogFiles
     }
@@ -79,6 +80,14 @@ class EventLogFileCompactor(
     }
   }
 
+  private def assertPrecondition(eventLogFiles: Seq[FileStatus]): Unit = {
+    val idxCompactedFiles = eventLogFiles.zipWithIndex.filter { case (file, _) =>
+      EventLogFileWriter.isCompacted(file.getPath)
+    }
+    require(idxCompactedFiles.size < 2 && idxCompactedFiles.headOption.forall(_._2 == 0),
+      "The number of compact files should be at most 1, and should be placed first if exists.")
+  }
+
   private def cleanupCompactedFiles(files: Seq[FileStatus]): Unit = {
     files.foreach { file =>
       var deleted = false
@@ -95,11 +104,19 @@ class EventLogFileCompactor(
 
   private def findFilesToCompact(
       eventLogFiles: Seq[FileStatus]): (Seq[FileStatus], Seq[FileStatus]) = {
-    val files = RollingEventLogFilesFileReader.dropBeforeLastCompactFile(eventLogFiles)
-    if (files.length > maxFilesToRetain) {
-      (files.dropRight(maxFilesToRetain), files.takeRight(maxFilesToRetain))
+    val numNormalEventLogFiles = {
+      if (EventLogFileWriter.isCompacted(eventLogFiles.head.getPath)) {
+        eventLogFiles.length - 1
+      } else {
+        eventLogFiles.length
+      }
+    }
+
+    // This avoids compacting only compact file.
+    if (numNormalEventLogFiles > maxFilesToRetain) {
+      (eventLogFiles.dropRight(maxFilesToRetain), eventLogFiles.takeRight(maxFilesToRetain))
     } else {
-      (Seq.empty, files)
+      (Seq.empty, eventLogFiles)
     }
   }
 }
@@ -125,13 +142,11 @@ class FilteredEventLogFileRewriter(
 
     logWriter.start()
     eventLogFiles.foreach { file =>
-      EventFilter.applyFilterToFile(fs, filters, file.getPath) { case (line, _) =>
-        logWriter.writeEvent(line, flushLogger = true)
-      } { case (_, _) =>
-        // no-op
-      } { line =>
-        logWriter.writeEvent(line, flushLogger = true)
-      }
+      EventFilter.applyFilterToFile(fs, filters, file.getPath,
+        onAccepted = (line, _) => logWriter.writeEvent(line, flushLogger = true),
+        onRejected = (_, _) => {},
+        onUnidentified = line => logWriter.writeEvent(line, flushLogger = true)
+      )
     }
     logWriter.stop()
 

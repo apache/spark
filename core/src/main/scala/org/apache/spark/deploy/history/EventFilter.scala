@@ -74,54 +74,42 @@ private[spark] trait EventFilter {
 }
 
 object EventFilter extends Logging {
-  def acceptEvent(filters: Seq[EventFilter], event: SparkListenerEvent): Boolean = {
-    val results = filters.flatMap(_.acceptFn().lift.apply(event))
-    results.isEmpty || !results.contains(false)
-  }
 
   def applyFilterToFile(
       fs: FileSystem,
       filters: Seq[EventFilter],
-      path: Path)(
-      fnAccepted: (String, SparkListenerEvent) => Unit)(
-      fnRejected: (String, SparkListenerEvent) => Unit)(
-      fnUnidentified: String => Unit): Unit = {
+      path: Path,
+      onAccepted: (String, SparkListenerEvent) => Unit,
+      onRejected: (String, SparkListenerEvent) => Unit,
+      onUnidentified: String => Unit): Unit = {
     Utils.tryWithResource(EventLogFileReader.openEventLog(path, fs)) { in =>
       val lines = Source.fromInputStream(in)(Codec.UTF8).getLines()
 
-      var currentLine: String = null
-      var lineNumber: Int = 0
-
-      try {
-        val lineEntries = lines.zipWithIndex
-        while (lineEntries.hasNext) {
-          val entry = lineEntries.next()
-
-          currentLine = entry._1
-          lineNumber = entry._2 + 1
-
+      lines.zipWithIndex.foreach { case (line, lineNum) =>
+        try {
           val event = try {
-            Some(JsonProtocol.sparkEventFromJson(parse(currentLine)))
+            Some(JsonProtocol.sparkEventFromJson(parse(line)))
           } catch {
             // ignore any exception occurred from unidentified json
             case NonFatal(_) =>
-              fnUnidentified(currentLine)
+              onUnidentified(line)
               None
           }
 
           event.foreach { e =>
-            if (EventFilter.acceptEvent(filters, e)) {
-              fnAccepted(currentLine, e)
+            val results = filters.flatMap(_.acceptFn().lift.apply(e))
+            if (results.isEmpty || !results.contains(false)) {
+              onAccepted(line, e)
             } else {
-              fnRejected(currentLine, e)
+              onRejected(line, e)
             }
           }
+        } catch {
+          case e: Exception =>
+            logError(s"Exception parsing Spark event log: ${path.getName}", e)
+            logError(s"Malformed line #$lineNum: $line\n")
+            throw e
         }
-      } catch {
-        case e: Exception =>
-          logError(s"Exception parsing Spark event log: ${path.getName}", e)
-          logError(s"Malformed line #$lineNumber: $currentLine\n")
-          throw e
       }
     }
   }
