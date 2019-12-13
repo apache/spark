@@ -569,6 +569,14 @@ class DataSourceV2SQLSuite
     assert(catalog("testcat").asTableCatalog.tableExists(ident) === false)
   }
 
+  test("DropTable: table qualified with the session catalog name") {
+    val ident = Identifier.of(Array(), "tbl")
+    sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
+    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
+    sql("DROP TABLE spark_catalog.tbl")
+    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === false)
+  }
+
   test("DropTable: if exists") {
     intercept[NoSuchTableException] {
       sql(s"DROP TABLE testcat.db.notbl")
