@@ -158,4 +158,19 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
     assert(message.contains("Unsupported type: invalid type name"))
   }
+
+  test("sql method of each data type") {
+    assert(NullType.sql == "NULL")
+    assert(IntegerType.sql == "INT")
+    assert(ShortType.sql == "SMALLINT")
+    assert(LongType.sql == "BIGINT")
+    assert(DoubleType.sql == "DOUBLE")
+    assert(FloatType.sql == "FLOAT")
+    assert(StructType(StructField("operation_log", StringType) :: Nil).sql ==
+      "STRUCT<`operation_log`: STRING>")
+    assert(DecimalType(38, 5).sql == "DECIMAL(38,5)")
+    assert(ArrayType(StringType).sql == "ARRAY<STRING>")
+    assert(MapType(StringType, DecimalType(5, 5)).sql == "MAP<STRING, DECIMAL(5,5)>")
+    assert(CalendarIntervalType.sql == "INTERVAL")
+  }
 }
