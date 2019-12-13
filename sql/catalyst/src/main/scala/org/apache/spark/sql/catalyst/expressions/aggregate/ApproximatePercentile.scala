@@ -67,6 +67,7 @@ import org.apache.spark.sql.types._
   """,
   since = "2.1.0")
 case class ApproximatePercentile(
+    funcName: String,
     child: Expression,
     percentageExpression: Expression,
     accuracyExpression: Expression,
@@ -75,7 +76,7 @@ case class ApproximatePercentile(
   extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes {
 
   def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
-    this(child, percentageExpression, accuracyExpression, 0, 0)
+    this("percentile_approx", child, percentageExpression, accuracyExpression, 0, 0)
   }
 
   def this(child: Expression, percentageExpression: Expression) = {
@@ -185,7 +186,7 @@ case class ApproximatePercentile(
     if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
 
-  override def prettyName: String = "percentile_approx"
+  override def nodeName: String = funcName
 
   override def serialize(obj: PercentileDigest): Array[Byte] = {
     ApproximatePercentile.serializer.serialize(obj)
@@ -194,6 +195,10 @@ case class ApproximatePercentile(
   override def deserialize(bytes: Array[Byte]): PercentileDigest = {
     ApproximatePercentile.serializer.deserialize(bytes)
   }
+
+  override def flatArguments: Iterator[Any] =
+    Iterator(child, percentageExpression, accuracyExpression,
+      mutableAggBufferOffset, inputAggBufferOffset)
 }
 
 object ApproximatePercentile {
