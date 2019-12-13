@@ -1890,6 +1890,21 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-30094: current namespace is used during table resolution") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+
+    withTable("spark_catalog.t", "testcat.ns.t") {
+      sql("CREATE TABLE t USING parquet AS SELECT data FROM source")
+      sql("CREATE TABLE testcat.ns.t USING parquet AS SELECT id FROM source")
+
+      checkAnswer(sql("SELECT * FROM t"), sql("SELECT data FROM source"))
+
+      sql("USE testcat.ns")
+      checkAnswer(sql("SELECT * FROM t"), sql("SELECT id FROM source"))
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")

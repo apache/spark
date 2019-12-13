@@ -293,8 +293,8 @@ class ResolveSessionCatalog(
           orCreate = c.orCreate)
       }
 
-    case d @ DropTableStatement(SessionCatalogAndTable(catalog, tbl), ifExists, purge) =>
-      DropTableCommand(d.tableName.asTableIdentifier, ifExists, isView = false, purge = purge)
+    case DropTableStatement(SessionCatalogAndTable(catalog, tbl), ifExists, purge) =>
+      DropTableCommand(tbl.asTableIdentifier, ifExists, isView = false, purge = purge)
 
     case DropViewStatement(SessionCatalogAndTable(catalog, viewName), ifExists) =>
       DropTableCommand(viewName.asTableIdentifier, ifExists, isView = true, purge = false)
@@ -566,7 +566,7 @@ class ResolveSessionCatalog(
 
   object SessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
+      case SessionCatalogAndIdentifier(catalog, ident) =>
         Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }
