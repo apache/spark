@@ -293,8 +293,8 @@ class ResolveSessionCatalog(
           orCreate = c.orCreate)
       }
 
-    case d @ DropTableStatement(SessionCatalogAndTable(catalog, tbl), ifExists, purge) =>
-      DropTableCommand(d.tableName.asTableIdentifier, ifExists, isView = false, purge = purge)
+    case DropTableStatement(SessionCatalogAndTable(catalog, tbl), ifExists, purge) =>
+      DropTableCommand(tbl.asTableIdentifier, ifExists, isView = false, purge = purge)
 
     case DropViewStatement(SessionCatalogAndTable(catalog, viewName), ifExists) =>
       DropTableCommand(viewName.asTableIdentifier, ifExists, isView = true, purge = false)
