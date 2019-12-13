@@ -829,19 +829,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
     val log = listing.read(classOf[LogInfo], logPath)
 
-    if (log.lastProcessed < maxTime && log.appId.isEmpty) {
+    if (log.lastProcessed <= maxTime && log.appId.isEmpty) {
       logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
       deleteLog(fs, new Path(log.logPath))
       listing.delete(classOf[LogInfo], log.logPath)
     }
 
     log.appId.foreach { appId =>
-      val appInfo = listing.read(classOf[ApplicationInfoWrapper], appId)
-      if (appInfo.oldestAttempt() < maxTime) {
-        val (remaining, toDelete) = appInfo.attempts.partition { attempt =>
+      val app = listing.read(classOf[ApplicationInfoWrapper], appId)
+      if (app.oldestAttempt() <= maxTime) {
+        val (remaining, toDelete) = app.attempts.partition { attempt =>
           attempt.info.lastUpdated.getTime() >= maxTime
         }
-        deleteAttemptLogs(appInfo, remaining, toDelete)
+        deleteAttemptLogs(app, remaining, toDelete)
       }
     }
   }

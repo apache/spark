@@ -1321,6 +1321,40 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     assertSerDe(serializer, attemptInfoWithIndex)
   }
 
+  test("SPARK-29043: clean up specified event log") {
+    def getLogPath(logFile: File): String = {
+      val uri = logFile.toURI
+      uri.getScheme + File.pathSeparator + uri.getPath
+    }
+
+    val clock = new ManualClock()
+    val conf = createTestConf().set(MAX_LOG_AGE_S.key, "2d")
+    val provider = new FsHistoryProvider(conf, clock)
+
+    // create an invalid application log file
+    val nonValidLogFile = newLogFile("NonValidLogFile", None, inProgress = true)
+    nonValidLogFile.createNewFile()
+    writeFile(nonValidLogFile, None,
+      SparkListenerApplicationStart(nonValidLogFile.getName, None, 1L, "test", None))
+    nonValidLogFile.setLastModified(clock.getTimeMillis())
+
+    // create a valid application log file
+    val validLogFile = newLogFile("validLogFile", None, inProgress = true)
+    validLogFile.createNewFile()
+    writeFile(validLogFile, None,
+      SparkListenerApplicationStart(validLogFile.getName, Some("local_123"), 1L, "test", None))
+    validLogFile.setLastModified(clock.getTimeMillis())
+
+    provider.checkForLogs()
+    clock.advance(TimeUnit.DAYS.toMillis(2))
+    provider.checkAndCleanLog(getLogPath(nonValidLogFile))
+    assert(new File(testDir.toURI).listFiles().size === 1)
+
+    clock.advance(1)
+    provider.checkAndCleanLog(getLogPath(validLogFile))
+    assert(new File(testDir.toURI).listFiles().size === 0)
+  }
+
   private def assertOptionAfterSerde(opt: Option[Long], expected: Option[Long]): Unit = {
     if (expected.isEmpty) {
       assert(opt.isEmpty)
