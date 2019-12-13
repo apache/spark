@@ -17,7 +17,7 @@ jobs:
           a way of keeping the PR queue manageable.
 
           If you'd like to revive this PR, please reopen it!
-        days-before-stale: 180
+        days-before-stale: 100
         # Setting this to 0 is the same as setting it to 1.
         # See: https://github.com/actions/stale/issues/28
         days-before-close: 0
