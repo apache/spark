@@ -104,6 +104,9 @@ class DataTypeSingleton(type):
         if cls not in cls._instances:
             cls._instances[cls] = super(DataTypeSingleton, cls).__call__()
         return cls._instances[cls]
+    
+def typeForSimpleString(str):
+    
 
 
 class NullType(DataType):
@@ -906,6 +909,20 @@ _type_mappings = {
     datetime.time: TimestampType,
 }
 
+# Mapping simpleString types to Spark SQL DataType
+_simple_type_map = [
+    "string": StringType,
+    "bool": BooleanType,
+    "double": DoubleType,
+    "float": FloatType,
+    "tinyint": ByteType,
+    "int": IntegerType,
+    "bigint": LongType,
+    "smallint": ShortType,
+    "udt": UserDefinedType,
+    "date": DateType
+]
+
 if sys.version < "3":
     _type_mappings.update({
         unicode: StringType,
@@ -1041,6 +1058,14 @@ def _infer_type(obj):
             return _infer_schema(obj)
         except TypeError:
             raise TypeError("not supported type: %s" % type(obj))
+
+
+def _type_from_simple_string(simple_str):
+    """Map simpleString to Spark SQL type
+    """
+    found_type = _simple_type_map.get(simple_str, None)
+    if not found_type:
+        raise TypeError("Not supported type: %s" % simple_str)
 
 
 def _infer_schema(row, names=None):
