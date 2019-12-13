@@ -29,13 +29,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
 
-/*
- * There are multiple implementations of [[InternalKafkaConnectorPool]] but they don't differ
- * significantly. Because of that only [[InternalKafkaConsumerPool]] used to test all the
- * functionality. If the behavior of implementations starts to differ it worth to add further
- * tests but for now it would be mainly copy-paste.
- */
-class InternalKafkaConnectorPoolSuite extends SharedSparkSession {
+class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
 
   test("basic multiple borrows and returns for single key") {
     val pool = new InternalKafkaConsumerPool(new SparkConf())

@@ -487,6 +487,13 @@ case class ShowTablePropertiesStatement(
     propertyKey: Option[String]) extends ParsedStatement
 
 /**
+ * A DESCRIBE FUNCTION statement, as parsed from SQL
+ */
+case class DescribeFunctionStatement(
+    functionName: Seq[String],
+    isExtended: Boolean) extends ParsedStatement
+
+/**
  *  SHOW FUNCTIONS statement, as parsed from SQL
  */
 case class ShowFunctionsStatement(
@@ -494,3 +501,11 @@ case class ShowFunctionsStatement(
     systemScope: Boolean,
     pattern: Option[String],
     functionName: Option[Seq[String]]) extends ParsedStatement
+
+/**
+ *  DROP FUNCTION statement, as parsed from SQL
+ */
+case class DropFunctionStatement(
+    functionName: Seq[String],
+    ifExists: Boolean,
+    isTemp: Boolean) extends ParsedStatement

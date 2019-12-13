@@ -1799,6 +1799,21 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablePropertiesStatement(Seq("a", "b", "c"), Some("propKey1")))
   }
 
+  test("DESCRIBE FUNCTION") {
+    comparePlans(
+      parsePlan("DESC FUNCTION a"),
+      DescribeFunctionStatement(Seq("a"), false))
+    comparePlans(
+      parsePlan("DESCRIBE FUNCTION a"),
+      DescribeFunctionStatement(Seq("a"), false))
+    comparePlans(
+      parsePlan("DESCRIBE FUNCTION a.b.c"),
+      DescribeFunctionStatement(Seq("a", "b", "c"), false))
+    comparePlans(
+      parsePlan("DESCRIBE FUNCTION EXTENDED a.b.c"),
+      DescribeFunctionStatement(Seq("a", "b", "c"), true))
+  }
+
   test("SHOW FUNCTIONS") {
     comparePlans(
       parsePlan("SHOW FUNCTIONS"),
@@ -1823,6 +1838,25 @@ class DDLParserSuite extends AnalysisTest {
       ShowFunctionsStatement(true, true, None, Some(Seq("a", "b", "c"))))
     val sql = "SHOW other FUNCTIONS"
     intercept(sql, s"$sql not supported")
+  }
+
+  test("DROP FUNCTION") {
+    comparePlans(
+      parsePlan("DROP FUNCTION a"),
+      DropFunctionStatement(Seq("a"), false, false))
+    comparePlans(
+      parsePlan("DROP FUNCTION a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), false, false))
+    comparePlans(
+      parsePlan("DROP TEMPORARY FUNCTION a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), false, true))
+    comparePlans(
+      parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), true, false))
+    comparePlans(
+      parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), true, true))
+
   }
 
   private case class TableSpec(

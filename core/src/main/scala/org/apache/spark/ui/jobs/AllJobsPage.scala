@@ -541,12 +541,15 @@ private[ui] class JobPagedTable(
 
   override def headers: Seq[Node] = {
     // Information for each header: title, cssClass, and sortable
-    val jobHeadersAndCssClasses: Seq[(String, String, Boolean)] =
+    val jobHeadersAndCssClasses: Seq[(String, String, Boolean, Option[String])] =
       Seq(
-        (jobIdTitle, "", true),
-        ("Description", "", true), ("Submitted", "", true), ("Duration", "", true),
-        ("Stages: Succeeded/Total", "", false),
-        ("Tasks (for all stages): Succeeded/Total", "", false)
+        (jobIdTitle, "", true, None),
+        ("Description", "", true, None),
+        ("Submitted", "", true, None),
+        ("Duration", "", true, Some("Elapsed time since the job was submitted " +
+          "until execution completion of all its stages.")),
+        ("Stages: Succeeded/Total", "", false, None),
+        ("Tasks (for all stages): Succeeded/Total", "", false, None)
       )
 
     if (!jobHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
@@ -554,7 +557,7 @@ private[ui] class JobPagedTable(
     }
 
     val headerRow: Seq[Node] = {
-      jobHeadersAndCssClasses.map { case (header, cssClass, sortable) =>
+      jobHeadersAndCssClasses.map { case (header, cssClass, sortable, tooltip) =>
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
@@ -566,9 +569,17 @@ private[ui] class JobPagedTable(
 
           <th class={cssClass}>
             <a href={headerLink}>
-              {header}<span>
-              &nbsp;{Unparsed(arrow)}
-            </span>
+              {
+                if (tooltip.nonEmpty) {
+                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                    {header}&nbsp;{Unparsed(arrow)}
+                  </span>
+                } else {
+                  <span>
+                    {header}&nbsp;{Unparsed(arrow)}
+                  </span>
+                }
+              }
             </a>
           </th>
         } else {
@@ -581,12 +592,32 @@ private[ui] class JobPagedTable(
 
             <th class={cssClass}>
               <a href={headerLink}>
-                {header}
-              </a>
+                {
+                  if (tooltip.nonEmpty) {
+                    <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                      {header}
+                    </span>
+                  } else {
+                    <span>
+                      {header}
+                    </span>
+                  }
+                }
+               </a>
             </th>
           } else {
             <th class={cssClass}>
-              {header}
+              {
+                if (tooltip.nonEmpty) {
+                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                    {header}
+                  </span>
+                } else {
+                  <span>
+                    {header}
+                  </span>
+                }
+              }
             </th>
           }
         }

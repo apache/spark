@@ -17,8 +17,8 @@
 
 package org.apache.spark.storage
 
-import scala.collection.Iterable
 import scala.collection.generic.CanBuildFrom
+import scala.collection.immutable.Iterable
 import scala.concurrent.Future
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -201,7 +201,7 @@ class BlockManagerMaster(
         Option[BlockStatus],
         Iterable[Option[BlockStatus]]]]
     val blockStatus = timeout.awaitResult(
-      Future.sequence[Option[BlockStatus], Iterable](futures)(cbf, ThreadUtils.sameThread))
+      Future.sequence(futures)(cbf, ThreadUtils.sameThread))
     if (blockStatus == null) {
       throw new SparkException("BlockManager returned null for BlockStatus query: " + blockId)
     }

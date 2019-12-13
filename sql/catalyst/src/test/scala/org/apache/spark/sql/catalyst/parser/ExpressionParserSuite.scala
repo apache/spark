@@ -20,6 +20,8 @@ import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 
+import scala.language.implicitConversions
+
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
@@ -196,6 +198,10 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not like 'pattern%' escape '\"'", !('a.like("pattern%", '\"')))
     intercept("a not like 'pattern%' escape '\"/'", message)
     intercept("a not like 'pattern%' escape ''", message)
+
+    val message2 = "Escape string can not be '%', '_'."
+    intercept("a like 'pattern%' escape '_'", message2)
+    intercept("a like 'pattern%' escape '%'", message2)
   }
 
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
@@ -716,7 +722,7 @@ class ExpressionParserSuite extends AnalysisTest {
       "0:0:0",
       "0:0:1")
     hourTimeValues.foreach { value =>
-      val result = Literal(IntervalUtils.fromDayTimeString(value))
+      val result = Literal(IntervalUtils.fromDayTimeString(value, HOUR, SECOND))
       checkIntervals(s"'$value' hour to second", result)
     }
 

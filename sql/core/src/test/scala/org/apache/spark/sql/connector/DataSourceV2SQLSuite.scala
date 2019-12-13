@@ -1799,6 +1799,18 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("DESCRIBE FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("DESCRIBE FUNCTION testcat.ns1.ns2.fun")
+    }
+    assert(e.message.contains("DESCRIBE FUNCTION is only supported in v1 catalog"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+  }
+
   test("SHOW FUNCTIONS not valid v1 namespace") {
     val function = "testcat.ns1.ns2.fun"
 
@@ -1806,6 +1818,18 @@ class DataSourceV2SQLSuite
       sql(s"SHOW FUNCTIONS LIKE $function")
     }
     assert(e.message.contains("SHOW FUNCTIONS is only supported in v1 catalog"))
+  }
+
+  test("DROP FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("DROP FUNCTION testcat.ns1.ns2.fun")
+    }
+    assert(e.message.contains("DROP FUNCTION is only supported in v1 catalog"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -1819,6 +1843,38 @@ class DataSourceV2SQLSuite
       sql(s"drop view $globalTempDB.v2")
     } finally {
       spark.sharedState.globalTempViewManager.clear()
+    }
+  }
+
+  test("SPARK-30104: global temp db is used as a table name under v2 catalog") {
+    val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val t = s"testcat.$globalTempDB"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql("USE testcat")
+      // The following should not throw AnalysisException, but should use `testcat.$globalTempDB`.
+      sql(s"DESCRIBE TABLE $globalTempDB")
+    }
+  }
+
+  test("SPARK-30104: v2 catalog named global_temp will be masked") {
+    val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+
+    val e = intercept[AnalysisException] {
+      // Since the following multi-part name starts with `globalTempDB`, it is resolved to
+      // the session catalog, not the `gloabl_temp` v2 catalog.
+      sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
+    }
+    assert(e.message.contains("global_temp.ns1.ns2.tbl is not a valid TableIdentifier"))
+  }
+
+  test("table name same as catalog can be used") {
+    withTable("testcat.testcat") {
+      sql(s"CREATE TABLE testcat.testcat (id bigint, data string) USING foo")
+      sql("USE testcat")
+      // The following should not throw AnalysisException.
+      sql(s"DESCRIBE TABLE testcat")
     }
   }
 

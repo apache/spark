@@ -77,7 +77,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       plan
     } else {
       val shuffleMetrics = shuffleStages.map { stage =>
-        val metricsFuture = stage.mapOutputStatisticsFuture
+        val metricsFuture = stage.plan.mapOutputStatisticsFuture
         assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
         ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
       }
