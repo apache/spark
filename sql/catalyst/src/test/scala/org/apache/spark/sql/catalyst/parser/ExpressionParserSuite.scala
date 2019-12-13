@@ -528,7 +528,7 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("1.20E-38BD", "decimal can only support precision up to 38")
   }
 
-  test("Decimal should set zero scale rather than negative scale under ansi mode") {
+  test("SPARK-30252: Decimal should set zero scale rather than negative scale under ansi mode") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       assertEqual("123.0BD", Literal(Decimal(BigDecimal("123.0")), DecimalType(4, 1)))
       assertEqual("123BD", Literal(Decimal(BigDecimal("123")), DecimalType(3, 0)))

@@ -75,7 +75,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkDecimal(Decimal(1e8.toLong, 10, -10), "1.00000000E+18", 10, -10)
   }
 
-  test("Negative scale is not allowed under ansi mode") {
+  test("SPARK-30252: Negative scale is not allowed under ansi mode") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       def checkNegativeScaleDecimal(d: => Decimal): Unit = {
         intercept[AnalysisException](d)
