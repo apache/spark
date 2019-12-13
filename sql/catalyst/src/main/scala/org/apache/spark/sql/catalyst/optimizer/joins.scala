@@ -93,7 +93,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   // the same strategy to extract the plan list.
   private[optimizer] def extractLeftDeepInnerJoins(plan: LogicalPlan)
     : Seq[LogicalPlan] = plan match {
-    case Join(left, right, _: InnerLike, _, _) => right +: extractLeftDeepInnerJoins(left)
+    case Join(left, right, _: InnerLike, _, hint) if hint == JoinHint.NONE =>
+      right +: extractLeftDeepInnerJoins(left)
     case Filter(_, child) => extractLeftDeepInnerJoins(child)
     case Project(_, child) => extractLeftDeepInnerJoins(child)
     case _ => Seq(plan)

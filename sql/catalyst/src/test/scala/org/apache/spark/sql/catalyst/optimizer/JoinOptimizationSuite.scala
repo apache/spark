@@ -177,22 +177,22 @@ class JoinOptimizationSuite extends PlanTest {
       val r0output = Seq('a.int, 'b.int, 'c.int)
       val r0colStat = ColumnStat(distinctCount = Some(100000000), nullCount = Some(0))
       val r0colStats = AttributeMap(r0output.map(_ -> r0colStat))
-      val r0 = StatsTestPlan(r0output, 100000000, r0colStats, name = Some("r0")).subquery('r0)
+      val r0 = StatsTestPlan(r0output, 100000000, r0colStats, identifier = Some("r0")).subquery('r0)
 
       val r1output = Seq('a.int, 'd.int)
       val r1colStat = ColumnStat(distinctCount = Some(10), nullCount = Some(0))
       val r1colStats = AttributeMap(r1output.map(_ -> r1colStat))
-      val r1 = StatsTestPlan(r1output, 10, r1colStats, name = Some("r1")).subquery('r1)
+      val r1 = StatsTestPlan(r1output, 10, r1colStats, identifier = Some("r1")).subquery('r1)
 
       val r2output = Seq('b.int, 'e.int)
       val r2colStat = ColumnStat(distinctCount = Some(100), nullCount = Some(0))
       val r2colStats = AttributeMap(r2output.map(_ -> r2colStat))
-      val r2 = StatsTestPlan(r2output, 100, r2colStats, name = Some("r2")).subquery('r2)
+      val r2 = StatsTestPlan(r2output, 100, r2colStats, identifier = Some("r2")).subquery('r2)
 
       val r3output = Seq('c.int, 'f.int)
       val r3colStat = ColumnStat(distinctCount = Some(1), nullCount = Some(0))
       val r3colStats = AttributeMap(r3output.map(_ -> r3colStat))
-      val r3 = StatsTestPlan(r3output, 1, r3colStats, name = Some("r3")).subquery('r3)
+      val r3 = StatsTestPlan(r3output, 1, r3colStats, identifier = Some("r3")).subquery('r3)
 
       val joined = r0.join(r1, Inner, Some($"r0.a" === $"r1.a"))
         .select($"r0.b", $"r0.c", $"r1.d")
@@ -208,7 +208,7 @@ class JoinOptimizationSuite extends PlanTest {
       val optimized = Optimize.execute(joined)
       val optJoins = ReorderJoin.extractLeftDeepInnerJoins(optimized)
       val joinOrder = optJoins.flatMap(_.collect{ case p: StatsTestPlan => p }.headOption)
-        .flatMap(_.name)
+        .flatMap(_.identifier)
       assert(joinOrder === Seq("r2", "r1", "r3", "r0"))
     }
   }

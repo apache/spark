@@ -70,7 +70,7 @@ case class StatsTestPlan(
     rowCount: BigInt,
     attributeStats: AttributeMap[ColumnStat],
     size: Option[BigInt] = None,
-    name: Option[String] = None) extends LeafNode {
+    identifier: Option[String] = None) extends LeafNode {
   override def output: Seq[Attribute] = outputList
   override def computeStats(): Statistics = Statistics(
     // If sizeInBytes is useless in testing, we just use a fake value
