@@ -35,12 +35,9 @@ import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /** The V1 and V2 provider of a streaming source, which blocks indefinitely on the call of stop() */
-object BlockOnStopSourceProvider extends StreamSourceProvider with TableProvider {
-
+object BlockOnStopSourceProvider {
   private var _latch: CountDownLatch = _
-
-  val schema: StructType = new StructType().add("id", LongType)
-
+  
   /** Set the latch that we will use to block the streaming query thread. */
   def enableBlocking(): Unit = {
     if (_latch == null || _latch.getCount == 0) {
@@ -54,9 +51,13 @@ object BlockOnStopSourceProvider extends StreamSourceProvider with TableProvider
       _latch = null
     }
   }
+}
+
+class BlockOnStopSourceProvider extends StreamSourceProvider with TableProvider {
+  val schema: StructType = new StructType().add("id", LongType)
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    new BlockOnStopSourceTable(_latch)
+    new BlockOnStopSourceTable(BlockOnStopSourceProvider._latch)
   }
 
   override def sourceSchema(
@@ -73,7 +74,7 @@ object BlockOnStopSourceProvider extends StreamSourceProvider with TableProvider
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source = {
-    new BlockOnStopSource(sqlContext.sparkSession, _latch)
+    new BlockOnStopSource(sqlContext.sparkSession, BlockOnStopSourceProvider._latch)
   }
 }
 
