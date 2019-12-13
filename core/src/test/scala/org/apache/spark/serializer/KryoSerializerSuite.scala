@@ -375,7 +375,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val taskCommitMessage1 = new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
     val taskCommitMessage2 = new TaskCommitMessage(Map.empty -> Set.empty)
     Seq(taskCommitMessage1, taskCommitMessage2).foreach { taskCommitMessage =>
-      ser.serialize(taskCommitMessage)
+      val obj1 = ser.deserialize[TaskCommitMessage](ser.serialize(taskCommitMessage)).obj
+      val obj2 = taskCommitMessage.obj
+      assert(obj1 == obj2)
     }
   }
 
