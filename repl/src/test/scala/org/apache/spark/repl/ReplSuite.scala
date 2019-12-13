@@ -328,7 +328,7 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     val infoLogMessage2 = "infoLogMessage3 should be output"
 
     val out = try {
-      PropertyConfigurator.configure(log4jprops.toString)
+      PropertyConfigurator.configure(log4jprops.toAbsolutePath.toString)
 
       // Re-initialization is needed to set SparkShellLoggingFilter to ConsoleAppender
       Main.initializeForcefully(true, false)
@@ -396,6 +396,10 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     val restoredRootAppender = restoredRootLogger.getAppender("file")
     assert(originalRootAppender.getClass == restoredRootAppender.getClass)
     assert(originalRootLogger.getLevel == restoredRootLogger.getLevel)
+
+    // Ensure loggers added in this test case are successfully removed.
+    assert(LogManager.getLogger("customLogger2").getLevel == null)
+    assert(LogManager.getLogger("customLogger2.child").getLevel == null)
 
     // Ensure log level threshold for REPL is ERROR.
     assertContains(replLoggerLogMessage + "ERROR", out)
