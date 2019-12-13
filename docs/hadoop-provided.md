@@ -56,8 +56,8 @@ ENV PATH="$SPARK_HOME/bin:$HADOOP_HOME/bin:$PATH"
 COPY /opt/hadoop3  $HADOOP_HOME  
 ...
 
-#Set your SPARK_DIST_CLASSPATH. Note it uses the hadoop executable to get the jars path and cannot be used with an ENV statement. You may need to add additional paths manually to SPARK_DIST_CLASSPATH if you have other dependencies for example in /hadoop/tools/lib/*  
+#Copy and use the Spark provided entrypoint.sh. It sets your SPARK_DIST_CLASSPATH using the hadoop binary in $HADOOP_HOME and starts the executor. If you choose to customize the value of SPARK_DIST_CLASSPATH here, the value will be retained in entrypoint.sh
 
-RUN export SPARK_DIST_CLASSPATH=$(hadoop classpath)  
+ENTRYPOINT [ "/opt/entrypoint.sh" ]
 ...  
 {% endhighlight %}
