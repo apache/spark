@@ -26,7 +26,7 @@ import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{IdentityTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{IdentityTransform, NamedReference, Transform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
@@ -59,10 +59,39 @@ class InMemoryTable(
 
   def rows: Seq[InternalRow] = dataMap.values.flatMap(_.rows).toSeq
 
-  private val partFieldNames = partitioning.flatMap(_.references).toSeq.flatMap(_.fieldNames)
-  private val partIndexes = partFieldNames.map(schema.fieldIndex)
+  private val partRefs: Array[NamedReference] = partitioning.flatMap(_.references)
 
-  private def getKey(row: InternalRow): Seq[Any] = partIndexes.map(row.toSeq(schema)(_))
+  private val partFieldNames: Seq[String] = partRefs.map { ref =>
+    schema.findNestedField(ref.fieldNames(), includeCollections = false) match {
+      case Some(_) => ref.describe()
+      case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
+    }
+  }
+
+    private val partCols: Array[Array[String]] = partRefs.map { ref =>
+    schema.findNestedField(ref.fieldNames(), includeCollections = false) match {
+      case Some(_) => ref.fieldNames()
+      case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
+    }
+  }
+
+  private def getKey(row: InternalRow): Seq[Any] = {
+    def extractor(fieldNames: Array[String], schema: StructType, values: Seq[Any]): Any = {
+      val index = schema.fieldIndex(fieldNames(0))
+      val value = values(index)
+      if (fieldNames.length > 1) {
+        (value, schema(index).dataType) match {
+          case (value: InternalRow, nestedSchema: StructType) =>
+            extractor(fieldNames.slice(1, fieldNames.length),
+              nestedSchema, value.toSeq(nestedSchema))
+          case _ => throw new IllegalArgumentException(s"does not exist.")
+        }
+      } else {
+        value
+      }
+    }
+    partCols.map(filedNames => extractor(filedNames, schema, row.toSeq(schema)))
+  }
 
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
