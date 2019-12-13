@@ -301,7 +301,7 @@ public interface TableChange {
   interface ColumnPosition {
 
     static ColumnPosition first() {
-      return First.singleton;
+      return First.SINGLETON;
     }
 
     static ColumnPosition after(String column) {
@@ -315,7 +315,7 @@ public interface TableChange {
    * be the first one within the struct.
    */
   final class First implements ColumnPosition {
-    private static First singleton = new First();
+    private static final First SINGLETON = new First();
 
     private First() {}
 

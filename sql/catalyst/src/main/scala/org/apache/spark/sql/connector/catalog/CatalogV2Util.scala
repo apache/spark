@@ -140,7 +140,7 @@ private[sql] object CatalogV2Util {
         case update: UpdateColumnPosition =>
           def updateFieldPos(struct: StructType, name: String): StructType = {
             val oldField = struct.fields.find(_.name == name).getOrElse {
-              throw new IllegalArgumentException("field not found: " + name)
+              throw new IllegalArgumentException("Field not found: " + name)
             }
             val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
             addField(withFieldRemoved, oldField, update.position())
@@ -153,6 +153,8 @@ private[sql] object CatalogV2Util {
               replace(schema, names.init, parent => parent.dataType match {
                 case parentType: StructType =>
                   Some(parent.copy(dataType = updateFieldPos(parentType, names.last)))
+                case _ =>
+                  throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
               })
           }
 
@@ -176,7 +178,11 @@ private[sql] object CatalogV2Util {
       StructType(field +: schema.fields)
     } else {
       val afterCol = position.asInstanceOf[After].column()
-      val (before, after) = schema.fields.span(_.name == afterCol)
+      val fieldIndex = schema.fields.indexWhere(_.name == afterCol)
+      if (fieldIndex == -1) {
+        throw new IllegalArgumentException("AFTER column not found: " + afterCol)
+      }
+      val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
     }
   }
