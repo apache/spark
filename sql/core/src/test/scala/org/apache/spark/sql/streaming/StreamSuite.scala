@@ -1146,7 +1146,7 @@ class StreamSuite extends StreamTest {
           }
         }
         val duration = (System.nanoTime() - startTime) / 1e6
-        assert(duration >= 2000 * 1e6,
+        assert(duration >= 2000,
           s"Should have waited more than 2000 millis, but waited $duration millis")
 
         BlockOnStopSourceProvider.disableBlocking()
