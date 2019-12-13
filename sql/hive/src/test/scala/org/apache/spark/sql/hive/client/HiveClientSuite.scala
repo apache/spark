@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.hive.client
 
+import java.text.SimpleDateFormat
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StringType}
 import org.apache.spark.util.Utils
 
 // TODO: Refactor this to `HivePartitionFilteringSuite`
@@ -34,6 +35,8 @@ class HiveClientSuite(version: String)
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
 
   private val testPartitionCount = 3 * 24 * 4
+
+  private val dhFormat = new SimpleDateFormat("yyyyMMddH")
 
   private def init(tryDirectSql: Boolean): HiveClient = {
     val storageFormat = CatalogStorageFormat(
@@ -48,7 +51,8 @@ class HiveClientSuite(version: String)
     hadoopConf.setBoolean(tryDirectSqlKey, tryDirectSql)
     hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().toURI().toString())
     val client = buildClient(hadoopConf)
-    client.runSqlHive("CREATE TABLE test (value INT) PARTITIONED BY (ds INT, h INT, chunk STRING)")
+    client.runSqlHive(
+      "CREATE TABLE test (value INT) PARTITIONED BY (ds INT, h INT, chunk STRING, ts TIMESTAMP)")
 
     val partitions =
       for {
@@ -58,7 +62,8 @@ class HiveClientSuite(version: String)
       } yield CatalogTablePartition(Map(
         "ds" -> ds.toString,
         "h" -> h.toString,
-        "chunk" -> chunk
+        "chunk" -> chunk,
+        "ts" -> new java.sql.Timestamp(dhFormat.parse(s"$ds$h").getTime).toString
       ), storageFormat)
     assert(partitions.size == testPartitionCount)
 
@@ -258,6 +263,16 @@ class HiveClientSuite(version: String)
     buildClient(new Configuration(), sharesHadoopClasses = false)
   }
 
+  test("getPartitionsByFilter: cast(ts as string)>='2017-01-02 00:00:00'") {
+    // Should return all partitions since partition key filtering only support string
+    // and integral type
+    testMetastorePartitionFiltering(
+      attr("ts").cast(StringType) >= "2017-01-02 00:00:00",
+      20170101 to 20170103,
+      0 to 23,
+      "aa" :: "ab" :: "ba" :: "bb" :: Nil)
+  }
+
   private def testMetastorePartitionFiltering(
       filterExpr: Expression,
       expectedDs: Seq[Int],
@@ -310,7 +325,8 @@ class HiveClientSuite(version: String)
         } yield Set(
           "ds" -> ds.toString,
           "h" -> h.toString,
-          "chunk" -> chunk
+          "chunk" -> chunk,
+          "ts" -> new java.sql.Timestamp(dhFormat.parse(s"$ds$h").getTime).toString
         )
     }.reduce(_ ++ _)
 

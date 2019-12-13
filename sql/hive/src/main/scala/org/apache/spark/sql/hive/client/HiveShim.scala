@@ -676,7 +676,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     object ExtractAttribute {
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
-          case attr: Attribute => Some(attr)
+          case attr: Attribute
+              if attr.dataType == StringType || IntegralType.acceptsType(attr.dataType) =>
+                Some(attr)
           case Cast(child @ AtomicType(), dt: AtomicType, _)
               if Cast.canSafeCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
