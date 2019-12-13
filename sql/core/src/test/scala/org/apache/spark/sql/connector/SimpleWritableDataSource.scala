@@ -240,4 +240,6 @@ class CSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[InternalRow] 
       fs.delete(file, false)
     }
   }
+
+  override def close(): Unit = {}
 }

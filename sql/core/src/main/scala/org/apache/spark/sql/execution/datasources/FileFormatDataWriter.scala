@@ -86,6 +86,8 @@ abstract class FileFormatDataWriter(
       committer.abortTask(taskAttemptContext)
     }
   }
+
+  override def close(): Unit = {}
 }
 
 /** FileFormatWriteTask for empty partitions */
