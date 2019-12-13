@@ -1479,8 +1479,8 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp` expression with the `fmt` expression to
-      a timestamp. Returns null with invalid input. By default, it follows casting rules to
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp. Returns null with invalid input. By default, it follows casting rules to
       a timestamp if the `fmt` is omitted.
   """,
   arguments = """
