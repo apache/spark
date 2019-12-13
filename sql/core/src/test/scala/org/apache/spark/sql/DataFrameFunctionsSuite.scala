@@ -863,7 +863,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
          |value with same element type, but it's [array<int>, string].
        """.stripMargin.replace("\n", " ").trim()
     assert(e2.message.contains(errorMsg2))
+  }
 
+  test("SPARK-29600: ArrayContains function may return incorrect result for DecimalType") {
     checkAnswer(
       sql("select array_contains(array(1.10), 1.1)"),
       Seq(Row(true))
