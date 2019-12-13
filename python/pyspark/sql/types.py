@@ -1624,11 +1624,13 @@ class DatetimeConverter(object):
         t = Timestamp(int(seconds) * 1000)
         t.setNanos(obj.microsecond * 1000)
         return t
-    
+
+
 def from_simple_string(simple_str):
     """Map simpleString to Spark SQL type
     """
     return _type_from_simple_string(simple_str)
+
 
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())
