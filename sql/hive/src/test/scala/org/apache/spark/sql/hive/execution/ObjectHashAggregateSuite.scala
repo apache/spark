@@ -175,7 +175,7 @@ class ObjectHashAggregateSuite
 
   private def percentile_approx(
       column: Column, percentage: Double, isDistinct: Boolean = false): Column = {
-    val approxPercentile = new ApproximatePercentile(column.expr, Literal(percentage))
+    val approxPercentile = ApproximatePercentile(column.expr, Literal(percentage))
     Column(approxPercentile.toAggregateExpression(isDistinct))
   }
 
