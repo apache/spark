@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, ExternalCatalog, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
@@ -135,6 +136,14 @@ private[sql] class HiveSessionCatalog(
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
           // We need to throw the original exception.
+
+          // When we start with spark-shell command and use hive udf , it will lead to
+          // "No handler for UDF/UDAF/UDTF" for the second or more times because of
+          // unsuitable classLoader. So before throw error, we reset classloader to active
+          // sparkSession's jar classloader, then for the next lookupFunction0, it will be ok.
+          Thread.currentThread().setContextClassLoader(SparkSession.getActiveSession.get.
+            asInstanceOf[SparkSession].sharedState.jarClassLoader)
+
           throw error
         } else {
           // This function is not in functionRegistry, let's try to load it as a Hive's
