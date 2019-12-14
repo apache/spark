@@ -185,7 +185,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       lastNewFileFindingTime = clock.getTimeMillis()
 
       // Calculate ignore threshold
-      val modTimeIgnoreThreshold = math.max(
+      val modTimeIgnoreThreshold = math.min(
         initialModTimeIgnoreThreshold,   // initial threshold based on newFilesOnly setting
         currentTime - durationToRemember.milliseconds  // trailing end of the remember window
       )
