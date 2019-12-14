@@ -665,6 +665,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       pendingReplayTasksCount.incrementAndGet()
       doMergeApplicationListing(reader, scanTime, enableOptimizations)
+      if (conf.get(CLEANER_ENABLED)) {
+        checkAndCleanLog(reader.rootPath.toString)
+      }
     } catch {
       case e: InterruptedException =>
         throw e
@@ -680,9 +683,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } finally {
       endProcessing(reader.rootPath)
       pendingReplayTasksCount.decrementAndGet()
-      if (conf.get(CLEANER_ENABLED)) {
-        checkAndCleanLog(reader.rootPath.toString)
-      }
     }
   }
 
