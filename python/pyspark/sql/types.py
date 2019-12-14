@@ -1060,9 +1060,11 @@ def _infer_type(obj):
 def _type_from_simple_string(simple_str):
     """Map simpleString to Spark SQL type
     """
-    found_type = _simple_type_map.get(simple_str, None)
-    if not found_type:
-        raise TypeError("Not supported type: %s" % simple_str)
+    try: 
+        found_type = _simple_type_map[simple_str]
+    except KeyError:
+        raise TypeError("Unsupported type: %s" % simple_str)
+    return found_type
 
 
 def _infer_schema(row, names=None):
