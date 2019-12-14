@@ -27,6 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -36,6 +37,7 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 private case class BigData(s: String)
@@ -1092,6 +1094,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
           }
         }
       }
+    }
+  }
+
+  test("cache supports for intervals") {
+    withTable("interval_cache") {
+      Seq((1, "1 second"), (2, "2 seconds"), (2, null))
+        .toDF("k", "v").write.saveAsTable("interval_cache")
+      sql("CACHE TABLE t1 AS SELECT k, cast(v as interval) FROM interval_cache")
+      assert(spark.catalog.isCached("t1"))
+      checkAnswer(sql("SELECT * FROM t1 WHERE k = 1"),
+        Row(1, new CalendarInterval(0, 0, DateTimeConstants.MICROS_PER_SECOND)))
+      sql("UNCACHE TABLE t1")
+      assert(!spark.catalog.isCached("t1"))
     }
   }
 }
