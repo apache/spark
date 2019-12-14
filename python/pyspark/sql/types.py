@@ -1060,7 +1060,7 @@ def _infer_type(obj):
 def _type_from_simple_string(simple_str):
     """Map simpleString to Spark SQL type
     """
-    try: 
+    try:
         found_type = _simple_type_map[simple_str]
     except KeyError:
         raise TypeError("Unsupported type: %s" % simple_str)
