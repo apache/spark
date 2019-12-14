@@ -306,9 +306,10 @@ class DataFrame(object):
 
         if not is_no_argument and not (is_extended_case or is_mode_case):
             if extended is not None:
-                errMsg = "extended should be provided as bool, got {0}".format(type(extended))
+                errMsg = "extended (optional) should be provided as bool" \
+                    ", got {0}".format(type(extended))
             else:  # For mode case
-                errMsg = "mode should be provided as str, got {0}".format(type(mode))
+                errMsg = "mode (optional) should be provided as str, got {0}".format(type(mode))
             raise TypeError(errMsg)
 
         # Sets an explain mode depending on a given argument
