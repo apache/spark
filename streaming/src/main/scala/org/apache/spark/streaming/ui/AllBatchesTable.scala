@@ -25,147 +25,12 @@ import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils => SparkUIUtils}
 
-private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) {
-
-  protected def columns: Seq[Node] = {
-    <th>Batch Time</th>
-      <th>Records</th>
-      <th>Scheduling Delay
-        {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "top")}
-      </th>
-      <th>Processing Time
-        {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "top")}</th>
-  }
-
-  /**
-   * Return the first failure reason if finding in the batches.
-   */
-  protected def getFirstFailureReason(batches: Seq[BatchUIData]): Option[String] = {
-    batches.flatMap(_.outputOperations.flatMap(_._2.failureReason)).headOption
-  }
-
-  protected def getFirstFailureTableCell(batch: BatchUIData): Seq[Node] = {
-    val firstFailureReason = batch.outputOperations.flatMap(_._2.failureReason).headOption
-    firstFailureReason.map { failureReason =>
-      val failureReasonForUI = UIUtils.createOutputOperationFailureForUI(failureReason)
-      UIUtils.failureReasonCell(
-        failureReasonForUI, rowspan = 1, includeFirstLineInExpandDetails = false)
-    }.getOrElse(<td>-</td>)
-  }
-
-  protected def baseRow(batch: BatchUIData): Seq[Node] = {
-    val batchTime = batch.batchTime.milliseconds
-    val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
-    val numRecords = batch.numRecords
-    val schedulingDelay = batch.schedulingDelay
-    val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
-    val processingTime = batch.processingDelay
-    val formattedProcessingTime = processingTime.map(SparkUIUtils.formatDuration).getOrElse("-")
-    val batchTimeId = s"batch-$batchTime"
-
-    <td id={batchTimeId} sorttable_customkey={batchTime.toString}
-        isFailed={batch.isFailed.toString}>
-      <a href={s"batch?id=$batchTime"}>
-        {formattedBatchTime}
-      </a>
-    </td>
-      <td sorttable_customkey={numRecords.toString}>{numRecords.toString} records</td>
-      <td sorttable_customkey={schedulingDelay.getOrElse(Long.MaxValue).toString}>
-        {formattedSchedulingDelay}
-      </td>
-      <td sorttable_customkey={processingTime.getOrElse(Long.MaxValue).toString}>
-        {formattedProcessingTime}
-      </td>
-  }
-
-  private def batchTable: Seq[Node] = {
-    <table id={tableId} class="table table-bordered table-striped table-condensed sortable">
-      <thead>
-        {columns}
-      </thead>
-      <tbody>
-        {renderRows}
-      </tbody>
-    </table>
-  }
-
-  def toNodeSeq: Seq[Node] = {
-    batchTable
-  }
-
-  protected def createOutputOperationProgressBar(batch: BatchUIData): Seq[Node] = {
-    <td class="progress-cell">
-      {
-      SparkUIUtils.makeProgressBar(
-        started = batch.numActiveOutputOp,
-        completed = batch.numCompletedOutputOp,
-        failed = batch.numFailedOutputOp,
-        skipped = 0,
-        reasonToNumKilled = Map.empty,
-        total = batch.outputOperations.size)
-      }
-    </td>
-  }
-
-  /**
-   * Return HTML for all rows of this table.
-   */
-  protected def renderRows: Seq[Node]
-}
-
-private[ui] class ActiveBatchTable(
-    runningBatches: Seq[BatchUIData],
-    waitingBatches: Seq[BatchUIData],
-    batchInterval: Long) extends BatchTableBase("active-batches-table", batchInterval) {
-
-  private val firstFailureReason = getFirstFailureReason(runningBatches)
-
-  override protected def columns: Seq[Node] = super.columns ++ {
-    <th>Output Ops: Succeeded/Total</th>
-      <th>Status</th> ++ {
-      if (firstFailureReason.nonEmpty) {
-        <th>Error</th>
-      } else {
-        Nil
-      }
-    }
-  }
-
-  override protected def renderRows: Seq[Node] = {
-    // The "batchTime"s of "waitingBatches" must be greater than "runningBatches"'s, so display
-    // waiting batches before running batches
-    waitingBatches.flatMap(batch => <tr>{waitingBatchRow(batch)}</tr>) ++
-      runningBatches.flatMap(batch => <tr>{runningBatchRow(batch)}</tr>)
-  }
-
-  private def runningBatchRow(batch: BatchUIData): Seq[Node] = {
-    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>processing</td> ++ {
-      if (firstFailureReason.nonEmpty) {
-        getFirstFailureTableCell(batch)
-      } else {
-        Nil
-      }
-    }
-  }
-
-  private def waitingBatchRow(batch: BatchUIData): Seq[Node] = {
-    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>queued</td>++ {
-      if (firstFailureReason.nonEmpty) {
-        // Waiting batches have not run yet, so must have no failure reasons.
-        <td>-</td>
-      } else {
-        Nil
-      }
-    }
-  }
-}
-
-private[ui] class CompletedBatchPagedTable(
+private[ui] class StreamingBatchPagedTable(
     request: HttpServletRequest,
     parent: StreamingTab,
     batchInterval: Long,
-    data: Seq[BatchUIData],
-    completedBatchTag: String,
+    batchData: Seq[BatchUIData],
+    streamingBatchTag: String,
     basePath: String,
     subPath: String,
     parameterOtherTable: Iterable[String],
@@ -173,13 +38,13 @@ private[ui] class CompletedBatchPagedTable(
     sortColumn: String,
     desc: Boolean) extends PagedTable[BatchUIData] {
 
-  override val dataSource = new CompletedBatchTableDataSource(data, pageSize, sortColumn, desc)
+  override val dataSource = new StreamingBatchTableDataSource(batchData, pageSize, sortColumn, desc)
 
   private val parameterPath = s"$basePath/$subPath/?${parameterOtherTable.mkString("&")}"
 
-  private val firstFailureReason = getFirstFailureReason(data)
+  private val firstFailureReason = getFirstFailureReason(batchData)
 
-  override def tableId: String = completedBatchTag
+  override def tableId: String = streamingBatchTag
 
   override def tableCssClass: String =
     "table table-bordered table-condensed table-striped " +
@@ -189,18 +54,18 @@ private[ui] class CompletedBatchPagedTable(
     val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
-      s"&$completedBatchTag.sort=$encodedSortColumn" +
-      s"&$completedBatchTag.desc=$desc" +
+      s"&$streamingBatchTag.sort=$encodedSortColumn" +
+      s"&$streamingBatchTag.desc=$desc" +
       s"&$pageSizeFormField=$pageSize"
   }
 
-  override def pageSizeFormField: String = s"$completedBatchTag.pageSize"
+  override def pageSizeFormField: String = s"$streamingBatchTag.pageSize"
 
-  override def pageNumberFormField: String = s"$completedBatchTag.page"
+  override def pageNumberFormField: String = s"$streamingBatchTag.page"
 
   override def goButtonFormPath: String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
-    s"$parameterPath&$completedBatchTag.sort=$encodedSortColumn&$completedBatchTag.desc=$desc"
+    s"$parameterPath&$streamingBatchTag.sort=$encodedSortColumn&$streamingBatchTag.desc=$desc"
   }
 
   override def headers: Seq[Node] = {
@@ -218,10 +83,10 @@ private[ui] class CompletedBatchPagedTable(
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
-              s"&$completedBatchTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$completedBatchTag.desc=${!desc}" +
-              s"&$completedBatchTag.pageSize=$pageSize" +
-              s"#$completedBatchTag")
+              s"&$streamingBatchTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
+              s"&$streamingBatchTag.desc=${!desc}" +
+              s"&$streamingBatchTag.pageSize=$pageSize" +
+              s"#$streamingBatchTag")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
 
           if (tooltip.nonEmpty) {
@@ -242,9 +107,9 @@ private[ui] class CompletedBatchPagedTable(
         } else {
           val headerLink = Unparsed(
             parameterPath +
-              s"&$completedBatchTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$completedBatchTag.pageSize=$pageSize" +
-              s"#$completedBatchTag")
+              s"&$streamingBatchTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
+              s"&$streamingBatchTag.pageSize=$pageSize" +
+              s"#$streamingBatchTag")
 
           if(tooltip.nonEmpty) {
             <th>
@@ -328,7 +193,7 @@ private[ui] class CompletedBatchPagedTable(
   }
 }
 
-private[ui] class CompletedBatchTableDataSource(
+private[ui] class StreamingBatchTableDataSource(
     info: Seq[BatchUIData],
     pageSize: Int,
     sortColumn: String,

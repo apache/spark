@@ -484,46 +484,45 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </tr>
   }
 
-  private def completedBatchTable(
+  private def streamingBatchTable(
       request: HttpServletRequest,
-      batches: Seq[BatchUIData],
+      batchData: Seq[BatchUIData],
+      streamingBatchTag: String,
       batchInterval: Long): Seq[Node] = {
-
-    val completedBatchTag = "completedBatch"
     val parameterOtherTable = request.getParameterMap.asScala
-      .filterNot(_._1.startsWith(completedBatchTag))
+      .filterNot(_._1.startsWith(streamingBatchTag))
       .map { case (name, vals) =>
         name + "=" + vals(0)
       }
 
-    val parameterCompletedBatchPage = request.getParameter(completedBatchTag + ".page")
-    val parameterCompletedBatchSortColumn = request.getParameter(completedBatchTag + ".sort")
-    val parameterCompletedBatchSortDesc = request.getParameter(completedBatchTag + ".desc")
-    val parameterCompletedBatchPageSize = request.getParameter(completedBatchTag + ".pageSize")
+    val parameterStreamingBatchPage = request.getParameter(streamingBatchTag + ".page")
+    val parameterStreamingBatchSortColumn = request.getParameter(streamingBatchTag + ".sort")
+    val parameterStreamingBatchSortDesc = request.getParameter(streamingBatchTag + ".desc")
+    val parameterStreamingBatchPageSize = request.getParameter(streamingBatchTag + ".pageSize")
 
-    val completedBatchPage = Option(parameterCompletedBatchPage).map(_.toInt).getOrElse(1)
-    val completedBatchSortColumn = Option(parameterCompletedBatchSortColumn).map { sortColumn =>
+    val streamingBatchPage = Option(parameterStreamingBatchPage).map(_.toInt).getOrElse(1)
+    val streamingBatchSortColumn = Option(parameterStreamingBatchSortColumn).map { sortColumn =>
       SparkUIUtils.decodeURLParameter(sortColumn)
     }.getOrElse("Batch Time")
-    val completedBatchSortDesc = Option(parameterCompletedBatchSortDesc).map(_.toBoolean).getOrElse(
-      completedBatchSortColumn == "Batch Time"
+    val streamingBatchSortDesc = Option(parameterStreamingBatchSortDesc).map(_.toBoolean).getOrElse(
+      streamingBatchSortColumn == "Batch Time"
     )
-    val completedBatchPageSize = Option(parameterCompletedBatchPageSize).map(_.toInt).getOrElse(100)
+    val streamingBatchPageSize = Option(parameterStreamingBatchPageSize).map(_.toInt).getOrElse(100)
 
     try {
-      new CompletedBatchPagedTable(
+      new StreamingBatchPagedTable(
         request,
         parent,
         batchInterval,
-        listener.retainedCompletedBatches,
-        completedBatchTag,
+        batchData,
+        streamingBatchTag,
         SparkUIUtils.prependBaseUri(request, parent.basePath),
         "streaming", // subPath
         parameterOtherTable,
-        pageSize = completedBatchPageSize,
-        sortColumn = completedBatchSortColumn,
-        desc = completedBatchSortDesc
-      ).table(completedBatchPage)
+        pageSize = streamingBatchPageSize,
+        sortColumn = streamingBatchSortColumn,
+        desc = streamingBatchSortDesc
+      ).table(streamingBatchPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
         <div class="alert alert-error">
@@ -540,6 +539,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val waitingBatches = listener.waitingBatches.sortBy(_.batchTime.milliseconds).reverse
     val completedBatches = listener.retainedCompletedBatches.
       sortBy(_.batchTime.milliseconds).reverse
+    val activeBatchData = waitingBatches ++ runningBatches
 
     val activeBatchesContent = {
       <div class="row-fluid">
@@ -553,7 +553,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
             </h4>
           </span>
           <div class="aggregated-activeBatches collapsible-table">
-            {new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq}
+            {streamingBatchTable(request, activeBatchData, "activeBatch",
+            listener.batchDuration)}
           </div>
         </div>
       </div>
@@ -572,7 +573,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
             </h4>
           </span>
           <div class="aggregated-completedBatches collapsible-table">
-            {completedBatchTable(request, completedBatches, listener.batchDuration)}
+            {streamingBatchTable(request, completedBatches, "completedBatch",
+            listener.batchDuration)}
           </div>
         </div>
       </div>
