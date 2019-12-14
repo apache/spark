@@ -937,7 +937,12 @@ private[hive] object HiveClientImpl {
     }
     hiveTable.setFields(schema.asJava)
     hiveTable.setPartCols(partCols.asJava)
-    userName.foreach(hiveTable.setOwner)
+    // Here when the table owner exists, we should not reset the owner with current userName
+    if (table.owner != null && table.owner.nonEmpty) {
+      hiveTable.setOwner(table.owner)
+    } else {
+      userName.foreach(hiveTable.setOwner)
+    }
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
     hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
     table.storage.locationUri.map(CatalogUtils.URIToString).foreach { loc =>
