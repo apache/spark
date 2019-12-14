@@ -198,10 +198,6 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not like 'pattern%' escape '\"'", !('a.like("pattern%", '\"')))
     intercept("a not like 'pattern%' escape '\"/'", message)
     intercept("a not like 'pattern%' escape ''", message)
-
-    val message2 = "Escape string can not be '%', '_'."
-    intercept("a like 'pattern%' escape '_'", message2)
-    intercept("a like 'pattern%' escape '%'", message2)
   }
 
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
