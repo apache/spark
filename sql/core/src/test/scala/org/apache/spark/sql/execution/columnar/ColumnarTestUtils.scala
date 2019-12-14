@@ -52,7 +52,7 @@ object ColumnarTestUtils {
       case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
       case BINARY => randomBytes(Random.nextInt(32))
       case CALENDAR_INTERVAL =>
-        new CalendarInterval(Random.nextInt(), Random.nextInt(), 0)
+        new CalendarInterval(Random.nextInt(), Random.nextInt(), Random.nextLong())
       case COMPACT_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
       case LARGE_DECIMAL(precision, scale) => Decimal(Random.nextLong(), precision, scale)
       case STRUCT(_) =>

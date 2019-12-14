@@ -1100,7 +1100,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
   test("cache supports for intervals") {
     withTable("interval_cache") {
       Seq((1, "1 second"), (2, "2 seconds"), (2, null))
-        .toDF("k", "v").write.format("json").saveAsTable("interval_cache")
+        .toDF("k", "v").write.saveAsTable("interval_cache")
       sql("CACHE TABLE t1 AS SELECT k, cast(v as interval) FROM interval_cache")
       assert(spark.catalog.isCached("t1"))
       checkAnswer(sql("SELECT * FROM t1 WHERE k = 1"),
@@ -1108,6 +1108,5 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
       sql("UNCACHE TABLE t1")
       assert(!spark.catalog.isCached("t1"))
     }
-
   }
 }

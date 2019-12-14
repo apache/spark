@@ -304,7 +304,7 @@ private[columnar] final class IntervalColumnStats extends ColumnStats {
       val value = row.getInterval(ordinal)
       if (value.compareTo(upper) > 0) upper = value
       if (value.compareTo(lower) < 0) lower = value
-      sizeInBytes += CALENDAR_INTERVAL.defaultSize
+      sizeInBytes += CALENDAR_INTERVAL.actualSize(row, ordinal)
       count += 1
     } else {
       gatherNullStats
