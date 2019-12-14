@@ -288,32 +288,39 @@ private[yarn] class YarnAllocator(
     var overheadMem = memoryOverhead.toLong
     var pysparkMem = pysparkWorkerMemory.toLong
     var cores = defaultExecutorCores
-    val yarnCustomResources = new mutable.HashMap[String, String]
+    val customResources = new mutable.HashMap[String, String]
     resourceProfileToTotalExecs.foreach { case (rp, num) =>
       if (!rpIdToYarnResource.contains(rp.id)) {
         getOrUpdateRunningExecutorForRPId(rp.id)
         logInfo(s"resource profile ${rp.id} doesn't exist, adding it")
-        val execResources = Option(rp.executorResources)
-        execResources.foreach { reqs =>
-          if (reqs.cores != -1) cores = reqs.cores
-          if (reqs.memory != -1) heapMem = reqs.memory
-          if (reqs.overheadMemory != -1) overheadMem = reqs.overheadMemory
-          if (reqs.pysparkMemory != -1) pysparkMem = reqs.pysparkMemory
-        }
-        val execCustomResources = execResources.map(_.resources).getOrElse(Map.empty)
-        execCustomResources.foreach { case (r, execReq) =>
+        val execResources = rp.executorResources
+        execResources.foreach { case (r, execReq) =>
           r match {
-            case "gpu" =>
-              yarnCustomResources(YARN_GPU_RESOURCE_CONFIG) = execReq.amount.toString
-            case "fpga" =>
-              yarnCustomResources(YARN_FPGA_RESOURCE_CONFIG) = execReq.amount.toString
+            case "memory" =>
+              heapMem = execReq.amount
+            case "memoryOverhead" =>
+              overheadMem = execReq.amount
+            case "pyspark.memory" =>
+              pysparkMem = execReq.amount
+            case "cores" =>
+              cores = execReq.amount.toInt
+            case "resource.gpu" =>
+              customResources(YARN_GPU_RESOURCE_CONFIG) = execReq.amount.toString
+            case "resource.fpga" =>
+              customResources(YARN_FPGA_RESOURCE_CONFIG) = execReq.amount.toString
             case _ =>
-              yarnCustomResources(_) = execReq.amount.toString
+              // strip off resource. if needed
+              val name = if (r.contains(RESOURCE_DOT)) {
+                r.substring(RESOURCE_DOT.size)
+              } else {
+                r
+              }
+              customResources(name) = execReq.amount.toString
           }
         }
         val resource = Resource.newInstance(
           heapMem + offHeapMem + overheadMem + pysparkMem, cores)
-        ResourceRequestHelper.setResourceRequests(yarnCustomResources.toMap, resource)
+        ResourceRequestHelper.setResourceRequests(customResources.toMap, resource)
         logDebug(s"Created resource capability: $resource")
         rpIdToYarnResource(rp.id) = resource
         rpIdToResourceProfile(rp.id) = rp
@@ -705,16 +712,9 @@ private[yarn] class YarnAllocator(
       }
 
       val rp = rpIdToResourceProfile(rpId)
-      val containerMem = if (rp.executorResources.memory == -1) {
-        executorMemory
-      } else {
-        rp.executorResources.memory
-      }
-      val containerCores = if (rp.getExecutorCores == -1) {
-        defaultExecutorCores
-      } else {
-        rp.getExecutorCores
-      }
+      val containerMem = rp.executorResources.get(ResourceProfile.MEMORY).
+        map(_.amount.toInt).getOrElse(executorMemory)
+      val containerCores = rp.getExecutorCores.getOrElse(defaultExecutorCores)
       val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size()
       if (rpRunningExecs < getTargetNumExecutorsForRPId(rpId)) {
         getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
@@ -728,7 +728,7 @@ private[yarn] class YarnAllocator(
                 driverUrl,
                 executorId,
                 executorHostname,
-                containerMem.toInt,
+                containerMem,
                 containerCores,
                 appAttemptId.getApplicationId.toString,
                 securityMgr,

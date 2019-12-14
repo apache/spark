@@ -18,6 +18,7 @@
 package org.apache.spark.resource
 
 import java.util.{Map => JMap}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.JavaConverters._
@@ -41,20 +42,23 @@ import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
 class ResourceProfile() extends Serializable with Logging {
 
   private val _id = ResourceProfile.getNextProfileId
-  private var _taskResources: Option[TaskResourceRequests] = None
-  private var _executorResources: Option[ExecutorResourceRequests] = None
+  private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
+  private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
   private var _executorResourceNumParts: Option[mutable.HashMap[String, Int]] = None
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
 
   def id: Int = _id
-  // TODO - do we want null? - works well with Java side
-  def taskResources: TaskResourceRequests = _taskResources.getOrElse(null)
-  def executorResources: ExecutorResourceRequests = _executorResources.getOrElse(null)
+  def taskResources: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
+  def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
 
-  def getExecutorCores: Int = _executorResources.map(_.cores).getOrElse(-1)
+  def getExecutorCores: Option[Int] = {
+    executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
+  }
 
-  def getTaskCpus: Int = _taskResources.map(_.cpus).getOrElse(-1)
+  def getTaskCpus: Option[Int] = {
+    taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
+  }
 
   private[spark] def getNumSlotsPerAddress(resource: String, sparkConf: SparkConf): Int = {
     _executorResourceNumParts.getOrElse {
@@ -87,40 +91,31 @@ class ResourceProfile() extends Serializable with Logging {
    * limiting resource is gpu, and this function will return 2.
    */
   private def calculateTasksAndLimitingResource(sparkConf: SparkConf): Unit = synchronized {
-    val coresPerExecutor = if (getExecutorCores == -1) {
-      sparkConf.get(EXECUTOR_CORES)
-    } else {
-      getExecutorCores
-    }
-    val cpusPerTask = if (getTaskCpus == -1 ) {
-      sparkConf.get(CPUS_PER_TASK)
-    } else {
-      getTaskCpus
-    }
+    val coresPerExecutor = getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
+    val cpusPerTask = taskResources.get(ResourceProfile.CPUS)
+      .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
     val tasksBasedOnCores = coresPerExecutor / cpusPerTask
     var limitingResource = ResourceProfile.CPUS
     _executorResourceNumParts = Some(new mutable.HashMap[String, Int])
     val numPartsMap = _executorResourceNumParts.get
     var taskLimit = tasksBasedOnCores
     logInfo(s"in calculateTasksAndLimiting $taskLimit on cores")
+    executorResources.foreach { case (rName, request) =>
+      logInfo(s"executor resource $rName")
+      val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
+      numPartsMap(rName) = 1
+      if (taskReq > 0.0) {
+        val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
+        numPartsMap(rName) = parts
+        val numTasks = ((request.amount * parts) / numPerTask).toInt
+        logInfo(s"executor resource $rName num " +
+          s"tasks $numTasks ${request.amount} $parts $numPerTask")
 
-    Option(executorResources).map(_.resources).getOrElse(Map.empty).foreach {
-      case (rName, request) =>
-        logInfo(s"executor resource $rName")
-        val taskReq = taskResources.resources.get(rName).map(_.amount).getOrElse(0.0)
-        numPartsMap(rName) = 1
-        if (taskReq > 0.0) {
-          val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
-          numPartsMap(rName) = parts
-          val numTasks = ((request.amount * parts) / numPerTask).toInt
-          logInfo(s"executor resource $rName num " +
-            s"tasks $numTasks ${request.amount} $parts $numPerTask")
-
-          if (numTasks < taskLimit) {
-            limitingResource = rName
-            taskLimit = numTasks
-          }
+        if (numTasks < taskLimit) {
+          limitingResource = rName
+          taskLimit = numTasks
         }
+      }
     }
     logInfo(s"Limiting resource is $limitingResource at $taskLimit tasks per executor")
     _maxTasksPerExecutor = Some(taskLimit)
@@ -130,33 +125,30 @@ class ResourceProfile() extends Serializable with Logging {
   /**
    * (Java-specific) gets a Java Map of resources to TaskResourceRequest
    */
-  def taskResourcesJMap: JMap[String, TaskResourceRequest] = {
-    _taskResources.map(_.resources).getOrElse(Map.empty).asJava
-  }
+  def taskResourcesJMap: JMap[String, TaskResourceRequest] = _taskResources.asScala.asJava
+
   /**
    * (Java-specific) gets a Java Map of resources to ExecutorResourceRequest
    */
   def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = {
-    _executorResources.map(_.resources).getOrElse(Map.empty).asJava
+    _executorResources.asScala.asJava
   }
 
   def reset(): Unit = {
-    _taskResources = None
-    _executorResources = None
+    _taskResources.clear()
+    _executorResources.clear()
     _executorResourceNumParts = None
     _maxTasksPerExecutor = None
     _limitingResource = None
   }
 
   def require(requests: ExecutorResourceRequests): this.type = {
-    // copy the requests at this point so they are immutable when used within Spark
-    _executorResources = Some(requests.clone())
+    _executorResources.putAll(requests.requests.asJava)
     this
   }
 
   def require(requests: TaskResourceRequests): this.type = {
-    // copy the requests at this point so they are immutable when used within Spark
-    _taskResources = Some(requests.clone())
+    _taskResources.putAll(requests.requests.asJava)
     this
   }
 
@@ -188,7 +180,7 @@ private[spark] object ResourceProfile extends Logging {
   val OVERHEAD_MEM = "memoryOverhead"
   val PYSPARK_MEM = "pyspark.memory"
 
-  val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor.resource"
+  val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
 
   private def resourceProfileIntConfPrefix(rpId: Int): String = {
     s"$SPARK_RP_EXEC_PREFIX.$rpId."
@@ -196,8 +188,8 @@ private[spark] object ResourceProfile extends Logging {
 
   // Helper class for constructing the resource profile internal configs used to pass to
   // executors. The configs look like:
-  // spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
-  // Note custom resources have name like gpu.
+  // spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
+  // Note custom resources have name like resource.gpu.
   case class ResourceProfileInternalConf(id: Int, resourceName: String) {
     def resourceNameConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceName"
     def resourceNameAndAmount: String = s"$resourceName.${ResourceUtils.AMOUNT}"
@@ -285,7 +277,7 @@ private[spark] object ResourceProfile extends Logging {
    */
   def createResourceProfileInternalConfs(rp: ResourceProfile): Map[String, String] = {
     val ret = new mutable.HashMap[String, String]()
-    Option(rp.executorResources).map(_.resources).getOrElse(Map.empty).foreach { case (name, req) =>
+    rp.executorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
       val execIntConf = ResourceProfileInternalConf(rp.id, name)
       ret(execIntConf.amountConf) = req.amount.toString
       if (req.vendor.nonEmpty) ret(execIntConf.vendorConf) = req.vendor
@@ -298,7 +290,7 @@ private[spark] object ResourceProfile extends Logging {
    * Parse out just the resourceName given the map of confs. It only looks for confs that
    * end with .amount because we should always have one of those for every resource.
    * Format is expected to be: [resourcename].amount, where resourceName could have multiple
-   * .'s like gpu.foo.amount
+   * .'s like resource.gpu.foo.amount
    */
   private def listResourceNames(confs: Map[String, String]): Seq[String] = {
     confs.filterKeys(_.endsWith(ResourceUtils.AMOUNT)).
@@ -322,7 +314,11 @@ private[spark] object ResourceProfile extends Logging {
       val amount = execConfs.get(intConf.resourceNameAndAmount).get.toInt
       val vendor = execConfs.get(intConf.resourceNameAndVendor)
       val discoveryScript = execConfs.get(intConf.resourceNameAndDiscovery)
-      val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, rName)
+      // note resourceName at this point is resource.[something] because with ResourceProfiles
+      // the name matches the spark conf. Strip off the resource. part here to match how global
+      // custom resource confs are parsed and how any resource files are handled.
+      val shortResourceName = rName.substring(RESOURCE_DOT.length)
+      val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, shortResourceName)
       ResourceRequest(resourceId, amount, discoveryScript, vendor)
     }
     resourceReqs

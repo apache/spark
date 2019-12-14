@@ -17,11 +17,10 @@
 
 package org.apache.spark.resource
 
-import java.util.concurrent.ConcurrentHashMap
-
-import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.resource.ResourceProfile._
+import org.apache.spark.resource.ResourceUtils._
 
 /**
  * A set of task resource requests. This is used in conjuntion with the ResourceProfile to
@@ -33,19 +32,9 @@ import org.apache.spark.resource.ResourceProfile._
  */
 private[spark] class TaskResourceRequests() extends Serializable {
 
-  private val _customResources = new ConcurrentHashMap[String, TaskResourceRequest]()
+  private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
 
-  @volatile private var _cpus: Int = -1
-
-  /**
-   * Returns a Map of the custom resources (GPU, FPGA, etc) set by the user
-   */
-  def resources: Map[String, TaskResourceRequest] = _customResources.asScala.toMap
-
-  /**
-   * Returns the number of cpus specified by the user or -1 if not set
-   */
-  def cpus: Int = _cpus
+  def requests: Map[String, TaskResourceRequest] = _taskResources.toMap
 
   /**
    * Specify number of cpus per Task.
@@ -53,7 +42,8 @@ private[spark] class TaskResourceRequests() extends Serializable {
    * @param amount Number of cpus to allocate per Task.
    */
   def cpus(amount: Int): this.type = {
-    _cpus = amount
+    val t = new TaskResourceRequest(CPUS, amount)
+    _taskResources(CPUS) = t
     this
   }
 
@@ -70,20 +60,16 @@ private[spark] class TaskResourceRequests() extends Serializable {
    */
   def resource(rName: String, amount: Double): this.type = {
     val t = new TaskResourceRequest(rName, amount)
-    _customResources(rName) = t
+    _taskResources(rName) = t
+    this
+  }
+
+  def addRequest(treq: TaskResourceRequest): this.type = {
+    _taskResources(treq.resourceName) = treq
     this
   }
 
   override def toString: String = {
-    s"Task cpus: ${_cpus}, resource requests: ${_customResources}"
-  }
-
-  override def clone(): TaskResourceRequests = {
-    val newReq = new TaskResourceRequests()
-      .cpus(_cpus)
-    resources.foreach { case (name, res) =>
-      newReq.resource(res.resourceName, res.amount)
-    }
-    newReq
+    s"Task resource requests: ${_taskResources}"
   }
 }

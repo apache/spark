@@ -163,11 +163,8 @@ private[spark] class LocalSchedulerBackend(
   // Doesn't support different ResourceProfiles yet
   // so we expect all executors to be of same ResourceProfile
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = {
-    val cpusPerTask = if (rp.getTaskCpus == -1) {
-      scheduler.CPUS_PER_TASK
-    } else {
-      rp.getTaskCpus
-    }
+    val cpusPerTask = rp.taskResources.get(ResourceProfile.CPUS)
+      .map(_.amount.toInt).getOrElse(scheduler.CPUS_PER_TASK)
     totalCores / cpusPerTask
   }
 
