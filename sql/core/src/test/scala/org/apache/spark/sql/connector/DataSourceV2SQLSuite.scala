@@ -1898,6 +1898,22 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-30259: session catalog can be specified in CREATE TABLE AS SELECT command") {
+    withTable("tbl") {
+      val ident = Identifier.of(Array(), "tbl")
+      sql("CREATE TABLE spark_catalog.tbl USING json AS SELECT 1 AS i")
+      assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
+    }
+  }
+
+  test("SPARK-30259: session catalog can be specified in CREATE TABLE command") {
+    withTable("tbl") {
+      val ident = Identifier.of(Array(), "tbl")
+      sql("CREATE TABLE spark_catalog.tbl (col string) USING json")
+      assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
