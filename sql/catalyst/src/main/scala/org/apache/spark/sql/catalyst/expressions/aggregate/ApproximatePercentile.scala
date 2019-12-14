@@ -75,12 +75,17 @@ case class ApproximatePercentile(
     override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes {
 
-  def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
-    this("percentile_approx", child, percentageExpression, accuracyExpression, 0, 0)
+  def this(
+    funcName: String,
+    child: Expression,
+    percentageExpression: Expression,
+    accuracyExpression: Expression) = {
+    this(funcName, child, percentageExpression, accuracyExpression, 0, 0)
   }
 
-  def this(child: Expression, percentageExpression: Expression) = {
-    this(child, percentageExpression, Literal(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
+  def this(funcName: String, child: Expression, percentageExpression: Expression) = {
+    this(funcName, child, percentageExpression,
+      Literal(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
   }
 
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
@@ -326,4 +331,22 @@ object ApproximatePercentile {
   }
 
   val serializer: PercentileDigestSerializer = new PercentileDigestSerializer
+
+  def apply(
+    child: Expression,
+    percentageExpression: Expression,
+    accuracyExpression: Expression,
+    mutableAggBufferOffset: Int, inputAggBufferOffset: Int): ApproximatePercentile =
+    new ApproximatePercentile("percentile_approx", child, percentageExpression,
+      accuracyExpression, mutableAggBufferOffset, inputAggBufferOffset)
+
+  def apply(
+    child: Expression,
+    percentageExpression: Expression,
+    accuracyExpression: Expression): ApproximatePercentile = {
+    new ApproximatePercentile("percentile_approx", child, percentageExpression, accuracyExpression)
+  }
+
+  def apply(child: Expression, percentageExpression: Expression): ApproximatePercentile =
+    new ApproximatePercentile("percentile_approx", child, percentageExpression)
 }
