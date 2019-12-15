@@ -229,4 +229,14 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
         assert(expected.weights === actual.weights)
       }
   }
+
+  test("load a 2.4.4 model") {
+    // a pre-saved 2.4.4 model with layers Array(4, 5, 2)
+    val model_path = "mlp_model_2.4.4"
+    val model = MultilayerPerceptronClassificationModel.load(model_path)
+    val layers = model.getLayers
+    assert(layers(0) === 4)
+    assert(layers(1) === 5)
+    assert(layers(2) === 2)
+  }
 }

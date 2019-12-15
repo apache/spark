@@ -299,13 +299,6 @@ class MultilayerPerceptronClassificationModel private[ml] (
   def setLayers(value: Array[Int]): this.type = set(layers, value)
 
   /**
-   * Returns layers in a Java List.
-   */
-  private[ml] def javaLayers: java.util.List[Int] = {
-    $(layers).toList.asJava
-  }
-
-  /**
    * Predict label for the given features.
    * This internal method is used to implement `transform()` and output [[predictionCol]].
    */
@@ -360,7 +353,7 @@ object MultilayerPerceptronClassificationModel
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: layers, weights
+      // Save model data: weights
       val data = Data(instance.weights)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
@@ -377,15 +370,15 @@ object MultilayerPerceptronClassificationModel
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val columns = sparkSession.read.parquet(dataPath).columns
-      val model = if (columns.length == 2) { // model prior to 3.0.0
-        val data = sparkSession.read.parquet(dataPath).select("layers", "weights").head()
+      val df = sparkSession.read.parquet(dataPath)
+      val model = if (df.columns.length == 2) { // model prior to 3.0.0
+        val data = df.select("layers", "weights").head()
         val layers = data.getAs[Seq[Int]](0).toArray
         val weights = data.getAs[Vector](1)
         val model = new MultilayerPerceptronClassificationModel(metadata.uid, weights)
          model.setLayers(layers)
       } else {
-        val data = sparkSession.read.parquet(dataPath).select("weights").head()
+        val data = df.select("weights").head()
         val weights = data.getAs[Vector](0)
         new MultilayerPerceptronClassificationModel(metadata.uid, weights)
       }
