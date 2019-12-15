@@ -132,7 +132,9 @@ class HadoopTableReader(
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
       val hconf = broadcastedHadoopConf.value.value
       val deserializer = deserializerClass.getConstructor().newInstance()
-      deserializer.initialize(hconf, localTableDesc.getProperties)
+      DeserializerLock.synchronized {
+        deserializer.initialize(hconf, localTableDesc.getProperties)
+      }
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
     }
 
@@ -252,10 +254,14 @@ class HadoopTableReader(
         partProps.asScala.foreach {
           case (key, value) => props.setProperty(key, value)
         }
-        deserializer.initialize(hconf, props)
+        DeserializerLock.synchronized {
+          deserializer.initialize(hconf, props)
+        }
         // get the table deserializer
         val tableSerDe = localTableDesc.getDeserializerClass.getConstructor().newInstance()
-        tableSerDe.initialize(hconf, localTableDesc.getProperties)
+        DeserializerLock.synchronized {
+          tableSerDe.initialize(hconf, tableProperties)
+        }
 
         // fill the non partition key attributes
         HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs,
@@ -369,6 +375,8 @@ private[hive] object HiveTableUtil {
     }
   }
 }
+
+private[hive] object DeserializerLock
 
 private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   /**
