@@ -22,6 +22,7 @@ import java.io._
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
+import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -99,10 +100,10 @@ private[this] object JsonPathParser extends RegexParsers {
 }
 
 private[this] object SharedFactory {
-  val jsonFactory = new JsonFactory()
-
-  // Enabled for Hive compatibility
-  jsonFactory.enable(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS)
+  val jsonFactory = new JsonFactoryBuilder()
+    // Enabled for Hive compatibility
+    .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
+    .build()
 }
 
 /**
@@ -756,11 +757,7 @@ case class SchemaOfJson(
   private lazy val jsonOptions = new JSONOptions(options, "UTC")
 
   @transient
-  private lazy val jsonFactory = {
-    val factory = new JsonFactory()
-    jsonOptions.setJacksonOptions(factory)
-    factory
-  }
+  private lazy val jsonFactory = jsonOptions.buildJsonFactory()
 
   @transient
   private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)
