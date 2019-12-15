@@ -24,7 +24,6 @@ import java.net.{URI, URL}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent._
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -73,10 +72,6 @@ private[spark] class Executor(
 
   private val conf = env.conf
 
-  private val executorShutdown = new AtomicBoolean(false)
-  ShutdownHookManager.addShutdownHook(
-    () => stop()
-  )
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
   // must not have port specified.
@@ -249,26 +244,24 @@ private[spark] class Executor(
   }
 
   def stop(): Unit = {
-    if (!executorShutdown.getAndSet(true)) {
-      env.metricsSystem.report()
-      heartbeater.shutdown()
-      heartbeater.awaitTermination(10, TimeUnit.SECONDS)
-      threadPool.shutdown()
+    env.metricsSystem.report()
+    heartbeater.shutdown()
+    heartbeater.awaitTermination(10, TimeUnit.SECONDS)
+    threadPool.shutdown()
 
-      // Notify plugins that executor is shutting down so they can terminate cleanly
-      Utils.withContextClassLoader(replClassLoader) {
-        executorPlugins.foreach { plugin =>
-          try {
-            plugin.shutdown()
-          } catch {
-            case e: Exception =>
-              logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
-          }
+    // Notify plugins that executor is shutting down so they can terminate cleanly
+    Utils.withContextClassLoader(replClassLoader) {
+      executorPlugins.foreach { plugin =>
+        try {
+          plugin.shutdown()
+        } catch {
+          case e: Exception =>
+            logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
         }
       }
-      if (!isLocal) {
-        env.stop()
-      }
+    }
+    if (!isLocal) {
+      env.stop()
     }
   }
 
