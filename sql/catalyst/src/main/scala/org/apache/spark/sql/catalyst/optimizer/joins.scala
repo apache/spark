@@ -119,7 +119,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         createOrderedJoin(input, conditions)
       }
 
-      // Checks if joins were reordered. If not reordered, returns the original plan
+      // To avoid applying this rule repeatedly, we don't change the plan in case of
+      // the same join order between `p` and `reordered`.
       if (!sameJoinOrder(reordered, p)) {
         if (p.sameOutput(reordered)) {
           reordered
@@ -129,7 +130,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
           Project(p.output, reordered)
         }
       } else {
-        reordered
+        p
       }
   }
 }

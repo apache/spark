@@ -137,7 +137,7 @@ class JoinOptimizationSuite extends PlanTest {
     }
   }
 
-  test("SPARK-23172 skip projections when flattening joins") {
+  test("Skip projections when flattening joins") {
     def checkExtractInnerJoins(plan: LogicalPlan): Unit = {
       val expectedTables = plan.collectLeaves().map { case p => (p, Inner) }
       val expectedConditions = plan.collect {
@@ -170,7 +170,7 @@ class JoinOptimizationSuite extends PlanTest {
     checkExtractInnerJoins(joined)
   }
 
-  test("SPARK-23172 reorder joins with projections") {
+  test("Reorder joins with projections") {
     withSQLConf(
         SQLConf.STARSCHEMA_DETECTION.key -> "true",
         SQLConf.CBO_ENABLED.key -> "false") {
