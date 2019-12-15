@@ -67,7 +67,9 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def +=(v: Long): Unit = _value += v
 
-  override def value: Long = _value
+  def getRawValue(): Long = _value
+
+  override def value: Long = Math.max(_value, 0)
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
@@ -205,7 +207,8 @@ object SQLMetrics {
     // directly without setting an execution id. We should be tolerant to it.
     if (executionId != null) {
       sc.listenerBus.post(
-        SparkListenerDriverAccumUpdates(executionId.toLong, metrics.map(m => m.id -> m.value)))
+        SparkListenerDriverAccumUpdates(
+          executionId.toLong, metrics.map(m => m.id -> m.getRawValue())))
     }
   }
 }
