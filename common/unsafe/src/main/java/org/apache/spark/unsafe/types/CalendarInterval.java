@@ -34,6 +34,10 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
   public final int days;
   public final long microseconds;
 
+  // CalendarInterval is represented by months, days and microseconds. Months and days are not
+  // units of time with a constant length (unlike hours, seconds), so they are two separated fields
+  // from microseconds. One month may be equal to 29, 30 or 31 days and one day may be equal to
+  // 23, 24 or 25 hours (daylight saving)
   public CalendarInterval(int months, int days, long microseconds) {
     this.months = months;
     this.days = days;
@@ -129,4 +133,16 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
    * @throws ArithmeticException if a numeric overflow occurs
    */
   public Duration extractAsDuration() { return Duration.of(microseconds, ChronoUnit.MICROS); }
+
+  /**
+   * A constant holding the minimum value an {@code CalendarInterval} can have.
+   */
+  public static CalendarInterval MIN_VALUE =
+    new CalendarInterval(Integer.MIN_VALUE, Integer.MIN_VALUE, Long.MIN_VALUE);
+
+  /**
+   * A constant holding the maximum value an {@code CalendarInterval} can have.
+   */
+  public static CalendarInterval MAX_VALUE =
+    new CalendarInterval(Integer.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE);
 }

@@ -21,6 +21,9 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.spark.network.shuffle.protocol.*;
 
 /** Verifies that all BlockTransferMessages can be serialized correctly. */
@@ -41,10 +44,29 @@ public class BlockTransferMessagesSuite {
     checkSerializeDeserialize(new StreamHandle(12345, 16));
   }
 
-  private void checkSerializeDeserialize(BlockTransferMessage msg) {
+  @Test
+  public void testLocalDirsMessages() {
+    checkSerializeDeserialize(
+      new GetLocalDirsForExecutors("app-1", new String[]{"exec-1", "exec-2"}));
+
+    Map<String, String[]> map = new HashMap<>();
+    map.put("exec-1", new String[]{"loc1.1"});
+    map.put("exec-22", new String[]{"loc2.1", "loc2.2"});
+    LocalDirsForExecutors localDirsForExecs = new LocalDirsForExecutors(map);
+    Map<String, String[]> resultMap =
+      ((LocalDirsForExecutors)checkSerializeDeserialize(localDirsForExecs)).getLocalDirsByExec();
+    assertEquals(resultMap.size(), map.keySet().size());
+    for (Map.Entry<String, String[]> e: map.entrySet()) {
+      assertTrue(resultMap.containsKey(e.getKey()));
+      assertArrayEquals(e.getValue(), resultMap.get(e.getKey()));
+    }
+  }
+
+  private BlockTransferMessage checkSerializeDeserialize(BlockTransferMessage msg) {
     BlockTransferMessage msg2 = BlockTransferMessage.Decoder.fromByteBuffer(msg.toByteBuffer());
     assertEquals(msg, msg2);
     assertEquals(msg.hashCode(), msg2.hashCode());
     assertEquals(msg.toString(), msg2.toString());
+    return msg2;
   }
 }

@@ -63,7 +63,7 @@ case class AdaptiveSparkPlanExec(
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient subqueryCache: TrieMap[SparkPlan, BaseSubqueryExec],
     @transient stageCache: TrieMap[SparkPlan, QueryStageExec],
-    @transient queryExecution: QueryExecution)
+    @transient isSubquery: Boolean)
   extends LeafExecNode {
 
   @transient private val lock = new Object()
@@ -128,14 +128,12 @@ case class AdaptiveSparkPlanExec(
 
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (!isFinalPlan) {
-      // Make sure we only update Spark UI if this plan's `QueryExecution` object matches the one
-      // retrieved by the `sparkContext`'s current execution ID. Note that sub-queries do not have
-      // their own execution IDs and therefore rely on the main query to update UI.
-      val executionId = Option(
-        session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).flatMap { idStr =>
-        val id = idStr.toLong
-        val qe = SQLExecution.getQueryExecution(id)
-        if (qe.eq(queryExecution)) Some(id) else None
+      // Subqueries do not have their own execution IDs and therefore rely on the main query to
+      // update UI.
+      val executionId = if (isSubquery) {
+        None
+      } else {
+        Option(session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
       }
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)

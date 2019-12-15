@@ -24,6 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -40,7 +41,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
-  import df.sparkSession.sessionState.analyzer.CatalogObjectIdentifier
+  import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
 
   private val df: DataFrame = ds.toDF()
 
@@ -51,7 +52,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
   private val (catalog, identifier) = {
-    val CatalogObjectIdentifier(catalog, identifier) = tableName
+    val CatalogAndIdentifier(catalog, identifier) = tableName
     (catalog.asTableCatalog, identifier)
   }
 
@@ -128,7 +129,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
         identifier,
         partitioning.getOrElse(Seq.empty),
         logicalPlan,
-        properties = provider.map(p => properties + ("provider" -> p)).getOrElse(properties).toMap,
+        properties = provider.map(p => properties + (TableCatalog.PROP_PROVIDER -> p))
+          .getOrElse(properties).toMap,
         writeOptions = options.toMap,
         ignoreIfExists = false)
     }

@@ -183,7 +183,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
       }.getMessage
 
       assert(error.contains("Operation not allowed") &&
-        error.contains("CREATE EXTERNAL TABLE ... USING"))
+        error.contains("CREATE EXTERNAL TABLE ..."))
     }
   }
 

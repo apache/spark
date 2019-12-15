@@ -467,6 +467,8 @@ object DataWritingSparkTask extends Logging {
       dataWriter.abort()
       logError(s"Aborted commit for partition $partId (task $taskId, attempt $attemptId, " +
             s"stage $stageId.$stageAttempt)")
+    }, finallyBlock = {
+      dataWriter.close()
     })
   }
 }

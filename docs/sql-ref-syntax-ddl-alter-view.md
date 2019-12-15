@@ -40,7 +40,7 @@ ALTER VIEW view_identifier RENAME TO view_identifier
     Specifies a view name, which may be optionally qualified with a database name.<br><br>
     <b> Syntax:</b>
       <code>
-        [database_name.]view_name
+        [ database_name. ] view_name
       </code>
   </dd>
 </dl>
@@ -52,7 +52,7 @@ the properties.
 
 #### Syntax
 {% highlight sql %}
-ALTER VIEW view_identifier SET TBLPROPERTIES (property_key=property_val [, ...])
+ALTER VIEW view_identifier SET TBLPROPERTIES ( property_key = property_val [ , ... ] )
 {% endhighlight %}
 
 #### Parameters
@@ -62,7 +62,7 @@ ALTER VIEW view_identifier SET TBLPROPERTIES (property_key=property_val [, ...])
     Specifies a view name, which may be optionally qualified with a database name.<br><br>
     <b> Syntax:</b>
       <code>
-        [database_name.]view_name
+        [ database_name. ] view_name
       </code>
   </dd>
   <dt><code><em>property_key</em></code></dt>
@@ -70,7 +70,7 @@ ALTER VIEW view_identifier SET TBLPROPERTIES (property_key=property_val [, ...])
     Specifies the property key. The key may consists of multiple parts separated by dot.<br><br>
     <b>Syntax:</b>
       <code>
-        [key_part1][.key_part2][...]
+        [ key_part1 ] [ .key_part2 ] [ ... ]
       </code>
   </dd>
 </dl>
@@ -81,7 +81,7 @@ Drop one or more properties of an existing view. If the specified keys do not ex
 
 #### Syntax
 {% highlight sql %}
-ALTER VIEW view_identifier UNSET TBLPROPERTIES [IF EXISTS] (property_key [, ...])
+ALTER VIEW view_identifier UNSET TBLPROPERTIES [ IF EXISTS ]  ( property_key [ , ... ] )
 {% endhighlight %}
 
 #### Parameters
@@ -91,7 +91,7 @@ ALTER VIEW view_identifier UNSET TBLPROPERTIES [IF EXISTS] (property_key [, ...]
     Specifies a view name, which may be optionally qualified with a database name.<br><br>
     <b> Syntax:</b>
       <code>
-        [database_name.]view_name
+        [ database_name. ] view_name
       </code>
   </dd>
   <dt><code><em>property_key</em></code></dt>
@@ -99,7 +99,7 @@ ALTER VIEW view_identifier UNSET TBLPROPERTIES [IF EXISTS] (property_key [, ...]
     Specifies the property key. The key may consists of multiple parts separated by dot.<br><br>
     <b>Syntax:</b>
       <code>
-        [key_part1][.key_part2][...]
+        [ key_part1 ] [ .key_part2 ] [ ... ]
       </code>
   </dd>
 </dl>
@@ -120,7 +120,7 @@ ALTER VIEW view_identifier AS select_statement
     Specifies a view name, which may be optionally qualified with a database name.<br><br>
     <b> Syntax:</b>
       <code>
-        [database_name.]view_name
+        [ database_name. ] view_name
       </code>
   </dd>
   <dt><code><em>select_statement</em></code></dt>
