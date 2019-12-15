@@ -71,11 +71,6 @@ cd spark
 git config user.name "$GIT_NAME"
 git config user.email $GIT_EMAIL
 
-if [[ $RELEASE_VERSION == *"preview"* ]]; then
-  echo "It's preview release. Will create a preview branch for this release."
-  git checkout -b preview-release
-fi
-
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
 # Set the release version in R/pkg/DESCRIPTION
@@ -111,6 +106,8 @@ if ! is_dry_run; then
   git push origin $RELEASE_TAG
   if [[ $RELEASE_VERSION != *"preview"* ]]; then
     git push origin HEAD:$GIT_BRANCH
+  else
+    echo "It's preview release. We only push $RELEASE_TAG to remote."
   fi
 
   cd ..
