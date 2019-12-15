@@ -499,7 +499,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val parameterStreamingBatchSortColumn = request.getParameter(streamingBatchTag + ".sort")
     val parameterStreamingBatchSortDesc = request.getParameter(streamingBatchTag + ".desc")
     val parameterStreamingBatchPageSize = request.getParameter(streamingBatchTag + ".pageSize")
-
     val streamingBatchPage = Option(parameterStreamingBatchPage).map(_.toInt).getOrElse(1)
     val streamingBatchSortColumn = Option(parameterStreamingBatchSortColumn).map { sortColumn =>
       SparkUIUtils.decodeURLParameter(sortColumn)
@@ -579,7 +578,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
         </div>
       </div>
     }
-
     activeBatchesContent ++ completedBatchesContent
   }
 }

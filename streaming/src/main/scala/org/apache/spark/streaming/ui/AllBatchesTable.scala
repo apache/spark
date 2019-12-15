@@ -39,9 +39,7 @@ private[ui] class StreamingBatchPagedTable(
     desc: Boolean) extends PagedTable[BatchUIData] {
 
   override val dataSource = new StreamingBatchTableDataSource(batchData, pageSize, sortColumn, desc)
-
   private val parameterPath = s"$basePath/$subPath/?${parameterOtherTable.mkString("&")}"
-
   private val firstFailureReason = getFirstFailureReason(batchData)
 
   override def tableId: String = streamingBatchTag
@@ -200,7 +198,6 @@ private[ui] class StreamingBatchTableDataSource(
     desc: Boolean) extends PagedDataSource[BatchUIData](pageSize) {
 
   private val data = info.sorted(ordering(sortColumn, desc))
-
   private var _slicedStartTime: Set[Long] = null
 
   override def dataSize: Int = data.size
