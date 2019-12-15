@@ -36,6 +36,7 @@ import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutput
 
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -699,5 +700,34 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       classOf[LongWritable], classOf[Text]).collect().isEmpty)
 
     assert(collectRDDAndDeleteFileBeforeCompute(true).isEmpty)
+  }
+
+  test("SPARK-25100: Using KryoSerializer and" +
+      "setting registrationRequired true can lead job failed") {
+    val inputFile = new File(tempDir, "/input").getAbsolutePath
+    val textFileOutputDir = new File(tempDir, "/out1").getAbsolutePath
+    val dataSetDir = new File(tempDir, "/out2").getAbsolutePath
+
+    Utils.tryWithResource(new PrintWriter(new File(inputFile))) { writer =>
+      for (i <- 1 to 100) {
+        writer.print(i)
+        writer.write('\n')
+      }
+    }
+
+    val conf = new SparkConf(false).setMaster("local").
+      set("spark.kryo.registrationRequired", "true").setAppName("test")
+    conf.set("spark.serializer", classOf[KryoSerializer].getName)
+
+    val jobConf = new JobConf()
+    jobConf.setOutputKeyClass(classOf[IntWritable])
+    jobConf.setOutputValueClass(classOf[IntWritable])
+    jobConf.set("mapred.output.dir", dataSetDir)
+
+    sc = new SparkContext(conf)
+    val pairRDD = sc.textFile(inputFile).map(x => (x, 1))
+
+    pairRDD.saveAsTextFile(textFileOutputDir)
+    pairRDD.saveAsNewAPIHadoopDataset(jobConf)
   }
 }

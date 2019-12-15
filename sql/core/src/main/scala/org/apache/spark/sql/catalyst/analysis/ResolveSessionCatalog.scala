@@ -221,7 +221,7 @@ class ResolveSessionCatalog(
     case c @ CreateTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
       if (!isV2Provider(c.provider)) {
-        val tableDesc = buildCatalogTable(c.tableName.asTableIdentifier, c.tableSchema,
+        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, c.tableSchema,
           c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
           c.comment, c.ifNotExists)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
@@ -240,7 +240,7 @@ class ResolveSessionCatalog(
     case c @ CreateTableAsSelectStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
       if (!isV2Provider(c.provider)) {
-        val tableDesc = buildCatalogTable(c.tableName.asTableIdentifier, new StructType,
+        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
           c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
           c.comment, c.ifNotExists)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists

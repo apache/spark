@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.util.{ConcurrentModificationException, UUID}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{TimeoutException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -321,6 +321,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    * @param trigger [[Trigger]] for the query.
    * @param triggerClock [[Clock]] to use for the triggering.
    */
+  @throws[TimeoutException]
   private[sql] def startQuery(
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],

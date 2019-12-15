@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.util.Locale
+import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
 
@@ -238,10 +239,18 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
-   * the stream.
+   * the stream. Throws a `TimeoutException` if the following conditions are met:
+   *  - Another run of the same streaming query, that is a streaming query
+   *    sharing the same checkpoint location, is already active on the same
+   *    Spark Driver
+   *  - The SQL configuration `spark.sql.streaming.stopActiveRunOnRestart`
+   *    is enabled
+   *  - The active run cannot be stopped within the timeout controlled by
+   *    the SQL configuration `spark.sql.streaming.stopTimeout`
    *
    * @since 2.0.0
    */
+  @throws[TimeoutException]
   def start(): StreamingQuery = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +

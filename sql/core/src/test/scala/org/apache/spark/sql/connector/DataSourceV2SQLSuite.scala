@@ -1898,6 +1898,22 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-30259: session catalog can be specified in CREATE TABLE AS SELECT command") {
+    withTable("tbl") {
+      val ident = Identifier.of(Array(), "tbl")
+      sql("CREATE TABLE spark_catalog.tbl USING json AS SELECT 1 AS i")
+      assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
+    }
+  }
+
+  test("SPARK-30259: session catalog can be specified in CREATE TABLE command") {
+    withTable("tbl") {
+      val ident = Identifier.of(Array(), "tbl")
+      sql("CREATE TABLE spark_catalog.tbl (col string) USING json")
+      assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
+    }
+  }
+
   test("SPARK-30094: current namespace is used during table resolution") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)

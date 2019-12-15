@@ -305,11 +305,12 @@ class DataFrame(object):
         is_mode_case = mode is not None and isinstance(mode, basestring)
 
         if not is_no_argument and not (is_extended_case or is_mode_case):
-            argtypes = [
-                str(type(arg)) for arg in [extended, mode] if arg is not None]
-            raise TypeError(
-                "extended (optional) and mode (optional) should be a bool and str; "
-                "however, got [%s]." % ", ".join(argtypes))
+            if extended is not None:
+                errMsg = "extended (optional) should be provided as bool" \
+                    ", got {0}".format(type(extended))
+            else:  # For mode case
+                errMsg = "mode (optional) should be provided as str, got {0}".format(type(mode))
+            raise TypeError(errMsg)
 
         # Sets an explain mode depending on a given argument
         if is_no_argument:
