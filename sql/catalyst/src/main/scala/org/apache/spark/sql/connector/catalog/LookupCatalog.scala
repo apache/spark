@@ -144,18 +144,4 @@ private[sql] trait LookupCatalog extends Logging {
         None
     }
   }
-
-  /**
-   * For temp views, extract a table identifier from a multi-part identifier if it has no catalog.
-   */
-  object AsTemporaryViewIdentifier {
-    def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndMultipartIdentifier(None, Seq(table)) =>
-        Some(TableIdentifier(table))
-      case CatalogAndMultipartIdentifier(None, Seq(database, table)) =>
-        Some(TableIdentifier(table, Some(database)))
-      case _ =>
-        None
-    }
-  }
 }
