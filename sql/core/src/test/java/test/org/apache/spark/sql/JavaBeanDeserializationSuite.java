@@ -585,6 +585,14 @@ public class JavaBeanDeserializationSuite implements Serializable {
       return Objects.hash(localDateField, instantField);
     }
 
+    @Override
+    public String toString() {
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+          .append("localDateField", localDateField)
+          .append("instantField", instantField)
+          .toString();
+    }
+
   }
 
   private static Row createLocalDateInstantRow(Long index) {
