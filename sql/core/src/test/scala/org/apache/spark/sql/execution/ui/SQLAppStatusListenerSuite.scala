@@ -20,10 +20,8 @@ package org.apache.spark.sql.execution.ui
 import java.util.Properties
 
 import scala.collection.mutable.ListBuffer
-
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
-
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.executor.ExecutorMetrics
@@ -36,14 +34,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SQLExecution, SparkPlanInfo}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
+import org.apache.spark.util.{AccumulatorMetadata, AccumulatorMode, JsonProtocol, LongAccumulator}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
@@ -111,7 +109,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   private def createAccumulatorInfos(accumulatorUpdates: Map[Long, Long]): Seq[AccumulableInfo] = {
     accumulatorUpdates.map { case (id, value) =>
       val acc = new LongAccumulator
-      acc.metadata = AccumulatorMetadata(id, None, false)
+      acc.metadata = AccumulatorMetadata(id, None, false, AccumulatorMode.All)
       acc.toInfo(Some(value), None)
     }.toSeq
   }

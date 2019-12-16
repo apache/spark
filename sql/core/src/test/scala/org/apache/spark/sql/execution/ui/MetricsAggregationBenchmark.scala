@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-
 import org.apache.spark.{SparkConf, TaskState}
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.executor.ExecutorMetrics
@@ -31,7 +30,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{AccumulatorMetadata, LongAccumulator, Utils}
+import org.apache.spark.util.{AccumulatorMetadata, AccumulatorMode, LongAccumulator, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 /**
@@ -116,7 +115,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
 
         val accumulables = (0 until numMetrics).map { mid =>
           val acc = new LongAccumulator
-          acc.metadata = AccumulatorMetadata(mid, None, false)
+          acc.metadata = AccumulatorMetadata(mid, None, false, AccumulatorMode.All)
           acc.toInfo(Some(i.toLong), None)
         }
 

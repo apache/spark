@@ -1525,7 +1525,8 @@ class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {
 
   override def add(v: Integer): Unit = _sum += v
 
-  override def merge(other: AccumulatorV2[Integer, Integer]): Unit = other match {
+  override def merge(other: AccumulatorV2[Integer, Integer],
+                     fragmentId: Option[Int] = None): Unit = other match {
     case a: NumRowGroupsAcc => _sum += a._sum
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")

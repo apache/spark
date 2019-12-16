@@ -26,12 +26,18 @@ import java.util.concurrent.atomic.AtomicLong
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.util.AccumulatorMode.AccumulatorMode
 
 private[spark] case class AccumulatorMetadata(
     id: Long,
     name: Option[String],
-    countFailedValues: Boolean) extends Serializable
+    countFailedValues: Boolean,
+    mode: AccumulatorMode) extends Serializable
 
+object AccumulatorMode extends Enumeration {
+  type AccumulatorMode = Value
+  val All, Max, Last = Value
+}
 
 /**
  * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
@@ -47,11 +53,12 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] def register(
       sc: SparkContext,
       name: Option[String] = None,
-      countFailedValues: Boolean = false): Unit = {
+      countFailedValues: Boolean = false,
+      mode: AccumulatorMode = AccumulatorMode.All): Unit = {
     if (this.metadata != null) {
       throw new IllegalStateException("Cannot register an Accumulator twice.")
     }
-    this.metadata = AccumulatorMetadata(AccumulatorContext.newId(), name, countFailedValues)
+    this.metadata = AccumulatorMetadata(AccumulatorContext.newId(), name, countFailedValues, mode)
     AccumulatorContext.register(this)
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(this))
   }
@@ -145,10 +152,11 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   def add(v: IN): Unit
 
   /**
-   * Merges another same-type accumulator into this one and update its state, i.e. this should be
-   * merge-in-place.
+   * Merges another same-type accumulator (a fragment) into this one and updates its state,
+   * i.e. this should be merge-in-place.
+   * The fragmentId provides extra context to recognize multiple updates of the same fragment.
    */
-  def merge(other: AccumulatorV2[IN, OUT]): Unit
+  def merge(other: AccumulatorV2[IN, OUT], fragmentId: Option[Int] = None): Unit
 
   /**
    * Defines the current value of this accumulator
@@ -294,6 +302,7 @@ private[spark] object AccumulatorContext extends Logging {
 class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private var _sum = 0L
   private var _count = 0L
+  private val _fragments = scala.collection.mutable.Map.empty[Int, (Long, Long)]
 
   /**
    * Returns false if this accumulator has had any values added to it or the sum is non-zero.
@@ -350,10 +359,15 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
    */
   def avg: Double = _sum.toDouble / _count
 
-  override def merge(other: AccumulatorV2[jl.Long, jl.Long]): Unit = other match {
+  override def merge(other: AccumulatorV2[jl.Long, jl.Long],
+                     fragmentId: Option[Int] = None): Unit = other match {
     case o: LongAccumulator =>
-      _sum += o.sum
-      _count += o.count
+      val (fragmentSum, fragmentCount) =
+        fragmentId
+          .flatMap(_fragments.put(_, (o.sum, o.count)))
+          .getOrElse((0L, 0L))
+      _sum += o.sum - fragmentSum
+      _count += o.count - fragmentCount
     case _ =>
       throw new UnsupportedOperationException(
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -374,6 +388,7 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
 class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private var _sum = 0.0
   private var _count = 0L
+  private val _fragments = scala.collection.mutable.Map.empty[Int, (Double, Long)]
 
   /**
    * Returns false if this accumulator has had any values added to it or the sum is non-zero.
@@ -428,10 +443,15 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
    */
   def avg: Double = _sum / _count
 
-  override def merge(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
+  override def merge(other: AccumulatorV2[jl.Double, jl.Double],
+                     fragmentId: Option[Int] = None): Unit = other match {
     case o: DoubleAccumulator =>
-      _sum += o.sum
-      _count += o.count
+      val (fragmentSum, fragmentCount) =
+        fragmentId
+          .flatMap(_fragments.put(_, (o.sum, o.count)))
+          .getOrElse((0.0, 0L))
+      _sum += o.sum - fragmentSum
+      _count += o.count - fragmentCount
     case _ =>
       throw new UnsupportedOperationException(
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -470,7 +490,8 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 
   override def add(v: T): Unit = _list.add(v)
 
-  override def merge(other: AccumulatorV2[T, java.util.List[T]]): Unit = other match {
+  override def merge(other: AccumulatorV2[T, java.util.List[T]],
+                     fragmentId: Option[Int] = None): Unit = other match {
     case o: CollectionAccumulator[T] => _list.addAll(o.value)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")

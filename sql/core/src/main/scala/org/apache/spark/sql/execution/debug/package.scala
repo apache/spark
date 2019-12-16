@@ -208,7 +208,8 @@ package object debug {
       }
       override def reset(): Unit = _set.clear()
       override def add(v: T): Unit = _set.add(v)
-      override def merge(other: AccumulatorV2[T, java.util.Set[T]]): Unit = {
+      override def merge(other: AccumulatorV2[T, java.util.Set[T]],
+                         fragmentId: Option[Int] = None): Unit = {
         _set.addAll(other.value)
       }
       override def value: java.util.Set[T] = _set

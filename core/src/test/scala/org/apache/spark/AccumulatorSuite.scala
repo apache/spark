@@ -18,19 +18,19 @@
 package org.apache.spark
 
 import java.util.concurrent.Semaphore
+
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
 import scala.util.control.NonFatal
-
 import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
-
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
+import org.apache.spark.util.AccumulatorMode.AccumulatorMode
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorMode, AccumulatorV2, LongAccumulator}
 
 
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -101,10 +101,11 @@ private[spark] object AccumulatorSuite {
       name: String,
       countFailedValues: Boolean = false,
       initValue: Long = 0,
-      id: Long = AccumulatorContext.newId()): LongAccumulator = {
+      id: Long = AccumulatorContext.newId(),
+      mode: AccumulatorMode = AccumulatorMode.All): LongAccumulator = {
     val acc = new LongAccumulator
     acc.setValue(initValue)
-    acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues)
+    acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues, mode)
     AccumulatorContext.register(acc)
     acc
   }
