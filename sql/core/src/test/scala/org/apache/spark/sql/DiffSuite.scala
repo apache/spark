@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -73,6 +74,13 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
     Row("I", 4, null, "four")
   )
 
+  lazy val expectedReverseDiff: Seq[Row] = Seq(
+    Row("N", 1, "one", "one"),
+    Row("C", 2, "Two", "two"),
+    Row("I", 3, null, "three"),
+    Row("D", 4, "four", null)
+  )
+
   lazy val expectedDiffAs: Seq[DiffAs] = expectedDiff.map( r =>
     DiffAs(r.getString(0), r.getInt(1), Option(r.getString(2)), Option(r.getString(3)))
   )
@@ -101,9 +109,34 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
 
   test("diff with one id column") {
     val actual = left.diff(right, "id").orderBy("id")
+    val reverse = right.diff(left, "id").orderBy("id")
 
     assert(actual.columns === expectedDiffColumns)
     assert(actual.collect() === expectedDiff)
+    assert(reverse.columns === expectedDiffColumns)
+    assert(reverse.collect() === expectedReverseDiff)
+  }
+
+  test("diff with one ID column case-insensitive") {
+    val actual = left.diff(right, "ID").orderBy("ID")
+    val reverse = right.diff(left, "ID").orderBy("ID")
+
+    assert(actual.columns === Seq("diff", "ID", "left_value", "right_value"))
+    assert(actual.collect() === expectedDiff)
+    assert(reverse.columns === Seq("diff", "ID", "left_value", "right_value"))
+    assert(reverse.collect() === expectedReverseDiff)
+  }
+
+  test("diff with one id column case-sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val actual = left.diff(right, "id").orderBy("id")
+      val reverse = right.diff(left, "id").orderBy("id")
+
+      assert(actual.columns === expectedDiffColumns)
+      assert(actual.collect() === expectedDiff)
+      assert(reverse.columns === expectedDiffColumns)
+      assert(reverse.collect() === expectedReverseDiff)
+    }
   }
 
   test("diff with two id columns") {
@@ -314,9 +347,12 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
 
   test("diff DataFrames") {
     val actual = left.toDF().diff(right.toDF(), "id").orderBy("id")
+    val reverse = right.toDF().diff(left.toDF(), "id").orderBy("id")
 
     assert(actual.columns === expectedDiffColumns)
     assert(actual.collect() === expectedDiff)
+    assert(reverse.columns === expectedDiffColumns)
+    assert(reverse.collect() === expectedReverseDiff)
   }
 
   test("diff with output columns in T") {
@@ -479,9 +515,12 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
     val right2 = sqlContext.createDataFrame(right.toDF().rdd, rightSchema)
 
     val actual = left2.diff(right2, "id").orderBy("id")
+    val reverse = right2.diff(left2, "id").orderBy("id")
 
     assert(actual.columns === expectedDiffColumns)
     assert(actual.collect() === expectedDiff)
+    assert(reverse.columns === expectedDiffColumns)
+    assert(reverse.collect() === expectedReverseDiff)
   }
 
   test("diff with different column names") {
@@ -493,6 +532,33 @@ class DiffSuite extends SparkFunSuite with SharedSparkSession with Logging {
       "The datasets do not have the same schema.\n" +
         "Left extra columns: value (StringType)\n" +
         "Right extra columns: comment (StringType)")
+  }
+
+  test("diff with case-insensitive column names") {
+    // different column names only compiles with DataFrames
+    val left = this.left.toDF("id", "value")
+    val right = this.right.toDF("ID", "VaLuE")
+
+    val actual = left.diff(right, "id").orderBy("id")
+    val reverse = right.diff(left, "id").orderBy("id")
+
+    assert(actual.columns === expectedDiffColumns)
+    assert(actual.collect() === expectedDiff)
+    assert(reverse.columns === Seq("diff", "id", "left_VaLuE", "right_VaLuE"))
+    assert(reverse.collect() === expectedReverseDiff)
+  }
+
+  test("diff with case-sensitive column names") {
+    // different column names only compiles with DataFrames
+    val left = this.left.toDF("id", "value")
+    val right = this.right.toDF("ID", "VaLuE")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      doTestRequirement(left.diff(right, "id"),
+        "The datasets do not have the same schema.\n" +
+          "Left extra columns: id (IntegerType), value (StringType)\n" +
+          "Right extra columns: ID (IntegerType), VaLuE (StringType)")
+    }
   }
 
   test("diff of non-existing id column") {

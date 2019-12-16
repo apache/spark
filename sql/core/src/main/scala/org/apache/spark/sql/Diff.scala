@@ -17,13 +17,20 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import org.apache.spark.sql.functions.{coalesce, lit, not, when}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Differ class to diff two Datasets.
  * @param options options for the diffing process
  */
 private[sql] class Diff(options: DiffOptions) {
+
+  // column names case-sensitivity can be configured
+  private def columnName(columnName: String): String =
+    if (SQLConf.get.caseSensitiveAnalysis) columnName else columnName.toLowerCase(Locale.ROOT)
 
   def checkSchema[T](left: Dataset[T], right: Dataset[T], idColumns: String*): Unit = {
     require(left.columns.length == right.columns.length,
@@ -33,19 +40,19 @@ private[sql] class Diff(options: DiffOptions) {
 
     require(left.columns.length > 0, "The schema must not be empty")
 
-    // we ignore the nullability of fields
-    val leftFields = left.schema.fields.map(f => (f.name, f.dataType))
-    val rightFields = right.schema.fields.map(f => (f.name, f.dataType))
+    // column types must match but we ignore the nullability of columns
+    val leftFields = left.schema.fields.map(f => columnName(f.name) -> f.dataType)
+    val rightFields = right.schema.fields.map(f => columnName(f.name) -> f.dataType)
     val leftExtraSchema = leftFields.diff(rightFields)
     val rightExtraSchema = rightFields.diff(leftFields)
-    val extraSchema = leftExtraSchema.union(rightExtraSchema)
-    require(extraSchema.isEmpty,
+    require(leftExtraSchema.isEmpty && rightExtraSchema.isEmpty,
       "The datasets do not have the same schema.\n" +
         s"Left extra columns: ${leftExtraSchema.map(t => s"${t._1} (${t._2})").mkString(", ")}\n" +
         s"Right extra columns: ${rightExtraSchema.map(t => s"${t._1} (${t._2})").mkString(", ")}")
 
-    val pkColumns = if (idColumns.isEmpty) left.columns.toList else idColumns
-    val missingIdColumns = pkColumns.diff(left.columns)
+    val columns = left.columns.map(columnName)
+    val pkColumns = if (idColumns.isEmpty) columns.toList else idColumns.map(columnName)
+    val missingIdColumns = pkColumns.diff(columns)
     require(missingIdColumns.isEmpty,
       s"Some id columns do not exist: ${missingIdColumns.mkString(", ")}")
 
@@ -53,7 +60,7 @@ private[sql] class Diff(options: DiffOptions) {
       s"The id columns must not contain the diff column name '${options.diffColumn}': " +
         s"${pkColumns.mkString(", ")}")
 
-    val nonIdColumns = left.columns.diff(pkColumns)
+    val nonIdColumns = columns.diff(pkColumns)
     val diffValueColumns = getDiffValueColumns(nonIdColumns)
 
     require(!diffValueColumns.contains(options.diffColumn),
@@ -77,7 +84,8 @@ private[sql] class Diff(options: DiffOptions) {
     checkSchema(left, right, idColumns: _*)
 
     val pkColumns = if (idColumns.isEmpty) left.columns.toList else idColumns
-    val otherColumns = left.columns.diff(pkColumns)
+    val pkColumnsCs = pkColumns.map(columnName).toSet
+    val otherColumns = left.columns.filter(col => !pkColumnsCs.contains(columnName(col)))
 
     val existsColumnName = Diff.distinctStringNameFor(left.columns)
     val l = left.withColumn(existsColumnName, lit(1))
