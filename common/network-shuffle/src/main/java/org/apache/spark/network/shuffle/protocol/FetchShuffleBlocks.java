@@ -19,8 +19,9 @@ package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encoders;
 
@@ -68,13 +69,13 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("appId", appId)
-      .add("execId", execId)
-      .add("shuffleId", shuffleId)
-      .add("mapIds", Arrays.toString(mapIds))
-      .add("reduceIds", Arrays.deepToString(reduceIds))
-      .add("batchFetchEnabled", batchFetchEnabled)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("appId", appId)
+      .append("execId", execId)
+      .append("shuffleId", shuffleId)
+      .append("mapIds", Arrays.toString(mapIds))
+      .append("reduceIds", Arrays.deepToString(reduceIds))
+      .append("batchFetchEnabled", batchFetchEnabled)
       .toString();
   }
 

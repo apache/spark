@@ -23,14 +23,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -417,7 +419,7 @@ public class YarnShuffleService extends AuxiliaryService {
       if (o == null || getClass() != o.getClass()) return false;
 
       AppId appExecId = (AppId) o;
-      return Objects.equal(appId, appExecId.appId);
+      return Objects.equals(appId, appExecId.appId);
     }
 
     @Override
@@ -427,8 +429,8 @@ public class YarnShuffleService extends AuxiliaryService {
 
     @Override
     public String toString() {
-      return Objects.toStringHelper(this)
-          .add("appId", appId)
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+          .append("appId", appId)
           .toString();
     }
   }

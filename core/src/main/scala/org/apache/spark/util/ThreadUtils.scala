@@ -19,21 +19,35 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
-import scala.collection.generic.CanBuildFrom
-import scala.language.higherKinds
-
-import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.language.higherKinds
 import scala.util.control.NonFatal
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.spark.SparkException
 import org.apache.spark.rpc.RpcAbortException
 
 private[spark] object ThreadUtils {
 
+  private val sameThreadService = new AbstractExecutorService {
+    private var serviceIsShutdown = false
+    override def shutdown(): Unit = serviceIsShutdown = true
+    override def shutdownNow(): java.util.List[Runnable] = {
+      shutdown()
+      java.util.Collections.emptyList()
+    }
+    override def isShutdown: Boolean = serviceIsShutdown
+    override def isTerminated: Boolean = serviceIsShutdown
+    override def awaitTermination(timeout: Long, unit: TimeUnit): Boolean = true
+    override def execute(command: Runnable): Unit = command.run()
+  }
+
   private val sameThreadExecutionContext =
-    ExecutionContext.fromExecutorService(MoreExecutors.sameThreadExecutor())
+    ExecutionContext.fromExecutorService(sameThreadService)
+
+  def sameThreadExecutorService: ExecutorService = sameThreadService
 
   /**
    * An `ExecutionContextExecutor` that runs each task in the thread that invokes `execute/submit`.
