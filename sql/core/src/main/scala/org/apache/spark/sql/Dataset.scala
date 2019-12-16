@@ -524,6 +524,16 @@ class Dataset[T] private[sql](
   /**
    * Prints the plans (logical and physical) with a format specified by a given explain mode.
    *
+   * @param mode specifies the expected output format of plans.
+   *             <ul>
+   *               <li>`simple` Print only a physical plan.</li>
+   *               <li>`extended`: Print both logical and physical plans.</li>
+   *               <li>`codegen`: Print a physical plan and generated codes if they are
+   *                 available.</li>
+   *               <li>`cost`: Print a logical plan and statistics if they are available.</li>
+   *               <li>`formatted`: Split explain output into two sections: a physical plan outline
+   *                 and node details.</li>
+   *             </ul>
    * @group basic
    * @since 3.0.0
    */
@@ -540,6 +550,8 @@ class Dataset[T] private[sql](
 
   /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
+   *
+   * @param extended default `false`. If `false`, prints only the physical plan.
    *
    * @group basic
    * @since 1.6.0
