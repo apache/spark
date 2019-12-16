@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -65,9 +65,10 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  private def findReusedExchange(plan: SparkPlan): Seq[ReusedQueryStageExec] = {
+  private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectInPlanAndSubqueries(plan) {
-      case e: ReusedQueryStageExec => e
+      case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
+      case BroadcastQueryStageExec(_, e: ReusedExchangeExec) => e
     }
   }
 
@@ -428,7 +429,7 @@ class AdaptiveQueryExecSuite
       // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
-      assert(ex.head.plan.isInstanceOf[BroadcastQueryStageExec])
+      assert(ex.head.child.isInstanceOf[BroadcastExchangeExec])
       val sub = findReusedSubquery(adaptivePlan)
       assert(sub.isEmpty)
     }
