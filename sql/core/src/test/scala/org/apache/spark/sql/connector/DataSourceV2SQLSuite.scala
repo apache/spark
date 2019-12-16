@@ -1919,13 +1919,13 @@ class DataSourceV2SQLSuite
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
 
     withTable("spark_catalog.t", "testcat.ns.t") {
-      sql("CREATE TABLE t USING parquet AS SELECT data FROM source")
-      sql("CREATE TABLE testcat.ns.t USING parquet AS SELECT id FROM source")
+      sql("CREATE TABLE t USING parquet AS SELECT 1")
+      sql("CREATE TABLE testcat.ns.t USING parquet AS SELECT 2")
 
-      checkAnswer(sql("SELECT * FROM t"), sql("SELECT data FROM source"))
+      checkAnswer(sql("SELECT * FROM t"), Row(1))
 
       sql("USE testcat.ns")
-      checkAnswer(sql("SELECT * FROM t"), sql("SELECT id FROM source"))
+      checkAnswer(sql("SELECT * FROM t"), Row(2))
     }
   }
 
