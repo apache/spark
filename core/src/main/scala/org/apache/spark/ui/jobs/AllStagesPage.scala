@@ -30,8 +30,6 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val sc = parent.sc
   private val subPath = "stages"
-  // Show pool information for only live UI
-  private def isFairScheduler = sc.isDefined && parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
     // For now, pool information is only accessible in live UIs
@@ -58,7 +56,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         </ul>
       </div>
 
-    val poolsDescription = if (isFairScheduler) {
+    val poolsDescription = if (parent.isFairScheduler) {
         <span class="collapse-aggregated-poolTable collapse-table"
             onClick="collapseTable('collapse-aggregated-poolTable','aggregated-poolTable')">
           <h4>
@@ -97,7 +95,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
 
       val stagesTable =
         new StageTableBase(parent.store, request, stages, statusName(status), stageTag(status),
-          parent.basePath, subPath, isFairScheduler, killEnabled, isFailedStage)
+          parent.basePath, subPath, parent.isFairScheduler, killEnabled, isFailedStage)
       val stagesSize = stages.size
       (Some(summary(appSummary, status, stagesSize)),
         Some(table(appSummary, status, stagesTable, stagesSize)))

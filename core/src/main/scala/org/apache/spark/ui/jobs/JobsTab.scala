@@ -32,7 +32,7 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
   val sc = parent.sc
   val killEnabled = parent.killEnabled
 
-  // Show pool information for only live UI
+  // Show pool information for only live UI.
   def isFairScheduler: Boolean = {
     sc.isDefined &&
     store
