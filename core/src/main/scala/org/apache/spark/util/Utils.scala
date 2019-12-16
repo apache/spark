@@ -47,6 +47,7 @@ import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
+import org.apache.commons.codec.binary.Hex
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -2809,7 +2810,7 @@ private[spark] object Utils extends Logging {
     val rnd = new SecureRandom()
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
-    Integer.toHexString(Arrays.hashCode(secretBytes))
+    Hex.encodeHexString(secretBytes)
   }
 
   /**
