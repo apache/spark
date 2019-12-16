@@ -62,27 +62,7 @@ private[spark] class ExecutorResourceRequest(
     val resourceName: String,
     val amount: Long,
     val discoveryScript: String = "",
-    val vendor: String = "") extends Serializable with Logging {
-
-  // TODO - this is a bit werid as this interface uses "resource.gpu" so we know its a custom
-  // resource, whereas the global configs use configs spark.x.resource.gpu.amount, but right now
-  // the parse of that just returns the name "gpu".  So this shortname is to get rid of "resource."
-  // on "resource.gpu" so they match - perhaps better way to do this?
-  val resourceShortName = resourceName.stripPrefix(s"${ResourceUtils.RESOURCE_PREFIX}.")
-
-  logInfo(s"resource short name is: $resourceShortName")
-
-  // A list of allowed Spark internal resources. Custom resources (spark.executor.resource.*)
-  // like GPUs/FPGAs are also allowed, see the check below.
-  private val allowedExecutorResources = mutable.HashSet[String](
-    ResourceProfile.MEMORY,
-    ResourceProfile.OVERHEAD_MEM,
-    ResourceProfile.PYSPARK_MEM,
-    ResourceProfile.CORES)
-
-  if (!allowedExecutorResources.contains(resourceName) && !resourceName.startsWith(RESOURCE_DOT)) {
-    throw new IllegalArgumentException(s"Executor resource not allowed: $resourceName")
-  }
+    val vendor: String = "") extends Serializable {
 
   override def equals(obj: Any): Boolean = {
     obj match {

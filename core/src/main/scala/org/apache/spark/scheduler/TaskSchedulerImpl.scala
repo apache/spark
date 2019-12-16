@@ -402,13 +402,13 @@ private[spark] class TaskSchedulerImpl(
     // TODO - do we only need to check limiting Resource?
     // if we only check limiting one we can't assign them at the same time
 
+    // remove task cpus since we checked already
     val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
     // check is ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) return false
-    if (taskSetProf.taskResources.isEmpty) return true
+    if (tsResources.isEmpty) return true
 
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
-    // remove task cpus since we checked already
     logInfo("task resources are: " + tsResources)
     for (rName <- tsResources.keys) {
       val resourceReqs = tsResources.get(rName).get

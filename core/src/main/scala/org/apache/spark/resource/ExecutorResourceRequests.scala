@@ -35,8 +35,6 @@ import org.apache.spark.resource.ResourceProfile._
 private[spark] class ExecutorResourceRequests() extends Serializable {
 
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
-  private val _customResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
-
 
   def requests: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
 
@@ -93,7 +91,9 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
   /**
    *  Amount of a particular custom resource(GPU, FPGA, etc) to use. The resource names supported
    *  correspond to the regular Spark configs with the prefix removed. For instance, resources
-   *  like GPUs are resource.gpu (spark configs spark.executor.resource.gpu.*)
+   *  like GPUs are gpu (spark configs spark.executor.resource.gpu.*). If you pass in a resource
+   *  that the cluster manager doesn't support the result is undefined, it may error or may just
+   *  be ignored.
    *
    * @param resourceName Name of the resource.
    * @param amount amount of that resource per executor to use.
@@ -111,7 +111,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
     // a bit weird but for Java api use empty string as meaning None because empty
     // string is otherwise invalid for those paramters anyway
     val eReq = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
-    _customResources(resourceName) = eReq
+    _executorResources(resourceName) = eReq
     this
   }
 

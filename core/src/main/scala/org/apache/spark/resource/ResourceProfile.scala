@@ -41,6 +41,7 @@ import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
 @Evolving
 class ResourceProfile() extends Serializable with Logging {
 
+  // TODO - when we way withREsources - create internal immutable version?
   private val _id = ResourceProfile.getNextProfileId
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
@@ -49,6 +50,7 @@ class ResourceProfile() extends Serializable with Logging {
   private var _maxTasksPerExecutor: Option[Int] = None
 
   def id: Int = _id
+  // TODO - have to convert everytime
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
   def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
 
