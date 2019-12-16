@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsWrite, TableCatalog, TableProvider, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Catalogs, Identifier, SupportsCatalogOptions, SupportsWrite, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.SQLExecution
@@ -278,6 +278,28 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                   relation, df.logicalPlan, Literal(true), extraOptions.toMap)
               }
 
+            case other if classOf[SupportsCatalogOptions].isAssignableFrom(provider.getClass) =>
+              val catalogOptions = provider.asInstanceOf[SupportsCatalogOptions]
+              val ident = catalogOptions.extractIdentifier(dsOptions)
+              val sessionState = df.sparkSession.sessionState
+              val catalog = Option(catalogOptions.extractCatalog(dsOptions))
+                .map(Catalogs.load(_, sessionState.conf))
+                .getOrElse(sessionState.catalogManager.v2SessionCatalog)
+                .asInstanceOf[TableCatalog]
+
+              val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
+
+              runCommand(df.sparkSession, "save") {
+                CreateTableAsSelect(
+                  catalog,
+                  ident,
+                  getV2Transforms,
+                  df.queryExecution.analyzed,
+                  Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
+                  extraOptions.toMap,
+                  ignoreIfExists = other == SaveMode.Ignore)
+              }
+
             case other =>
               throw new AnalysisException(s"TableProvider implementation $source cannot be " +
                 s"written with $other mode, please use Append or Overwrite " +
@@ -504,14 +526,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
 
   private def saveAsTable(catalog: TableCatalog, ident: Identifier): Unit = {
-    val partitioning = partitioningColumns.map { colNames =>
-      colNames.map(name => IdentityTransform(FieldReference(name)))
-    }.getOrElse(Seq.empty[Transform])
-    val bucketing = bucketColumnNames.map { cols =>
-      Seq(BucketTransform(LiteralValue(numBuckets.get, IntegerType), cols.map(FieldReference(_))))
-    }.getOrElse(Seq.empty[Transform])
-    val partitionTransforms = partitioning ++ bucketing
-
     val tableOpt = try Option(catalog.loadTable(ident)) catch {
       case _: NoSuchTableException => None
     }
@@ -532,7 +546,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         ReplaceTableAsSelect(
           catalog,
           ident,
-          partitionTransforms,
+          getV2Transforms,
           df.queryExecution.analyzed,
           Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
           extraOptions.toMap,
@@ -545,7 +559,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         CreateTableAsSelect(
           catalog,
           ident,
-          partitionTransforms,
+          getV2Transforms,
           df.queryExecution.analyzed,
           Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
           extraOptions.toMap,
@@ -621,6 +635,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     runCommand(df.sparkSession, "saveAsTable")(
       CreateTable(tableDesc, mode, Some(df.logicalPlan)))
+  }
+
+  private def getV2Transforms: Seq[Transform] = {
+    val partitioning = partitioningColumns.map { colNames =>
+      colNames.map(name => IdentityTransform(FieldReference(name)))
+    }.getOrElse(Seq.empty[Transform])
+    val bucketing = bucketColumnNames.map { cols =>
+      Seq(BucketTransform(LiteralValue(numBuckets.get, IntegerType), cols.map(FieldReference(_))))
+    }.getOrElse(Seq.empty[Transform])
+    partitioning ++ bucketing
   }
 
   /**
