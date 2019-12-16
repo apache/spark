@@ -53,7 +53,7 @@ class InternalKafkaProducerPoolSuite extends SharedSparkSession {
     val kafkaParams = getTestKafkaParams()
     val producer = pool.acquire(kafkaParams)
     val producer2 = pool.acquire(kafkaParams)
-    assert(producer === producer2)
+    assert(producer eq producer2)
 
     val map = pool.getAsMap
     assert(map.size === 1)
@@ -68,7 +68,7 @@ class InternalKafkaProducerPoolSuite extends SharedSparkSession {
 
     val producer3 = pool.acquire(kafkaParams)
     assertCacheEntry(pool, cacheEntry, 1L)
-    assert(producer === producer3)
+    assert(producer eq producer3)
   }
 
   test("Should return different cached instances on calling acquire with different params.") {
@@ -79,7 +79,7 @@ class InternalKafkaProducerPoolSuite extends SharedSparkSession {
     kafkaParams.put("acks", "1")
     val producer2 = pool.acquire(kafkaParams)
     // With updated conf, a new producer instance should be created.
-    assert(producer !== producer2)
+    assert(producer ne producer2)
 
     val map = pool.getAsMap
     assert(map.size === 2)
@@ -181,12 +181,12 @@ class InternalKafkaProducerPoolSuite extends SharedSparkSession {
       pool: InternalKafkaProducerPool,
       cacheEntry: CachedProducerEntry,
       expectedRefCount: Long): Unit = {
-    val timeoutVal = pool.cacheExpireTimeout
+    val timeoutVal = TimeUnit.MILLISECONDS.toNanos(pool.cacheExpireTimeoutMillis)
     assert(cacheEntry.refCount === expectedRefCount)
     if (expectedRefCount > 0) {
       assert(cacheEntry.expireAt === Long.MaxValue)
     } else {
-      assert(cacheEntry.expireAt <= pool.clock.getTimeMillis() + timeoutVal)
+      assert(cacheEntry.expireAt <= pool.clock.nanoTime() + timeoutVal)
     }
   }
 }

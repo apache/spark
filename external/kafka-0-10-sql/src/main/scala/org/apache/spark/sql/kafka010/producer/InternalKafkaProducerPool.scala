@@ -48,7 +48,7 @@ private[producer] class InternalKafkaProducerPool(
   }
 
   /** exposed for testing */
-  private[producer] val cacheExpireTimeout: Long = conf.get(PRODUCER_CACHE_TIMEOUT)
+  private[producer] val cacheExpireTimeoutMillis: Long = conf.get(PRODUCER_CACHE_TIMEOUT)
 
   private val evictorThreadRunIntervalMillis = conf.get(PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL)
 
@@ -83,7 +83,8 @@ private[producer] class InternalKafkaProducerPool(
       val entry = cache.getOrElseUpdate(paramsSeq, {
         val producer = createKafkaProducer(paramsSeq)
         val cachedProducer = new CachedKafkaProducer(paramsSeq, producer)
-        new CachedProducerEntry(cachedProducer, clock, cacheExpireTimeout)
+        new CachedProducerEntry(cachedProducer,
+          TimeUnit.MILLISECONDS.toNanos(cacheExpireTimeoutMillis))
       })
       entry.handleBorrowed()
       entry.producer
@@ -98,23 +99,24 @@ private[producer] class InternalKafkaProducerPool(
 
     synchronized {
       cache.get(producer.cacheKey) match {
-        case Some(entry) if entry.producer.id == producer.id => entry.handleReturned()
-        case _ => closeProducerNotInCache(producer)
+        case Some(entry) if entry.producer.id == producer.id =>
+          entry.handleReturned(clock.nanoTime())
+        case _ =>
+          closeProducerNotInCache(producer)
       }
     }
   }
 
   private[producer] def shutdown(): Unit = {
+    scheduled.foreach(_.cancel(true))
     ThreadUtils.shutdown(executorService)
   }
 
   /** exposed for testing. */
   private[producer] def reset(): Unit = synchronized {
     scheduled.foreach(_.cancel(true))
-    cache.foreach { case (k, v) =>
-      cache.remove(k)
-      v.producer.close()
-    }
+    cache.foreach { case (_, v) => v.producer.close() }
+    cache.clear()
     scheduled = startEvictorThread()
   }
 
@@ -122,11 +124,16 @@ private[producer] class InternalKafkaProducerPool(
   private[producer] def getAsMap: Map[CacheKey, CachedProducerEntry] = cache.toMap
 
   private def evictExpired(): Unit = {
+    val curTimeNs = clock.nanoTime()
     val producers = new mutable.ArrayBuffer[CachedProducerEntry]()
     synchronized {
-      cache.filter { case (_, v) => v.expired }.foreach { case (k, v) =>
-        cache.remove(k)
-        producers += v
+      cache.retain { case (_, v) =>
+        if (v.expired(curTimeNs)) {
+          producers += v
+          false
+        } else {
+          true
+        }
       }
     }
     producers.foreach { _.producer.close() }
@@ -142,8 +149,7 @@ private[producer] class InternalKafkaProducerPool(
   }
 
   private def paramsToSeq(kafkaParams: ju.Map[String, Object]): Seq[(String, Object)] = {
-    val paramsSeq: Seq[(String, Object)] = kafkaParams.asScala.toSeq.sortBy(x => x._1)
-    paramsSeq
+    kafkaParams.asScala.toSeq.sortBy(x => x._1)
   }
 }
 
@@ -169,8 +175,7 @@ private[kafka010] object InternalKafkaProducerPool extends Logging {
    */
   private[producer] class CachedProducerEntry(
       val producer: CachedKafkaProducer,
-      clock: Clock,
-      cacheExpireTimeout: Long) {
+      cacheExpireTimeoutNs: Long) {
     private var _refCount: Long = 0L
     private var _expireAt: Long = Long.MaxValue
 
@@ -183,14 +188,17 @@ private[kafka010] object InternalKafkaProducerPool extends Logging {
       _expireAt = Long.MaxValue
     }
 
-    def handleReturned(): Unit = {
+    def handleReturned(curTimeNs: Long): Unit = {
       _refCount -= 1
-      if (_refCount <= 0) {
-        _expireAt = clock.getTimeMillis() + cacheExpireTimeout
+      require(_refCount < 0, "Reference count shouldn't be negative. Returning same producer " +
+        "multiple times would occur this bug. Check the logic around returning producer.")
+
+      if (_refCount == 0) {
+        _expireAt = curTimeNs + cacheExpireTimeoutNs
       }
     }
 
-    def expired: Boolean = _refCount <= 0 && _expireAt < clock.getTimeMillis()
+    def expired(curTimeNs: Long): Boolean = _refCount == 0 && _expireAt < curTimeNs
   }
 
   def acquire(kafkaParams: ju.Map[String, Object]): CachedKafkaProducer = {
