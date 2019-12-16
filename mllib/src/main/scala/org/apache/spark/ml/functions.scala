@@ -19,8 +19,8 @@ package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.functions.udf
 
 // scalastyle:off
 @Since("3.0.0")
