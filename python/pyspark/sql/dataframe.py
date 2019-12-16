@@ -2137,7 +2137,7 @@ class DataFrame(object):
         return result
 
     def melt(self, id_vars, value_vars, var_name="variable", value_name="value"):
-        """Convert :class:`DataFrame` from wide to long format.  
+        """Convert :class:`DataFrame` from wide to long format.
         Based on [this](https://stackoverflow.com/a/41673644/12474509) implementation
 
         :param id_vars: id columns to melt over.
