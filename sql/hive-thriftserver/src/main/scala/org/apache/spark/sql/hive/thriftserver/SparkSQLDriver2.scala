@@ -19,9 +19,17 @@ import scala.util.{Failure, Success, Try}
 private[hive] case class SparkSQLDriver2(context: SQLContext,
                                          hadoopConf: Configuration)
     extends Logging {
+
   type RowResult = Seq[String]
+
+  /**
+   *
+   * @param cmd
+   * @return
+   */
   def processCmd(cmd: String): Int = {
-    val cmd_cleaned = cmd.trim.toLowerCase(Locale.ROOT)
+    val cmd_cleaned = cmd.trim
+    println("processCmd>>>>>>>>>>>>>>>>" + cmd_cleaned)
     cmd_cleaned
       .split("\\s+")
       .toList match {
@@ -37,7 +45,13 @@ private[hive] case class SparkSQLDriver2(context: SQLContext,
     }
   }
 
-  private def run(command: String): Option[Seq[RowResult]] = {
+  /**
+   *
+   * @param command
+   * @return
+   */
+  def run(command: String): Option[Seq[RowResult]] = {
+    println("run>>>>>>>>>>>>>>>>>" + command)
     Try {
       context.sparkContext.setJobDescription(command)
       val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
@@ -60,6 +74,11 @@ private[hive] case class SparkSQLDriver2(context: SQLContext,
     }
   }
 
+  /**
+   *
+   * @param file
+   * @return
+   */
   def processFile(file: String): Int = {
     val auxPath = new Path(file)
     val fs = if (auxPath.toUri.isAbsolute) {
@@ -96,8 +115,13 @@ private[hive] case class SparkSQLDriver2(context: SQLContext,
     }
   }
 
+  /**
+   *
+   * @param cmd
+   * @return
+   */
   def processSQLCmd(cmd: String): Int = {
-    println(s">>>>>>> $cmd")
+//    println(s">>>>>>> $cmd")
     val result = run(cmd)
     if (result.nonEmpty) {
       println(showQueryResults(result.get))
@@ -105,6 +129,12 @@ private[hive] case class SparkSQLDriver2(context: SQLContext,
     1
   }
 
+
+  /**
+   *
+   * @param cmd
+   * @return
+   */
   def processShellCmd(cmd: String): Int = {
     Try(cmd.!!) match {
       case Success(value) =>
@@ -117,27 +147,46 @@ private[hive] case class SparkSQLDriver2(context: SQLContext,
     }
   }
 
+  /**
+   *
+   * @param cmd
+   * @return
+   */
   def processLine(cmd: String): Int = processLines(List[String](cmd))
 
+  /**
+   *
+   * @param cmd
+   * @return
+   */
   def processLines(cmd: List[String]): Int = {
+
+    // Avoiding lines starting with --.
     val trimmed: String = cmd
-      .filterNot(_ startsWith "--")
+      .filterNot(_.startsWith("--"))
       .map(_.trim)
       .map(_.replace("\\\\", " "))
       .mkString
       .trim
 
+    // Using Regex to select complete sections
+    // with (simple and double) quotes.
     val replacementTag = "''"
     val regexPattern = """(["'])(.*?[^\\])\1""".r
 
+    // Finding all groups that match quote pattern.
     val replace = regexPattern
       .findAllIn(trimmed)
       .toList
 
+    // Replacing those groups with a tag,
+    // and splitting lines using ;.
     val allin = regexPattern
       .replaceAllIn(trimmed, replacementTag)
       .split(";")
       .toList
+
+    // Tail-recursive function to replace back original content from regex groups.
     @scala.annotation.tailrec
     def pushBack(
         lines: List[String],
@@ -148,8 +197,20 @@ private[hive] case class SparkSQLDriver2(context: SQLContext,
         accumulator
       } else {
         if (lines.head.contains(replacementTag) && replacements.nonEmpty) {
-          val rep = lines.head.replace(replacementTag, replacements.head)
-          pushBack(lines.tail, replacements.tail, accumulator :+ rep)
+
+          // Avoids auto escaping.
+          val avoid_escapes = replacements.head
+            .replaceAll("\"" , "\\\\\"")
+            .replaceAll("\'", "\\\\\'")
+
+          val rep = lines.head.replaceFirst(replacementTag, avoid_escapes)
+
+          if (rep.contains(replacementTag)) {
+            pushBack(rep +: lines.tail, replacements.tail, accumulator)
+          } else {
+            pushBack(lines.tail, replacements.tail, accumulator :+ rep)
+          }
+
         } else {
           pushBack(lines.tail, replacements, accumulator :+ lines.head)
         }
@@ -157,6 +218,9 @@ private[hive] case class SparkSQLDriver2(context: SQLContext,
     }
 
     val commands = pushBack(allin, replace, List[String]())
+
+    commands.foreach(_ => println("processLines>>>>>>>>>>>>>>>>>" + _))
+
     @scala.annotation.tailrec
     def runCommands(cmd: List[String], prevResult: Int): Int = {
       if (cmd.isEmpty) {
@@ -170,15 +234,18 @@ private[hive] case class SparkSQLDriver2(context: SQLContext,
     runCommands(commands, 0)
   }
 
-  def showQueryResults(rows: Seq[Seq[String]]): String = {
-
+  /**
+   *
+   * @param resultRows
+   * @return
+   */
+  def showQueryResults(resultRows: Seq[Seq[String]]): String = {
 
     val sb = new StringBuilder
 
-    // If no headers/data is provided, an empty String will be returned.
     val numCols =
-      if (rows.nonEmpty) {
-        rows.head.length
+      if (resultRows.nonEmpty) {
+        resultRows.head.length
       } else {
         0
       }
@@ -187,13 +254,17 @@ private[hive] case class SparkSQLDriver2(context: SQLContext,
     val minimumColWidth = 3
     val colWidths = Array.fill(numCols)(minimumColWidth)
 
+    val rows = resultRows.map {
+      x => x ++ Seq.fill(numCols - x.length)("")
+    }
+
     for (row <- rows) {
       for ((cell, i) <- row.zipWithIndex) {
         colWidths(i) = math.max(colWidths(i), Utils.stringHalfWidth(cell))
       }
     }
 
-    val paddedRows = rows.map { row =>
+    val paddedRows: Seq[Seq[String]] = rows.map { row =>
       row.zipWithIndex.map { case (cell, i) =>
         StringUtils.leftPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
       }
