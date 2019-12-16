@@ -705,14 +705,11 @@ private[columnar] case class MAP(dataType: MapType)
   override def clone(v: UnsafeMapData): UnsafeMapData = v.copy()
 }
 
-private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval]
-  with DirectCopyColumnType[CalendarInterval] {
+private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] {
 
   override def dataType: DataType = CalendarIntervalType
 
-  override def defaultSize: Int = 16
-
-  override def actualSize(row: InternalRow, ordinal: Int): Int = 20
+  override val defaultSize: Int = 16
 
   override def getField(row: InternalRow, ordinal: Int): CalendarInterval = row.getInterval(ordinal)
 
@@ -721,15 +718,22 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval]
   }
 
   override def extract(buffer: ByteBuffer): CalendarInterval = {
-    ByteBufferHelper.getInt(buffer)
     val months = ByteBufferHelper.getInt(buffer)
     val days = ByteBufferHelper.getInt(buffer)
     val microseconds = ByteBufferHelper.getLong(buffer)
     new CalendarInterval(months, days, microseconds)
   }
 
+  // copy the bytes from ByteBuffer to UnsafeRow
+  override def extract(buffer: ByteBuffer, row: InternalRow, ordinal: Int): Unit = row match {
+    case r: MutableUnsafeRow =>
+      val cursor = buffer.position()
+      buffer.position(cursor + defaultSize)
+      r.writer.write(ordinal, buffer.array(), buffer.arrayOffset() + cursor, defaultSize)
+    case _ => setField(row, ordinal, extract(buffer))
+  }
+
   override def append(v: CalendarInterval, buffer: ByteBuffer): Unit = {
-    ByteBufferHelper.putInt(buffer, 16)
     ByteBufferHelper.putInt(buffer, v.months)
     ByteBufferHelper.putInt(buffer, v.days)
     ByteBufferHelper.putLong(buffer, v.microseconds)
