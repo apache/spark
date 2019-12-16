@@ -21,12 +21,12 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
-import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerBlockManagerAdded, SparkListenerEnvironmentUpdate, SparkListenerEvent, SparkListenerNodeBlacklisted, SparkListenerNodeUnblacklisted}
+import org.apache.spark.scheduler._
 import org.apache.spark.util.JsonProtocol
 
 object EventLogTestHelper {
@@ -77,6 +77,35 @@ object EventLogTestHelper {
     writer.logPath
   }
 
+  def writeEventsToRollingWriter(
+      fs: FileSystem,
+      appId: String,
+      dir: File,
+      sparkConf: SparkConf,
+      hadoopConf: Configuration,
+      eventsFiles: Seq[SparkListenerEvent]*): Seq[FileStatus] = {
+    val writer = new RollingEventLogFilesWriter(appId, None, dir.toURI, sparkConf, hadoopConf)
+    writer.start()
+
+    eventsFiles.dropRight(1).foreach { events =>
+      writeEventsToRollingWriter(writer, events, rollFile = true)
+    }
+    eventsFiles.lastOption.foreach { events =>
+      writeEventsToRollingWriter(writer, events, rollFile = false)
+    }
+
+    writer.stop()
+    EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles
+  }
+
+  def writeEventsToRollingWriter(
+      writer: RollingEventLogFilesWriter,
+      events: Seq[SparkListenerEvent],
+      rollFile: Boolean): Unit = {
+    events.foreach { event => writer.writeEvent(convertEvent(event), flushLogger = true) }
+    if (rollFile) writer.rollEventLogFile()
+  }
+
   def convertEvent(event: SparkListenerEvent): String = {
     compact(render(JsonProtocol.sparkEventToJson(event)))
   }
@@ -87,6 +116,8 @@ object EventLogTestHelper {
       case _: SparkListenerBlockManagerAdded => true
       case _: SparkListenerApplicationStart => false
     }
+
+    override def statistic(): Option[EventFilter.FilterStatistic] = None
   }
 
   class TestEventFilter2 extends EventFilter {
@@ -98,5 +129,7 @@ object EventLogTestHelper {
       case _: SparkListenerApplicationStart => false
       case _: SparkListenerNodeUnblacklisted => false
     }
+
+    override def statistic(): Option[EventFilter.FilterStatistic] = None
   }
 }

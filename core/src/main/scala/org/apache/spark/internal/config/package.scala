@@ -204,6 +204,12 @@ package object config {
       .checkValue(_ > 0, "Max event log files to retain should be higher than 0.")
       .createWithDefault(Integer.MAX_VALUE)
 
+  private[spark] val EVENT_LOG_COMPACTION_SCORE_THRESHOLD =
+    ConfigBuilder("spark.eventLog.rolling.compaction.score.threshold")
+      .internal()
+      .doubleConf
+      .createWithDefault(0.7d)
+
   private[spark] val EXECUTOR_ID =
     ConfigBuilder("spark.executor.id").stringConf.createOptional
 

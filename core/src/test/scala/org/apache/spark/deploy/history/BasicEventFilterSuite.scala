@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history
 
 import org.apache.spark.{storage, SparkFunSuite, Success, TaskState}
+import org.apache.spark.deploy.history.EventFilter.FilterStatistic
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.status.ListenerEventsTestHelper
@@ -25,6 +26,7 @@ import org.apache.spark.storage.{BlockManagerId, RDDBlockId, StorageLevel}
 
 class BasicEventFilterSuite extends SparkFunSuite {
   import ListenerEventsTestHelper._
+  import BasicEventFilterSuite._
 
   test("filter out events for finished jobs") {
     // assume finished job 1 with stage 1, tasks (1, 2), rdds (1, 2)
@@ -33,8 +35,10 @@ class BasicEventFilterSuite extends SparkFunSuite {
     val stageToTasks: Map[Int, Set[Long]] = Map(2 -> Set(3, 4), 3 -> Set(5, 6))
     val stageToRDDs: Map[Int, Seq[Int]] = Map(2 -> Seq(3, 4), 3 -> Seq(5, 6))
     val liveExecutors: Set[String] = Set("1", "2")
+    val filterStats = FilterStatistic(2, 1, 2, 1, 4, 2)
 
-    val filter = new BasicEventFilter(liveJobToStages, stageToTasks, stageToRDDs, liveExecutors)
+    val filter = new BasicEventFilter(filterStats, liveJobToStages, stageToTasks, stageToRDDs,
+      liveExecutors)
     val acceptFn = filter.acceptFn().lift
 
     // Verifying with finished job 1
@@ -96,7 +100,8 @@ class BasicEventFilterSuite extends SparkFunSuite {
     // assume executor 1 was dead, and live executor 2 is available
     val liveExecutors: Set[String] = Set("2")
 
-    val filter = new BasicEventFilter(Map.empty, Map.empty, Map.empty, liveExecutors)
+    val filter = new BasicEventFilter(EMPTY_STATS, Map.empty, Map.empty, Map.empty,
+      liveExecutors)
     val acceptFn = filter.acceptFn().lift
 
     // events for dead executor should be rejected
@@ -129,7 +134,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
       assert(predicate === None)
     }
 
-    val filter = new BasicEventFilter(Map.empty, Map.empty, Map.empty, Set.empty)
+    val filter = new BasicEventFilter(EMPTY_STATS, Map.empty, Map.empty, Map.empty, Set.empty)
     val acceptFn = filter.acceptFn().lift
 
     assertNone(acceptFn(SparkListenerEnvironmentUpdate(Map.empty)))
@@ -186,4 +191,8 @@ class BasicEventFilterSuite extends SparkFunSuite {
       assert(acceptFn(taskEndEvent) === expectedVal)
     }
   }
+}
+
+object BasicEventFilterSuite {
+  val EMPTY_STATS = FilterStatistic(0, 0, 0, 0, 0, 0)
 }

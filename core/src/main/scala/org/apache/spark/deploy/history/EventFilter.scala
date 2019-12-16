@@ -19,13 +19,13 @@ package org.apache.spark.deploy.history
 
 import java.util.ServiceLoader
 
-import scala.collection.JavaConverters._
 import scala.io.{Codec, Source}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods.parse
 
+import org.apache.spark.deploy.history.EventFilter.FilterStatistic
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -39,30 +39,18 @@ private[spark] trait EventFilterBuilder extends SparkListenerInterface {
   def createFilter(): EventFilter
 }
 
-object EventFilterBuilder {
-  /**
-   * Loads all available EventFilterBuilders in classloader via ServiceLoader, and initializes
-   * them via replaying events in given files.
-   */
-  def initializeBuilders(fs: FileSystem, files: Seq[Path]): Seq[EventFilterBuilder] = {
-    val bus = new ReplayListenerBus()
-
-    val builders = ServiceLoader.load(classOf[EventFilterBuilder],
-      Utils.getContextOrSparkClassLoader).asScala.toSeq
-    builders.foreach(bus.addListener)
-
-    files.foreach { log =>
-      Utils.tryWithResource(EventLogFileReader.openEventLog(log, fs)) { in =>
-        bus.replay(in, log.getName)
-      }
-    }
-
-    builders
-  }
-}
-
 /** [[EventFilter]] decides whether the given event should be accepted or rejected. */
 private[spark] trait EventFilter {
+  /**
+   * Provide statistic information of event filter, which would be used for measuring the score
+   * of compaction.
+   *
+   * To simplify the condition, currently the fields of statistic are static, since major kinds of
+   * events compaction would filter out are job related event types. If the filter doesn't track
+   * with job related events, return None instead.
+   */
+  def statistic(): Option[FilterStatistic]
+
   /**
    * Classify whether the event is accepted or rejected by this filter.
    *
@@ -74,6 +62,13 @@ private[spark] trait EventFilter {
 }
 
 object EventFilter extends Logging {
+  case class FilterStatistic(
+      totalJobs: Long,
+      liveJobs: Long,
+      totalStages: Long,
+      liveStages: Long,
+      totalTasks: Long,
+      liveTasks: Long)
 
   def applyFilterToFile(
       fs: FileSystem,

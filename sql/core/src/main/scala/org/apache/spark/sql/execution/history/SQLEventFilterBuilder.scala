@@ -120,7 +120,7 @@ private[spark] class SQLLiveEntitiesEventFilter(
     _jobToStages: Map[Int, Seq[Int]],
     _stageToTasks: Map[Int, Set[Long]],
     _stageToRDDs: Map[Int, Seq[Int]])
-  extends JobEventFilter(_jobToStages, _stageToTasks, _stageToRDDs) with Logging {
+  extends JobEventFilter(None, _jobToStages, _stageToTasks, _stageToRDDs) with Logging {
 
   logDebug(s"live executions : ${liveExecutionToJobs.keySet}")
   logDebug(s"jobs in live executions : ${liveExecutionToJobs.values.flatten}")

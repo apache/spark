@@ -214,7 +214,7 @@ class SingleEventLogFileWriter(
   override val logPath: String = SingleEventLogFileWriter.getLogPath(logBaseDir, appId,
     appAttemptId, compressionCodecName)
 
-  private val inProgressPath = logPath + EventLogFileWriter.IN_PROGRESS
+  protected def inProgressPath = logPath + EventLogFileWriter.IN_PROGRESS
 
   override def start(): Unit = {
     requireLogBaseDirAsDirectory()
@@ -333,7 +333,8 @@ class RollingEventLogFilesWriter(
     writeLine(eventJson, flushLogger)
   }
 
-  private def rollEventLogFile(): Unit = {
+  /** exposed for testing only */
+  private[history] def rollEventLogFile(): Unit = {
     closeWriter()
 
     index += 1

@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history
 
 import scala.collection.mutable
 
+import org.apache.spark.deploy.history.EventFilter.FilterStatistic
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 
@@ -33,12 +34,18 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
   private val _stageToRDDs = new mutable.HashMap[Int, Seq[Int]]
   private val _liveExecutors = new mutable.HashSet[String]
 
+  private var totalJobs: Long = 0L
+  private var totalStages: Long = 0L
+  private var totalTasks: Long = 0L
+
   def liveJobToStages: Map[Int, Seq[Int]] = _liveJobToStages.toMap
   def stageToTasks: Map[Int, Set[Long]] = _stageToTasks.mapValues(_.toSet).toMap
   def stageToRDDs: Map[Int, Seq[Int]] = _stageToRDDs.toMap
   def liveExecutors: Set[String] = _liveExecutors.toSet
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+    totalJobs += 1
+    totalStages += jobStart.stageIds.length
     _liveJobToStages += jobStart.jobId -> jobStart.stageIds
   }
 
@@ -55,6 +62,7 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+    totalTasks += 1
     val curTasks = _stageToTasks.getOrElseUpdate(taskStart.stageId,
       mutable.HashSet[Long]())
     curTasks += taskStart.taskInfo.taskId
@@ -69,6 +77,11 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
   }
 
   override def createFilter(): EventFilter = new BasicEventFilter(this)
+
+  def statistic(): FilterStatistic = {
+    FilterStatistic(totalJobs, liveJobToStages.size, totalStages,
+      liveJobToStages.map(_._2.size).sum, totalTasks, _stageToTasks.map(_._2.size).sum)
+  }
 }
 
 /**
@@ -78,6 +91,7 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
  * otherwise.
  */
 private[spark] abstract class JobEventFilter(
+    stats: Option[FilterStatistic],
     jobToStages: Map[Int, Seq[Int]],
     stageToTasks: Map[Int, Set[Long]],
     stageToRDDs: Map[Int, Seq[Int]]) extends EventFilter with Logging {
@@ -90,6 +104,8 @@ private[spark] abstract class JobEventFilter(
   logDebug(s"stages : ${stageToTasks.keySet}")
   logDebug(s"tasks in stages : ${stageToTasks.values.flatten}")
   logDebug(s"RDDs in stages : ${stageToRDDs.values.flatten}")
+
+  override def statistic(): Option[FilterStatistic] = stats
 
   protected val acceptFnForJobEvents: PartialFunction[SparkListenerEvent, Boolean] = {
     case e: SparkListenerStageCompleted =>
@@ -132,14 +148,16 @@ private[spark] abstract class JobEventFilter(
  * will be considered as "Don't mind".
  */
 private[spark] class BasicEventFilter(
+    _stats: FilterStatistic,
     _liveJobToStages: Map[Int, Seq[Int]],
     _stageToTasks: Map[Int, Set[Long]],
     _stageToRDDs: Map[Int, Seq[Int]],
     liveExecutors: Set[String])
-  extends JobEventFilter(_liveJobToStages, _stageToTasks, _stageToRDDs) with Logging {
+  extends JobEventFilter(Some(_stats), _liveJobToStages, _stageToTasks, _stageToRDDs) with Logging {
 
   def this(builder: BasicEventFilterBuilder) = {
-    this(builder.liveJobToStages, builder.stageToTasks, builder.stageToRDDs, builder.liveExecutors)
+    this(builder.statistic(), builder.liveJobToStages, builder.stageToTasks, builder.stageToRDDs,
+      builder.liveExecutors)
   }
 
   logDebug(s"live executors : $liveExecutors")

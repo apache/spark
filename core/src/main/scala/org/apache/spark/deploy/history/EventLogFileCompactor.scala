@@ -19,14 +19,19 @@ package org.apache.spark.deploy.history
 
 import java.io.IOException
 import java.net.URI
+import java.util.ServiceLoader
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.history.EventFilter.FilterStatistic
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN
-import org.apache.spark.scheduler._
+import org.apache.spark.internal.config.{EVENT_LOG_COMPACTION_SCORE_THRESHOLD, EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN}
+import org.apache.spark.scheduler.ReplayListenerBus
+import org.apache.spark.util.Utils
 
 /**
  * This class compacts the old event log files into one compact file, via two phases reading:
@@ -36,6 +41,10 @@ import org.apache.spark.scheduler._
  * 2) Initialize [[EventFilter]] instances from [[EventFilterBuilder]] instances, and replay the
  * old event log files with filters. Rewrite the events to the compact file which the filters decide
  * to accept.
+ *
+ * This class will calculate the score based on statistic from [[EventFilter]] instances, which
+ * represents approximate rate of filtered-out events. Score is being calculated via applying
+ * heuristic; task events tend to take most size in event log.
  *
  * This class assumes caller will provide the sorted list of files which are sorted by the index of
  * event log file, with "at most" one compact file placed first if it exists. Caller should keep in
@@ -50,33 +59,34 @@ class EventLogFileCompactor(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
     fs: FileSystem) extends Logging {
-
   private val maxFilesToRetain: Int = sparkConf.get(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN)
+  private val compactionThresholdScore: Double = sparkConf.get(EVENT_LOG_COMPACTION_SCORE_THRESHOLD)
 
-  def compact(eventLogFiles: Seq[FileStatus]): Seq[FileStatus] = {
+  def compact(eventLogFiles: Seq[FileStatus]): (CompactionResult.Value, Option[Long]) = {
     assertPrecondition(eventLogFiles)
 
-    if (eventLogFiles.length <= maxFilesToRetain) {
-      return eventLogFiles
+    if (eventLogFiles.length < maxFilesToRetain) {
+      return (CompactionResult.NOT_ENOUGH_FILES, None)
     }
 
-    if (EventLogFileWriter.isCompacted(eventLogFiles.last.getPath)) {
-      return Seq(eventLogFiles.last)
-    }
-
-    val (filesToCompact, filesToRetain) = findFilesToCompact(eventLogFiles)
+    val filesToCompact = findFilesToCompact(eventLogFiles)
     if (filesToCompact.isEmpty) {
-      filesToRetain
+      (CompactionResult.NOT_ENOUGH_FILES, None)
     } else {
-      val builders = EventFilterBuilder.initializeBuilders(fs, filesToCompact.map(_.getPath))
+      val builders = initializeBuilders(fs, filesToCompact.map(_.getPath))
 
-      val rewriter = new FilteredEventLogFileRewriter(sparkConf, hadoopConf, fs,
-        builders.map(_.createFilter()))
-      val compactedPath = rewriter.rewrite(filesToCompact)
+      val filters = builders.map(_.createFilter())
+      val minScore = filters.flatMap(_.statistic()).map(calculateScore).min
 
-      cleanupCompactedFiles(filesToCompact)
-
-      fs.getFileStatus(new Path(compactedPath)) :: filesToRetain.toList
+      if (minScore < compactionThresholdScore) {
+        (CompactionResult.LOW_SCORE_FOR_COMPACTION, None)
+      } else {
+        val rewriter = new FilteredEventLogFileRewriter(sparkConf, hadoopConf, fs, filters)
+        rewriter.rewrite(filesToCompact)
+        cleanupCompactedFiles(filesToCompact)
+        (CompactionResult.SUCCESS, Some(RollingEventLogFilesWriter.getEventLogFileIndex(
+          filesToCompact.last.getPath.getName)))
+      }
     }
   }
 
@@ -86,6 +96,33 @@ class EventLogFileCompactor(
     }
     require(idxCompactedFiles.size < 2 && idxCompactedFiles.headOption.forall(_._2 == 0),
       "The number of compact files should be at most 1, and should be placed first if exists.")
+  }
+
+  /**
+   * Loads all available EventFilterBuilders in classloader via ServiceLoader, and initializes
+   * them via replaying events in given files.
+   */
+  private def initializeBuilders(fs: FileSystem, files: Seq[Path]): Seq[EventFilterBuilder] = {
+    val bus = new ReplayListenerBus()
+
+    val builders = ServiceLoader.load(classOf[EventFilterBuilder],
+      Utils.getContextOrSparkClassLoader).asScala.toSeq
+    builders.foreach(bus.addListener)
+
+    files.foreach { log =>
+      Utils.tryWithResource(EventLogFileReader.openEventLog(log, fs)) { in =>
+        bus.replay(in, log.getName)
+      }
+    }
+
+    builders
+  }
+
+  private def calculateScore(stats: FilterStatistic): Double = {
+    // For now it's simply measuring how many task events will be filtered out (rejected)
+    // but it can be sophisticated later once we get more heuristic information and found
+    // the case where this simple calculation doesn't work.
+    (stats.totalTasks - stats.liveTasks) * 1.0 / stats.totalTasks
   }
 
   private def cleanupCompactedFiles(files: Seq[FileStatus]): Unit = {
@@ -103,7 +140,7 @@ class EventLogFileCompactor(
   }
 
   private def findFilesToCompact(
-      eventLogFiles: Seq[FileStatus]): (Seq[FileStatus], Seq[FileStatus]) = {
+      eventLogFiles: Seq[FileStatus]): Seq[FileStatus] = {
     val numNormalEventLogFiles = {
       if (EventLogFileWriter.isCompacted(eventLogFiles.head.getPath)) {
         eventLogFiles.length - 1
@@ -114,11 +151,15 @@ class EventLogFileCompactor(
 
     // This avoids compacting only compact file.
     if (numNormalEventLogFiles > maxFilesToRetain) {
-      (eventLogFiles.dropRight(maxFilesToRetain), eventLogFiles.takeRight(maxFilesToRetain))
+      eventLogFiles.dropRight(maxFilesToRetain)
     } else {
-      (Seq.empty, eventLogFiles)
+      Seq.empty
     }
   }
+}
+
+object CompactionResult extends Enumeration {
+  val SUCCESS, NOT_ENOUGH_FILES, LOW_SCORE_FOR_COMPACTION = Value
 }
 
 /**
