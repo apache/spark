@@ -1516,7 +1516,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("SPARK-30269 failed to update partition stats if it's equal to table's old stats") {
-    val tbl = "SPARK_25185"
+    val tbl = "SPARK_30269"
     val ext_tbl = "SPARK_30269_external"
     withTempDir { dir =>
       withTable(tbl, ext_tbl) {
