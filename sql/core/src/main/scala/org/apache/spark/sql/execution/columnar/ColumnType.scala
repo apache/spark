@@ -709,7 +709,7 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] 
 
   override def dataType: DataType = CalendarIntervalType
 
-  override val defaultSize: Int = 16
+  override def defaultSize: Int = 16
 
   override def getField(row: InternalRow, ordinal: Int): CalendarInterval = row.getInterval(ordinal)
 
