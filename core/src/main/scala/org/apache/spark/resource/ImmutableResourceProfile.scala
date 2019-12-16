@@ -196,9 +196,8 @@ private[spark] object ImmutableResourceProfile extends Logging {
     val treqs = new TaskResourceRequests().cpus(cpusPerTask)
     val taskReq = ResourceUtils.parseResourceRequirements(conf, SPARK_TASK_PREFIX)
     taskReq.foreach { req =>
-      val name = s"${RESOURCE_PREFIX}.${req.resourceName}"
       // TODO - test this - have to handle if fractional and numParts set!!
-      treqs.resource(name, req.amount/req.numParts)
+      treqs.resource(req.resourceName, req.amount/req.numParts)
     }
     treqs.requests
   }
@@ -210,7 +209,7 @@ private[spark] object ImmutableResourceProfile extends Logging {
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
     logInfo(s"add default executor resources $execReq")
     execReq.foreach { req =>
-      val name = s"${RESOURCE_PREFIX}.${req.id.resourceName}"
+      val name = req.id.resourceName
       logInfo(s"adding resour with name $name")
       ereqs.resource(name, req.amount, req.discoveryScript.getOrElse(""),
         req.vendor.getOrElse(""))
