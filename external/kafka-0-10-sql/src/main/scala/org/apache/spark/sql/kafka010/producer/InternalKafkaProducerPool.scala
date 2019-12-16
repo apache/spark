@@ -190,7 +190,7 @@ private[kafka010] object InternalKafkaProducerPool extends Logging {
 
     def handleReturned(curTimeNs: Long): Unit = {
       _refCount -= 1
-      require(_refCount < 0, "Reference count shouldn't be negative. Returning same producer " +
+      require(_refCount >= 0, "Reference count shouldn't be negative. Returning same producer " +
         "multiple times would occur this bug. Check the logic around returning producer.")
 
       if (_refCount == 0) {
