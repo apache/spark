@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -238,8 +239,12 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     getTableFromCatalogCache(tableName) != null
   }
 
-  def getCatalogStatistics(tableName: String): CatalogStatistics = {
+  def getTableStats(tableName: String): CatalogStatistics = {
     getCatalogTable(tableName).stats.get
+  }
+
+  def getPartitionStats(tableName: String, partSpec: TablePartitionSpec): CatalogStatistics = {
+    spark.sessionState.catalog.getPartition(TableIdentifier(tableName), partSpec).stats.get
   }
 
   def checkTableStats(

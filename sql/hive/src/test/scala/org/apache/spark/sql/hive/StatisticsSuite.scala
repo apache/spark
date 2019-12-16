@@ -54,7 +54,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       Seq(dsTbl, hiveTbl).foreach { tbl =>
         sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS")
-        val catalogStats = getCatalogStatistics(tbl)
+        val catalogStats = getTableStats(tbl)
         withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
           val relationStats = spark.table(tbl).queryExecution.optimizedPlan.stats
           assert(relationStats.sizeInBytes == catalogStats.sizeInBytes)
@@ -312,7 +312,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
 
-        assert(getCatalogStatistics(tableName).sizeInBytes === BigInt(17436))
+        assert(getTableStats(tableName).sizeInBytes === BigInt(17436))
       }
     }
   }
@@ -353,11 +353,11 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           // Analyze original table - expect 3 partitions
           sql(s"ANALYZE TABLE $sourceTableName COMPUTE STATISTICS noscan")
-          assert(getCatalogStatistics(sourceTableName).sizeInBytes === BigInt(3 * 5812))
+          assert(getTableStats(sourceTableName).sizeInBytes === BigInt(3 * 5812))
 
           // Analyze partial-copy table - expect only 1 partition
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
-          assert(getCatalogStatistics(tableName).sizeInBytes === BigInt(5812))
+          assert(getTableStats(tableName).sizeInBytes === BigInt(5812))
         }
     }
   }
@@ -1204,7 +1204,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         assert(tsHistogramProps.size == 1)
 
         // Validate histogram after deserialization.
-        val cs = getCatalogStatistics(tableName).colStats
+        val cs = getTableStats(tableName).colStats
         val intHistogram = cs("cint").histogram.get
         val tsHistogram = cs("ctimestamp").histogram.get
         assert(intHistogram.bins.length == spark.sessionState.conf.histogramNumBins)
@@ -1512,6 +1512,36 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           }
         }
       }
+    }
+  }
+
+  test("SPARK-xxx failed to update partition stats if it's equal to table's old stats") {
+    val tblName = "SPARK_xxx"
+    withTable(tblName) {
+      sql(s"CREATE TABLE $tblName (key INT, value STRING, ds STRING) PARTITIONED BY (ds)")
+      sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
+
+      // analyze table
+      sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
+      var tableStats = getTableStats(tblName)
+      assert(tableStats.sizeInBytes == 601)
+      assert(tableStats.rowCount.isEmpty)
+
+      sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS")
+      tableStats = getTableStats(tblName)
+      assert(tableStats.sizeInBytes == 601)
+      assert(tableStats.rowCount.get == 1)
+
+      // analyze a single partition
+      sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS NOSCAN")
+      var partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+      assert(partStats.sizeInBytes == 601)
+      assert(partStats.rowCount.isEmpty)
+
+      sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS")
+      partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+      assert(partStats.sizeInBytes == 601)
+      assert(partStats.rowCount.get == 1)
     }
   }
 }
