@@ -1528,7 +1528,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
              | LOCATION '${dir.toURI}'
            """.stripMargin)
 
-        Seq(ext_tbl).foreach { tblName =>
+        Seq(tbl, ext_tbl).foreach { tblName =>
           sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
 
           // analyze table
