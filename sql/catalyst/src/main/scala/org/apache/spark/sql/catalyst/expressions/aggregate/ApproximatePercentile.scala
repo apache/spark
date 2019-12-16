@@ -89,17 +89,17 @@ case class ApproximatePercentile(
   private lazy val (returnPercentileArray: Boolean, percentages: Array[Double]) =
     percentageExpression.dataType match {
       case DoubleType => (false, Array(percentageExpression.eval().asInstanceOf[Double]))
-      case _: FractionalType =>
+      case _: NumericType =>
         (false, Array(Cast(percentageExpression, DoubleType).eval().asInstanceOf[Double]))
       case ArrayType(DoubleType, false) =>
         (true, percentageExpression.eval().asInstanceOf[ArrayData].toDoubleArray())
-      case ArrayType(et, false) if et.isInstanceOf[FractionalType] =>
+      case ArrayType(et, false) if et.isInstanceOf[NumericType] =>
         (true, Cast(percentageExpression, ArrayType(DoubleType, containsNull = false)).eval()
           .asInstanceOf[ArrayData].toDoubleArray())
       case ArrayType(_, _) => throw new IllegalArgumentException(
-        "Each value of the percentage array must be be between 0.0 and 1.0, but got" +
+        "Each value of the percentage array must be between 0.0 and 1.0, but got" +
           s" ${percentageExpression.eval().asInstanceOf[ArrayData]}")
-      case _ => throw new IllegalArgumentException("The value of percentage must be be between" +
+      case _ => throw new IllegalArgumentException("The value of percentage must be between" +
         s" 0.0 and 1.0, but got ${percentageExpression.eval()}")
     }
 

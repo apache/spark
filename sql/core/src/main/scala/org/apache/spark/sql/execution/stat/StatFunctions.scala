@@ -246,13 +246,15 @@ object StatFunctions extends Logging {
       if (stats.endsWith("%")) {
         val index = percentileIndex
         percentileIndex += 1
-        (child: Expression) =>
+        (child: Expression) => if (child.dataType.isInstanceOf[NumericType]) {
           GetArrayItem(
-            new ApproximatePercentile(
-              child,
-              Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)))
-              .toAggregateExpression(),
+            new ApproximatePercentile(child,
+              Literal(new GenericArrayData(percentiles),
+                ArrayType(DoubleType, false))).toAggregateExpression(),
             Literal(index))
+        } else {
+          Literal(null)
+        }
       } else {
         stats.toLowerCase(Locale.ROOT) match {
           case "count" => (child: Expression) => Count(child).toAggregateExpression()

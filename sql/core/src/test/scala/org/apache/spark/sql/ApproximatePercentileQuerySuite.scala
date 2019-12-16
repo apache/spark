@@ -149,7 +149,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     withTempView(table) {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800D) FROM $table"),
+        spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800) FROM $table"),
         Row(Seq(499))
       )
     }
@@ -182,7 +182,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
         spark.sql(
           s"""SELECT
              |  key,
-             |  percentile_approx(null, 0.5)
+             |  percentile_approx(cast(null as int), 0.5)
              |FROM $table
              |GROUP BY key
            """.stripMargin),
@@ -200,9 +200,9 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
       checkAnswer(
         spark.sql(
           s"""SELECT
-              |  percentile_approx(null, 0.5),
+              |  percentile_approx(cast(null as int), 0.5),
               |  sum(null),
-              |  percentile_approx(null, 0.5)
+              |  percentile_approx(cast(null as int), 0.5)
               |FROM $table
            """.stripMargin),
          Row(null, null, null)
