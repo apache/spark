@@ -1515,33 +1515,45 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("SPARK-xxx failed to update partition stats if it's equal to table's old stats") {
-    val tblName = "SPARK_xxx"
-    withTable(tblName) {
-      sql(s"CREATE TABLE $tblName (key INT, value STRING, ds STRING) PARTITIONED BY (ds)")
-      sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
+  test("SPARK-30269 failed to update partition stats if it's equal to table's old stats") {
+    val tbl = "SPARK_25185"
+    val ext_tbl = "SPARK_30269_external"
+    withTempDir { dir =>
+      withTable(tbl, ext_tbl) {
+        sql(s"CREATE TABLE $tbl (key INT, value STRING, ds STRING) PARTITIONED BY (ds)")
+        sql(
+          s"""
+             | CREATE TABLE $ext_tbl (key INT, value STRING, ds STRING)
+             | PARTITIONED BY (ds)
+             | LOCATION '${dir.toURI}'
+           """.stripMargin)
 
-      // analyze table
-      sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
-      var tableStats = getTableStats(tblName)
-      assert(tableStats.sizeInBytes == 601)
-      assert(tableStats.rowCount.isEmpty)
+        Seq(ext_tbl).foreach { tblName =>
+          sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
 
-      sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS")
-      tableStats = getTableStats(tblName)
-      assert(tableStats.sizeInBytes == 601)
-      assert(tableStats.rowCount.get == 1)
+          // analyze table
+          sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
+          var tableStats = getTableStats(tblName)
+          assert(tableStats.sizeInBytes == 601)
+          assert(tableStats.rowCount.isEmpty)
 
-      // analyze a single partition
-      sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS NOSCAN")
-      var partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
-      assert(partStats.sizeInBytes == 601)
-      assert(partStats.rowCount.isEmpty)
+          sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS")
+          tableStats = getTableStats(tblName)
+          assert(tableStats.sizeInBytes == 601)
+          assert(tableStats.rowCount.get == 1)
 
-      sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS")
-      partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
-      assert(partStats.sizeInBytes == 601)
-      assert(partStats.rowCount.get == 1)
+          // analyze a single partition
+          sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS NOSCAN")
+          var partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+          assert(partStats.sizeInBytes == 601)
+          assert(partStats.rowCount.isEmpty)
+
+          sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS")
+          partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+          assert(partStats.sizeInBytes == 601)
+          assert(partStats.rowCount.get == 1)
+        }
+      }
     }
   }
 }
