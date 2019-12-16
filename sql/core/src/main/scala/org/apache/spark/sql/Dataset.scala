@@ -2342,31 +2342,29 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new DataFrame that contains the differences
-   * between this and the other Dataset of the same type `T`.
+   * Returns a new DataFrame that contains the differences between this and the other Dataset
+   * of the same type `T`.
    *
-   * Optional id columns are used to uniquely identify rows that relate.
-   * If values in any non-id column are differing between this and the other Dataset,
-   * then that row is marked as `"C"`hange and `"N"`o-change otherwise.
-   * Rows of the other Dataset, that do not exist in this Dataset
-   * (w.r.t. the values in the id columns) are marked as `"I"`nsert.
-   * And rows of this Dataset, that do not exist in the other Dataset
-   * are marked as `"D"`elete.
+   * Optional id columns are used to uniquely identify rows that relate. If values in any non-id
+   * column are differing between this and the other Dataset, then that row is marked as `"C"`hange
+   * and `"N"`o-change otherwise. Rows of the other Dataset, that do not exist in this Dataset
+   * (w.r.t. the values in the id columns) are marked as `"I"`nsert. And rows of this Dataset, that
+   * do not exist in the other Dataset are marked as `"D"`elete.
    *
-   * If no id columns are given, all columns are considered id columns. Then,
-   * no `"C"`hange rows will appear, as all changes will exists as respective
-   * `"D"`elete and `"I"`nsert.
+   * If no id columns are given, all columns are considered id columns. Then, no `"C"`hange rows
+   * will appear, as all changes will exists as respective `"D"`elete and `"I"`nsert.
    *
-   * The returned DataFrame has the `diff` column as the first column.
-   * This holds the `"N"`, `"C"`, `"I"` or `"D"` strings. The id columns follow.
+   * The returned DataFrame has the `diff` column as the first column. This holds the `"N"`, `"C"`,
+   * `"I"` or `"D"` strings. The id columns follow, then the non-id columns (all remaining columns).
    *
-   * The id columns are in order as given to the method.
-   * If none are given, in the order of this Dataset.
-   * The non-id columns are in the order of this Dataset.
+   * The id columns are in order as given to the method. If no id columns are given then all
+   * columns of this Dataset are id columns and appear in the same order. The remaining non-id
+   * columns are in the order of this Dataset.
    *
    * @group untypedrel
    * @since 3.0.0
    */
+  @scala.annotation.varargs
   def diff(other: Dataset[T], idColumns: String*): DataFrame = {
     Diff.of(this, other, idColumns: _*)
   }
@@ -2382,6 +2380,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 3.0.0
    */
+  @scala.annotation.varargs
   def diff(other: Dataset[T], options: DiffOptions, idColumns: String*): DataFrame = {
     new Diff(options).of(this, other, idColumns: _*)
   }
@@ -2397,6 +2396,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.0.0
    */
+  @scala.annotation.varargs
   def diffAs[U](other: Dataset[T], idColumns: String*)
                (implicit diffEncoder: Encoder[U]): Dataset[U] = {
     Diff.ofAs(this, other, idColumns: _*)
@@ -2414,6 +2414,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.0.0
    */
+  @scala.annotation.varargs
   def diffAs[U](other: Dataset[T], options: DiffOptions, idColumns: String*)
                (implicit diffEncoder: Encoder[U]): Dataset[U] = {
     new Diff(options).ofAs(this, other, idColumns: _*)
@@ -2430,6 +2431,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.0.0
    */
+  @scala.annotation.varargs
   def diffAs[U](other: Dataset[T], diffEncoder: Encoder[U], idColumns: String*): Dataset[U] = {
     Diff.ofAs(this, other, diffEncoder, idColumns: _*)
   }
@@ -2446,6 +2448,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.0.0
    */
+  @scala.annotation.varargs
   def diffAs[U](other: Dataset[T],
                 options: DiffOptions,
                 diffEncoder: Encoder[U],

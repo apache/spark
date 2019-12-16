@@ -38,7 +38,8 @@ case class DiffOptions(diffColumn: String,
   require(nochangeDiffValue.nonEmpty, "No-change diff value must not be empty")
 
   val diffValues = Seq(insertDiffValue, changeDiffValue, deleteDiffValue, nochangeDiffValue)
-  require(diffValues.distinct.length == 4, s"Diff values must be distinct: $diffValues")
+  require(diffValues.distinct.length == diffValues.length,
+    s"Diff values must be distinct: $diffValues")
 }
 
 object DiffOptions {

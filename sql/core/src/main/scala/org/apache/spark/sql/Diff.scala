@@ -23,7 +23,7 @@ import org.apache.spark.sql.functions.{coalesce, lit, not, when}
  * Differ class to diff two Datasets.
  * @param options options for the diffing process
  */
-class Diff(options: DiffOptions) {
+private[sql] class Diff(options: DiffOptions) {
 
   def checkSchema[T](left: Dataset[T], right: Dataset[T], idColumns: String*): Unit = {
     require(left.columns.length == right.columns.length,
@@ -129,7 +129,7 @@ class Diff(options: DiffOptions) {
 /**
  * Diffing singleton with default diffing options.
  */
-object Diff {
+private[sql] object Diff {
   val default = new Diff(DiffOptions.default)
 
   /**
