@@ -72,7 +72,8 @@ class UnivocityParser(
     new CsvParser(parserSetting)
   }
 
-  private val row = new GenericInternalRow(requiredSchema.length)
+  private val singleRow = Seq(new GenericInternalRow(requiredSchema.length))
+  private val noRows = Seq.empty[InternalRow]
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
@@ -194,7 +195,7 @@ class UnivocityParser(
   private val doParse = if (options.columnPruning && requiredSchema.isEmpty) {
     // If `columnPruning` enabled and partition attributes scanned only,
     // `schema` gets empty.
-    (_: String) => InternalRow.empty
+    (_: String) => Seq(InternalRow.empty)
   } else {
     // parse if the columnPruning is disabled or requiredSchema is nonEmpty
     (input: String) => convert(tokenizer.parseLine(input))
@@ -204,7 +205,7 @@ class UnivocityParser(
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): InternalRow = doParse(input)
+  def parse(input: String): Seq[InternalRow] = doParse(input)
 
   private val getToken = if (options.columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
@@ -212,7 +213,7 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
-  private def convert(tokens: Array[String]): InternalRow = {
+  private def convert(tokens: Array[String]): Seq[InternalRow] = {
     if (tokens == null) {
       throw BadRecordException(
         () => getCurrentInput,
@@ -229,7 +230,7 @@ class UnivocityParser(
       }
       def getPartialResult(): Option[InternalRow] = {
         try {
-          Some(convert(checkedTokens))
+          convert(checkedTokens).headOption
         } catch {
           case _: BadRecordException => None
         }
@@ -243,23 +244,38 @@ class UnivocityParser(
     } else {
       // When the length of the returned tokens is identical to the length of the parsed schema,
       // we just need to convert the tokens that correspond to the required columns.
-      var badRecordException: Option[Throwable] = None
       var i = 0
+      val r = singleRow.head
+      var skipValueConversion = false
+      var badRecordException: Option[Throwable] = None
+
       while (i < requiredSchema.length) {
-        try {
-          row(i) = valueConverters(i).apply(getToken(tokens, i))
-        } catch {
-          case NonFatal(e) =>
-            badRecordException = badRecordException.orElse(Some(e))
-            row.setNullAt(i)
+        if (skipValueConversion) {
+          r.setNullAt(i)
+        } else {
+          try {
+            r(i) = valueConverters(i).apply(getToken(tokens, i))
+            if (false) {
+              skipValueConversion = true
+            }
+          } catch {
+            case NonFatal(e) =>
+              badRecordException = Some(e)
+              skipValueConversion = true
+              r.setNullAt(i)
+          }
         }
         i += 1
       }
-
-      if (badRecordException.isEmpty) {
-        row
+      if (skipValueConversion) {
+        if (badRecordException.isDefined) {
+          throw BadRecordException(
+            () => getCurrentInput, () => singleRow.headOption, badRecordException.get)
+        } else {
+          noRows
+        }
       } else {
-        throw BadRecordException(() => getCurrentInput, () => Some(row), badRecordException.get)
+        singleRow
       }
     }
   }
@@ -291,7 +307,7 @@ private[sql] object UnivocityParser {
       schema: StructType): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
-      input => Seq(parser.convert(input)),
+      input => parser.convert(input),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -344,7 +360,7 @@ private[sql] object UnivocityParser {
     val filteredLines: Iterator[String] = CSVExprUtils.filterCommentAndEmpty(lines, options)
 
     val safeParser = new FailureSafeParser[String](
-      input => Seq(parser.parse(input)),
+      input => parser.parse(input),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
