@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -73,17 +73,6 @@ case class CreateFunctionCommand(
       s"is not allowed: '${databaseName.get}'")
   }
 
-  def isResourceChanged(catalog: SessionCatalog, changedFuntion: CatalogFunction): Boolean = {
-    val oldFunction = catalog.getFunctionMetadata(changedFuntion.identifier)
-    if (oldFunction.resources.size != changedFuntion.resources.size) {
-      return true
-    }
-    val changedResources = changedFuntion.resources.filter(
-      newResource => !oldFunction.resources.contains(newResource))
-    changedResources.nonEmpty
-  }
-
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
@@ -94,14 +83,8 @@ case class CreateFunctionCommand(
     } else {
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
       if (replace && catalog.functionExists(func.identifier)) {
-        isResourceChanged(catalog, func) match {
-          // as of now Hive only alter name, owner, class name, type but not resource URI
-          // So in order to replace function spark needs to delete and create the function
-          case true => catalog.dropFunction(func.identifier, ignoreIfExists)
-            catalog.createFunction(func, ignoreIfExists)
-          // replace the function in the metastore if there is no change in the resource
-          case _ => catalog.alterFunction(func)
-        }
+        // alter the function in the metastore
+        catalog.alterFunction(func)
       } else {
         // For a permanent, we will store the metadata into underlying external catalog.
         // This function will be loaded into the FunctionRegistry when a query uses it.
