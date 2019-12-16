@@ -3268,9 +3268,9 @@ object functions {
    * Returns an array containing all the elements in `x` from index `start` (or starting from the
    * end if `start` is negative) with the specified `length`.
    *
-   * @param x the column which is to be sliced
-   * @param start the starting index of the slice
-   * @param length the desired length of the slice
+   * @param x the array column to be sliced
+   * @param start the starting index
+   * @param length the length of the slice
    *
    * @group collection_funcs
    * @since 2.4.0
