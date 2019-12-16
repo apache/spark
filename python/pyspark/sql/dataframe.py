@@ -306,21 +306,21 @@ class DataFrame(object):
 
         if not is_no_argument and not (is_extended_case or is_mode_case):
             if extended is not None:
-                errMsg = "extended (optional) should be provided as bool" \
+                err_msg = "extended (optional) should be provided as bool" \
                     ", got {0}".format(type(extended))
             else:  # For mode case
-                errMsg = "mode (optional) should be provided as str, got {0}".format(type(mode))
-            raise TypeError(errMsg)
+                err_msg = "mode (optional) should be provided as str, got {0}".format(type(mode))
+            raise TypeError(err_msg)
 
         # Sets an explain mode depending on a given argument
         if is_no_argument:
-            explainMode = "simple"
+            explain_mode = "simple"
         elif is_extended_case:
-            explainMode = "extended" if extended else "simple"
+            explain_mode = "extended" if extended else "simple"
         elif is_mode_case:
-            explainMode = mode
+            explain_mode = mode
 
-        print(self._jdf.toExplainString(explainMode))
+        print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
     @since(2.4)
     def exceptAll(self, other):

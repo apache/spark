@@ -1199,7 +1199,7 @@ class DataSourceV2SQLSuite
   }
 
   test("tableCreation: duplicate column names in the table definition") {
-    val errorMsg = "Found duplicate column(s) in the table definition of `t`"
+    val errorMsg = "Found duplicate column(s) in the table definition of t"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisError(
@@ -1223,7 +1223,7 @@ class DataSourceV2SQLSuite
   }
 
   test("tableCreation: duplicate nested column names in the table definition") {
-    val errorMsg = "Found duplicate column(s) in the table definition of `t`"
+    val errorMsg = "Found duplicate column(s) in the table definition of t"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisError(
