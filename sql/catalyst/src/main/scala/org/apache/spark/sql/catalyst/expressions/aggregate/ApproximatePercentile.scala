@@ -72,7 +72,7 @@ case class ApproximatePercentile(
     accuracyExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes {
+  extends TypedImperativeAggregate[PercentileDigest] {
 
   def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
     this(child, percentageExpression, accuracyExpression, 0, 0)
@@ -83,32 +83,37 @@ case class ApproximatePercentile(
   }
 
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
-  private lazy val accuracy: Int = accuracyExpression.eval().asInstanceOf[Int]
-
-  override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType and TimestampType since their internal types are all numeric,
-    // and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType),
-      TypeCollection(DoubleType, ArrayType(DoubleType)), IntegerType)
-  }
+  private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue()
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
   private lazy val (returnPercentileArray: Boolean, percentages: Array[Double]) =
-    percentageExpression.eval() match {
-      // Rule ImplicitTypeCasts can cast other numeric types to double
-      case num: Double => (false, Array(num))
-      case arrayData: ArrayData => (true, arrayData.toDoubleArray())
+    percentageExpression.dataType match {
+      case DoubleType => (false, Array(percentageExpression.eval().asInstanceOf[Double]))
+      case _: FractionalType =>
+        (false, Array(Cast(percentageExpression, DoubleType).eval().asInstanceOf[Double]))
+      case ArrayType(DoubleType, false) =>
+        (true, percentageExpression.eval().asInstanceOf[ArrayData].toDoubleArray())
+      case ArrayType(et, false) if et.isInstanceOf[FractionalType] =>
+        (true, Cast(percentageExpression, ArrayType(DoubleType, containsNull = false)).eval()
+          .asInstanceOf[ArrayData].toDoubleArray())
+      case ArrayType(_, _) => throw new IllegalArgumentException(
+        "Each value of the percentage array must be be between 0.0 and 1.0, but got" +
+          s" ${percentageExpression.eval().asInstanceOf[ArrayData]}")
+      case _ => throw new IllegalArgumentException("The value of percentage must be be between" +
+        s" 0.0 and 1.0, but got ${percentageExpression.eval()}")
     }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
+    val defaultCheck = ExpectsInputTypes.checkInputDataTypes(
+      Seq(child, percentageExpression, accuracyExpression),
+      Seq(TypeCollection(NumericType, DateType, TimestampType), AnyDataType, IntegralType))
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
       TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
     } else if (accuracy <= 0) {
       TypeCheckFailure(
-        s"The accuracy provided must be a positive integer literal (current value = $accuracy)")
+        s"The accuracy provided must be a positive integral literal (current value = $accuracy)")
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       TypeCheckFailure(
         s"All percentage values must be between 0.0 and 1.0 " +
