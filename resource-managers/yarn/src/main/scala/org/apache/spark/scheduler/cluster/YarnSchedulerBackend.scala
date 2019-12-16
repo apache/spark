@@ -33,7 +33,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ImmutableResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -124,7 +124,7 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   private[cluster] def prepareRequestExecutors(
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): RequestExecutors = {
+      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int]): RequestExecutors = {
     val nodeBlacklist: Set[String] = scheduler.nodeBlacklist()
     // For locality preferences, ignore preferences for nodes that are blacklisted
 
@@ -141,7 +141,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
+      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int]): Future[Boolean] = {
     yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(resourceProfileToTotalExecs))
   }
 

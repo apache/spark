@@ -33,7 +33,7 @@ import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ImmutableResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -81,7 +81,7 @@ class CoarseGrainedSchedulerBackend(
   // Number of executors for the default ResourceProfile requested by the
   // cluster manager, [[ExecutorAllocationManager]]
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
-  private var requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
+  private var requestedTotalExecutorsPerResourceProfile = new HashMap[ImmutableResourceProfile, Int]
 
 
   // Number of executors for the default ResourceProfile requested from the cluster manager that
@@ -568,7 +568,7 @@ class CoarseGrainedSchedulerBackend(
     executorDataMap.contains(id) && !executorsPendingToRemove.contains(id)
   }
 
-  override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
+  override def maxNumConcurrentTasks(rp: ImmutableResourceProfile): Int = synchronized {
     val cpusPerTask = rp.getTaskCpus.getOrElse(scheduler.CPUS_PER_TASK)
     val executorsWithResourceProfile = executorDataMap.filter { case (e, data) =>
       data.resourceProfileId == rp.id
@@ -587,7 +587,8 @@ class CoarseGrainedSchedulerBackend(
   // this function is for testing only
   def getExecutorResourceProfileId(executorId: String): Int = synchronized {
     val res = executorDataMap.get(executorId)
-    val ret = res.map(_.resourceProfileId).getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+    val ret = res.map(_.resourceProfileId)
+      .getOrElse(ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
     logInfo(s"Tom getExecutorResourceProfileId id is $ret")
     ret
   }
@@ -652,7 +653,7 @@ class CoarseGrainedSchedulerBackend(
     }
     val response = synchronized {
       this.requestedTotalExecutorsPerResourceProfile =
-        new HashMap[ResourceProfile, Int] ++= resourceProfileToNumExecutors
+        new HashMap[ImmutableResourceProfile, Int] ++= resourceProfileToNumExecutors
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
@@ -673,7 +674,7 @@ class CoarseGrainedSchedulerBackend(
    * @return a future whose evaluation indicates whether the request is acknowledged.
    */
   protected def doRequestTotalExecutors(
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] =
+      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int]): Future[Boolean] =
     Future.successful(false)
 
   /**

@@ -21,7 +21,6 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.RDDInfo
 
 /**

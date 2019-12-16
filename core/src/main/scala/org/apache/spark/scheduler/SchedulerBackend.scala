@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ImmutableResourceProfile
 
 /**
  * A backend interface for scheduling systems that allows plugging in different ones under
@@ -87,6 +87,6 @@ private[spark] trait SchedulerBackend {
    * @param rp ResourceProfile which to use to calculate max concurrent tasks.
    * @return The max number of tasks that can be concurrent launched currently.
    */
-  def maxNumConcurrentTasks(rp: ResourceProfile): Int
+  def maxNumConcurrentTasks(rp: ImmutableResourceProfile): Int
 
 }

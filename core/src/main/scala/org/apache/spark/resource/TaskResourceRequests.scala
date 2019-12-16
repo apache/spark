@@ -17,24 +17,22 @@
 
 package org.apache.spark.resource
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.resource.ResourceProfile._
-import org.apache.spark.resource.ResourceUtils._
 
 /**
  * A set of task resource requests. This is used in conjuntion with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
- *
- * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
  */
-private[spark] class TaskResourceRequests() extends Serializable {
+class TaskResourceRequests() extends Serializable {
 
-  private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
+  private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
 
-  def requests: Map[String, TaskResourceRequest] = _taskResources.toMap
+  def requests: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
 
   /**
    * Specify number of cpus per Task.
@@ -42,8 +40,8 @@ private[spark] class TaskResourceRequests() extends Serializable {
    * @param amount Number of cpus to allocate per Task.
    */
   def cpus(amount: Int): this.type = {
-    val t = new TaskResourceRequest(CPUS, amount)
-    _taskResources(CPUS) = t
+    val treq = new TaskResourceRequest(CPUS, amount)
+    _taskResources.put(CPUS, treq)
     this
   }
 
@@ -59,13 +57,13 @@ private[spark] class TaskResourceRequests() extends Serializable {
    *               ie amount equals 0.5 translates into 2 tasks per resource address.
    */
   def resource(rName: String, amount: Double): this.type = {
-    val t = new TaskResourceRequest(rName, amount)
-    _taskResources(rName) = t
+    val treq = new TaskResourceRequest(rName, amount)
+    _taskResources.put(rName, treq)
     this
   }
 
   def addRequest(treq: TaskResourceRequest): this.type = {
-    _taskResources(treq.resourceName) = treq
+    _taskResources.put(treq.resourceName, treq)
     this
   }
 

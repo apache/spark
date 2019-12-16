@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.CallSite
 
 /**

@@ -23,7 +23,7 @@ import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.SparkConf
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ImmutableResourceProfile
 
 class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
 
@@ -42,8 +42,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
   }
 
   val resource = Resource.newInstance(1024, 1)
-  val defaultResourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-  val rp = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
+  val defaultResourceProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+  val rp = ImmutableResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
   test("allocate locality preferred containers with enough resource and no matched existed " +
     "containers") {

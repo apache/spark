@@ -21,7 +21,6 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.{MapOutputTrackerMaster, ShuffleDependency}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.CallSite
 
 /**

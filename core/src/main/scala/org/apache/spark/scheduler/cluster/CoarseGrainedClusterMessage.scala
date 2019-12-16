@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.{ImmutableResourceProfile, ResourceInformation}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.ExecutorLossReason
 import org.apache.spark.util.SerializableBuffer
@@ -125,7 +125,7 @@ private[spark] object CoarseGrainedClusterMessages {
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
       hostToLocalTaskCount: Map[Int, Map[String, Int]],
       nodeBlacklist: Set[String],
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int])
+      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int])
     extends CoarseGrainedClusterMessage
 
   // Check if an executor was force-killed but for a reason unrelated to the running tasks.

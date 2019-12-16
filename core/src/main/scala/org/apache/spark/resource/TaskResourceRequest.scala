@@ -27,11 +27,8 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  * stage level.
  *
  * Use TaskResourceRequests class as a convenience API.
- *
- * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
  */
-private[spark] class TaskResourceRequest(resourceName: String, val amount: Double)
+class TaskResourceRequest(val resourceName: String, val amount: Double)
   extends Serializable {
 
   assert(amount <= 0.5 || amount % 1 == 0,

@@ -25,7 +25,7 @@ import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
 import org.apache.spark.SparkConf
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ImmutableResourceProfile
 
 private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], racks: Array[String])
 
@@ -105,7 +105,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
       localityMatchedPendingAllocations: Seq[ContainerRequest],
       resource: Resource,
-      rp: ResourceProfile
+      rp: ImmutableResourceProfile
     ): Array[ContainerLocalityPreferences] = {
     val updatedHostToContainerCount = expectedHostToContainerCount(
       numLocalityAwareTasks, hostToLocalTaskCount, allocatedHostToContainersMap,
@@ -158,7 +158,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
   private def numExecutorsPending(
       numTasksPending: Int,
       resource: Resource,
-      rp: ResourceProfile): Int = {
+      rp: ImmutableResourceProfile): Int = {
     val tasksPerExec = rp.maxTasksPerExecutor(sparkConf)
     math.ceil(numTasksPending / tasksPerExec.toDouble).toInt
   }
@@ -181,7 +181,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
       localityMatchedPendingAllocations: Seq[ContainerRequest],
       resource: Resource,
-      rp: ResourceProfile
+      rp: ImmutableResourceProfile
     ): Map[String, Int] = {
     val totalLocalTaskNum = hostToLocalTaskCount.values.sum
     val pendingHostToContainersMap = pendingHostToContainerCount(localityMatchedPendingAllocations)

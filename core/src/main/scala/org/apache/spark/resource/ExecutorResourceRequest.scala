@@ -54,11 +54,8 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  *                        allocated. The script runs on Executors startup to discover the addresses
  *                        of the resources available.
  * @param vendor Optional vendor, required for some cluster managers
- *
- * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
  */
-private[spark] class ExecutorResourceRequest(
+class ExecutorResourceRequest(
     val resourceName: String,
     val amount: Long,
     val discoveryScript: String = "",

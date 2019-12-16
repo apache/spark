@@ -28,11 +28,8 @@ import org.apache.spark.resource.ResourceProfile._
  * A set of Executor resource requests. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
- *
- * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
  */
-private[spark] class ExecutorResourceRequests() extends Serializable {
+class ExecutorResourceRequests() extends Serializable {
 
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
@@ -46,8 +43,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def memory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(MEMORY, amountMiB)
-    _executorResources(MEMORY) = rr
+    val req = new ExecutorResourceRequest(MEMORY, amountMiB)
+    _executorResources.put(MEMORY, req)
     this
   }
 
@@ -59,8 +56,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def memoryOverhead(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(OVERHEAD_MEM, amountMiB)
-    _executorResources(OVERHEAD_MEM) = rr
+    val req = new ExecutorResourceRequest(OVERHEAD_MEM, amountMiB)
+    _executorResources.put(OVERHEAD_MEM, req)
     this
   }
 
@@ -72,8 +69,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def pysparkMemory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(PYSPARK_MEM, amountMiB)
-    _executorResources(PYSPARK_MEM) = rr
+    val req = new ExecutorResourceRequest(PYSPARK_MEM, amountMiB)
+    _executorResources.put(PYSPARK_MEM, req)
     this
   }
 
@@ -83,8 +80,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    * @param amount Number of cores to allocate per Executor.
    */
   def cores(amount: Int): this.type = {
-    val t = new ExecutorResourceRequest(CORES, amount)
-    _executorResources(CORES) = t
+    val req = new ExecutorResourceRequest(CORES, amount)
+    _executorResources.put(CORES, req)
     this
   }
 
@@ -110,8 +107,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
       vendor: String = ""): this.type = {
     // a bit weird but for Java api use empty string as meaning None because empty
     // string is otherwise invalid for those paramters anyway
-    val eReq = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
-    _executorResources(resourceName) = eReq
+    val req = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
+    _executorResources.put(resourceName, req)
     this
   }
 

@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.Buffer
 
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ImmutableResourceProfile
 
 /**
  * Represents free resources available on an executor.
@@ -33,4 +33,4 @@ case class WorkerOffer(
     // when multiple executors are launched on the same host.
     address: Option[String] = None,
     resources: Map[String, Buffer[String]] = Map.empty,
-    resourceProfileId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    resourceProfileId: Int = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)

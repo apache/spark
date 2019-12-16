@@ -18,23 +18,21 @@
 package org.apache.spark.resource
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark
-
 import org.apache.spark.internal.config._
 
 class ResourceProfileSuite extends SparkFunSuite {
 
   override def afterEach() {
     try {
-      ResourceProfile.reInitDefaultProfile(new SparkConf)
+      ImmutableResourceProfile.reInitDefaultProfile(new SparkConf)
     } finally {
       super.afterEach()
     }
   }
 
   test("Default ResourceProfile") {
-    val rprof = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
-    assert(rprof.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val rprof = ImmutableResourceProfile.getOrCreateDefaultProfile(new SparkConf)
+    assert(rprof.id === ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assert(rprof.executorResources.size === 2,
       "Executor resources should contain cores and memory by default")
     assert(rprof.executorResources(ResourceProfile.CORES).amount === 1,
@@ -52,8 +50,8 @@ class ResourceProfileSuite extends SparkFunSuite {
     conf.set("spark.task.resource.gpu.amount", "1")
     conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.amount", "1")
     conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.discoveryScript", "nameOfScript")
-    val rprof = ResourceProfile.getOrCreateDefaultProfile(conf)
-    assert(rprof.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val rprof = ImmutableResourceProfile.getOrCreateDefaultProfile(conf)
+    assert(rprof.id === ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val execResources = rprof.executorResources
     assert(execResources.size === 3,
       "Executor resources should contain cores, memory, and gpu " + execResources)
@@ -63,12 +61,15 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(rprof.taskResources.contains("resource.gpu"), "Task resources should have gpu")
   }
 
-  test("Create ResourceProfile") {
-    val rprof = new ResourceProfile()
-    assert(rprof.id > ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+  test("Create ImmutableResourceProfile") {
+    val rprof = ImmutableResourceProfile.getOrCreateDefaultProfile(new SparkConf())
+    assert(rprof.id > ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assert(rprof.executorResources === Map.empty)
     assert(rprof.taskResources === Map.empty)
+  }
 
+  test("Create ResourceProfile") {
+    val rprof = new ResourceProfile()
     val taskReq = new TaskResourceRequests().resource("resource.gpu", 1)
     val eReq = new ExecutorResourceRequests().resource("resource.gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(eReq)
@@ -170,10 +171,13 @@ class ResourceProfileSuite extends SparkFunSuite {
     val gpuExecReq =
       new ExecutorResourceRequests().resource("resource.gpu", 2, "someScript")
     rprof.require(gpuExecReq)
-    val internalResourceConfs = ResourceProfile.createResourceProfileInternalConfs(rprof)
+    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    val internalResourceConfs =
+      ImmutableResourceProfile.createResourceProfileInternalConfs(immrprof)
     val sparkConf = new SparkConf
     internalResourceConfs.foreach { case(key, value) => sparkConf.set(key, value) }
-    val resourceReq = ResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, rprof.id)
+    val resourceReq =
+      ImmutableResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, immrprof.id)
 
     assert(resourceReq.size === 1, "ResourceRequest should have 1 item")
     assert(resourceReq(0).id.resourceName === "gpu")
@@ -189,8 +193,9 @@ class ResourceProfileSuite extends SparkFunSuite {
     val execReq =
       new ExecutorResourceRequests().resource("resource.gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
-    assert(rprof.limitingResource(sparkConf) == "cpus")
-    assert(rprof.maxTasksPerExecutor(sparkConf) == 1)
+    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    assert(immrprof.limitingResource(sparkConf) == "cpus")
+    assert(immrprof.maxTasksPerExecutor(sparkConf) == 1)
   }
 
   test("maxTasksPerExecutor gpus") {
@@ -201,19 +206,21 @@ class ResourceProfileSuite extends SparkFunSuite {
     val execReq =
       new ExecutorResourceRequests().resource("resource.gpu", 4, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
-    assert(rprof.limitingResource(sparkConf) == "resource.gpu")
-    assert(rprof.maxTasksPerExecutor(sparkConf) == 2)
+    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    assert(immrprof.limitingResource(sparkConf) == "resource.gpu")
+    assert(immrprof.maxTasksPerExecutor(sparkConf) == 2)
   }
 
   test("maxTasksPerExecutor gpus fractional") {
-    val sparkConf = new spark.SparkConf()
+    val sparkConf = new SparkConf()
         .set(EXECUTOR_CORES, 6)
     val rprof = new ResourceProfile()
     val taskReq = new TaskResourceRequests().resource("resource.gpu", 0.5)
     val execReq = new ExecutorResourceRequests().resource("resource.gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
-    assert(rprof.limitingResource(sparkConf) == "resource.gpu")
-    assert(rprof.maxTasksPerExecutor(sparkConf) == 4)
+    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    assert(immrprof.limitingResource(sparkConf) == "resource.gpu")
+    assert(immrprof.maxTasksPerExecutor(sparkConf) == 4)
   }
 
   test("maxTasksPerExecutor multiple resources") {
@@ -227,7 +234,8 @@ class ResourceProfileSuite extends SparkFunSuite {
     taskReqs.resource("resource.fpga", 1)
     execReqs.resource("resource.fpga", 4, "myscript", "nvidia")
     rprof.require(taskReqs).require(execReqs)
-    assert(rprof.limitingResource(sparkConf) == "resource.fpga")
-    assert(rprof.maxTasksPerExecutor(sparkConf) == 4)
+    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    assert(immrprof.limitingResource(sparkConf) == "resource.fpga")
+    assert(immrprof.maxTasksPerExecutor(sparkConf) == 4)
   }
 }

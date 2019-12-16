@@ -17,8 +17,8 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.resource.ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceInformation
-import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
 /**
  * :: DeveloperApi ::

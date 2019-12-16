@@ -29,16 +29,17 @@ import org.apache.spark.annotation.Evolving
  */
 @Evolving
 private[spark] class ResourceProfileManager(sparkConf: SparkConf) {
-  private val resourceProfileIdToResourceProfile = new ConcurrentHashMap[Int, ResourceProfile]()
+  private val resourceProfileIdToResourceProfile =
+    new ConcurrentHashMap[Int, ImmutableResourceProfile]()
 
-  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  private val defaultProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
   addResourceProfile(defaultProfile)
 
-  def defaultResourceProfile: ResourceProfile = defaultProfile
+  def defaultResourceProfile: ImmutableResourceProfile = defaultProfile
 
   private val taskCpusDefaultProfile = defaultProfile.getTaskCpus.get
 
-  def addResourceProfile(rp: ResourceProfile): ResourceProfile = {
+  def addResourceProfile(rp: ImmutableResourceProfile): Unit = {
     // force the computation of maxTasks and limitingResource now so we don't have cost later
     rp.limitingResource(sparkConf)
     resourceProfileIdToResourceProfile.putIfAbsent(rp.id, rp)
@@ -48,7 +49,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) {
    * Gets the ResourceProfile associated with the id, if a profile doesn't exist
    * it returns the default ResourceProfile created from the application level configs.
    */
-  def resourceProfileFromId(rpId: Int): ResourceProfile = {
+  def resourceProfileFromId(rpId: Int): ImmutableResourceProfile = {
     val rp = resourceProfileIdToResourceProfile.get(rpId)
     if (rp == null) {
       throw new SparkException(s"ResourceProfileId $rpId not found!")

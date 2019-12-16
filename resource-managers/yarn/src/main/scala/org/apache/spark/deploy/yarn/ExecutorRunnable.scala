@@ -40,7 +40,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ImmutableResourceProfile
 import org.apache.spark.util.Utils
 
 private[yarn] class ExecutorRunnable(
@@ -55,7 +55,7 @@ private[yarn] class ExecutorRunnable(
     appId: String,
     securityMgr: SecurityManager,
     localResources: Map[String, LocalResource],
-    resourceProfile: ResourceProfile) extends Logging {
+    resourceProfile: ImmutableResourceProfile) extends Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
@@ -188,7 +188,7 @@ private[yarn] class ExecutorRunnable(
     */
 
     // add the extra resources from the resource profile to javaOpts.
-    val rpMap = ResourceProfile.createResourceProfileInternalConfs(resourceProfile)
+    val rpMap = ImmutableResourceProfile.createResourceProfileInternalConfs(resourceProfile)
     javaOpts ++= rpMap.map { case (key, value) => s"-D$key=$value" }.toSeq
 
     // For log4j configuration to reference

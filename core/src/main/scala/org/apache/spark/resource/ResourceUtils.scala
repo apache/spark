@@ -28,7 +28,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SPARK_TASK_PREFIX
-import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -250,7 +249,8 @@ private[spark] object ResourceUtils extends Logging {
       sparkConf: SparkConf,
       resourcesFileOpt: Option[String],
       componentName: String): Map[String, ResourceInformation] = {
-    val requests = getResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
+    val requests =
+      ImmutableResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
     val resourceIdToRequest = requests.map(req => (req.id, req)).toMap
     val requestResourceIds = resourceIdToRequest.keySet.toSeq
     val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt,

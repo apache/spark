@@ -53,7 +53,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
-import org.apache.spark.resource.{ResourceID, ResourceInformation, ResourceProfile, ResourceProfileManager}
+import org.apache.spark.resource.{ResourceID, ResourceInformation, ImmutableResourceProfile, ResourceProfileManager}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
@@ -1612,7 +1612,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param rp ResourceProfile which to use to calculate max concurrent tasks.
    * @return The max number of tasks that can be concurrent launched currently.
    */
-  private[spark] def maxNumConcurrentTasks(rp: ResourceProfile): Int = {
+  private[spark] def maxNumConcurrentTasks(rp: ImmutableResourceProfile): Int = {
     schedulerBackend.maxNumConcurrentTasks(rp)
   }
 

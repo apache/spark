@@ -27,8 +27,8 @@ import org.mockito.Mockito.{doAnswer, mock, when}
 import org.apache.spark._
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, UNKNOWN_RESOURCE_PROFILE_ID}
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ImmutableResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, UNKNOWN_RESOURCE_PROFILE_ID}
+import org.apache.spark.resource.ImmutableResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
@@ -437,7 +437,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   private def stageInfo(id: Int, shuffleId: Int = -1): StageInfo = {
     new StageInfo(id, 0, s"stage$id", 1, Nil, Nil, "",
       shuffleDepId = if (shuffleId >= 0) Some(shuffleId) else None,
-      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      resourceProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   private def taskInfo(
