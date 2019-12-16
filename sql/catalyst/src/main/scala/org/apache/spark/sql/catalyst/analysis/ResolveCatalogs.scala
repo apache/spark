@@ -35,19 +35,32 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case AlterTableAddColumnsStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
       val changes = cols.map { col =>
-        TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
+        TableChange.addColumn(
+          col.name.toArray,
+          col.dataType,
+          true,
+          col.comment.orNull,
+          col.position.orNull)
       }
       createAlterTable(nameParts, catalog, tbl, changes)
 
     case AlterTableAlterColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), colName, dataType, comment) =>
+         nameParts @ NonSessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
+      val colNameArray = colName.toArray
       val typeChange = dataType.map { newDataType =>
-        TableChange.updateColumnType(colName.toArray, newDataType, true)
+        TableChange.updateColumnType(colNameArray, newDataType, true)
       }
       val commentChange = comment.map { newComment =>
-        TableChange.updateColumnComment(colName.toArray, newComment)
+        TableChange.updateColumnComment(colNameArray, newComment)
       }
-      createAlterTable(nameParts, catalog, tbl, typeChange.toSeq ++ commentChange)
+      val positionChange = pos.map { newPosition =>
+        TableChange.updateColumnPosition(colNameArray, newPosition)
+      }
+      createAlterTable(
+        nameParts,
+        catalog,
+        tbl,
+        typeChange.toSeq ++ commentChange ++ positionChange)
 
     case AlterTableRenameColumnStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
