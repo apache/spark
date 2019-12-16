@@ -25,8 +25,8 @@ import org.junit.Test;
 // Test the ResourceProfile and Request api's from Java
 public class JavaResourceProfileSuite {
 
-  String GpuResource = "resource.gpu";
-  String FPGAResource = "resource.fpga";
+  String GpuResource = "gpu";
+  String FPGAResource = "fpga";
 
   @Test
   public void testResourceProfileAccessFromJava() throws Exception {

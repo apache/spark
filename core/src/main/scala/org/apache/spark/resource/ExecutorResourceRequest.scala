@@ -29,16 +29,13 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  *
  * This is used to specify what the resource requirements are for an Executor and how
  * Spark can find out specific details about those resources. Not all the parameters are
- * required for every resource type. The resources names supported
- * correspond to the regular Spark configs with the prefix removed. For instance overhead
- * memory in this api is memoryOverhead, which is spark.executor.memoryOverhead with
- * spark.executor removed. Resources like GPUs are resource.gpu
- * (spark configs spark.executor.resource.gpu.*). The amount, discoveryScript, and vendor
- * parameters for resources are all the same parameters a user would specify through the
+ * required for every resource type. Resources like GPUs are supported and have same limitations
+ * as using the global spark configs spark.executor.resource.gpu.*. The amount, discoveryScript,
+ * and vendor parameters for resources are all the same parameters a user would specify through the
  * configs: spark.executor.resource.{resourceName}.{amount, discoveryScript, vendor}.
  *
  * For instance, a user wants to allocate an Executor with GPU resources on YARN. The user has
- * to specify the resource name (resource.gpu), the amount or number of GPUs per Executor,
+ * to specify the resource name (gpu), the amount or number of GPUs per Executor,
  * the discovery script would be specified so that when the Executor starts up it can
  * discovery what GPU addresses are available for it to use because YARN doesn't tell
  * Spark that, then vendor would not be used because its specific for Kubernetes.

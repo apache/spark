@@ -175,8 +175,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
     val defaultRProf = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    val execReq = new ExecutorResourceRequests().resource("resource.gpu", 6)
-    val taskReq = new TaskResourceRequests().resource("resource.gpu", 1)
+    val execReq = new ExecutorResourceRequests().resource("gpu", 6)
+    val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val rprof = new ImmutableResourceProfile(execReq.requests, taskReq.requests)
     // request a single container and receive it
     val handler = createAllocator(0)
@@ -211,12 +211,12 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
     val defaultRProf = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    val execReq = new ExecutorResourceRequests().resource("resource.gpu", 6)
-    val taskReq = new TaskResourceRequests().resource("resource.gpu", 1)
+    val execReq = new ExecutorResourceRequests().resource("gpu", 6)
+    val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val rprof = new ImmutableResourceProfile(execReq.requests, taskReq.requests)
 
-    val execReq2 = new ExecutorResourceRequests().resource("resource.fpga", 2)
-    val taskReq2 = new TaskResourceRequests().resource("resource.fpga", 1)
+    val execReq2 = new ExecutorResourceRequests().resource("fpga", 2)
+    val taskReq2 = new TaskResourceRequests().resource("fpga", 1)
     val rprof2 = new ImmutableResourceProfile(execReq2.requests, taskReq2.requests)
 
     // request a single container and receive it

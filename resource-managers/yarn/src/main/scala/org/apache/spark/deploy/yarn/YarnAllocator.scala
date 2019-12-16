@@ -304,9 +304,9 @@ private[yarn] class YarnAllocator(
               pysparkMem = execReq.amount
             case "cores" =>
               cores = execReq.amount.toInt
-            case "resource.gpu" =>
+            case "gpu" =>
               customResources(YARN_GPU_RESOURCE_CONFIG) = execReq.amount.toString
-            case "resource.fpga" =>
+            case "fpga" =>
               customResources(YARN_FPGA_RESOURCE_CONFIG) = execReq.amount.toString
             case _ =>
               // strip off resource. if needed

@@ -46,9 +46,7 @@ class TaskResourceRequests() extends Serializable {
   }
 
   /**
-   *  Amount of a particular custom resource(GPU, FPGA, etc) to use. The resource names supported
-   *  correspond to the regular Spark configs with the prefix removed. For instance, resources
-   *  like GPUs are resource.gpu (spark configs spark.task.resource.gpu.*)
+   *  Amount of a particular custom resource(GPU, FPGA, etc) to use.
    *
    * @param resourceName Name of the resource.
    * @param amount Amount requesting as a Double to support fractional resource requests.

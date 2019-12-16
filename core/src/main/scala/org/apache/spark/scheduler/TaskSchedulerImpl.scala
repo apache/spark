@@ -397,11 +397,7 @@ private[spark] class TaskSchedulerImpl(
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
     val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(rpId)
 
-    logInfo("task set resources is: " + taskSetProf)
-
-    // TODO - do we only need to check limiting Resource?
-    // if we only check limiting one we can't assign them at the same time
-
+    logInfo("task set resources are: " + taskSetProf)
     // remove task cpus since we checked already
     val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
     // check is ResourceProfile has cpus first since that is common case
@@ -410,6 +406,8 @@ private[spark] class TaskSchedulerImpl(
 
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
     logInfo("task resources are: " + tsResources)
+    // we go through all resources here so that we can make sure match and also get what the
+    // assignments are for the next task
     for (rName <- tsResources.keys) {
       val resourceReqs = tsResources.get(rName).get
       val taskReqAmount = resourceReqs.amount
@@ -435,8 +433,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-
-    // taskResourceAssignments ++= localTaskReqAssign
+    taskResourceAssignments ++= localTaskReqAssign
     true
   }
 
@@ -536,11 +533,8 @@ private[spark] class TaskSchedulerImpl(
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
         val slots = calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
           taskSet.taskSet.resourceProfileId)
-        logInfo(s"number of slots for barrier is $slots")
         slots
       } else {
-        logInfo(s"number of slots for barrier is -1")
-
         -1
       }
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.

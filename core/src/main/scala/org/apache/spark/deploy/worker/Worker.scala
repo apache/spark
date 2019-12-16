@@ -233,6 +233,9 @@ private[deploy] class Worker(
   private def setupWorkerResources(): Unit = {
     try {
       val allResources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
+      allResources.foreach { case (name, ri) =>
+        logInfo(s"Tom resource $name and ri: $ri")
+      }
       resources = acquireResources(conf, SPARK_WORKER_PREFIX, allResources, pid)
       logResourceInfo(SPARK_WORKER_PREFIX, resources)
     } catch {

@@ -133,8 +133,8 @@ private[spark] class ImmutableResourceProfile(
   override def hashCode(): Int = Seq(taskResources, executorResources).hashCode()
 
   override def toString(): String = {
-    s"Profile: id = ${_id}, executor resources: ${executorResources}, " +
-      s"task resources: ${taskResources}"
+    s"Profile: id = ${_id}, executor resources: ${executorResources.mkString(",")}, " +
+      s"task resources: ${taskResources.mkString(",")}"
   }
 }
 
