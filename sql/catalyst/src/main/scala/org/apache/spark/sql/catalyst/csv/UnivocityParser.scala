@@ -20,13 +20,12 @@ package org.apache.spark.sql.catalyst.csv
 import java.io.InputStream
 
 import scala.util.control.NonFatal
-
 import com.univocity.parsers.csv.CsvParser
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -43,11 +42,15 @@ import org.apache.spark.unsafe.types.UTF8String
 class UnivocityParser(
     dataSchema: StructType,
     requiredSchema: StructType,
-    val options: CSVOptions) extends Logging {
+    val options: CSVOptions,
+    filters: Seq[Filter]) extends Logging {
   require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
     s"requiredSchema (${requiredSchema.catalogString}) should be the subset of " +
       s"dataSchema (${dataSchema.catalogString}).")
 
+  def this(dataSchema: StructType, requiredSchema: StructType, options: CSVOptions) = {
+    this(dataSchema, requiredSchema, options, Seq.empty)
+  }
   def this(schema: StructType, options: CSVOptions) = this(schema, schema, options)
 
   // A `ValueConverter` is responsible for converting the given value to a desired type.

@@ -134,7 +134,11 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
       val actualRequiredSchema = StructType(
         requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-      val parser = new UnivocityParser(actualDataSchema, actualRequiredSchema, parsedOptions)
+      val parser = new UnivocityParser(
+        actualDataSchema,
+        actualRequiredSchema,
+        parsedOptions,
+        filters)
       val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(
