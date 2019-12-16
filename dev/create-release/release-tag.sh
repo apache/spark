@@ -104,7 +104,11 @@ git commit -a -m "Preparing development version $NEXT_VERSION"
 if ! is_dry_run; then
   # Push changes
   git push origin $RELEASE_TAG
-  git push origin HEAD:$GIT_BRANCH
+  if [[ $RELEASE_VERSION != *"preview"* ]]; then
+    git push origin HEAD:$GIT_BRANCH
+  else
+    echo "It's preview release. We only push $RELEASE_TAG to remote."
+  fi
 
   cd ..
   rm -rf spark
