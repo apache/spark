@@ -230,13 +230,16 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
       }
   }
 
-  test("load a 2.4.4 model") {
-    // a pre-saved 2.4.4 model with layers Array(4, 5, 2)
-    val model_path = "mlp_model_2.4.4"
-    val model = MultilayerPerceptronClassificationModel.load(model_path)
+  test("Load MultilayerPerceptronClassificationModel prior to Spark 3.0") {
+    val mlpPath = testFile("test-data/mlp-pre3.0")
+    val model = MultilayerPerceptronClassificationModel.load(mlpPath)
     val layers = model.getLayers
     assert(layers(0) === 4)
     assert(layers(1) === 5)
     assert(layers(2) === 2)
+
+    val metadata = spark.read.json(s"$mlpPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr == "2.4.4-SNAPSHOT")
   }
 }
