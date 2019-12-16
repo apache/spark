@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.csv
 import java.io.InputStream
 
 import scala.util.control.NonFatal
+
 import com.univocity.parsers.csv.CsvParser
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
@@ -86,6 +88,8 @@ class UnivocityParser(
     options.dateFormat,
     options.zoneId,
     options.locale)
+
+  private val csvFilters = new CSVFilters(filters, requiredSchema)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -258,7 +262,7 @@ class UnivocityParser(
         } else {
           try {
             r(i) = valueConverters(i).apply(getToken(tokens, i))
-            if (false) {
+            if (csvFilters.skipRow(r)) {
               skipValueConversion = true
             }
           } catch {
