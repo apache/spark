@@ -38,6 +38,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
+from pyspark.sql.functions import array, col, explode, lit, struct
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import IntegralType
@@ -2134,6 +2135,39 @@ class DataFrame(object):
         assert isinstance(result, DataFrame), "Func returned an instance of type [%s], " \
                                               "should have been DataFrame." % type(result)
         return result
+
+
+    def melt(self, id_vars, value_vars, var_name="variable", value_name="value"):
+        """Convert :class:`DataFrame` from wide to long format.  Based on [this](https://stackoverflow.com/a/41673644/12474509) implementation
+    
+        :param id_vars: id columns to melt over.
+        :param value_vars: value columns to melt.
+        :param var_name: Column name for output id.
+        :param value_name: Column name for output values.
+        
+        >>> import pandas as pd
+        >>> pdf = pd.DataFrame({'A': {0: 'a', 1: 'b', 2: 'c'},
+                   'B': {0: 1, 1: 3, 2: 5},
+                   'C': {0: 2, 1: 4, 2: 6}})
+        >>> pd.melt(pdf, id_vars=['A'], value_vars=['B', 'C'])
+               A variable  value
+            0  a        B      1
+            1  b        B      3
+            2  c        B      5
+            3  a        C      2
+            4  b        C      4
+            5  c        C      6
+    """
+    _vars_and_vals = array(*(
+        struct(lit(c).alias(var_name), col(c).alias(value_name)) 
+        for c in value_vars))
+
+    _tmp = df.withColumn("_vars_and_vals", explode(_vars_and_vals))
+
+    cols = id_vars + [
+            col("_vars_and_vals")[x].alias(x) for x in [var_name, value_name]]
+    return _tmp.select(*cols)
+
 
     @since(1.3)
     def toPandas(self):
