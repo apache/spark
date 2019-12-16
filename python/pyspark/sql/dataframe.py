@@ -2157,16 +2157,16 @@ class DataFrame(object):
             3  a        C      2
             4  b        C      4
             5  c        C      6
-    """
-    _vars_and_vals = array(*(
-        struct(lit(c).alias(var_name), col(c).alias(value_name)) 
-        for c in value_vars))
+        """
+        _vars_and_vals = array(*(
+            struct(lit(c).alias(var_name), col(c).alias(value_name)) 
+            for c in value_vars))
 
-    _tmp = df.withColumn("_vars_and_vals", explode(_vars_and_vals))
+        _tmp = self.withColumn("_vars_and_vals", explode(_vars_and_vals))
 
-    cols = id_vars + [
-            col("_vars_and_vals")[x].alias(x) for x in [var_name, value_name]]
-    return _tmp.select(*cols)
+        cols = id_vars + [
+                col("_vars_and_vals")[x].alias(x) for x in [var_name, value_name]]
+        return _tmp.select(*cols)
 
 
     @since(1.3)
