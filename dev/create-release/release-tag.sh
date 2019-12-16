@@ -73,8 +73,12 @@ git config user.email $GIT_EMAIL
 
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
-# Set the release version in R/pkg/DESCRIPTION
-sed -i".tmp1" 's/Version.*$/Version: '"$RELEASE_VERSION"'/g' R/pkg/DESCRIPTION
+if [[ $RELEASE_VERSION != *"preview"* ]]; then
+  # Set the release version in R/pkg/DESCRIPTION
+  sed -i".tmp1" 's/Version.*$/Version: '"$RELEASE_VERSION"'/g' R/pkg/DESCRIPTION
+else
+  sed -i".tmp1" 's/-SNAPSHOT/'"-$(cut -d "-" -f 2 <<< $RELEASE_VERSION)"'/g' R/pkg/R/sparkR.R
+fi
 # Set the release version in docs
 sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
 sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
