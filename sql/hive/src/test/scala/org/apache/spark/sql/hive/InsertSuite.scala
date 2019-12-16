@@ -833,7 +833,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         val bs = org.apache.commons.codec.binary.Hex.decodeHex(hex.toCharArray)
         Files.write(bs, file)
         val path = file.getParent
-        sql(s"create table t1 (c string) location '$path'")
+        sql(s"create table t1 (c string) STORED AS TEXTFILE location '$path'")
         checkAnswer(
           sql("select hex(c) from t1"),
           Row(hex)
