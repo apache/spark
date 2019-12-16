@@ -2136,15 +2136,15 @@ class DataFrame(object):
                                               "should have been DataFrame." % type(result)
         return result
 
-
     def melt(self, id_vars, value_vars, var_name="variable", value_name="value"):
-        """Convert :class:`DataFrame` from wide to long format.  Based on [this](https://stackoverflow.com/a/41673644/12474509) implementation
-    
+        """Convert :class:`DataFrame` from wide to long format.  
+        Based on [this](https://stackoverflow.com/a/41673644/12474509) implementation
+
         :param id_vars: id columns to melt over.
         :param value_vars: value columns to melt.
         :param var_name: Column name for output id.
         :param value_name: Column name for output values.
-        
+
         >>> import pandas as pd
         >>> pdf = pd.DataFrame({'A': {0: 'a', 1: 'b', 2: 'c'},
                    'B': {0: 1, 1: 3, 2: 5},
@@ -2159,15 +2159,14 @@ class DataFrame(object):
             5  c        C      6
         """
         _vars_and_vals = array(*(
-            struct(lit(c).alias(var_name), col(c).alias(value_name)) 
+            struct(lit(c).alias(var_name), col(c).alias(value_name))
             for c in value_vars))
 
         _tmp = self.withColumn("_vars_and_vals", explode(_vars_and_vals))
 
         cols = id_vars + [
-                col("_vars_and_vals")[x].alias(x) for x in [var_name, value_name]]
+            col("_vars_and_vals")[x].alias(x) for x in [var_name, value_name]]
         return _tmp.select(*cols)
-
 
     @since(1.3)
     def toPandas(self):
