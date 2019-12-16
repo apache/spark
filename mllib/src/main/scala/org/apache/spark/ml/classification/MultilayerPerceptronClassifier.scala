@@ -247,8 +247,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     }
     trainer.setStackSize($(blockSize))
     val mlpModel = trainer.train(data)
-    val model = new MultilayerPerceptronClassificationModel(uid, mlpModel.weights)
-    model.setLayers(myLayers)
+    new MultilayerPerceptronClassificationModel(uid, mlpModel.weights)
   }
 }
 
