@@ -50,7 +50,9 @@ object JavaTypeInference {
   // Guava changed the name of this method; this tries to stay compatible with both
   // TODO replace with isSupertypeOf when Guava 14 support no longer needed for Hadoop
   private val ttIsAssignableFrom: (TypeToken[_], TypeToken[_]) => Boolean = {
-    val ttMethods = classOf[TypeToken[_]].getMethods
+    val ttMethods = classOf[TypeToken[_]].getMethods.
+      filter(_.getParameterCount == 1).
+      filter(_.getParameterTypes.head == classOf[TypeToken[_]])
     val isAssignableFromMethod = ttMethods.find(_.getName == "isSupertypeOf").getOrElse(
       ttMethods.find(_.getName == "isAssignableFrom").get)
     (a: TypeToken[_], b: TypeToken[_]) => isAssignableFromMethod.invoke(a, b).asInstanceOf[Boolean]
