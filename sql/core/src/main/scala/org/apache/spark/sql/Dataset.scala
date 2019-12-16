@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
-import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -522,53 +521,20 @@ class Dataset[T] private[sql](
   def printSchema(level: Int): Unit = println(schema.treeString(level))
   // scalastyle:on println
 
-  private def toExplainString(mode: ExplainMode): String = {
-    // Because temporary views are resolved during analysis when we create a Dataset, and
-    // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
-    // `ExplainCommand` here will probably output different query plans, compared to the results
-    // of evaluation of the Dataset. So just output QueryExecution's query plans here.
-    val qe = ExplainCommandUtil.explainedQueryExecution(sparkSession, logicalPlan, queryExecution)
-
-    mode match {
-      case ExplainMode.Simple =>
-        qe.simpleString
-      case ExplainMode.Extended =>
-        qe.toString
-      case ExplainMode.Codegen =>
-        try {
-          org.apache.spark.sql.execution.debug.codegenString(queryExecution.executedPlan)
-        } catch {
-          case e: AnalysisException => e.toString
-        }
-      case ExplainMode.Cost =>
-        qe.stringWithStats
-      case ExplainMode.Formatted =>
-        qe.simpleString(formatted = true)
-    }
-  }
-
-  // This method intends to be called from PySpark DataFrame
-  private[sql] def toExplainString(mode: String): String = {
-    mode.toLowerCase(Locale.ROOT) match {
-      case "simple" => toExplainString(ExplainMode.Simple)
-      case "extended" => toExplainString(ExplainMode.Extended)
-      case "codegen" => toExplainString(ExplainMode.Codegen)
-      case "cost" => toExplainString(ExplainMode.Cost)
-      case "formatted" => toExplainString(ExplainMode.Formatted)
-      case _ => throw new IllegalArgumentException(s"Unknown explain mode: $mode. Accepted " +
-        "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
-    }
-  }
-
   /**
    * Prints the plans (logical and physical) with a format specified by a given explain mode.
    *
    * @group basic
    * @since 3.0.0
    */
-  def explain(mode: ExplainMode): Unit = {
+  def explain(mode: String): Unit = {
+    // Because temporary views are resolved during analysis when we create a Dataset, and
+    // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
+    // `ExplainCommand` here will probably output different query plans, compared to the results
+    // of evaluation of the Dataset. So just output QueryExecution's query plans here.
+
     // scalastyle:off println
-    println(toExplainString(mode))
+    println(queryExecution.explainString(ExplainMode.fromString(mode)))
     // scalastyle:on println
   }
 
@@ -579,9 +545,9 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = if (extended) {
-    explain(ExplainMode.Extended)
+    explain(ExtendedMode.name)
   } else {
-    explain(ExplainMode.Simple)
+    explain(SimpleMode.name)
   }
 
   /**
@@ -590,7 +556,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def explain(): Unit = explain(ExplainMode.Simple)
+  def explain(): Unit = explain(SimpleMode.name)
 
   /**
    * Returns all column names and their data types as an array.
