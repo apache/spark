@@ -49,9 +49,7 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
  * (spark.deploy.*).
  */
 private[spark]
-class CoarseGrainedSchedulerBackend(
-    scheduler: TaskSchedulerImpl,
-    val rpcEnv: RpcEnv)
+class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
   extends ExecutorAllocationClient with SchedulerBackend with Logging {
 
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
@@ -82,15 +80,6 @@ class CoarseGrainedSchedulerBackend(
   // cluster manager, [[ExecutorAllocationManager]]
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private var requestedTotalExecutorsPerResourceProfile = new HashMap[ImmutableResourceProfile, Int]
-
-
-  // Number of executors for the default ResourceProfile requested from the cluster manager that
-  // have not registered yet
-  // TODO - this seems to be purely for logging - remove it as it complicates things and
-  // would require pending to remove to be per resource profile as well
-  // @GuardedBy("CoarseGrainedSchedulerBackend.this")
-  // private var numPendingExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
-
 
   private val listenerBus = scheduler.sc.listenerBus
 

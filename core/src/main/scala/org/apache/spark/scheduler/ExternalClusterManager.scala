@@ -38,9 +38,7 @@ private[spark] trait ExternalClusterManager {
    * @param masterURL the master URL
    * @return TaskScheduler that will be responsible for task handling
    */
-  def createTaskScheduler(
-      sc: SparkContext,
-      masterURL: String): TaskScheduler
+  def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler
 
   /**
    * Create a scheduler backend for the given SparkContext and scheduler. This is
