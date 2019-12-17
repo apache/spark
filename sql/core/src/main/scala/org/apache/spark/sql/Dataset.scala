@@ -1868,9 +1868,9 @@ class Dataset[T] private[sql](
  /**
   * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
   * that returns the same result as the input, with the following guarantees:
-  * - It will compute the defined aggregates (metrics) on all the data that is flowing through the
+  *  - It will compute the defined aggregates (metrics) on all the data that is flowing through the
   *   Dataset at that point.
-  * - It will report the value of the defined aggregate columns as soon as we reach a completion
+  *  - It will report the value of the defined aggregate columns as soon as we reach a completion
   *   point. A completion point is either the end of a query (batch mode) or the end of a streaming
   *   epoch. The value of the aggregates only reflects the data processed since the previous
   *   completion point.
@@ -2498,6 +2498,13 @@ class Dataset[T] private[sql](
    *
    * Use [[summary]] for expanded statistics and control over which statistics to compute.
    *
+   * NOTES:
+   *  - String columns are countable, so count is accurate
+   *  - String columns are comparable, so min/max are accurate
+   *  - String columns will be implicitly cast to double when perform arithmetic operations, so the
+   *  mean/stddev only summarize the records that can be cast to double values, e.g. "1",
+   *  "2.02" are summarized, "0a", "xyz" are cast to nulls and omitted silently.
+   *
    * @param cols Columns to compute statistics on.
    *
    * @group action
@@ -2512,12 +2519,12 @@ class Dataset[T] private[sql](
   /**
    * Computes specified statistics for numeric and string columns. Available statistics are:
    *
-   * - count
-   * - mean
-   * - stddev
-   * - min
-   * - max
-   * - arbitrary approximate percentiles specified as a percentage (eg, 75%)
+   *  - count
+   *  - mean
+   *  - stddev
+   *  - min
+   *  - max
+   *  - arbitrary approximate percentiles specified as a percentage (eg, 75%)
    *
    * If no statistics are given, this function computes count, mean, stddev, min,
    * approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
@@ -2560,6 +2567,13 @@ class Dataset[T] private[sql](
    * }}}
    *
    * See also [[describe]] for basic statistics.
+   *
+   * NOTES:
+   *  - String columns are countable, so count is accurate
+   *  - String columns are comparable, so min/max are accurate
+   *  - String columns will be implicitly cast to double when perform arithmetic operations, so the
+   *  mean, stddev and percentiles only summarize the records that can be cast to double values,
+   *  e.g. "1", "2.02" are summarized, "0a", "xyz" are cast to nulls and omitted silently.
    *
    * @param statistics Statistics from above list to be computed.
    *
