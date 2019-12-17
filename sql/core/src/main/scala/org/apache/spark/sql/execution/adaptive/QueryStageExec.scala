@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
 import org.apache.spark.{FutureAction, MapOutputStatistics}
@@ -161,6 +162,29 @@ case class ShuffleQueryStageExec(
         action.cancel()
       case _ =>
     }
+  }
+
+  private def getPartitionIndexRanges(omittedPartitions: Set[Int]): Array[(Int, Int)] = {
+    val length = plan.shuffleDependency.partitioner.numPartitions
+    val partitionStartIndices = ArrayBuffer[Int]()
+    val partitionEndIndices = ArrayBuffer[Int]()
+    (0 until length).map { i =>
+      if (!omittedPartitions.contains(i)) {
+        partitionStartIndices += i
+        partitionEndIndices += i + 1
+      }
+    }
+    partitionStartIndices.zip(partitionEndIndices).toArray
+  }
+
+  private var cachedShuffleRDD: ShuffledRowRDD = null
+
+  override def doExecute(): RDD[InternalRow] = {
+    if (cachedShuffleRDD == null) {
+      cachedShuffleRDD = plan.createShuffledRDD(
+        Some(getPartitionIndexRanges(excludedPartitions)))
+    }
+    cachedShuffleRDD
   }
 }
 

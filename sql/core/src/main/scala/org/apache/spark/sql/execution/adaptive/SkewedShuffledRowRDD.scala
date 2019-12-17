@@ -23,14 +23,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
 
 /**
- * The [[Partition]] used by [[SkewedShuffledRowRDD]]. A post-shuffle partition
- * (identified by `postShufflePartitionIndex`) contains a range of pre-shuffle partitions
- * (`preShufflePartitionIndex` from `startMapId` to `endMapId - 1`, inclusive).
+ * The [[Partition]] used by [[SkewedShuffledRowRDD]].
  */
-private final class SkewedShuffledRowRDDPartition(
-    val postShufflePartitionIndex: Int) extends Partition {
-  override val index: Int = postShufflePartitionIndex
-}
+class SkewedShuffledRowRDDPartition(override val index: Int) extends Partition
 
 /**
  * This is a specialized version of [[org.apache.spark.sql.execution.ShuffledRowRDD]]. This is used

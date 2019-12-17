@@ -65,7 +65,6 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
       case _: LocalShuffleReaderExec => Nil
-      case _: SkewedShufflePartitionReader => Nil
       case stage: ShuffleQueryStageExec => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
     }
@@ -90,24 +89,13 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
       if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
-        val visitedStage = mutable.HashSet[QueryStageExec]()
-        plan.transformDown {
-          // even for shuffle exchange whose input RDD has 0 partition, we should still update its
-          // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
-          // number of output partitions.
-          case stage: ShuffleQueryStageExec if(!visitedStage.contains(stage)) =>
-            visitedStage += stage
-            val excludedPartitions =
-              ShuffleQueryStageExec.getShuffleStage(stage).excludedPartitions
-            val partitionIndices = estimatePartitionStartAndEndIndices(
-              validMetrics.toArray, excludedPartitions)
-            visitedStage += stage
+        val excludedPartitions =
+          shuffleStages.head.excludedPartitions
+        val partitionIndices = estimatePartitionStartAndEndIndices(
+          validMetrics.toArray, excludedPartitions)
+        plan.transformUp {
+          case stage: ShuffleQueryStageExec =>
             CoalescedShuffleReaderExec(stage, partitionIndices)
-          case partialReader: PartialShuffleReader =>
-            visitedStage += partialReader.child
-            val optimizedPartitionIndices = estimatePartitionStartAndEndIndices(
-              validMetrics.toArray, partialReader.excludedPartitions)
-            CoalescedShuffleReaderExec(partialReader.child, optimizedPartitionIndices)
         }
       } else {
         plan
@@ -124,7 +112,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
   private[sql] def estimatePartitionStartAndEndIndices(
       mapOutputStatistics: Array[MapOutputStatistics],
       excludedPartitions: Set[Int] = Set.empty): Array[(Int, Int)] = {
-    val minNumPostShufflePartitions = conf.minNumPostShufflePartitions
+    val minNumPostShufflePartitions = conf.minNumPostShufflePartitions - excludedPartitions.size
     val advisoryTargetPostShuffleInputSize = conf.targetPostShuffleInputSize
     // If minNumPostShufflePartitions is defined, it is possible that we need to use a
     // value less than advisoryTargetPostShuffleInputSize as the target input size of
@@ -159,13 +147,13 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
     val partitionStartIndices = ArrayBuffer[Int]()
     val partitionEndIndices = ArrayBuffer[Int]()
-    val numPartitions = mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).head
+    val numPartitions = distinctNumPreShufflePartitions.head
     val includedPartitions = (0 until numPartitions).filter(!excludedPartitions.contains(_))
     val firstStartIndex = includedPartitions(0)
     partitionStartIndices += firstStartIndex
     var postShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId(firstStartIndex)).sum
     var i = firstStartIndex
-    includedPartitions.filter(_ != firstStartIndex).foreach {
+    includedPartitions.drop(1).foreach {
       nextPartitionIndices =>
         var nextShuffleInputSize =
           mapOutputStatistics.map(_.bytesByPartitionId(nextPartitionIndices)).sum
