@@ -363,16 +363,14 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val conf = new SparkConf(false)
     conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
+    // HadoopMapReduceCommitProtocol.commitTask() returns a TaskCommitMessage containing a complex
+    // structure.
+
     val ser = new KryoSerializer(conf).newInstance()
-    // In HadoopMapReduceCommitProtocol#commitTask
-    val addedAbsPathFiles: mutable.Map[String, String] = mutable.Map()
-    addedAbsPathFiles.put("test1", "test1")
-    addedAbsPathFiles.put("test2", "test2")
+    val addedAbsPathFiles = Map("test1" -> "test1", "test2" -> "test2")
+    val partitionPaths = Set("test3")
 
-    val partitionPaths: mutable.Set[String] = mutable.Set()
-    partitionPaths.add("test3")
-
-    val taskCommitMessage1 = new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
+    val taskCommitMessage1 = new TaskCommitMessage(addedAbsPathFiles -> partitionPaths)
     val taskCommitMessage2 = new TaskCommitMessage(Map.empty -> Set.empty)
     Seq(taskCommitMessage1, taskCommitMessage2).foreach { taskCommitMessage =>
       val obj1 = ser.deserialize[TaskCommitMessage](ser.serialize(taskCommitMessage)).obj
