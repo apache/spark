@@ -779,7 +779,7 @@ class Analyzer(
         case _ => None
       }
       if (maybeTempView.isDefined) {
-        throw new AnalysisException(
+        unresolved.failAnalysis(
           s"Invalid command: '${unresolved.originalNameParts.quoted}' is a view not a table.")
       }
 
