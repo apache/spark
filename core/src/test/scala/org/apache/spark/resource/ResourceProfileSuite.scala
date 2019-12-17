@@ -30,44 +30,6 @@ class ResourceProfileSuite extends SparkFunSuite {
     }
   }
 
-  test("Default ResourceProfile") {
-    val rprof = ImmutableResourceProfile.getOrCreateDefaultProfile(new SparkConf)
-    assert(rprof.id === ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    assert(rprof.executorResources.size === 2,
-      "Executor resources should contain cores and memory by default")
-    assert(rprof.executorResources(ResourceProfile.CORES).amount === 1,
-      s"Executor resources should have 1 core")
-    assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 1024,
-      s"Executor resources should have 1024 memory")
-    assert(rprof.taskResources.size === 1,
-      "Task resources should just contain cpus by default")
-    assert(rprof.taskResources(ResourceProfile.CPUS).amount === 1,
-      s"Task resources should have 1 cpu")
-  }
-
-  test("Default ResourceProfile with app level resources specified") {
-    val conf = new SparkConf
-    conf.set("spark.task.resource.gpu.amount", "1")
-    conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.amount", "1")
-    conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.discoveryScript", "nameOfScript")
-    val rprof = ImmutableResourceProfile.getOrCreateDefaultProfile(conf)
-    assert(rprof.id === ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    val execResources = rprof.executorResources
-    assert(execResources.size === 3,
-      "Executor resources should contain cores, memory, and gpu " + execResources)
-    assert(rprof.taskResources.size === 2,
-      "Task resources should just contain cpus and gpu")
-    assert(execResources.contains("gpu"), "Executor resources should have gpu")
-    assert(rprof.taskResources.contains("gpu"), "Task resources should have gpu")
-  }
-
-  test("Create ImmutableResourceProfile") {
-    val rprof = ImmutableResourceProfile.getOrCreateDefaultProfile(new SparkConf())
-    assert(rprof.id > ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    assert(rprof.executorResources === Map.empty)
-    assert(rprof.taskResources === Map.empty)
-  }
-
   test("Create ResourceProfile") {
     val rprof = new ResourceProfile()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
@@ -110,16 +72,6 @@ class ResourceProfileSuite extends SparkFunSuite {
 
     assert(rprof.taskResources.size === 2)
     assert(rprof.taskResources("cpus").amount === 1, "Task resources should have cpu")
-
-    val error = intercept[IllegalArgumentException] {
-      rprof.require(new ExecutorResourceRequests().resource("bogusResource", 1))
-    }.getMessage()
-    assert(error.contains("Executor resource not allowed"))
-
-    val taskError = intercept[IllegalArgumentException] {
-      rprof.require(new TaskResourceRequests().resource("bogusTaskResource", 1))
-    }.getMessage()
-    assert(taskError.contains("Task resource not allowed"))
   }
 
   test("Test ExecutorResourceRequests memory helpers") {
@@ -164,78 +116,5 @@ class ResourceProfileSuite extends SparkFunSuite {
       rprof.require(new TaskResourceRequests().resource("gpu", 0.7))
     }.getMessage()
     assert(taskError.contains("The resource amount 0.7 must be either <= 0.5, or a whole number."))
-  }
-
-  test("Internal confs") {
-    val rprof = new ResourceProfile()
-    val gpuExecReq =
-      new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    rprof.require(gpuExecReq)
-    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
-    val internalResourceConfs =
-      ImmutableResourceProfile.createResourceProfileInternalConfs(immrprof)
-    val sparkConf = new SparkConf
-    internalResourceConfs.foreach { case(key, value) => sparkConf.set(key, value) }
-    val resourceReq =
-      ImmutableResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, immrprof.id)
-
-    assert(resourceReq.size === 1, "ResourceRequest should have 1 item")
-    assert(resourceReq(0).id.resourceName === "gpu")
-    assert(resourceReq(0).amount === 2)
-    assert(resourceReq(0).discoveryScript === Some("someScript"))
-  }
-
-  test("maxTasksPerExecutor cpus") {
-    val sparkConf = new SparkConf()
-      .set(EXECUTOR_CORES, 1)
-    val rprof = new ResourceProfile()
-    val taskReq = new TaskResourceRequests().resource("gpu", 1)
-    val execReq =
-      new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprof.require(taskReq).require(execReq)
-    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
-    assert(immrprof.limitingResource(sparkConf) == "cpus")
-    assert(immrprof.maxTasksPerExecutor(sparkConf) == 1)
-  }
-
-  test("maxTasksPerExecutor gpus") {
-    val sparkConf = new SparkConf()
-      .set(EXECUTOR_CORES, 6)
-    val rprof = new ResourceProfile()
-    val taskReq = new TaskResourceRequests().resource("gpu", 2)
-    val execReq =
-      new ExecutorResourceRequests().resource("gpu", 4, "myscript", "nvidia")
-    rprof.require(taskReq).require(execReq)
-    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
-    assert(immrprof.limitingResource(sparkConf) == "gpu")
-    assert(immrprof.maxTasksPerExecutor(sparkConf) == 2)
-  }
-
-  test("maxTasksPerExecutor gpus fractional") {
-    val sparkConf = new SparkConf()
-        .set(EXECUTOR_CORES, 6)
-    val rprof = new ResourceProfile()
-    val taskReq = new TaskResourceRequests().resource("gpu", 0.5)
-    val execReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprof.require(taskReq).require(execReq)
-    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
-    assert(immrprof.limitingResource(sparkConf) == "gpu")
-    assert(immrprof.maxTasksPerExecutor(sparkConf) == 4)
-  }
-
-  test("maxTasksPerExecutor multiple resources") {
-    val sparkConf = new SparkConf()
-      .set(EXECUTOR_CORES, 6)
-    val rprof = new ResourceProfile()
-    val taskReqs = new TaskResourceRequests()
-    val execReqs = new ExecutorResourceRequests()
-    taskReqs.resource("gpu", 1)
-    execReqs.resource("gpu", 6, "myscript", "nvidia")
-    taskReqs.resource("fpga", 1)
-    execReqs.resource("fpga", 4, "myscript", "nvidia")
-    rprof.require(taskReqs).require(execReqs)
-    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
-    assert(immrprof.limitingResource(sparkConf) == "fpga")
-    assert(immrprof.maxTasksPerExecutor(sparkConf) == 4)
   }
 }

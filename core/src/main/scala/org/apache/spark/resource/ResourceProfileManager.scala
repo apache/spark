@@ -44,20 +44,24 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
   def defaultResourceProfile: ImmutableResourceProfile = defaultProfile
 
   private val taskCpusDefaultProfile = defaultProfile.getTaskCpus.get
+  private val shouldError = !isTesting ||
+    sparkConf.getBoolean("spark.testing.resourceProfileManager", false)
+  private val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
+  private val isNotYarn = master.isDefined && !master.get.equals("yarn")
+
 
   // If we use anything except the default profile, its only supported on YARN right now
-  // TODO - add tests
-  private[spark] def isSupported(rp: ImmutableResourceProfile): Unit = {
-    val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
+  // throws exception if not supported
+  private[spark] def isSupported(rp: ImmutableResourceProfile): Boolean = {
     // is master isn't defined we go ahead and allow it for testing purposes
-    val isNotYarn = master.isDefined && !master.get.equals("yarn")
     val isYarn = !isNotYarn
     val isNotDefaultProfile = rp.id != ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    if (!isTesting &&
+    if (shouldError &&
       ((isNotDefaultProfile && isNotYarn) || (isNotDefaultProfile && isYarn && !dynamicEnabled))) {
       throw new SparkException("ResourceProfiles are only supported on YARN with dynamic " +
         "allocation enabled.")
     }
+    true
   }
 
   def addResourceProfile(rp: ImmutableResourceProfile): Unit = {

@@ -1012,7 +1012,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": false,
       |        "Count Failed Values": false
       |      }
-      |    ]
+      |    ],
+      |    "ResourceProfileID" : 0
       |  },
       |  "Properties": {
       |    "France": "Paris",
@@ -1069,7 +1070,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": false,
       |        "Count Failed Values": false
       |      }
-      |    ]
+      |    ],
+      |    "ResourceProfileID" : 0
       |  }
       |}
     """.stripMargin
@@ -1591,7 +1593,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
-      |      ]
+      |      ],
+      |      "ResourceProfileID" : 0
       |    },
       |    {
       |      "Stage ID": 2,
@@ -1651,7 +1654,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
-      |      ]
+      |      ],
+      |      "ResourceProfileID" : 0
       |    },
       |    {
       |      "Stage ID": 3,
@@ -1727,7 +1731,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
-      |      ]
+      |      ],
+      |      "ResourceProfileID" : 0
       |    },
       |    {
       |      "Stage ID": 4,
@@ -1819,7 +1824,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
-      |      ]
+      |      ],
+      |      "ResourceProfileID" : 0
       |    }
       |  ],
       |  "Stage IDs": [

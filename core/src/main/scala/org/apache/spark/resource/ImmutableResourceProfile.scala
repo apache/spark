@@ -84,7 +84,6 @@ private[spark] class ImmutableResourceProfile(
    * request is for 4 cpus and 2 gpus and your task request is for 1 cpu and 1 gpu each, the
    * limiting resource is gpu, and this function will return 2.
    */
-  // TODO - add tests
   private def calculateTasksAndLimitingResource(sparkConf: SparkConf): Unit = synchronized {
     val coresPerExecutor = getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
     val master = sparkConf.getOption("spark.master")
@@ -170,7 +169,7 @@ private[spark] object ImmutableResourceProfile extends Logging {
   val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
 
   private def resourceProfileIntConfPrefix(rpId: Int): String = {
-    s"$SPARK_RP_EXEC_PREFIX.$rpId."
+    s"$SPARK_RP_EXEC_PREFIX.$rpId.resource."
   }
 
   // Helper class for constructing the resource profile internal configs used to pass to
@@ -252,17 +251,17 @@ private[spark] object ImmutableResourceProfile extends Logging {
 
   /**
    * Create the ResourceProfile internal confs that are used to pass between Driver and Executors.
-   * It pulls any "resource." resources from the ResourceProfile and returns a Map of key
+   * It pulls any custom resources from the ResourceProfile and returns a Map of key
    * to value where the keys get formatted as:
    *
-   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
-   *
-   * Keep this here as utility a function rather then in public ResourceProfile interface because
-   * end users doesn't need this.
+   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
    */
   def createResourceProfileInternalConfs(rp: ImmutableResourceProfile): Map[String, String] = {
     val ret = new mutable.HashMap[String, String]()
-    rp.executorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
+
+    val customResource =
+      rp.executorResources.filter(!ResourceProfile.allSupportedExecutorResources.contains(_))
+    customResource.foreach { case (name, req) =>
       val execIntConf = ResourceProfileInternalConf(rp.id, name)
       ret(execIntConf.amountConf) = req.amount.toString
       if (req.vendor.nonEmpty) ret(execIntConf.vendorConf) = req.vendor
@@ -299,11 +298,7 @@ private[spark] object ImmutableResourceProfile extends Logging {
       val amount = execConfs.get(intConf.resourceNameAndAmount).get.toInt
       val vendor = execConfs.get(intConf.resourceNameAndVendor)
       val discoveryScript = execConfs.get(intConf.resourceNameAndDiscovery)
-      // note resourceName at this point is resource.[something] because with ResourceProfiles
-      // the name matches the spark conf. Strip off the resource. part here to match how global
-      // custom resource confs are parsed and how any resource files are handled.
-      val shortResourceName = rName.substring(RESOURCE_DOT.length)
-      val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, shortResourceName)
+      val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, rName)
       ResourceRequest(resourceId, amount, discoveryScript, vendor)
     }
     resourceReqs

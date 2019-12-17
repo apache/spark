@@ -88,4 +88,7 @@ private[spark] object ResourceProfile {
   val MEMORY = "memory"
   val OVERHEAD_MEM = "memoryOverhead"
   val PYSPARK_MEM = "pyspark.memory"
+
+  // all known spark executor resources (minus the custom resources like GPUs/FPGAs)
+  val allSupportedExecutorResources = Seq(CORES, MEMORY, OVERHEAD_MEM, PYSPARK_MEM)
 }
