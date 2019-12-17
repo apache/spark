@@ -22,13 +22,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.HiveServer2
-
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
@@ -85,32 +83,32 @@ object HiveThriftServer2 extends Logging {
     optionsProcessor.parse(args)
 
     logInfo("Starting SparkContext")
-    SparkSQLEnv.init()
+    val sparkSQLEnv = SparkSQLEnv(new SparkConf(loadDefaults = true))
 
     ShutdownHookManager.addShutdownHook { () =>
-      SparkSQLEnv.stop()
+      sparkSQLEnv.stop()
       uiTab.foreach(_.detach())
     }
 
     val executionHive = HiveUtils.newClientForExecution(
-      SparkSQLEnv.sqlContext.sparkContext.conf,
-      SparkSQLEnv.sqlContext.sessionState.newHadoopConf())
+      sparkSQLEnv.sqlContext.sparkContext.conf,
+      sparkSQLEnv.sqlContext.sessionState.newHadoopConf())
 
     try {
-      val server = new HiveThriftServer2(SparkSQLEnv.sqlContext)
+      val server = new HiveThriftServer2(sparkSQLEnv.sqlContext)
       server.init(executionHive.conf)
       server.start()
       logInfo("HiveThriftServer2 started")
-      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sqlContext.conf)
-      SparkSQLEnv.sparkContext.addSparkListener(listener)
-      uiTab = if (SparkSQLEnv.sparkContext.getConf.get(UI_ENABLED)) {
-        Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
+      listener = new HiveThriftServer2Listener(server, sparkSQLEnv.sqlContext.conf)
+      sparkSQLEnv.sparkContext.addSparkListener(listener)
+      uiTab = if (sparkSQLEnv.sparkContext.getConf.get(UI_ENABLED)) {
+        Some(new ThriftServerTab(sparkSQLEnv.sparkContext))
       } else {
         None
       }
       // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
       // process can not exit, so check whether if SparkContext was stopped.
-      if (SparkSQLEnv.sparkContext.stopped.get()) {
+      if (sparkSQLEnv.sparkContext.stopped.get()) {
         logError("SparkContext has stopped even if HiveServer2 has started, so exit")
         System.exit(-1)
       }
