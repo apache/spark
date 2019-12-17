@@ -28,13 +28,13 @@ import org.apache.spark.sql.types.IntegerType
  * aggregation in which the regular aggregation expressions and every distinct clause is aggregated
  * in a separate group. The results are then combined in a second aggregate.
  *
- * First example: query without filter clauses (in scala):
+ * For example (in scala):
  * {{{
  *   val data = Seq(
- *     (1, "a", "ca1", "cb1", 10),
- *     (2, "a", "ca1", "cb2", 5),
- *     (3, "b", "ca1", "cb1", 13))
- *     .toDF("id", "key", "cat1", "cat2", "value")
+ *     ("a", "ca1", "cb1", 10),
+ *     ("a", "ca1", "cb2", 5),
+ *     ("b", "ca1", "cb1", 13))
+ *     .toDF("key", "cat1", "cat2", "value")
  *   data.createOrReplaceTempView("data")
  *
  *   val agg = data.groupBy($"key")
@@ -70,99 +70,6 @@ import org.apache.spark.sql.types.IntegerType
  *     Expand(
  *        projections = [('key, null, null, 0, cast('value as bigint)),
  *                       ('key, 'cat1, null, 1, null),
- *                       ('key, null, 'cat2, 2, null)]
- *        output = ['key, 'cat1, 'cat2, 'gid, 'value])
- *       LocalTableScan [...]
- * }}}
- *
- * Second example: aggregate function without distinct and with filter clauses (in sql):
- * {{{
- *   SELECT
- *     COUNT(DISTINCT cat1) as cat1_cnt,
- *     COUNT(DISTINCT cat2) as cat2_cnt,
- *     SUM(value) FILTER (
- *       WHERE
- *         id > 1
- *     ) AS total
- *  FROM
- *    data
- *  GROUP BY
- *    key
- * }}}
- *
- * This translates to the following (pseudo) logical plan:
- * {{{
- * Aggregate(
- *    key = ['key]
- *    functions = [COUNT(DISTINCT 'cat1),
- *                 COUNT(DISTINCT 'cat2),
- *                 sum('value) with FILTER('id > 1)]
- *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
- *   LocalTableScan [...]
- * }}}
- *
- * This rule rewrites this logical plan to the following (pseudo) logical plan:
- * {{{
- * Aggregate(
- *    key = ['key]
- *    functions = [count(if (('gid = 1)) 'cat1 else null),
- *                 count(if (('gid = 2)) 'cat2 else null),
- *                 first(if (('gid = 0)) 'total else null) ignore nulls]
- *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
- *   Aggregate(
- *      key = ['key, 'cat1, 'cat2, 'gid]
- *      functions = [sum('value) with FILTER('id > 1)]
- *      output = ['key, 'cat1, 'cat2, 'gid, 'total])
- *     Expand(
- *        projections = [('key, null, null, 0, cast('value as bigint), 'id),
- *                       ('key, 'cat1, null, 1, null, null),
- *                       ('key, null, 'cat2, 2, null, null)]
- *        output = ['key, 'cat1, 'cat2, 'gid, 'value, 'id])
- *       LocalTableScan [...]
- * }}}
- *
- * Third example: aggregate function with distinct and filter clauses (in sql):
- * {{{
- *   SELECT
- *     COUNT(DISTINCT cat1) FILTER (
- *       WHERE
- *         id > 1
- *     ) as cat1_cnt,
- *     COUNT(DISTINCT cat2) as cat2_cnt,
- *     SUM(value) as total
- *   FROM
- *     data
- *   GROUP BY
- *     key
- * }}}
- *
- * This translates to the following (pseudo) logical plan:
- * {{{
- * Aggregate(
- *    key = ['key]
- *    functions = [COUNT(DISTINCT 'cat1) with FILTER('id > 1),
- *                 COUNT(DISTINCT 'cat2),
- *                 sum('value)]
- *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
- *   LocalTableScan [...]
- * }}}
- *
- * This rule rewrites this logical plan to the following (pseudo) logical plan:
- *
- * {{{
- * Aggregate(
- *    key = ['key]
- *    functions = [count(if (('gid = 1)) 'cat1 else null),
- *                 count(if (('gid = 2)) 'cat2 else null),
- *                 first(if (('gid = 0)) 'total else null) ignore nulls]
- *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
- *   Aggregate(
- *      key = ['key, 'cat1, 'cat2, 'gid]
- *      functions = [sum('value)]
- *      output = ['key, 'cat1, 'cat2, 'gid, 'total])
- *     Expand(
- *        projections = [('key, null, null, 0, cast('value as bigint)),
- *                       ('key, if ('id > 1) 'cat1 else null, null, 1, null),
  *                       ('key, null, 'cat2, 2, null)]
  *        output = ['key, 'cat1, 'cat2, 'gid, 'value])
  *       LocalTableScan [...]
@@ -253,16 +160,10 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)
-          val filterExpressions = expressions.filter(_.filter.isDefined).map(_.filter.get)
 
           // Expand projection
           val projection = distinctAggChildren.map {
-            case e if group.contains(e) =>
-              if (filterExpressions.isEmpty) {
-                e
-              } else {
-                If(filterExpressions(0), e, nullify(e))
-              }
+            case e if group.contains(e) => e
             case e => nullify(e)
           } :+ id
 
@@ -272,9 +173,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val naf = patchAggregateFunctionChildren(af) { x =>
               distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _))
             }
-            // [[Expand]] will use filter of the aggregate expression to filter data rows first,
-            // so remove it from the aggregate expression
-            (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = None))
+            (e, e.copy(aggregateFunction = naf, isDistinct = false))
           }
 
           (projection, operators)
@@ -284,12 +183,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       // only expand unfoldable children
       val regularAggExprs = aggExpressions
         .filter(e => !e.isDistinct && e.children.exists(!_.foldable))
-      val regularAggFunChildren = regularAggExprs
+      val regularAggChildren = regularAggExprs
         .flatMap(_.aggregateFunction.children.filter(!_.foldable))
-      val regularAggFilterChildren = regularAggExprs
-        .flatMap(ae => ae.filter.map(_.children.filter(!_.foldable)))
-        .flatten
-      val regularAggChildren = (regularAggFunChildren ++ regularAggFilterChildren).distinct
+        .distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
 
       // Setup aggregates for 'regular' aggregate expressions.
@@ -298,11 +194,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
         val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrLookup.get)
-        val filterOpt = e.filter.map { fe =>
-          val newChildren = fe.children.map(c => regularAggChildAttrLookup.getOrElse(c, c))
-          fe.withNewChildren(newChildren)
-        }
-        val operator = Alias(e.copy(aggregateFunction = af, filter = filterOpt), e.sql)()
+        val operator = Alias(e.copy(aggregateFunction = af), e.sql)()
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(

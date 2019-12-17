@@ -405,10 +405,10 @@ SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
 -- filter
 
 -- [SPARK-30182] Support nested aggregates
-SELECT sum(salary), row_number() OVER (ORDER BY depname), sum(
-    sum(salary) FILTER (WHERE enroll_date > '2007-01-01')
-)
-FROM empsalary GROUP BY depname;
+-- SELECT sum(salary), row_number() OVER (ORDER BY depname), sum(
+--     sum(salary) FILTER (WHERE enroll_date > '2007-01-01')
+-- )
+-- FROM empsalary GROUP BY depname;
 
 -- Test pushdown of quals into a subquery containing window functions
 

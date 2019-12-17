@@ -337,8 +337,9 @@ order by 2,1;
 
 -- FILTER queries
 -- [SPARK-27986] Support Aggregate Expressions with filter
-select ten, sum(distinct four) filter (where string(four) like '123') from onek a
-group by rollup(ten);
+-- [SPARK-30276] Support Filter expression allows simultaneous use of DISTINCT
+-- select ten, sum(distinct four) filter (where string(four) like '123') from onek a
+-- group by rollup(ten);
 
 -- More rescan tests
 -- [SPARK-27877] ANSI SQL: LATERAL derived table(T491)

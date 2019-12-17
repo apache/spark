@@ -169,15 +169,7 @@ abstract class AggregationIterator(
                 } else {
                   ae.updateExpressions
                 }
-              case PartialMerge =>
-                if (isDistinct && filter.isDefined) {
-                  ae.mergeExpressions.zip(ae.aggBufferAttributes).map {
-                    case (mergeExpr, attr) => If(filter.get, mergeExpr, attr)
-                  }
-                } else {
-                  ae.mergeExpressions
-                }
-              case Final => ae.mergeExpressions
+              case PartialMerge | Final => ae.mergeExpressions
             }
           case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
         }

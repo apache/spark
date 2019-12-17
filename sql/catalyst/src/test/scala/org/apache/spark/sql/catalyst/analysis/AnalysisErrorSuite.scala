@@ -191,6 +191,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
 
   errorTest(
+    "DISTINCT and FILTER cannot be used in aggregate functions at the same time",
+    CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE c > 1) FROM TaBlE2"),
+    "DISTINCT and FILTER cannot be used in aggregate functions at the same time" :: Nil)
+
+  errorTest(
     "nested aggregate functions",
     testRelation.groupBy($"a")(
       AggregateExpression(
