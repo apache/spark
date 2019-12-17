@@ -116,10 +116,11 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
       catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
     })
     when(manager.currentCatalog).thenReturn(catalogs("prod"))
+    when(manager.currentNamespace).thenReturn(Array.empty[String])
     manager
   }
 
-  test("catalog object identifier") {
+  test("catalog and identifier") {
     Seq(
       ("tbl", catalogs("prod"), Seq.empty, "tbl"),
       ("db.tbl", catalogs("prod"), Seq("db"), "tbl"),
