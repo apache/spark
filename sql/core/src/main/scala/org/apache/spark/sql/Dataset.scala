@@ -452,7 +452,7 @@ class Dataset[T] private[sql](
    * method used to map columns depend on the type of `U`:
    * <ul>
    *   <li>When `U` is a class, fields for the class will be mapped to columns of the same name
-   *   (case sensitivity is determined by `spark.sql.caseSensitive`).
+   *   (case sensitivity is determined by `spark.sql.caseSensitive`).</li>
    *   <li>When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
    *   be assigned to `_1`).</li>
    *   <li>When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
