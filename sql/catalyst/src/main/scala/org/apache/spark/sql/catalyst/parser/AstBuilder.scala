@@ -3381,7 +3381,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.NULL => ""
       case _ => string(ctx.STRING)
     }
-    CommentOnNamespace(visitMultipartIdentifier(ctx.multipartIdentifier), comment)
+    CommentOnNamespace(UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      comment)
   }
 
   override def visitCommentTable(ctx: CommentTableContext): LogicalPlan = withOrigin(ctx) {

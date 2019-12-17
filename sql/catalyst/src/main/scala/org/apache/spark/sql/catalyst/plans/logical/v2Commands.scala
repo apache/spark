@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, Star, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NamespaceNode, Star, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
@@ -465,7 +465,7 @@ case class ShowTableProperties(
  * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
  *
  */
-case class CommentOnNamespace(namespace: Seq[String], comment: String) extends Command
+case class CommentOnNamespace(namespace: NamespaceNode, comment: String) extends Command
 
 /**
  * The logical plan that defines or changes the comment of an TABLE for v2 catalogs.
