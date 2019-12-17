@@ -25,7 +25,6 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
 
 /**
  * Internal immutable version of Resource profile to associate with an RDD. This is an
@@ -217,11 +216,7 @@ private[spark] object ImmutableResourceProfile extends Logging {
   private def getDefaultTaskResources(conf: SparkConf): Map[String, TaskResourceRequest] = {
     val cpusPerTask = conf.get(CPUS_PER_TASK)
     val treqs = new TaskResourceRequests().cpus(cpusPerTask)
-    val taskReq = ResourceUtils.parseResourceRequirements(conf, SPARK_TASK_PREFIX)
-    taskReq.foreach { req =>
-      // TODO - test this - have to handle if fractional and numParts set!!
-      treqs.resource(req.resourceName, req.amount/req.numParts)
-    }
+    ResourceUtils.addTaskResourceRequests(conf, treqs)
     treqs.requests
   }
 

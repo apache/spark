@@ -65,6 +65,14 @@ class ImmutableResourceProfileSuite extends SparkFunSuite {
     assert(rprof.taskResources.contains("gpu"), "Task resources should have gpu")
   }
 
+  test("test default profile task gpus fractional") {
+    val sparkConf = new SparkConf()
+      .set("spark.executor.resource.gpu.amount", "2")
+      .set("spark.task.resource.gpu.amount", "0.33")
+    val immrprof = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assert(immrprof.taskResources.get("gpu").get.amount == 0.33)
+  }
+
   test("Internal confs") {
     val rprof = new ResourceProfile()
     val gpuExecReq =

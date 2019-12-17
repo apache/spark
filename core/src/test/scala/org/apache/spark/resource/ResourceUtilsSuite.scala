@@ -135,7 +135,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
       val gpuInternalConf =
-        ImmutableResourceProfile.ResourceProfileInternalConf(1, s"$RESOURCE_DOT$GPU")
+        ImmutableResourceProfile.ResourceProfileInternalConf(1, GPU)
       val gpuDiscovery = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript", """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(gpuInternalConf.amountConf, "2")

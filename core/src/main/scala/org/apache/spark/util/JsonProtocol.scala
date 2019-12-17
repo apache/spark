@@ -33,7 +33,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
-import org.apache.spark.resource.{ResourceInformation, ImmutableResourceProfile}
+import org.apache.spark.resource.{ImmutableResourceProfile, ResourceInformation}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
@@ -803,10 +803,10 @@ private[spark] object JsonProtocol {
         case None => Seq.empty[AccumulableInfo]
       }
     }
-    val resourceProfileId = (json \ "ResourceProfileID").extract[Int]
-
+    val rpId = jsonOption(json \ "ResourceProfileID").map(_.extract[Int])
+    val stageProf = rpId.getOrElse(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val stageInfo = new StageInfo(stageId, attemptId, stageName, numTasks, rddInfos,
-      parentIds, details, resourceProfileId = resourceProfileId)
+      parentIds, details, resourceProfileId = stageProf)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason
