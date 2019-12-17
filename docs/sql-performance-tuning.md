@@ -129,8 +129,7 @@ a specific strategy may not support all join types.
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-import org.apache.spark.sql.functions.broadcast
-broadcast(spark.table("src")).join(spark.table("records"), "key").show()
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 {% endhighlight %}
 
 </div>
@@ -138,8 +137,7 @@ broadcast(spark.table("src")).join(spark.table("records"), "key").show()
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-import static org.apache.spark.sql.functions.broadcast;
-broadcast(spark.table("src")).join(spark.table("records"), "key").show();
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show();
 {% endhighlight %}
 
 </div>
@@ -147,8 +145,7 @@ broadcast(spark.table("src")).join(spark.table("records"), "key").show();
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-from pyspark.sql.functions import broadcast
-broadcast(spark.table("src")).join(spark.table("records"), "key").show()
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 {% endhighlight %}
 
 </div>
@@ -158,7 +155,7 @@ broadcast(spark.table("src")).join(spark.table("records"), "key").show()
 {% highlight r %}
 src <- sql("SELECT * FROM src")
 records <- sql("SELECT * FROM records")
-head(join(broadcast(src), records, src$key == records$key))
+head(join(src, hint(records, "broadcast"), src$key == records$key))
 {% endhighlight %}
 
 </div>
