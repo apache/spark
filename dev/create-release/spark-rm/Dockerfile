@@ -33,7 +33,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
-ARG BASE_PIP_PKGS="setuptools wheel virtualenv"
+ARG BASE_PIP_PKGS="setuptools wheel"
 ARG PIP_PKGS="pyopenssl pypandoc numpy sphinx"
 
 # Install extra needed repos and refresh.
@@ -62,14 +62,13 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   curl -sL https://deb.nodesource.com/setup_11.x | bash && \
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
-  $APT_INSTALL libpython2.7-dev libpython3-dev python-pip python3-pip && \
-  pip install $BASE_PIP_PKGS && \
-  pip install $PIP_PKGS && \
-  cd && \
-  virtualenv -p python3 /opt/p35 && \
-  . /opt/p35/bin/activate && \
-  pip install $BASE_PIP_PKGS && \
-  pip install $PIP_PKGS && \
+  $APT_INSTALL libpython3-dev python3-pip && \
+  # Change default python version to python3.
+  update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
+  update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \
+  update-alternatives --set python /usr/bin/python3.6 && \
+  pip3 install $BASE_PIP_PKGS && \
+  pip3 install $PIP_PKGS && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
   $APT_INSTALL r-base r-base-dev && \

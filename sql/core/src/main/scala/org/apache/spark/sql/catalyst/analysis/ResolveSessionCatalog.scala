@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -55,13 +55,18 @@ class ResolveSessionCatalog(
           AlterTableAddColumnsCommand(tbl.asTableIdentifier, cols.map(convertToStructField))
       }.getOrElse {
         val changes = cols.map { col =>
-          TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
+          TableChange.addColumn(
+            col.name.toArray,
+            col.dataType,
+            true,
+            col.comment.orNull,
+            col.position.orNull)
         }
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
     case AlterTableAlterColumnStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), colName, dataType, comment) =>
+         nameParts @ SessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
           if (colName.length > 1) {
@@ -71,6 +76,10 @@ class ResolveSessionCatalog(
           if (dataType.isEmpty) {
             throw new AnalysisException(
               "ALTER COLUMN with v1 tables must specify new data type.")
+          }
+          if (pos.isDefined) {
+            throw new AnalysisException("" +
+              "ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.")
           }
           val builder = new MetadataBuilder
           // Add comment to metadata
@@ -87,13 +96,21 @@ class ResolveSessionCatalog(
             builder.build())
           AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName(0), newColumn)
       }.getOrElse {
+        val colNameArray = colName.toArray
         val typeChange = dataType.map { newDataType =>
-          TableChange.updateColumnType(colName.toArray, newDataType, true)
+          TableChange.updateColumnType(colNameArray, newDataType, true)
         }
         val commentChange = comment.map { newComment =>
-          TableChange.updateColumnComment(colName.toArray, newComment)
+          TableChange.updateColumnComment(colNameArray, newComment)
         }
-        createAlterTable(nameParts, catalog, tbl, typeChange.toSeq ++ commentChange)
+        val positionChange = pos.map { newPosition =>
+          TableChange.updateColumnPosition(colNameArray, newPosition)
+        }
+        createAlterTable(
+          nameParts,
+          catalog,
+          tbl,
+          typeChange.toSeq ++ commentChange ++ positionChange)
       }
 
     case AlterTableRenameColumnStatement(
@@ -221,7 +238,7 @@ class ResolveSessionCatalog(
     case c @ CreateTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
       if (!isV2Provider(c.provider)) {
-        val tableDesc = buildCatalogTable(c.tableName.asTableIdentifier, c.tableSchema,
+        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, c.tableSchema,
           c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
           c.comment, c.ifNotExists)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
@@ -240,7 +257,7 @@ class ResolveSessionCatalog(
     case c @ CreateTableAsSelectStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
       if (!isV2Provider(c.provider)) {
-        val tableDesc = buildCatalogTable(c.tableName.asTableIdentifier, new StructType,
+        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
           c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
           c.comment, c.ifNotExists)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
@@ -293,8 +310,8 @@ class ResolveSessionCatalog(
           orCreate = c.orCreate)
       }
 
-    case d @ DropTableStatement(SessionCatalogAndTable(catalog, tbl), ifExists, purge) =>
-      DropTableCommand(d.tableName.asTableIdentifier, ifExists, isView = false, purge = purge)
+    case DropTableStatement(SessionCatalogAndTable(catalog, tbl), ifExists, purge) =>
+      DropTableCommand(tbl.asTableIdentifier, ifExists, isView = false, purge = purge)
 
     case DropViewStatement(SessionCatalogAndTable(catalog, viewName), ifExists) =>
       DropTableCommand(viewName.asTableIdentifier, ifExists, isView = true, purge = false)
@@ -474,6 +491,19 @@ class ResolveSessionCatalog(
         tbl.asTableIdentifier,
         propertyKey)
 
+    case DescribeFunctionStatement(CatalogAndIdentifier(catalog, functionIdent), extended) =>
+      val functionIdentifier = if (isSessionCatalog(catalog)) {
+        functionIdent.asMultipartIdentifier match {
+          case Seq(db, fn) => FunctionIdentifier(fn, Some(db))
+          case Seq(fn) => FunctionIdentifier(fn, None)
+          case _ =>
+            throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
+        }
+      } else {
+        throw new AnalysisException ("DESCRIBE FUNCTION is only supported in v1 catalog")
+      }
+      DescribeFunctionCommand(functionIdentifier, extended)
+
     case ShowFunctionsStatement(userScope, systemScope, pattern, fun) =>
       val (database, function) = fun match {
         case Some(CatalogAndIdentifier(catalog, functionIdent)) =>
@@ -490,6 +520,19 @@ class ResolveSessionCatalog(
         case None => (None, pattern)
       }
       ShowFunctionsCommand(database, function, userScope, systemScope)
+
+    case DropFunctionStatement(CatalogAndIdentifier(catalog, functionIdent), ifExists, isTemp) =>
+      if (isSessionCatalog(catalog)) {
+        val (database, function) = functionIdent.asMultipartIdentifier match {
+          case Seq(db, fn) => (Some(db), fn)
+          case Seq(fn) => (None, fn)
+          case _ =>
+            throw new AnalysisException(s"Unsupported function name '${functionIdent.quoted}'")
+        }
+        DropFunctionCommand(database, function, ifExists, isTemp)
+      } else {
+        throw new AnalysisException("DROP FUNCTION is only supported in v1 catalog")
+      }
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
@@ -540,7 +583,7 @@ class ResolveSessionCatalog(
 
   object SessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
+      case SessionCatalogAndIdentifier(catalog, ident) =>
         Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }

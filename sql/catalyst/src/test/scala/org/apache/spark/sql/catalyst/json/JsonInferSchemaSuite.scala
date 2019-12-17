@@ -28,8 +28,7 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
   def checkType(options: Map[String, String], json: String, dt: DataType): Unit = {
     val jsonOptions = new JSONOptions(options, "UTC", "")
     val inferSchema = new JsonInferSchema(jsonOptions)
-    val factory = new JsonFactory()
-    jsonOptions.setJacksonOptions(factory)
+    val factory = jsonOptions.buildJsonFactory()
     val parser = CreateJacksonParser.string(factory, json)
     parser.nextToken()
     val expectedType = StructType(Seq(StructField("a", dt, true)))

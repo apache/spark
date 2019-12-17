@@ -309,9 +309,9 @@ class KMeans private (
 
         clusterWeightSum.indices.filter(clusterWeightSum(_) > 0)
           .map(j => (j, (sums(j), clusterWeightSum(j)))).iterator
-      }.reduceByKey { case ((sum1, clusterWeightSum1), (sum2, clusterWeightSum2)) =>
-        axpy(1.0, sum2, sum1)
-        (sum1, clusterWeightSum1 + clusterWeightSum2)
+      }.reduceByKey { (sumweight1, sumweight2) =>
+        axpy(1.0, sumweight2._1, sumweight1._1)
+        (sumweight1._1, sumweight1._2 + sumweight2._2)
       }.collectAsMap()
 
       if (iteration == 0) {

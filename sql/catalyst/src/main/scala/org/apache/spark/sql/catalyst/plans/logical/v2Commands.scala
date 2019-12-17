@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NamespaceNode, Star, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NamespaceNode, Star, TableNode, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
@@ -477,4 +477,4 @@ case class CommentOnNamespace(namespace: NamespaceNode, comment: String) extends
  * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
  *
  */
-case class CommentOnTable(namespace: Seq[String], comment: String) extends Command
+case class CommentOnTable(table: TableNode, comment: String) extends Command

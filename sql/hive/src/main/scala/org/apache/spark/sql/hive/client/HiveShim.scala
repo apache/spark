@@ -703,7 +703,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
     }
 
-    object NonVarcharAttribute {
+    object SupportedAttribute {
       // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
       private val varcharKeys = table.getPartitionKeys.asScala
         .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
@@ -713,8 +713,10 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       def unapply(attr: Attribute): Option[String] = {
         if (varcharKeys.contains(attr.name)) {
           None
-        } else {
+        } else if (attr.dataType.isInstanceOf[IntegralType] || attr.dataType == StringType) {
           Some(attr.name)
+        } else {
+          None
         }
       }
     }
@@ -737,20 +739,20 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     def convert(expr: Expression): Option[String] = expr match {
-      case In(ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiterals(values))
+      case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case InSet(ExtractAttribute(NonVarcharAttribute(name)), ExtractableValues(values))
+      case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
       case op @ SpecialBinaryComparison(
-          ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiteral(value)) =>
+          ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
         Some(s"$name ${op.symbol} $value")
 
       case op @ SpecialBinaryComparison(
-          ExtractableLiteral(value), ExtractAttribute(NonVarcharAttribute(name))) =>
+          ExtractableLiteral(value), ExtractAttribute(SupportedAttribute(name))) =>
         Some(s"$value ${op.symbol} $name")
 
       case And(expr1, expr2) if useAdvanced =>

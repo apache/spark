@@ -88,6 +88,8 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     val n = Attribute.fromStructField(dataframe.schema(colName)) match {
       case binAttr: BinaryAttribute => Some(2)
       case nomAttr: NominalAttribute => nomAttr.getNumValues
+      case unknown =>
+        throw new IllegalArgumentException(s"Attribute type: ${unknown.getClass.getName}")
     }
     assert(n.isDefined && n.get === numValues,
       s"the number of values obtained from schema should be $numValues, but got $n")

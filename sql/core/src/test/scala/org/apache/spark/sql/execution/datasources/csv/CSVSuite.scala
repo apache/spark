@@ -2186,4 +2186,22 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
       checkAnswer(readback, Row(timestamp))
     }
   }
+
+  test("return correct results when data columns overlap with partition columns") {
+    withTempPath { path =>
+      val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
+
+      val inputDF = Seq((1, 2, 3, 4, 5)).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+      inputDF.write
+        .option("header", "true")
+        .csv(tablePath.getCanonicalPath)
+
+      val resultDF = spark.read
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .csv(path.getCanonicalPath)
+        .select("CoL1", "Col2", "CoL5", "CoL3")
+      checkAnswer(resultDF, Row("a", 2, "e", "c"))
+    }
+  }
 }
