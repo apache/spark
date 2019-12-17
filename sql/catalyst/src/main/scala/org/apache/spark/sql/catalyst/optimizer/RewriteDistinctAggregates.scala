@@ -197,7 +197,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
         val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrLookup.get)
-        val operator = Alias(e.copy(aggregateFunction = af), e.sql)()
+        val filterOpt = e.filter.map { fe =>
+          val newChildren = fe.children.map(c => regularAggChildAttrLookup.getOrElse(c, c))
+          fe.withNewChildren(newChildren)
+        }
+        val operator = Alias(e.copy(aggregateFunction = af, filter = filterOpt), e.sql)()
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(
