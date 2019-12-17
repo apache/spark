@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.util.concurrent._
+import java.util.concurrent.locks.ReentrantLock
 
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
@@ -31,17 +32,80 @@ import org.apache.spark.rpc.RpcAbortException
 
 private[spark] object ThreadUtils {
 
+  // Inspired by Guava MoreExecutors.sameThreadExecutor; inlined and converted
+  // to Scala here to avoid Guava version issues
   private val sameThreadService = new AbstractExecutorService {
+
+    private val lock = new ReentrantLock()
+    private val termination = lock.newCondition()
+    private var runningTasks = 0
     private var serviceIsShutdown = false
-    override def shutdown(): Unit = serviceIsShutdown = true
+
+    override def shutdown(): Unit = {
+      lock.lock()
+      try {
+        serviceIsShutdown = true
+      } finally {
+        lock.unlock()
+      }
+    }
+
     override def shutdownNow(): java.util.List[Runnable] = {
       shutdown()
       java.util.Collections.emptyList()
     }
-    override def isShutdown: Boolean = serviceIsShutdown
-    override def isTerminated: Boolean = serviceIsShutdown
-    override def awaitTermination(timeout: Long, unit: TimeUnit): Boolean = true
-    override def execute(command: Runnable): Unit = command.run()
+
+    override def isShutdown: Boolean = {
+      lock.lock()
+      try {
+        serviceIsShutdown
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def isTerminated: Boolean = synchronized {
+      lock.lock()
+      try {
+        serviceIsShutdown && runningTasks == 0
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def awaitTermination(timeout: Long, unit: TimeUnit): Boolean = {
+      var nanos = unit.toNanos(timeout)
+      lock.lock()
+      try {
+        while (nanos > 0 && !isTerminated()) {
+          nanos = termination.awaitNanos(nanos)
+        }
+        isTerminated()
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def execute(command: Runnable): Unit = {
+      lock.lock()
+      try {
+        if (isShutdown()) throw new RejectedExecutionException("Executor already shutdown")
+        runningTasks += 1
+      } finally {
+        lock.unlock()
+      }
+      try {
+        command.run()
+      } finally {
+        lock.lock()
+        try {
+          runningTasks -= 1
+          if (isTerminated()) termination.signalAll()
+        } finally {
+          lock.unlock()
+        }
+      }
+    }
   }
 
   private val sameThreadExecutionContext =
