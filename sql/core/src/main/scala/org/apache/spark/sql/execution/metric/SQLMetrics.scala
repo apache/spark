@@ -50,7 +50,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   override def reset(): Unit = _value = _zeroValue
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value += o.value
+    case o: SQLMetric => add(o.value)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
@@ -59,7 +59,9 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   override def add(v: Long): Unit = {
     if (_value < 0) _value = 0
-    _value += v
+    if (v > 0) {
+      _value += v
+    }
   }
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
@@ -70,9 +72,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def +=(v: Long): Unit = add(v)
 
-  def getRawValue(): Long = _value
-
-  override def value: Long = Math.max(_value, 0)
+  override def value: Long = _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
@@ -210,8 +210,7 @@ object SQLMetrics {
     // directly without setting an execution id. We should be tolerant to it.
     if (executionId != null) {
       sc.listenerBus.post(
-        SparkListenerDriverAccumUpdates(
-          executionId.toLong, metrics.map(m => m.id -> m.getRawValue())))
+        SparkListenerDriverAccumUpdates(executionId.toLong, metrics.map(m => m.id -> m.value)))
     }
   }
 }

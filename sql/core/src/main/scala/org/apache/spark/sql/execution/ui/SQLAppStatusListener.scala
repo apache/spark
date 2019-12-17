@@ -173,11 +173,7 @@ class SQLAppStatusListener(
       event.taskMetrics.externalAccums.flatMap { a =>
         // This call may fail if the accumulator is gc'ed, so account for that.
         try {
-          val accumValue = a match {
-            case sqlMetric: SQLMetric => sqlMetric.getRawValue()
-            case t => t.value
-          }
-          Some(a.toInfo(Some(accumValue), None))
+          Some(a.toInfo(Some(a.value), None))
         } catch {
           case _: IllegalAccessError => None
         }
