@@ -195,7 +195,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
-  test("executors should not sit idle for too long") {
+  test("SPARK-18886 Delay scheduling should not delay some executors indefinitely " +
+    "if one task is scheduled before delay timeout") {
     val LOCALITY_WAIT_MS = 3000
     val clock = new ManualClock
     val conf = new SparkConf()
@@ -218,8 +219,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
       override def executorAdded(execId: String, host: String): Unit = {}
     }
+    val valueSer = SparkEnv.get.serializer.newInstance()
     taskScheduler.initialize(new FakeSchedulerBackend)
-    val taskSet = FakeTask.createTaskSet(5, 1, 1,
+    val taskSet = FakeTask.createTaskSet(9, 1, 1,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
       Seq(TaskLocation("host1", "exec1")),
       Seq(TaskLocation("host1", "exec1")),
       Seq(TaskLocation("host1", "exec1")),
@@ -233,23 +239,126 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // First offer host2, exec2: no task should be chosen due to bad data locality
     assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1)))
       .flatten.isEmpty)
-    val task0 = taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
-      .flatten.head
-    assert(task0.index === 0)
-    taskScheduler.statusUpdate(task0.taskId, TaskState.FINISHED, ByteBuffer.allocate(0))
 
+    // Next offer exec 1, which is local to all tasks. First task will take it
+    val taskDescriptions0 = taskScheduler
+      .resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+      .flatten
+    assert(taskDescriptions0.length === 1)
+    val task0 = taskDescriptions0.head
+    assert(task0.index === 0)
+    val result0 = new DirectTaskResult[Int](valueSer.serialize(0), Seq(), Array())
+    taskScheduler.statusUpdate(task0.taskId, TaskState.FINISHED, valueSer.serialize(result0))
+
+    // clock advances, increasing data locality level to ANY
     clock.advance(LOCALITY_WAIT_MS * 2)
-    val task1 = taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
-      .flatten.head
+    // Local resource is utilized again
+    val taskDescriptions1 = taskScheduler
+      .resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+      .flatten
+    assert(taskDescriptions1.length === 1)
+    val task1 = taskDescriptions1.head
     assert(task1.index === 1)
-    val task2 = taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1)))
-      .flatten.head
+
+    // Even though we launched a local task, we still utilize non-local exec2
+    // This is the behavior change to fix SPARK-18886. Also tested below in this same test
+    // This is because we have not utilized our 2 possible slots (exec1 + exec2) within
+    // the locality wait period.
+    val taskDescriptions2 = taskScheduler
+      .resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1)))
+      .flatten
+    assert(taskDescriptions2.length === 1)
+    val task2 = taskDescriptions2.head
     assert(task2.index === 2)
-    taskScheduler.statusUpdate(task1.taskId, TaskState.FINISHED, ByteBuffer.allocate(0))
-    assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
-      .flatten.head.index === 3)
+
+    // Finish data local task on exec 1 (still 1 task running on exec 2)
+    val result1 = new DirectTaskResult[Int](valueSer.serialize(1), Seq(), Array())
+    taskScheduler.statusUpdate(task1.taskId, TaskState.FINISHED, valueSer.serialize(result1))
+
+    // Local resource will again be utilized. Data locality is reset to PROCESS_LOCAL
+    val taskDescriptions3 = taskScheduler
+      .resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+      .flatten
+    assert(taskDescriptions3.length === 1)
+    val task3 = taskDescriptions3.head
+    assert(task3.index === 3)
+    // Complete task 2 and  task 3, no more tasks running
+    val result2 = new DirectTaskResult[Int](valueSer.serialize(2), Seq(), Array())
+    taskScheduler.statusUpdate(task2.taskId, TaskState.FINISHED, valueSer.serialize(result2))
+    val result3 = new DirectTaskResult[Int](valueSer.serialize(3), Seq(), Array())
+    taskScheduler.statusUpdate(task3.taskId, TaskState.FINISHED, valueSer.serialize(result3))
+
+    // Non-local resource will not be utilized, since data locality was reset,
+    // and locality wait has not expired
     assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1)))
       .flatten.isEmpty)
+
+    // Offer a total of 2 slots on exec 3, non are taken since non-local
+    assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec3", "host3", 2)))
+      .flatten.isEmpty)
+
+    taskScheduler.executorLost("exec1", LossReasonPending)
+    taskScheduler.executorLost("exec2", LossReasonPending)
+
+    // clock advances, increasing data locality level to ANY
+    clock.advance(LOCALITY_WAIT_MS * 2)
+
+    // Accept non local resource, total utilized slots is 1
+    val taskDescriptions4 = taskScheduler
+      .resourceOffers(IndexedSeq(WorkerOffer("exec3", "host3", 1)))
+      .flatten
+    assert(taskDescriptions4.length === 1)
+    val task4 = taskDescriptions4.head
+    assert(task4.index === 4)
+
+
+    // Offer data local exec 1. This increases total slots to 3, but only 2 are utilized now
+    val taskDescriptions5 = taskScheduler
+      .resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+      .flatten
+    assert(taskDescriptions5.length === 1)
+    val task5 = taskDescriptions5.head
+    assert(task5.index === 5)
+
+    // Data locality has not been reset, still accept non local resource.
+    // Now 3 tasks are running. 3 slots are being used.
+    // Locality timer is reset, but locality level is not
+    val taskDescriptions6 = taskScheduler
+      .resourceOffers(IndexedSeq(WorkerOffer("exec3", "host3", 1)))
+      .flatten
+    assert(taskDescriptions6.length === 1)
+    val task6 = taskDescriptions6.head
+    assert(task6.index === 6)
+
+    // Finish data local task. Only 2 running tasks now
+    val result5 = new DirectTaskResult[Int](valueSer.serialize(5), Seq(), Array())
+    taskScheduler.statusUpdate(task5.taskId, TaskState.FINISHED, valueSer.serialize(result5))
+
+    // Offer data local exec 1 again. 3 slots used and is data local,
+    // so locality is reset to PROCESS_LOCAL and timer is reset
+    val taskDescriptions7 = taskScheduler
+      .resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+      .flatten
+    assert(taskDescriptions7.length === 1)
+    val task7 = taskDescriptions7.head
+    assert(task7.index === 7)
+
+    // Non-local resource will not be utilized, since data locality was reset,
+    // and locality wait has not expired
+    assert(taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec3", "host3", 1)))
+      .flatten.isEmpty)
+
+    // Complete task on data local node (exec1)
+    val result7 = new DirectTaskResult[Int](valueSer.serialize(7), Seq(), Array())
+    taskScheduler.statusUpdate(task7.taskId, TaskState.FINISHED, valueSer.serialize(result7))
+
+    // Complete the last task locally
+    val taskDescriptions8 = taskScheduler
+      .resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+      .flatten
+    assert(taskDescriptions8.length === 1)
+    val task8 = taskDescriptions8.head
+    assert(task8.index === 8)
   }
 
   test("Scheduler does not crash when tasks are not serializable") {

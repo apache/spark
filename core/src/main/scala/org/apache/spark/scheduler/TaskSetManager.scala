@@ -201,7 +201,8 @@ private[spark] class TaskSetManager(
   private[scheduler] var localityWaits = myLocalityLevels.map(getLocalityWait)
 
   // Delay scheduling variables: we keep track of our current locality level and the time we
-  // last launched a task at that level and were also fully utilizing all slots
+  // last launched a task at that level and were also fully utilizing all "available" slots.
+  // See Pool.updateAvailableSlots() for how the number of available slots is calculated.
   // Move up a level when localityWaits[curLevel] expires.
   // We then move down if we manage to launch a "more local" task.
   private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels

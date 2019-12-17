@@ -406,6 +406,7 @@ private[spark] class TaskSchedulerImpl(
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
         hostToExecutors(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
+        // Assumes the first offer will include all cores (free cores == all cores)
         executorIdToCores(o.executorId) = o.cores
         totalSlots += o.cores / CPUS_PER_TASK
         executorIdToHost(o.executorId) = o.host

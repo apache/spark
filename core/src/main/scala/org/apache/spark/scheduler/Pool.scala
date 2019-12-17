@@ -120,24 +120,61 @@ private[spark] class Pool(
     }
   }
 
+  // Update the number of slots considered available for each TaskSetManager whose ancestor
+  // in the tree is this pool
+  // For FAIR scheduling, slots are distributed among pools based on weights and minshare.
+  //   If a pool requires fewer slots than are available to it, the leftover slots are redistributed
+  //   to the remaining pools using the remaining pools' weights.
+  // For FIFO scheduling, the schedulable queue is iterated over in FIFO order,
+  //   giving each schedulable the remaining slots,
+  //   up to the number of remaining tasks for that schedulable.
   override def updateAvailableSlots(numSlots: Float): Unit = {
     schedulingMode match {
       case SchedulingMode.FAIR =>
-        val usableWeights = schedulableQueue.asScala
-          .map(s => if (s.getSortedTaskSetQueue.nonEmpty) (s, s.weight) else (s, 0))
-        val totalWeights = usableWeights.map(_._2).sum
-        usableWeights.foreach { case (schedulable, usableWeight) =>
-          schedulable.updateAvailableSlots(
-            Math.max(numSlots * usableWeight / totalWeights, schedulable.minShare))
-        }
-      // for FIFO, allocate all slots to the first taskset in the queue
+        val queueCopy = new ConcurrentLinkedQueue[Schedulable](schedulableQueue)
+        var shouldRedistribute = false
+        var totalWeights = schedulableQueue.asScala.map(_.weight).sum
+        var totalSlots = numSlots
+        do {
+          shouldRedistribute = false
+          var nextWeights = totalWeights
+          var nextSlots = totalSlots
+          queueCopy.forEach(schedulable => {
+            val numTasksRemaining = schedulable.getSortedTaskSetQueue
+              .map(tsm => tsm.tasks.length - tsm.tasksSuccessful).sum
+            val allocatedSlots = Math.max(
+              totalSlots * schedulable.weight / totalWeights,
+              schedulable.minShare)
+            if (numTasksRemaining < allocatedSlots) {
+              schedulable.updateAvailableSlots(numTasksRemaining)
+              nextWeights -= schedulable.weight
+              nextSlots -= numTasksRemaining
+              shouldRedistribute = true
+              queueCopy.remove(schedulable)
+            }
+          })
+          totalWeights = nextWeights
+          totalSlots = nextSlots
+        } while (shouldRedistribute)
+
+        // All schedulables remaining have more remaining tasks than their share of slots,
+        // so no need to recalculate remaining tasks. Just give them their total share of slots.
+        queueCopy.forEach(schedulable => {
+          val allocatedSlots = Math.max(
+            totalSlots * schedulable.weight / totalWeights,
+            schedulable.minShare)
+          schedulable.updateAvailableSlots(allocatedSlots)
+        })
       case SchedulingMode.FIFO =>
         val sortedSchedulableQueue =
           schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
-        var isFirst = true
+        var remainingSlots = numSlots
         for (schedulable <- sortedSchedulableQueue) {
-          schedulable.updateAvailableSlots(if (isFirst) numSlots else 0)
-          isFirst = false
+          val numTasksRemaining = schedulable.getSortedTaskSetQueue
+            .map(tsm => tsm.tasks.length - tsm.tasksSuccessful).sum
+          val toAssign = Math.min(numTasksRemaining, remainingSlots)
+          schedulable.updateAvailableSlots(toAssign)
+          remainingSlots -= toAssign
         }
       case _ =>
         val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."

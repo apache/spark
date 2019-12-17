@@ -58,17 +58,36 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val rootPool = new Pool("", FIFO, 0, 0)
     val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
 
-    val taskSetManager0 = createTaskSetManager(0, 2, taskScheduler)
-    val taskSetManager1 = createTaskSetManager(1, 2, taskScheduler)
+    val taskSetManager0 = createTaskSetManager(0, 5, taskScheduler)
+    val taskSetManager1 = createTaskSetManager(1, 3, taskScheduler)
     val taskSetManager2 = createTaskSetManager(2, 2, taskScheduler)
     schedulableBuilder.addTaskSetManager(taskSetManager0, null)
     schedulableBuilder.addTaskSetManager(taskSetManager1, null)
     schedulableBuilder.addTaskSetManager(taskSetManager2, null)
 
     rootPool.updateAvailableSlots(9)
-    assert(taskSetManager0.numAvailableSlot === 9)
-    assert(taskSetManager1.numAvailableSlot === 0)
-    assert(taskSetManager2.numAvailableSlot === 0)
+    // first task set only gets 5 slots as there are only 5 tasks
+    assert(taskSetManager0.numAvailableSlot === 5)
+    assert(taskSetManager1.numAvailableSlot === 3)
+    // last task set gets only 1 slot since there are 9 total and 8 have already been taken
+    assert(taskSetManager2.numAvailableSlot === 1)
+
+    rootPool.removeSchedulable(taskSetManager1)
+    rootPool.updateAvailableSlots(6)
+    assert(taskSetManager0.numAvailableSlot === 5)
+    // TSM 2 gets only 1 slot since there are 6 total and 5 have been taken by TSM 0
+    assert(taskSetManager2.numAvailableSlot === 1)
+
+    val taskSetManager3 = createTaskSetManager(3, 3, taskScheduler)
+    schedulableBuilder.addTaskSetManager(taskSetManager3, null)
+    taskSetManager0.tasksSuccessful += 1
+    taskSetManager0.addRunningTask(1)
+    rootPool.updateAvailableSlots(8)
+    // Gets only 4 slots since it has only 4 tasks remaining (1 complete)
+    assert(taskSetManager0.numAvailableSlot === 4)
+    assert(taskSetManager2.numAvailableSlot === 2)
+    // New TSM 3 gets single leftover slot:  8 - 4 (TSM 0) - 2 (TSM 2) = 2
+    assert(taskSetManager3.numAvailableSlot === 2)
   }
 
   test("validate FAIR slot distributions") {
@@ -81,7 +100,9 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
-    val taskSetManager0 = createTaskSetManager(0, 2, taskScheduler)
+    val taskSetManager0 = createTaskSetManager(0, 4, taskScheduler)
+    taskSetManager0.tasksSuccessful += 1
+    taskSetManager0.addRunningTask(1)
     val taskSetManager1 = createTaskSetManager(1, 2, taskScheduler)
     sc.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, "pool1")
     var localProperties = sc.getLocalProperties
@@ -90,27 +111,60 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
 
     sc.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, "pool2")
     localProperties = sc.getLocalProperties
-    val taskSetManager2 = createTaskSetManager(2, 2, taskScheduler)
+    val taskSetManager2 = createTaskSetManager(2, 9, taskScheduler)
     val taskSetManager3 = createTaskSetManager(3, 2, taskScheduler)
+    taskSetManager3.tasksSuccessful += 1
     schedulableBuilder.addTaskSetManager(taskSetManager2, localProperties)
     schedulableBuilder.addTaskSetManager(taskSetManager3, localProperties)
 
 
     rootPool.updateAvailableSlots(12)
     // pool 1 weight is 1, pool 2 weight is 2, so they get 4 and 8 slots respectively
-    // since pool 1 is FIFO TSM 0 gets all 4 slots of pool 1
-    // since pool 2 is FAIR TSM 3 and 4 each get half (4) of pool 2's 8 slots
-    assert(taskSetManager0.numAvailableSlot === 4)
-    assert(taskSetManager1.numAvailableSlot === 0)
-    assert(taskSetManager2.numAvailableSlot === 4)
-    assert(taskSetManager3.numAvailableSlot === 4)
+    // TSM 0 has 4 tasks total, but 1 is complete, so it needs only 3 slots.
+    assert(taskSetManager0.numAvailableSlot === 3)
+    // TSM 1 takes the remaining slot from pool 1.
+    assert(taskSetManager1.numAvailableSlot === 1)
+    // Since pool 2 is FAIR TSM 2 and 3 each could get half (4) of pool 2's 8 slots
+    // TSM 3 has only 1 incomplete task, so it takes only 1 out of 4 possible slots
+    assert(taskSetManager3.numAvailableSlot === 1)
+    // TSM 2 takes its original 4 slots + the 3 remaining from TSM 3
+    assert(taskSetManager2.numAvailableSlot === 7)
+
 
     rootPool.updateAvailableSlots(6)
     // similar to above but pool 1 has 3 slots due to having minShare of 3
     assert(taskSetManager0.numAvailableSlot === 3)
     assert(taskSetManager1.numAvailableSlot === 0)
+    assert(taskSetManager2.numAvailableSlot === 3)
+    assert(taskSetManager3.numAvailableSlot === 1)
+
+    taskSetManager3.tasksSuccessful -= 1
+    // same as above, but task 3 should use 2 slots since it has 0 complete tasks
+    rootPool.updateAvailableSlots(6)
+    assert(taskSetManager0.numAvailableSlot === 3)
+    assert(taskSetManager1.numAvailableSlot === 0)
     assert(taskSetManager2.numAvailableSlot === 2)
     assert(taskSetManager3.numAvailableSlot === 2)
+
+    rootPool.getSchedulableByName("pool2").removeSchedulable(taskSetManager2)
+    rootPool.updateAvailableSlots(6)
+    // 4 slots go to pool 2, but TSM 3 only takes 2, remaining 2 can go to pool 1
+    // Pool one has 2 slots + 2 from pool 2 = 4
+    // TSM 0 takes 3 and TSM 1 takes 1
+    assert(taskSetManager0.numAvailableSlot === 3)
+    assert(taskSetManager1.numAvailableSlot === 1)
+    assert(taskSetManager3.numAvailableSlot === 2)
+
+
+    // TSM 4 goes to pool 2
+    val taskSetManager4 = createTaskSetManager(4, 1, taskScheduler)
+    schedulableBuilder.addTaskSetManager(taskSetManager4, localProperties)
+    rootPool.updateAvailableSlots(6)
+    // Same as above but new TSM 4 in pool 2 takes 1 slot, giving only 1 to pool 1
+    assert(taskSetManager0.numAvailableSlot === 3)
+    assert(taskSetManager1.numAvailableSlot === 0)
+    assert(taskSetManager3.numAvailableSlot === 2)
+    assert(taskSetManager4.numAvailableSlot === 1)
   }
 
   test("FIFO Scheduler Test") {
