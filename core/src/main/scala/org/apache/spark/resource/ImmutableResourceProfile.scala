@@ -37,7 +37,9 @@ private[spark] class ImmutableResourceProfile(
     val executorResources: Map[String, ExecutorResourceRequest],
     val taskResources: Map[String, TaskResourceRequest]) extends Serializable with Logging {
 
+  // _id is only a var for testing purposes
   private var _id = ImmutableResourceProfile.getNextProfileId
+  // this is used for any resources that use fractional amounts
   private var _executorResourceNumParts: Option[Map[String, Int]] = None
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
@@ -82,31 +84,50 @@ private[spark] class ImmutableResourceProfile(
    * request is for 4 cpus and 2 gpus and your task request is for 1 cpu and 1 gpu each, the
    * limiting resource is gpu, and this function will return 2.
    */
+  // TODO - add tests
   private def calculateTasksAndLimitingResource(sparkConf: SparkConf): Unit = synchronized {
     val coresPerExecutor = getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
     val cpusPerTask = taskResources.get(ResourceProfile.CPUS)
       .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
+    if (cpusPerTask > coresPerExecutor) {
+      throw new SparkException(s"The executor cores (=$coresPerExecutor) has to be >= the task " +
+        s"resource request of $cpusPerTask")
+    }
     val tasksBasedOnCores = coresPerExecutor / cpusPerTask
     var limitingResource = ResourceProfile.CPUS
     val numPartsMap = new mutable.HashMap[String, Int]
     var taskLimit = tasksBasedOnCores
     logInfo(s"in calculateTasksAndLimiting $taskLimit on cores")
-    executorResources.foreach { case (rName, request) =>
+    val allTaskResources = new mutable.HashMap[String, TaskResourceRequest] ++= taskResources
+    allTaskResources -= ResourceProfile.CPUS
+    executorResources.filter(_ != ResourceProfile.CORES).foreach { case (rName, execReq) =>
       logInfo(s"executor resource $rName")
       val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
       numPartsMap(rName) = 1
       if (taskReq > 0.0) {
+        if (taskReq > execReq.amount) {
+          throw new SparkException(s"The executor resource $rName, amount ${execReq.amount} " +
+            s"needs to be >= the task resource request amount of $taskReq")
+        }
         val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
         numPartsMap(rName) = parts
-        val numTasks = ((request.amount * parts) / numPerTask).toInt
+        val numTasks = ((execReq.amount * parts) / numPerTask).toInt
         logInfo(s"executor resource $rName num " +
-          s"tasks $numTasks ${request.amount} $parts $numPerTask")
+          s"tasks $numTasks ${execReq.amount} $parts $numPerTask")
 
         if (numTasks < taskLimit) {
           limitingResource = rName
           taskLimit = numTasks
         }
+        allTaskResources -= rName
+      } else {
+        logWarning("The executor resource config $rName was specified but not corresponding" +
+          "task resource request was specified.")
       }
+    }
+    if (allTaskResources.nonEmpty) {
+      throw new SparkException("No executor resource configs were not specified for the " +
+        s"following task configs: ${allTaskResources.keys.mkString(",")}")
     }
     logInfo(s"Limiting resource is $limitingResource at $taskLimit tasks per executor")
     _executorResourceNumParts = Some(numPartsMap.toMap)
@@ -207,10 +228,8 @@ private[spark] object ImmutableResourceProfile extends Logging {
     ereqs.cores(conf.get(EXECUTOR_CORES))
     ereqs.memory(conf.get(EXECUTOR_MEMORY).toString)
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
-    logInfo(s"add default executor resources $execReq")
     execReq.foreach { req =>
       val name = req.id.resourceName
-      logInfo(s"adding resour with name $name")
       ereqs.resource(name, req.amount, req.discoveryScript.getOrElse(""),
         req.vendor.getOrElse(""))
     }

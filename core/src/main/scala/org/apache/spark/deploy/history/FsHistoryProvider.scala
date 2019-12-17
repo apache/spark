@@ -954,7 +954,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
     val trackingStore = new ElementTrackingStore(store, replayConf)
     val replayBus = new ReplayListenerBus()
-    // TODO - is this the right sparkConf though?
+    // TODO - SPARK-29303 - we will need to add more messages
     // we may want to not create default profile until we read the conf from the history file
     val resourceProfileManager = new ResourceProfileManager(conf)
     val listener = new AppStatusListener(trackingStore, replayConf, false,

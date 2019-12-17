@@ -2774,14 +2774,19 @@ object SparkContext extends Logging {
     val MAX_LOCAL_TASK_FAILURES = 1
 
     // Ensure that default executor's resources satisfies one or more tasks requirement.
-    // TODO - do we want to check when resourceprofiles added?
+    // TODO - can we remove this since done in ResourceProfileManager?
+    // DO we really need to know the master?
+    // TODO - test I think this check is broken for standalone mode if task cores > 1
     def checkResourcesPerTask(clusterMode: Boolean, executorCores: Option[Int]): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
       val execCores = if (clusterMode) {
+        // TODO - this check is wrong for standalone mode, if you specify spark.task.cpus > 1
+        // it triggers even though executor may have enough
         executorCores.getOrElse(sc.conf.get(EXECUTOR_CORES))
       } else {
         executorCores.get
       }
+      logInfo(s"Tom checkResourcesPerTask executor cores is: $execCores")
 
       // Number of cores per executor must meet at least one task requirement.
       if (execCores < taskCores) {

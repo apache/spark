@@ -69,8 +69,9 @@ class ResourceProfile() {
   }
 
   override def toString(): String = {
-    s"Profile executor resources: ${_executorResources}, " +
-      s"task resources: ${_taskResources}"
+    "Profile executor resources: " +
+      s"${_executorResources.asScala.map(pair => s"${pair._1}=${pair._2.toString()}")}, " +
+      s"task resources: ${_taskResources.asScala.map(pair => s"${pair._1}=${pair._2.toString()}")}"
   }
 
   override def clone(): ResourceProfile = {

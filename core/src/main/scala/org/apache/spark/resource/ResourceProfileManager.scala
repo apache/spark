@@ -21,6 +21,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.internal.config._
+
 
 /**
  * Manager of resource profiles.
@@ -32,6 +34,8 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) {
   private val resourceProfileIdToResourceProfile =
     new ConcurrentHashMap[Int, ImmutableResourceProfile]()
 
+  private val master = sparkConf.get("spark.master")
+
   private val defaultProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
   addResourceProfile(defaultProfile)
 
@@ -39,7 +43,21 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) {
 
   private val taskCpusDefaultProfile = defaultProfile.getTaskCpus.get
 
+  // If we use anything except the default profile, its only supported on YARN right now
+  // TODO - add tests
+  private[spark] def isSupported(rp: ImmutableResourceProfile): Unit = {
+    val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
+    val isNotYarn = !master.equals("yarn")
+    val isYarn = !isNotYarn
+    val isNotDefaultProfile = rp.id != ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    if ((isNotDefaultProfile && isNotYarn) || (isNotDefaultProfile && isYarn && !dynamicEnabled)) {
+      throw new SparkException("ResourceProfiles are only supported on YARN with dynamic " +
+        "allocation enabled.")
+    }
+  }
+
   def addResourceProfile(rp: ImmutableResourceProfile): Unit = {
+    isSupported(rp)
     // force the computation of maxTasks and limitingResource now so we don't have cost later
     rp.limitingResource(sparkConf)
     resourceProfileIdToResourceProfile.putIfAbsent(rp.id, rp)
@@ -61,4 +79,3 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) {
     resourceProfileFromId(rpId).getTaskCpus.getOrElse(taskCpusDefaultProfile)
   }
 }
-

@@ -71,4 +71,8 @@ class ExecutorResourceRequest(
 
   override def hashCode(): Int =
     Seq(resourceName, amount, discoveryScript, vendor).hashCode()
+
+  override def toString(): String = {
+    s"name: $resourceName, amount: $amount, script: $discoveryScript, vendor: $vendor"
+  }
 }

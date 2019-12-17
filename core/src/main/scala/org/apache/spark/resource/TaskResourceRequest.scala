@@ -45,4 +45,8 @@ class TaskResourceRequest(val resourceName: String, val amount: Double)
   }
 
   override def hashCode(): Int = Seq(resourceName, amount).hashCode()
+
+  override def toString(): String = {
+    s"name: $resourceName, amount: $amount"
+  }
 }
