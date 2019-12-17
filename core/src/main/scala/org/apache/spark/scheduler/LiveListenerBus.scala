@@ -53,6 +53,10 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   private val started = new AtomicBoolean(false)
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
+  // Indicate `stop()` is called but not finished
+  private val inStop = new AtomicBoolean(false)
+
+  private[spark] def isInStop: Boolean = inStop.get()
 
   /** A counter for dropped events. It will be reset every time we log it. */
   private val droppedEventsCounter = new AtomicLong(0L)
@@ -226,10 +230,12 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
       return
     }
 
+    inStop.set(true)
     synchronized {
       queues.asScala.foreach(_.stop())
       queues.clear()
     }
+    inStop.set(false)
   }
 
   // For testing only.

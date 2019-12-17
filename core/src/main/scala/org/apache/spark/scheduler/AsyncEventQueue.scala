@@ -201,10 +201,24 @@ private class AsyncEventQueue(
     true
   }
 
+  override def doPostEvent(listener: SparkListenerInterface, event: SparkListenerEvent): Unit = {
+    // If listener is dead, we don't post any event to it.
+    if (!listener.dead) {
+      super.doPostEvent(listener, event)
+    }
+  }
+
   override def removeListenerOnError(listener: SparkListenerInterface): Unit = {
-    // the listener failed in an unrecoverably way, we want to remove it from the entire
-    // LiveListenerBus (potentially stopping a queue if it is empty)
-    bus.removeListener(listener)
+    if (bus.isInStop) {
+      // If bus is in the progress of stop, we just mark the listener as dead instead of removing
+      // via calling `bus.removeListener` to avoid race condition
+      // dead listeners will be removed eventually in `bus.stop`
+      listener.dead = true
+    } else {
+      // the listener failed in an unrecoverably way, we want to remove it from the entire
+      // LiveListenerBus (potentially stopping a queue if it is empty)
+      bus.removeListener(listener)
+    }
   }
 
 }
