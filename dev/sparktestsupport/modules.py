@@ -170,6 +170,21 @@ hive_thriftserver = Module(
     ]
 )
 
+service = Module(
+    name="service",
+    dependencies=[hive],
+    source_file_regexes=[
+        "sql/service",
+        "sbin/start-thriftserver.sh",
+    ],
+    build_profile_flags=[
+        "-Pspark-thriftserver",
+    ],
+    sbt_test_goals=[
+        "service/test",
+    ]
+)
+
 avro = Module(
     name="avro",
     dependencies=[sql],
