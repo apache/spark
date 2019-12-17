@@ -47,6 +47,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private var listenerBus: LiveListenerBus = _
   private var client: ExecutorAllocationClient = _
   private val clock = new SystemClock()
+  private var rpManager: ResourceProfileManager = _
 
 
   override def beforeEach(): Unit = {
@@ -180,7 +181,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val execReqs = new ExecutorResourceRequests().cores(4).resource("gpu", 4)
     val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
     rp1.require(execReqs).require(taskReqs)
+
     val rprof1 = new ImmutableResourceProfile(rp1.executorResources, rp1.taskResources)
+    rpManager.addResourceProfile(rprof1)
     post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
     
     val updatesNeeded =
@@ -1192,9 +1195,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private def createManager(
       conf: SparkConf,
       clock: Clock = new SystemClock()): ExecutorAllocationManager = {
-    val resourceProfileManager = new ResourceProfileManager(conf)
+    rpManager = new ResourceProfileManager(conf)
     val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
-      resourceProfileManager = resourceProfileManager)
+      resourceProfileManager = rpManager)
     managers += manager
     manager.start()
     manager
@@ -1346,9 +1349,9 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       rp: ImmutableResourceProfile
   ): Int = {
     val maxNumExecutorsNeeded =
-      manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp)
+      manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
     manager invokePrivate
-      _addExecutorsToTarget(maxNumExecutorsNeeded, rp, updatesNeeded)
+      _addExecutorsToTarget(maxNumExecutorsNeeded, rp.id, updatesNeeded)
   }
 
   private def addTime(manager: ExecutorAllocationManager): Long = {
@@ -1369,7 +1372,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private def maxNumExecutorsNeededPerResourceProfile(
       manager: ExecutorAllocationManager,
       rp: ImmutableResourceProfile): Int = {
-    manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp)
+    manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
   }
 
   private def adjustRequestedExecutors(manager: ExecutorAllocationManager): Int = {

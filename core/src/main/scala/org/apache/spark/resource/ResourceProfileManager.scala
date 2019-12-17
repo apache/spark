@@ -21,7 +21,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.util.Utils.isTesting
 
 
 /**
@@ -30,11 +32,11 @@ import org.apache.spark.internal.config._
  * so this shouldn't be much overhead.
  */
 @Evolving
-private[spark] class ResourceProfileManager(sparkConf: SparkConf) {
+private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Logging {
   private val resourceProfileIdToResourceProfile =
     new ConcurrentHashMap[Int, ImmutableResourceProfile]()
 
-  private val master = sparkConf.get("spark.master")
+  private val master = sparkConf.getOption("spark.master")
 
   private val defaultProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
   addResourceProfile(defaultProfile)
@@ -47,10 +49,12 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) {
   // TODO - add tests
   private[spark] def isSupported(rp: ImmutableResourceProfile): Unit = {
     val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
-    val isNotYarn = !master.equals("yarn")
+    // is master isn't defined we go ahead and allow it for testing purposes
+    val isNotYarn = master.isDefined && !master.get.equals("yarn")
     val isYarn = !isNotYarn
     val isNotDefaultProfile = rp.id != ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    if ((isNotDefaultProfile && isNotYarn) || (isNotDefaultProfile && isYarn && !dynamicEnabled)) {
+    if (!isTesting &&
+      ((isNotDefaultProfile && isNotYarn) || (isNotDefaultProfile && isYarn && !dynamicEnabled))) {
       throw new SparkException("ResourceProfiles are only supported on YARN with dynamic " +
         "allocation enabled.")
     }
@@ -60,6 +64,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) {
     isSupported(rp)
     // force the computation of maxTasks and limitingResource now so we don't have cost later
     rp.limitingResource(sparkConf)
+    logInfo(s"adding ResourceProfile id: ${rp.id}")
     resourceProfileIdToResourceProfile.putIfAbsent(rp.id, rp)
   }
 
