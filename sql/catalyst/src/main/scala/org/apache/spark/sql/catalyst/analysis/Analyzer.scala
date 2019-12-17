@@ -748,6 +748,8 @@ class Analyzer(
    * [[ResolveRelations]] still resolves v1 tables.
    */
   object ResolveTables extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
@@ -778,7 +780,7 @@ class Analyzer(
       }
       if (maybeTempView.isDefined) {
         throw new AnalysisException(
-          s"A temp view '${unresolved.originalNameParts.head}' cannot be handled by V2 commands.")
+          s"Invalid command: '${unresolved.originalNameParts.quoted}' is a view not a table.")
       }
 
       CatalogV2Util.loadRelation(unresolved.catalog, unresolved.tableName)

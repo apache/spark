@@ -52,7 +52,7 @@ class TableResolutionSuite extends QueryTest with SharedSparkSession with Before
           val ex = intercept[AnalysisException] {
             sql(command)
           }
-          assert(ex.getMessage.contains("A temp view 't' cannot be handled"))
+          assert(ex.getMessage.contains("Invalid command: 't' is a view not a table."))
         }
       }
     }
