@@ -19,6 +19,7 @@ package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector => OldVector}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions.udf
 
@@ -27,12 +28,20 @@ import org.apache.spark.sql.functions.udf
 object functions {
 // scalastyle:on
 
-  private[ml] val vector_to_dense_array_udf = udf { v: Vector => v.toArray }
+  private[ml] val vector_to_array_udf = udf { vec: Any =>
+    vec match {
+      case v: Vector => v.toArray
+      case v: OldVector => v.toArray
+      case _ => throw new IllegalArgumentException(
+        "function vector_to_array require an argument of type " +
+        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`.")
+    }
+  }
 
   /**
    * Convert MLlib sparse/dense vectors in a DataFrame into dense arrays.
    *
    * @since 3.0.0
    */
-  def vector_to_dense_array(v: Column): Column = vector_to_dense_array_udf(v)
+  def vector_to_array(v: Column): Column = vector_to_array_udf(v)
 }

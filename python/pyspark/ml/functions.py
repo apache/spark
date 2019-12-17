@@ -18,19 +18,25 @@
 from pyspark import since, SparkContext
 from pyspark.sql.column import Column, _to_java_column
 
+
 @since(3.0)
-def vector_to_dense_array(col):
+def vector_to_array(col):
     """
     Convert MLlib sparse/dense vectors in a DataFrame into dense arrays.
 
     >>> from pyspark.ml.linalg import Vectors
-    >>> from pyspark.ml.functions import vector_to_dense_array
+    >>> from pyspark.ml.functions import vector_to_array
+    >>> from pyspark.mllib.linalg import Vectors as OldVectors
     >>> df = spark.createDataFrame([
-    ...     (Vectors.dense(1.0, 2.0, 3.0),),
-    ...     (Vectors.sparse(3, [(0, 2.0), (2, 3.0)]),)], ["vec"])
-    >>> df.select(vector_to_dense_array("vec").alias("arr")).collect()
-    [Row(arr=[1.0, 2.0, 3.0]), Row(arr=[2.0, 0.0, 3.0])]
+    ...     (Vectors.dense(1.0, 2.0, 3.0), OldVectors.dense(10.0, 20.0, 30.0)),
+    ...     (Vectors.sparse(3, [(0, 2.0), (2, 3.0)]),
+    ...      OldVectors.sparse(3, [(0, 20.0), (2, 30.0)]))],
+    ...     ["vec", "oldVec"])
+    >>> df.select(vector_to_array("vec").alias("vec"),
+    ...           vector_to_array("oldVec").alias("oldVec")).collect()
+    [Row(vec=[1.0, 2.0, 3.0], oldVec=[10.0, 20.0, 30.0]),
+     Row(vec=[2.0, 0.0, 3.0], oldVec=[20.0, 0.0, 30.0])]
     """
     sc = SparkContext._active_spark_context
     return Column(
-        sc._jvm.org.apache.spark.ml.functions.vector_to_dense_array(_to_java_column(col)))
+        sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col)))

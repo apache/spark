@@ -17,27 +17,29 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.ml.functions.vector_to_dense_array
+import org.apache.spark.ml.functions.vector_to_array
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.MLTest
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 
 class FunctionsSuite extends MLTest {
 
   import testImplicits._
 
-  test("test vector_to_dense_array") {
+  test("test vector_to_array") {
     val df1 = Seq(
-      Tuple1(Vectors.dense(1.0, 2.0, 3.0)),
-      Tuple1(Vectors.sparse(3, Seq((0, 2.0), (2, 3.0))))
-    ).toDF("vec")
+      (Vectors.dense(1.0, 2.0, 3.0), OldVectors.dense(10.0, 20.0, 30.0)),
+      (Vectors.sparse(3, Seq((0, 2.0), (2, 3.0))), OldVectors.sparse(3, Seq((0, 20.0), (2, 30.0))))
+    ).toDF("vec", "oldVec")
 
-    val result = df1.select(vector_to_dense_array('vec))
-      .as[Array[Double]].collect()
+    val result = df1.select(vector_to_array('vec), vector_to_array('oldVec))
+      .as[(List[Double], List[Double])]
+      .collect()
+
     val expected = Array(
-      Array(1.0, 2.0, 3.0),
-      Array(2.0, 0.0, 3.0)
+      (List(1.0, 2.0, 3.0), List(10.0, 20.0, 30.0)),
+      (List(2.0, 0.0, 3.0), List(20.0, 0.0, 30.0))
     )
-
     assert(result === expected)
   }
 }
