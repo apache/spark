@@ -1046,7 +1046,6 @@ ansiNonReserved
     | EXTERNAL
     | EXTRACT
     | FIELDS
-    | FILTER
     | FILEFORMAT
     | FIRST
     | FOLLOWING
