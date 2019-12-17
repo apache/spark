@@ -83,30 +83,25 @@ case class ApproximatePercentile(
   }
 
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
-  private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue()
+  private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Long]
+
+  @transient private val inputTypes: Seq[AbstractDataType] = {
+    // Support NumericType, DateType and TimestampType since their internal types are all numeric,
+    // and can be easily cast to double for processing.
+    Seq(TypeCollection(NumericType, DateType, TimestampType),
+      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), LongType)
+  }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
   private lazy val (returnPercentileArray: Boolean, percentages: Array[Double]) =
-    percentageExpression.dataType match {
-      case DoubleType => (false, Array(percentageExpression.eval().asInstanceOf[Double]))
-      case _: NumericType =>
-        (false, Array(Cast(percentageExpression, DoubleType).eval().asInstanceOf[Double]))
-      case ArrayType(DoubleType, false) =>
-        (true, percentageExpression.eval().asInstanceOf[ArrayData].toDoubleArray())
-      case ArrayType(et, false) if et.isInstanceOf[NumericType] =>
-        (true, Cast(percentageExpression, ArrayType(DoubleType, containsNull = false)).eval()
-          .asInstanceOf[ArrayData].toDoubleArray())
-      case ArrayType(_, _) => throw new IllegalArgumentException(
-        "Each value of the percentage array must be between 0.0 and 1.0, but got" +
-          s" ${percentageExpression.eval().asInstanceOf[ArrayData]}")
-      case _ => throw new IllegalArgumentException("The value of percentage must be between" +
-        s" 0.0 and 1.0, but got ${percentageExpression.eval()}")
+    percentageExpression.eval() match {
+      // Rule [[FunctionArgumentConversion]] can cast other numeric types to double
+      case num: Double => (false, Array(num))
+      case arrayData: ArrayData => (true, arrayData.toDoubleArray())
     }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = ExpectsInputTypes.checkInputDataTypes(
-      Seq(child, percentageExpression, accuracyExpression),
-      Seq(TypeCollection(NumericType, DateType, TimestampType), AnyDataType, IntegralType))
+    val defaultCheck = ExpectsInputTypes.checkInputDataTypes(children, inputTypes)
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
@@ -205,7 +200,7 @@ object ApproximatePercentile {
 
   // Default accuracy of Percentile approximation. Larger value means better accuracy.
   // The default relative error can be deduced by defaultError = 1.0 / DEFAULT_PERCENTILE_ACCURACY
-  val DEFAULT_PERCENTILE_ACCURACY: Int = 10000
+  val DEFAULT_PERCENTILE_ACCURACY: Long = 10000L
 
   /**
    * PercentileDigest is a probabilistic data structure used for approximating percentiles
