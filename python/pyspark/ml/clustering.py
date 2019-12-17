@@ -155,6 +155,15 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
         return self._call_java("weights")
 
     @property
+    @since("3.0.0")
+    def gaussians(self):
+        """
+        Array of :py:class:`MultivariateGaussian` where gaussians[i] represents
+        the Multivariate Gaussian (Normal) Distribution for Gaussian i
+        """
+        return self._call_java("gaussians")
+
+    @property
     @since("2.0.0")
     def gaussiansDF(self):
         """
@@ -251,6 +260,9 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> weights = model.weights
     >>> len(weights)
     3
+    >>> gaussians = model.gaussians
+    >>> len(gaussians)
+    3
     >>> model.gaussiansDF.select("mean").head()
     Row(mean=DenseVector([0.825, 0.8675]))
     >>> model.gaussiansDF.select("cov").head()
@@ -272,6 +284,8 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> model2.hasSummary
     False
     >>> model2.weights == model.weights
+    True
+    >>> model2.gaussians == model.gaussians
     True
     >>> model2.gaussiansDF.select("mean").head()
     Row(mean=DenseVector([0.825, 0.8675]))
