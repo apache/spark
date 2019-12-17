@@ -19,7 +19,7 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
   val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
 
-  val sparkEnv: SparkSQLEnv = SparkSQLEnv(sparkConf)
+  SparkSQLEnv.init()
 
   val allConf: Map[String, String] = (hadoopConf
     .iterator()
@@ -41,25 +41,25 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
     .orElse(allConf.get("hive.aux.jars.path"))
 
   if (auxJars.nonEmpty) {
-    val resourceLoader = sparkEnv.sqlContext.sessionState.resourceLoader
+    val resourceLoader = SparkSQLEnv.sqlContext.sessionState.resourceLoader
     auxJars.get.split(",").foreach(resourceLoader.addJar)
   }
 
   // Adding Hive configs (--hiveconf) to the spark session.
   sparkSQLArgs.getHiveConfigs.foreach {
     case (k, v) =>
-      sparkEnv.sqlContext.setConf(k, v)
+      SparkSQLEnv.sqlContext.setConf(k, v)
   }
 
   // Sets current database, from --database.
   val currentDB = sparkSQLArgs.getDatabase.getOrElse("default")
-  sparkEnv.sqlContext.sessionState.catalog
+  SparkSQLEnv.sqlContext.sessionState.catalog
     .setCurrentDatabase(currentDB)
 
-  val driver = SparkSQLDriver(sparkEnv.sqlContext, hadoopConf)
+  val driver = SparkSQLDriver(SparkSQLEnv.sqlContext, hadoopConf)
 
-  val master = sparkEnv.sparkContext.master
-  val appId = sparkEnv.sparkContext.applicationId
+  val master = SparkSQLEnv.sparkContext.master
+  val appId = SparkSQLEnv.sparkContext.applicationId
   println(s"Spark master: $master, Application Id: $appId")
 
   // Executing init files, if any, (-i) first, after applying settings.
@@ -69,14 +69,14 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
 
   sparkSQLArgs.getQueryString.foreach { query =>
     driver.processLine(query)
-    sparkEnv.stop()
+    SparkSQLEnv.stop()
     sys.exit(0)
   }
 
   // Executing files, if any, (-f|--files), and exiting.
   sparkSQLArgs.getFile.foreach { file =>
     driver.processFile(file)
-    sparkEnv.stop()
+    SparkSQLEnv.stop()
     sys.exit(0)
   }
 
@@ -86,7 +86,7 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
    */
   @scala.annotation.tailrec
   def readLines(previousLine: List[String] = Nil): Unit = {
-    val currentDB = sparkEnv.sqlContext.sessionState.catalog.getCurrentDatabase
+    val currentDB = SparkSQLEnv.sqlContext.sessionState.catalog.getCurrentDatabase
 
     val promptTemplate = s"spark-sql: ($currentDB)> "
     val prompt = if (previousLine.isEmpty) {
@@ -106,7 +106,7 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
       case s: String =>
         readLines(previousLine :+ s)
       case _ =>
-        sparkEnv.stop()
+        SparkSQLEnv.stop()
         sys.exit(1)
     }
   }
