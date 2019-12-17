@@ -232,7 +232,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   object NonSessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndIdentifier(catalog, ident) if !isSessionCatalog(catalog) =>
+      case NonSessionCatalogAndIdentifier(catalog, ident) =>
         Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }
