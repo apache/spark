@@ -23,10 +23,11 @@ import java.nio.channels.Channels
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDDServer
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.DataType
 
@@ -55,6 +56,10 @@ private[sql] object PythonSQLUtils {
       schemaString: String,
       sqlContext: SQLContext): DataFrame = {
     ArrowConverters.toDataFrame(arrowBatchRDD, schemaString, sqlContext)
+  }
+
+  def explainString(queryExecution: QueryExecution, mode: String): String = {
+    queryExecution.explainString(ExplainMode.fromString(mode))
   }
 }
 
