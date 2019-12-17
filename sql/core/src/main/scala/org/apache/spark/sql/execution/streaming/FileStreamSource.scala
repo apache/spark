@@ -390,9 +390,9 @@ object FileStreamSource {
         s" / base archive path: $baseArchivePath")
 
       require(!isBaseArchivePathMatchedAgainstSourcePattern, "Base archive path cannot be set to" +
-        " the path where archived path can possibly match with source pattern. Ensure below: \n" +
-        "1) prefix of base archive path doesn't match with source pattern in same depth\n" +
-        "2) prefix of source pattern doesn't match with base archive path in same depth")
+        " the path where archived path can possibly match with source pattern. Ensure the base " +
+        "archive path doesn't match with source pattern in depth, where the depth is minimum of" +
+        " depth on both paths.")
     }
 
     private def getAncestorEnsuringDepth(path: Path, depth: Int): Path = {
