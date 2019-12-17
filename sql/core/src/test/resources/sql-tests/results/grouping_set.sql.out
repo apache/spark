@@ -65,9 +65,15 @@ SELECT c1, c2, Sum(c3), grouping__id
 FROM   (VALUES ('x', 'a', 10), ('y', 'b', 20) ) AS t (c1, c2, c3)
 GROUP  BY GROUPING SETS ( ( c1 ), ( c2 ) )
 HAVING GROUPING__ID > 1
+<<<<<<< HEAD
 -- !query schema
 struct<c1:string,c2:string,sum(c3):bigint,grouping__id:int>
 -- !query output
+=======
+-- !query 6 schema
+struct<c1:string,c2:string,sum(c3):bigint,grouping__id:bigint>
+-- !query 6 output
+>>>>>>> Fix
 NULL	a	10	2
 NULL	b	20	2
 
