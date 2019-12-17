@@ -155,24 +155,53 @@ class RobustScaler (override val uid: String)
     val localUpper = $(upper)
     val localLower = $(lower)
 
-    // compute scale by the logic in treeAggregate with depth=2
-    // TODO: design a common treeAggregateByKey in PairRDDFunctions?
-    val scale = math.max(math.ceil(math.sqrt(vectors.getNumPartitions)).toInt, 2)
+    // each featureIndex and its QuantileSummaries
+    val summaries = if (numFeatures < 1000) {
+      vectors.mapPartitions { iter =>
+        var agg: Array[QuantileSummaries] = null
+        while (iter.hasNext) {
+          val vec = iter.next()
+          require(vec.size == numFeatures,
+            s"Number of dimensions must be $numFeatures but got ${vec.size}")
+          if (agg == null) {
+            agg = Array.fill(numFeatures)(
+              new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))
+          }
+          var i = 0
+          while (i < vec.size) {
+            agg(i) = agg(i).insert(vec(i))
+            i += 1
+          }
+        }
+        if (agg == null) {
+          Iterator.empty
+        } else {
+          Iterator.range(0, numFeatures).map { i => (i, agg(i).compress) }
+        }
+      }.reduceByKey { case (s1, s2) => s1.compress.merge(s2.compress) }
+    } else {
+      // compute scale by the logic in treeAggregate with depth=2
+      // TODO: design a common treeAggregateByKey in PairRDDFunctions?
+      val scale = math.max(math.ceil(math.sqrt(vectors.getNumPartitions)).toInt, 2)
 
-    val (ranges, medians) = vectors.mapPartitionsWithIndex { case (pid, iter) =>
-      val p = pid % scale
-      iter.flatMap { vec =>
-        require(vec.size == numFeatures,
-          s"Number of dimensions must be $numFeatures but got ${vec.size}")
-        Iterator.range(0, numFeatures).map { i => ((p, i), vec(i)) }
-      }
-    }.aggregateByKey(
-      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))(
-      seqOp = (s, v) => s.insert(v),
-      combOp = (s1, s2) => s1.compress.merge(s2.compress)
-    ).map { case ((_, i), s) => (i, s)
-    }.reduceByKey { case (s1, s2) => s1.compress.merge(s2.compress)
-    }.mapValues { s =>
+      // when numFeatures is large, we can not even maintain a Array[QuantileSummaries]
+      // in a executor's RAM.
+      vectors.mapPartitionsWithIndex { case (pid, iter) =>
+        val p = pid % scale
+        iter.flatMap { vec =>
+          require(vec.size == numFeatures,
+            s"Number of dimensions must be $numFeatures but got ${vec.size}")
+          Iterator.range(0, numFeatures).map { i => ((p, i), vec(i)) }
+        }
+      }.aggregateByKey(
+        new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))(
+        seqOp = (s, v) => s.insert(v),
+        combOp = (s1, s2) => s1.compress.merge(s2.compress)
+      ).map { case ((_, i), s) => (i, s)
+      }.reduceByKey { case (s1, s2) => s1.compress.merge(s2.compress) }
+    }
+
+    val (ranges, medians) = summaries.mapValues { s =>
       // confirm compression before query
       val s2 = s.compress
       val range = s2.query(localUpper).get - s2.query(localLower).get
@@ -180,7 +209,7 @@ class RobustScaler (override val uid: String)
       (range, median)
     }.sortBy(_._1).values.collect().unzip
     require(ranges.length == numFeatures,
-      "QuantileSummaries on some dimensions were not computed")
+      "QuantileSummaries on some dimensions can not be computed")
 
     copyValues(new RobustScalerModel(uid, Vectors.dense(ranges).compressed,
       Vectors.dense(medians).compressed).setParent(this))
