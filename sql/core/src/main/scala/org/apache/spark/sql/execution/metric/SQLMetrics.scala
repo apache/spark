@@ -57,7 +57,10 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   override def isZero(): Boolean = _value == _zeroValue
 
-  override def add(v: Long): Unit = _value += v
+  override def add(v: Long): Unit = {
+    if (_value < 0) _value = 0
+    _value += v
+  }
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
@@ -65,7 +68,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def set(v: Long): Unit = _value = v
 
-  def +=(v: Long): Unit = _value += v
+  def +=(v: Long): Unit = add(v)
 
   def getRawValue(): Long = _value
 
