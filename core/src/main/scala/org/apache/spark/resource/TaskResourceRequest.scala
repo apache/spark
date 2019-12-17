@@ -17,10 +17,6 @@
 
 package org.apache.spark.resource
 
-import scala.collection.mutable
-
-import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
-
 /**
  * A task resource request. This is used in conjuntion with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the

@@ -98,11 +98,10 @@ private[spark] class ImmutableResourceProfile(
     var limitingResource = ResourceProfile.CPUS
     val numPartsMap = new mutable.HashMap[String, Int]
     var taskLimit = tasksBasedOnCores
-    logInfo(s"in calculateTasksAndLimiting $taskLimit on cores")
-    val allTaskResources = new mutable.HashMap[String, TaskResourceRequest] ++= taskResources
-    allTaskResources -= ResourceProfile.CPUS
-    executorResources.filter(!_.equals(ResourceProfile.CORES)).foreach { case (rName, execReq) =>
-      logInfo(s"executor resource $rName")
+    val taskResourcesToCheck = new mutable.HashMap[String, TaskResourceRequest] ++= taskResources
+    taskResourcesToCheck -= ResourceProfile.CPUS
+    val execResourceToCheck = ImmutableResourceProfile.getCustomExecutorResources(this)
+    execResourceToCheck.foreach { case (rName, execReq) =>
       val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
       numPartsMap(rName) = 1
       if (taskReq > 0.0) {
@@ -113,22 +112,19 @@ private[spark] class ImmutableResourceProfile(
         val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
         numPartsMap(rName) = parts
         val numTasks = ((execReq.amount * parts) / numPerTask).toInt
-        logInfo(s"executor resource $rName num " +
-          s"tasks $numTasks ${execReq.amount} $parts $numPerTask")
-
         if (numTasks < taskLimit) {
           limitingResource = rName
           taskLimit = numTasks
         }
-        allTaskResources -= rName
+        taskResourcesToCheck -= rName
       } else {
-        logWarning("The executor resource config for resource: $rName was specified but " +
-          " the corresponding task resource request was specified.")
+        logWarning(s"The executor resource config for resource: $rName was specified but " +
+          "the corresponding task resource request was specified.")
       }
     }
-    if (allTaskResources.nonEmpty) {
+    if (taskResourcesToCheck.nonEmpty) {
       throw new SparkException("No executor resource configs were not specified for the " +
-        s"following task configs: ${allTaskResources.keys.mkString(",")}")
+        s"following task configs: ${taskResourcesToCheck.keys.mkString(",")}")
     }
     logInfo(s"Limiting resource is $limitingResource at $taskLimit tasks per executor")
     _executorResourceNumParts = Some(numPartsMap.toMap)
@@ -204,6 +200,9 @@ private[spark] object ImmutableResourceProfile extends Logging {
         val taskResources = getDefaultTaskResources(conf)
         val executorResources = getDefaultExecutorResources(conf)
         val defProf = new ImmutableResourceProfile(executorResources, taskResources)
+        logInfo("Default ResourceProfile created, executor resources: " +
+          s"${defProf.executorResources}, task resources: " +
+          s"${defProf.taskResources}")
         defProf.setToDefaultProfile
         defProf
       }
@@ -244,6 +243,11 @@ private[spark] object ImmutableResourceProfile extends Logging {
     defaultProfileRef = new AtomicReference[ImmutableResourceProfile]()
   }
 
+  def getCustomExecutorResources(
+      rp: ImmutableResourceProfile): Map[String, ExecutorResourceRequest] = {
+    rp.executorResources.filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k))
+  }
+
   /**
    * Create the ResourceProfile internal confs that are used to pass between Driver and Executors.
    * It pulls any custom resources from the ResourceProfile and returns a Map of key
@@ -254,8 +258,7 @@ private[spark] object ImmutableResourceProfile extends Logging {
   def createResourceProfileInternalConfs(rp: ImmutableResourceProfile): Map[String, String] = {
     val ret = new mutable.HashMap[String, String]()
 
-    val customResource =
-      rp.executorResources.filter(!ResourceProfile.allSupportedExecutorResources.contains(_))
+    val customResource = getCustomExecutorResources(rp)
     customResource.foreach { case (name, req) =>
       val execIntConf = ResourceProfileInternalConf(rp.id, name)
       ret(execIntConf.amountConf) = req.amount.toString

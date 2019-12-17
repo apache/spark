@@ -76,7 +76,7 @@ class ImmutableResourceProfileSuite extends SparkFunSuite {
   test("Internal confs") {
     val rprof = new ResourceProfile()
     val gpuExecReq =
-      new ExecutorResourceRequests().resource("gpu", 2, "someScript")
+      new ExecutorResourceRequests().cores(2).resource("gpu", 2, "someScript")
     rprof.require(gpuExecReq)
     val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
     val internalResourceConfs =

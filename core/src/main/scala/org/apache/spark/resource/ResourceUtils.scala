@@ -111,7 +111,7 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   def listResourceIds(sparkConf: SparkConf, componentName: String): Seq[ResourceID] = {
-    sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_DOT").map { case (key, _) =>
+    sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_PREFIX.").map { case (key, _) =>
       key.substring(0, key.indexOf('.'))
     }.toSet.toSeq.map(name => ResourceID(componentName, name))
   }
@@ -309,5 +309,4 @@ private[spark] object ResourceUtils extends Logging {
   final val FPGA: String = "fpga"
 
   final val RESOURCE_PREFIX: String = "resource"
-  final val RESOURCE_DOT: String = s"$RESOURCE_PREFIX."
 }

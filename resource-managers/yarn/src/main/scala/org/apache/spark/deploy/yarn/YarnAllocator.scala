@@ -308,14 +308,8 @@ private[yarn] class YarnAllocator(
               customResources(YARN_GPU_RESOURCE_CONFIG) = execReq.amount.toString
             case "fpga" =>
               customResources(YARN_FPGA_RESOURCE_CONFIG) = execReq.amount.toString
-            case _ =>
-              // strip off resource. if needed
-              val name = if (r.contains(RESOURCE_DOT)) {
-                r.substring(RESOURCE_DOT.size)
-              } else {
-                r
-              }
-              customResources(name) = execReq.amount.toString
+            case rName =>
+              customResources(rName) = execReq.amount.toString
           }
         }
         val resource = Resource.newInstance(
