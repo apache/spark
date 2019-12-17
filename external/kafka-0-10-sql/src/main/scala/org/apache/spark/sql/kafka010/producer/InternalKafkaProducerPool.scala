@@ -50,12 +50,11 @@ private[producer] class InternalKafkaProducerPool(
   /** exposed for testing */
   private[producer] val cacheExpireTimeoutMillis: Long = conf.get(PRODUCER_CACHE_TIMEOUT)
 
-  private val evictorThreadRunIntervalMillis = conf.get(PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL)
-
   @GuardedBy("this")
   private val cache = new mutable.HashMap[CacheKey, CachedProducerEntry]
 
   private def startEvictorThread(): Option[ScheduledFuture[_]] = {
+    val evictorThreadRunIntervalMillis = conf.get(PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL)
     if (evictorThreadRunIntervalMillis > 0) {
       val future = executorService.scheduleAtFixedRate(() => {
         Utils.tryLogNonFatalError(evictExpired())
@@ -92,32 +91,26 @@ private[producer] class InternalKafkaProducerPool(
   }
 
   private[producer] def release(producer: CachedKafkaProducer): Unit = {
-    def closeProducerNotInCache(producer: CachedKafkaProducer): Unit = {
-      logWarning(s"Released producer ${producer.id} is not a member of the cache. Closing.")
-      producer.close()
-    }
-
     synchronized {
       cache.get(producer.cacheKey) match {
         case Some(entry) if entry.producer.id == producer.id =>
           entry.handleReturned(clock.nanoTime())
         case _ =>
-          closeProducerNotInCache(producer)
+          logWarning(s"Released producer ${producer.id} is not a member of the cache. Closing.")
+          producer.close()
       }
     }
   }
 
   private[producer] def shutdown(): Unit = {
-    scheduled.foreach(_.cancel(true))
+    scheduled.foreach(_.cancel(false))
     ThreadUtils.shutdown(executorService)
   }
 
   /** exposed for testing. */
   private[producer] def reset(): Unit = synchronized {
-    scheduled.foreach(_.cancel(true))
     cache.foreach { case (_, v) => v.producer.close() }
     cache.clear()
-    scheduled = startEvictorThread()
   }
 
   /** exposed for testing */
@@ -189,10 +182,10 @@ private[kafka010] object InternalKafkaProducerPool extends Logging {
     }
 
     def handleReturned(curTimeNs: Long): Unit = {
-      _refCount -= 1
-      require(_refCount >= 0, "Reference count shouldn't be negative. Returning same producer " +
+      require(_refCount > 0, "Reference count shouldn't become negative. Returning same producer " +
         "multiple times would occur this bug. Check the logic around returning producer.")
 
+      _refCount -= 1
       if (_refCount == 0) {
         _expireAt = curTimeNs + cacheExpireTimeoutNs
       }
