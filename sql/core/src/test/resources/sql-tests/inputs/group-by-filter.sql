@@ -115,7 +115,7 @@ SELECT 1 FROM (SELECT COUNT(1) FILTER (WHERE a >= 3 OR b <= 1) FROM testData WHE
 -- Aggregate with filter contains exists subquery
 SELECT emp.dept_id,
        avg(salary),
-       avg(salary) FILTER (WHERE b = SELECT 2)
+       avg(salary) FILTER (WHERE b = (SELECT 2))
 FROM emp
 GROUP BY dept_id;
 SELECT emp.dept_id,
