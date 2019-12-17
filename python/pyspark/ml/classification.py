@@ -2285,13 +2285,6 @@ class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationMod
     .. versionadded:: 1.6.0
     """
 
-    @since("3.0.0")
-    def setLayers(self, value):
-        """
-        Sets the value of :py:attr:`layers`.
-        """
-        return self._set(layers=value)
-
     @property
     @since("2.0.0")
     def weights(self):

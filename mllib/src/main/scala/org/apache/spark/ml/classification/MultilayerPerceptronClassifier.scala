@@ -290,14 +290,6 @@ class MultilayerPerceptronClassificationModel private[ml] (
     .model(weights)
 
   /**
-   * Sets the value of param [[layers]].
-   *
-   * @group setParam
-   */
-  @Since("3.0.0")
-  def setLayers(value: Array[Int]): this.type = set(layers, value)
-
-  /**
    * Predict label for the given features.
    * This internal method is used to implement `transform()` and output [[predictionCol]].
    */
@@ -375,7 +367,7 @@ object MultilayerPerceptronClassificationModel
         val layers = data.getAs[Seq[Int]](0).toArray
         val weights = data.getAs[Vector](1)
         val model = new MultilayerPerceptronClassificationModel(metadata.uid, weights)
-         model.setLayers(layers)
+        model.set("layers", layers)
       } else {
         val data = df.select("weights").head()
         val weights = data.getAs[Vector](0)
