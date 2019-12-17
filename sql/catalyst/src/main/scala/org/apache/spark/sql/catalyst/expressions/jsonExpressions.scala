@@ -22,6 +22,7 @@ import java.io._
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
+import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -99,10 +100,10 @@ private[this] object JsonPathParser extends RegexParsers {
 }
 
 private[this] object SharedFactory {
-  val jsonFactory = new JsonFactory()
-
-  // Enabled for Hive compatibility
-  jsonFactory.enable(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS)
+  val jsonFactory = new JsonFactoryBuilder()
+    // Enabled for Hive compatibility
+    .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
+    .build()
 }
 
 /**
@@ -515,12 +516,10 @@ case class JsonToStructs(
     timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
 
-  val forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA)
-
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
   // can generate incorrect files if values are missing in columns declared as non-nullable.
-  val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
+  val nullableSchema = schema.asNullable
 
   override def nullable: Boolean = true
 
@@ -758,11 +757,7 @@ case class SchemaOfJson(
   private lazy val jsonOptions = new JSONOptions(options, "UTC")
 
   @transient
-  private lazy val jsonFactory = {
-    val factory = new JsonFactory()
-    jsonOptions.setJacksonOptions(factory)
-    factory
-  }
+  private lazy val jsonFactory = jsonOptions.buildJsonFactory()
 
   @transient
   private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)

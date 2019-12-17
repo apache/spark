@@ -28,7 +28,7 @@ import org.apache.avro.io.EncoderFactory
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.functions.{col, struct}
+import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -152,5 +152,48 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(df.queryExecution.executedPlan.isInstanceOf[LocalTableScanExec])
       assert(df.collect().map(_.get(0)) === Seq(Row("one"), Row("two"), Row("three"), Row("four")))
     }
+  }
+
+  test("SPARK-27506: roundtrip in to_avro and from_avro with different compatible schemas") {
+    val df = spark.range(10).select(
+      struct('id.as("col1"), 'id.cast("string").as("col2")).as("struct")
+    )
+    val avroStructDF = df.select(functions.to_avro('struct).as("avro"))
+    val actualAvroSchema =
+      s"""
+         |{
+         |  "type": "record",
+         |  "name": "struct",
+         |  "fields": [
+         |    {"name": "col1", "type": "int"},
+         |    {"name": "col2", "type": "string"}
+         |  ]
+         |}
+         |""".stripMargin
+
+    val evolvedAvroSchema =
+      s"""
+         |{
+         |  "type": "record",
+         |  "name": "struct",
+         |  "fields": [
+         |    {"name": "col1", "type": "int"},
+         |    {"name": "col2", "type": "string"},
+         |    {"name": "col3", "type": "string", "default": ""}
+         |  ]
+         |}
+         |""".stripMargin
+
+    val expected = spark.range(10).select(
+      struct('id.as("col1"), 'id.cast("string").as("col2"), lit("").as("col3")).as("struct")
+    )
+
+    checkAnswer(
+      avroStructDF.select(
+        functions.from_avro(
+          'avro,
+          evolvedAvroSchema,
+          Map("actualSchema" -> actualAvroSchema).asJava)),
+      expected)
   }
 }

@@ -19,12 +19,13 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 
 /**
  * Normalize a vector to have unit norm using the given p-norm.
@@ -65,6 +66,19 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
+
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(inputCol).nonEmpty && $(outputCol).nonEmpty) {
+      val size = AttributeGroup.fromStructField(schema($(inputCol))).size
+      if (size >= 0) {
+        outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+          $(outputCol), size)
+      }
+    }
+    outputSchema
+  }
 
   @Since("3.0.0")
   override def toString: String = {

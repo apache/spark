@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -101,34 +102,6 @@ object IntervalUtils {
     Decimal(result, 18, 6)
   }
 
-  /**
-   * Converts a string to [[CalendarInterval]] case-insensitively.
-   *
-   * @throws IllegalArgumentException if the input string is not in valid interval format.
-   */
-  def fromString(str: String): CalendarInterval = {
-    if (str == null) throw new IllegalArgumentException("Interval string cannot be null")
-    try {
-      CatalystSqlParser.parseInterval(str)
-    } catch {
-      case e: ParseException =>
-        val ex = new IllegalArgumentException(s"Invalid interval string: $str\n" + e.message)
-        ex.setStackTrace(e.getStackTrace)
-        throw ex
-    }
-  }
-
-  /**
-   * A safe version of `fromString`. It returns null for invalid input string.
-   */
-  def safeFromString(str: String): CalendarInterval = {
-    try {
-      fromString(str)
-    } catch {
-      case _: IllegalArgumentException => null
-    }
-  }
-
   private def toLongWithRange(
       fieldName: IntervalUnit,
       s: String,
@@ -183,9 +156,6 @@ object IntervalUtils {
     fromDayTimeString(s, DAY, SECOND)
   }
 
-  private val dayTimePattern =
-    "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$".r
-
   /**
    * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
    *
@@ -196,9 +166,35 @@ object IntervalUtils {
    * - MINUTE TO SECOND
    */
   def fromDayTimeString(input: String, from: IntervalUnit, to: IntervalUnit): CalendarInterval = {
+    if (SQLConf.get.getConf(SQLConf.LEGACY_FROM_DAYTIME_STRING)) {
+      parseDayTimeLegacy(input, from, to)
+    } else {
+      parseDayTime(input, from, to)
+    }
+  }
+
+  private val dayTimePatternLegacy =
+    "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$".r
+
+  /**
+   * Legacy method of parsing a string in a day-time format. It ignores the `from` bound,
+   * and takes into account only the `to` bound by truncating the result. For example,
+   * if the input string is "2 12:30:15", `from` is "hour" and `to` is "second", the result
+   * is "2 days 12 hours 30 minutes".
+   *
+   * @param input The day-time string
+   * @param from The interval units from which the input strings begins
+   * @param to The interval units at which the input string ends
+   * @return an instance of `CalendarInterval` if parsing completes successfully otherwise
+   *         the exception `IllegalArgumentException` is raised.
+   */
+  private def parseDayTimeLegacy(
+      input: String,
+      from: IntervalUnit,
+      to: IntervalUnit): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
     assert(input.length == input.trim.length)
-    val m = dayTimePattern.pattern.matcher(input)
+    val m = dayTimePatternLegacy.pattern.matcher(input)
     require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input")
 
     try {
@@ -250,44 +246,76 @@ object IntervalUtils {
     }
   }
 
-  def fromUnitStrings(units: Array[IntervalUnit], values: Array[String]): CalendarInterval = {
-    assert(units.length == values.length)
-    var months: Int = 0
+  private val signRe = "(?<sign>[+|-])"
+  private val dayRe = "(?<day>\\d+)"
+  private val hourRe = "(?<hour>\\d{1,2})"
+  private val minuteRe = "(?<minute>\\d{1,2})"
+  private val secondRe = "(?<second>(\\d{1,2})(\\.(\\d{1,9}))?)"
+
+  private val dayTimePattern = Map(
+    (MINUTE, SECOND) -> s"^$signRe?$minuteRe:$secondRe$$".r,
+    (HOUR, MINUTE) -> s"^$signRe?$hourRe:$minuteRe$$".r,
+    (HOUR, SECOND) -> s"^$signRe?$hourRe:$minuteRe:$secondRe$$".r,
+    (DAY, HOUR) -> s"^$signRe?$dayRe $hourRe$$".r,
+    (DAY, MINUTE) -> s"^$signRe?$dayRe $hourRe:$minuteRe$$".r,
+    (DAY, SECOND) -> s"^$signRe?$dayRe $hourRe:$minuteRe:$secondRe$$".r
+  )
+
+  private def unitsRange(start: IntervalUnit, end: IntervalUnit): Seq[IntervalUnit] = {
+    (start.id to end.id).map(IntervalUnit(_))
+  }
+
+  /**
+   * Parses an input string in the day-time format defined by the `from` and `to` bounds.
+   * It supports the following formats:
+   * - [+|-]D+ H[H]:m[m]:s[s][.SSSSSSSSS] for DAY TO SECOND
+   * - [+|-]D+ H[H]:m[m] for DAY TO MINUTE
+   * - [+|-]D+ H[H] for DAY TO HOUR
+   * - [+|-]H[H]:m[m]s[s][.SSSSSSSSS] for HOUR TO SECOND
+   * - [+|-]H[H]:m[m] for HOUR TO MINUTE
+   * - [+|-]m[m]:s[s][.SSSSSSSSS] for MINUTE TO SECOND
+   *
+   * Note: the seconds fraction is truncated to microseconds.
+   *
+   * @param input The input string to parse.
+   * @param from The interval unit from which the input string begins.
+   * @param to The interval unit at where the input string ends.
+   * @return an instance of `CalendarInterval` if the input string was parsed successfully
+   *         otherwise throws an exception.
+   * @throws IllegalArgumentException The input string has incorrect format and cannot be parsed.
+   * @throws ArithmeticException An interval unit value is out of valid range or the resulted
+   *                             interval fields `days` or `microseconds` are out of the valid
+   *                             ranges.
+   */
+  private def parseDayTime(
+      input: String,
+      from: IntervalUnit,
+      to: IntervalUnit): CalendarInterval = {
+    require(input != null, "Interval day-time string must be not null")
+    val regexp = dayTimePattern.get(from -> to)
+    require(regexp.isDefined, s"Cannot support (interval '$input' $from to $to) expression")
+    val pattern = regexp.get.pattern
+    val m = pattern.matcher(input)
+    require(m.matches, s"Interval string must match day-time format of '$pattern': $input")
+    var micros: Long = 0L
     var days: Int = 0
-    var microseconds: Long = 0
-    var i = 0
-    while (i < units.length) {
-      try {
-        units(i) match {
-          case YEAR =>
-            months = Math.addExact(months, Math.multiplyExact(values(i).toInt, 12))
-          case MONTH =>
-            months = Math.addExact(months, values(i).toInt)
-          case WEEK =>
-            days = Math.addExact(days, Math.multiplyExact(values(i).toInt, 7))
-          case DAY =>
-            days = Math.addExact(days, values(i).toInt)
-          case HOUR =>
-            val hoursUs = Math.multiplyExact(values(i).toLong, MICROS_PER_HOUR)
-            microseconds = Math.addExact(microseconds, hoursUs)
-          case MINUTE =>
-            val minutesUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MINUTE)
-            microseconds = Math.addExact(microseconds, minutesUs)
-          case SECOND =>
-            microseconds = Math.addExact(microseconds, parseSecondNano(values(i)))
-          case MILLISECOND =>
-            val millisUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MILLIS)
-            microseconds = Math.addExact(microseconds, millisUs)
-          case MICROSECOND =>
-            microseconds = Math.addExact(microseconds, values(i).toLong)
-        }
-      } catch {
-        case e: Exception =>
-          throw new IllegalArgumentException(s"Error parsing interval string: ${e.getMessage}", e)
-      }
-      i += 1
+    unitsRange(to, from).foreach {
+      case unit @ DAY =>
+        days = toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue).toInt
+      case unit @ HOUR =>
+        val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 23)
+        micros = Math.addExact(micros, parsed * MICROS_PER_HOUR)
+      case unit @ MINUTE =>
+        val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 59)
+        micros = Math.addExact(micros, parsed * MICROS_PER_MINUTE)
+      case unit @ SECOND =>
+        micros = Math.addExact(micros, parseSecondNano(m.group(unit.toString)))
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Cannot support (interval '$input' $from to $to) expression")
     }
-    new CalendarInterval(months, days, microseconds)
+    val sign = if (m.group("sign") != null && m.group("sign") == "-") -1 else 1
+    new CalendarInterval(0, sign * days, sign * micros)
   }
 
   // Parses a string with nanoseconds, truncates the result and returns microseconds
@@ -424,6 +452,85 @@ object IntervalUtils {
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
+  // `toString` implementation in CalendarInterval is the multi-units format currently.
+  def toMultiUnitsString(interval: CalendarInterval): String = interval.toString
+
+  def toSqlStandardString(interval: CalendarInterval): String = {
+    val yearMonthPart = if (interval.months < 0) {
+      val ma = math.abs(interval.months)
+      "-" + ma / 12 + "-" + ma % 12
+    } else if (interval.months > 0) {
+      "+" + interval.months / 12 + "-" + interval.months % 12
+    } else {
+      ""
+    }
+
+    val dayPart = if (interval.days < 0) {
+      interval.days.toString
+    } else if (interval.days > 0) {
+      "+" + interval.days
+    } else {
+      ""
+    }
+
+    val timePart = if (interval.microseconds != 0) {
+      val sign = if (interval.microseconds > 0) "+" else "-"
+      val sb = new StringBuilder(sign)
+      var rest = math.abs(interval.microseconds)
+      sb.append(rest / MICROS_PER_HOUR)
+      sb.append(':')
+      rest %= MICROS_PER_HOUR
+      val minutes = rest / MICROS_PER_MINUTE;
+      if (minutes < 10) {
+        sb.append(0)
+      }
+      sb.append(minutes)
+      sb.append(':')
+      rest %= MICROS_PER_MINUTE
+      val bd = BigDecimal.valueOf(rest, 6)
+      if (bd.compareTo(new BigDecimal(10)) < 0) {
+        sb.append(0)
+      }
+      val s = bd.stripTrailingZeros().toPlainString
+      sb.append(s)
+      sb.toString()
+    } else {
+      ""
+    }
+
+    val intervalList = Seq(yearMonthPart, dayPart, timePart).filter(_.nonEmpty)
+    if (intervalList.nonEmpty) intervalList.mkString(" ") else "0"
+  }
+
+  def toIso8601String(interval: CalendarInterval): String = {
+    val sb = new StringBuilder("P")
+
+    val year = interval.months / 12
+    if (year != 0) sb.append(year + "Y")
+    val month = interval.months % 12
+    if (month != 0) sb.append(month + "M")
+
+    if (interval.days != 0) sb.append(interval.days + "D")
+
+    if (interval.microseconds != 0) {
+      sb.append('T')
+      var rest = interval.microseconds
+      val hour = rest / MICROS_PER_HOUR
+      if (hour != 0) sb.append(hour + "H")
+      rest %= MICROS_PER_HOUR
+      val minute = rest / MICROS_PER_MINUTE
+      if (minute != 0) sb.append(minute + "M")
+      rest %= MICROS_PER_MINUTE
+      if (rest != 0) {
+        val bd = BigDecimal.valueOf(rest, 6)
+        sb.append(bd.stripTrailingZeros().toPlainString + "S")
+      }
+    } else if (interval.days == 0 && interval.months == 0) {
+      sb.append("T0S")
+    }
+    sb.toString()
+  }
+
   private object ParseState extends Enumeration {
     type ParseState = Value
 
@@ -438,7 +545,7 @@ object IntervalUtils {
         UNIT_SUFFIX,
         UNIT_END = Value
   }
-  private final val intervalStr = UTF8String.fromString("interval ")
+  private final val intervalStr = UTF8String.fromString("interval")
   private def unitToUtf8(unit: IntervalUnit): UTF8String = {
     UTF8String.fromString(unit.toString)
   }
@@ -452,18 +559,37 @@ object IntervalUtils {
   private final val millisStr = unitToUtf8(MILLISECOND)
   private final val microsStr = unitToUtf8(MICROSECOND)
 
+  /**
+   * A safe version of `stringToInterval`. It returns null for invalid input string.
+   */
+  def safeStringToInterval(input: UTF8String): CalendarInterval = {
+    try {
+      stringToInterval(input)
+    } catch {
+      case _: IllegalArgumentException => null
+    }
+  }
+
+  /**
+   * Converts a string to [[CalendarInterval]] case-insensitively.
+   *
+   * @throws IllegalArgumentException if the input string is not in valid interval format.
+   */
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
+    def throwIAE(msg: String, e: Exception = null) = {
+      throw new IllegalArgumentException(s"Error parsing '$input' to interval, $msg", e)
+    }
 
     if (input == null) {
-      return null
+      throwIAE("interval string cannot be null")
     }
     // scalastyle:off caselocale .toLowerCase
-    val s = input.trim.toLowerCase
+    val s = input.trimAll().toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
     if (bytes.isEmpty) {
-      return null
+      throwIAE("interval string cannot be empty")
     }
     var state = PREFIX
     var i = 0
@@ -473,13 +599,23 @@ object IntervalUtils {
     var days: Int = 0
     var microseconds: Long = 0
     var fractionScale: Int = 0
+    val initialFractionScale = (NANOS_PER_SECOND / 10).toInt
     var fraction: Int = 0
+    var pointPrefixed: Boolean = false
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
-      b match {
-        case ' ' => i += 1
-        case _ => state = next
+      if (b <= ' ') {
+        i += 1
+      } else {
+        state = next
       }
+    }
+
+    def currentWord: String = {
+      val sep = "\\s+"
+      val strings = s.toString.split(sep)
+      val lenRight = s.substring(i, s.numBytes()).toString.split(sep).length
+      strings(strings.length - lenRight)
     }
 
     while (i < bytes.length) {
@@ -488,14 +624,28 @@ object IntervalUtils {
         case PREFIX =>
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
-              return null
+              throwIAE("interval string cannot be empty")
+            } else if (bytes(i + intervalStr.numBytes()) > ' ') {
+              throwIAE(s"invalid interval prefix $currentWord")
             } else {
-              i += intervalStr.numBytes()
+              i += intervalStr.numBytes() + 1
             }
           }
           state = TRIM_BEFORE_SIGN
         case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
         case SIGN =>
+          currentValue = 0
+          fraction = 0
+          // We preset next state from SIGN to TRIM_BEFORE_VALUE. If we meet '.' in the SIGN state,
+          // it means that the interval value we deal with here is a numeric with only fractional
+          // part, such as '.11 second', which can be parsed to 0.11 seconds. In this case, we need
+          // to reset next state to `VALUE_FRACTIONAL_PART` to go parse the fraction part of the
+          // interval value.
+          state = TRIM_BEFORE_VALUE
+          // We preset the scale to an invalid value to track fraction presence in the UNIT_BEGIN
+          // state. If we meet '.', the scale become valid for the VALUE_FRACTIONAL_PART state.
+          fractionScale = -1
+          pointPrefixed = false
           b match {
             case '-' =>
               isNegative = true
@@ -505,14 +655,14 @@ object IntervalUtils {
               i += 1
             case _ if '0' <= b && b <= '9' =>
               isNegative = false
-            case _ => return null
+            case '.' =>
+              isNegative = false
+              fractionScale = initialFractionScale
+              pointPrefixed = true
+              i += 1
+              state = VALUE_FRACTIONAL_PART
+            case _ => throwIAE( s"unrecognized number '$currentWord'")
           }
-          currentValue = 0
-          fraction = 0
-          // Sets the scale to an invalid value to track fraction presence
-          // in the BEGIN_UNIT_NAME state
-          fractionScale = -1
-          state = TRIM_BEFORE_VALUE
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
           b match {
@@ -520,31 +670,34 @@ object IntervalUtils {
               try {
                 currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
               } catch {
-                case _: ArithmeticException => return null
+                case e: ArithmeticException => throwIAE(e.getMessage, e)
               }
-            case ' ' => state = TRIM_BEFORE_UNIT
+            case _ if b <= ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
-              fractionScale = (NANOS_PER_SECOND / 10).toInt
+              fractionScale = initialFractionScale
               state = VALUE_FRACTIONAL_PART
-            case _ => return null
+            case _ => throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
-          b match {
-            case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
-              fraction += (b - '0') * fractionScale
-              fractionScale /= 10
-            case ' ' =>
-              fraction /= NANOS_PER_MICROS.toInt
-              state = TRIM_BEFORE_UNIT
-            case _ => return null
+          if ('0' <= b && b <= '9' && fractionScale > 0) {
+            fraction += (b - '0') * fractionScale
+            fractionScale /= 10
+          } else if (b <= ' ' && (!pointPrefixed || fractionScale < initialFractionScale)) {
+            fraction /= NANOS_PER_MICROS.toInt
+            state = TRIM_BEFORE_UNIT
+          } else if ('0' <= b && b <= '9') {
+            throwIAE(s"interval can only support nanosecond precision, '$currentWord' is out" +
+              s" of range")
+          } else {
+            throwIAE(s"invalid value '$currentWord'")
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
         case UNIT_BEGIN =>
           // Checks that only seconds can have the fractional part
           if (b != 's' && fractionScale >= 0) {
-            return null
+            throwIAE(s"'$currentWord' cannot have fractional part")
           }
           if (isNegative) {
             currentValue = -currentValue
@@ -588,26 +741,26 @@ object IntervalUtils {
                 } else if (s.matchAt(microsStr, i)) {
                   microseconds = Math.addExact(microseconds, currentValue)
                   i += microsStr.numBytes()
-                } else return null
-              case _ => return null
+                } else throwIAE(s"invalid unit '$currentWord'")
+              case _ => throwIAE(s"invalid unit '$currentWord'")
             }
           } catch {
-            case _: ArithmeticException => return null
+            case e: ArithmeticException => throwIAE(e.getMessage, e)
           }
           state = UNIT_SUFFIX
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
-            case ' ' => state = TRIM_BEFORE_SIGN
-            case _ => return null
+            case _ if b <= ' ' => state = TRIM_BEFORE_SIGN
+            case _ => throwIAE(s"invalid unit '$currentWord'")
           }
           i += 1
         case UNIT_END =>
-          b match {
-            case ' ' =>
-              i += 1
-              state = TRIM_BEFORE_SIGN
-            case _ => return null
+          if (b <= ' ') {
+            i += 1
+            state = TRIM_BEFORE_SIGN
+          } else {
+            throwIAE(s"invalid unit '$currentWord'")
           }
       }
     }

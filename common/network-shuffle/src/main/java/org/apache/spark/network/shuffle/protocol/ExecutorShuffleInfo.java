@@ -65,7 +65,7 @@ public class ExecutorShuffleInfo implements Encodable {
     if (other != null && other instanceof ExecutorShuffleInfo) {
       ExecutorShuffleInfo o = (ExecutorShuffleInfo) other;
       return Arrays.equals(localDirs, o.localDirs)
-        && Objects.equal(subDirsPerLocalDir, o.subDirsPerLocalDir)
+        && subDirsPerLocalDir == o.subDirsPerLocalDir
         && Objects.equal(shuffleManager, o.shuffleManager);
     }
     return false;

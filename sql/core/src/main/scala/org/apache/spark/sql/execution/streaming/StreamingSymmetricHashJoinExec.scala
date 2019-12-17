@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -233,8 +233,9 @@ case class StreamingSymmetricHashJoinExec(
     val joinedRow = new JoinedRow
 
 
+    val inputSchema = left.output ++ right.output
     val postJoinFilter =
-      newPredicate(condition.bothSides.getOrElse(Literal(true)), left.output ++ right.output).eval _
+      Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
       condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left)
@@ -417,7 +418,7 @@ case class StreamingSymmetricHashJoinExec(
 
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
-      newPredicate(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
+      Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
       joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value,
@@ -428,16 +429,16 @@ case class StreamingSymmetricHashJoinExec(
       case Some(JoinStateKeyWatermarkPredicate(expr)) =>
         // inputSchema can be empty as expr should only have BoundReferences and does not require
         // the schema to generated predicate. See [[StreamingSymmetricHashJoinHelper]].
-        newPredicate(expr, Seq.empty).eval _
+        Predicate.create(expr, Seq.empty).eval _
       case _ =>
-        newPredicate(Literal(false), Seq.empty).eval _ // false = do not remove if no predicate
+        Predicate.create(Literal(false), Seq.empty).eval _ // false = do not remove if no predicate
     }
 
     private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(expr)) =>
-        newPredicate(expr, inputAttributes).eval _
+        Predicate.create(expr, inputAttributes).eval _
       case _ =>
-        newPredicate(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
+        Predicate.create(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
     }
 
     private[this] var updatedStateRowsCount = 0
@@ -457,7 +458,7 @@ case class StreamingSymmetricHashJoinExec(
       val nonLateRows =
         WatermarkSupport.watermarkExpression(watermarkAttribute, eventTimeWatermark) match {
           case Some(watermarkExpr) =>
-            val predicate = newPredicate(watermarkExpr, inputAttributes)
+            val predicate = Predicate.create(watermarkExpr, inputAttributes)
             inputIter.filter { row => !predicate.eval(row) }
           case None =>
             inputIter

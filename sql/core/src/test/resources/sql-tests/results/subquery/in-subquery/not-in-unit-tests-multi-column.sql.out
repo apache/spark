@@ -37,9 +37,9 @@ WHERE  (a, b) NOT IN (SELECT *
 -- !query 2 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 2 output
-2	3
-4	5
-NULL	1
+2	3.0
+4	5.0
+NULL	1.0
 NULL	NULL
 
 
@@ -91,7 +91,7 @@ WHERE  b = 1.0 -- Matches (null, 1.0)
 -- !query 6 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 6 output
-NULL	1
+NULL	1.0
 
 
 -- !query 7
@@ -117,4 +117,4 @@ WHERE  b = 5.0 -- Matches (4, 5.0)
 -- !query 8 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 8 output
-4	5
+4	5.0

@@ -27,6 +27,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -684,7 +685,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("y", true)
     checkCast("yes", true)
     checkCast("1", true)
-
     checkCast("f", false)
     checkCast("false", false)
     checkCast("FAlsE", false)
@@ -693,8 +693,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("0", false)
 
     checkEvaluation(cast("abc", BooleanType), null)
-    checkEvaluation(cast("tru", BooleanType), null)
-    checkEvaluation(cast("fla", BooleanType), null)
     checkEvaluation(cast("", BooleanType), null)
   }
 
@@ -1208,6 +1206,13 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(134.12), DecimalType(3, 2)), null)
     }
+  }
+
+  test("collect_list/collect_set can cast to ArrayType not containsNull") {
+    val list = CollectList(Literal(1))
+    assert(Cast.canCast(list.dataType, ArrayType(IntegerType, false)))
+    val set = CollectSet(Literal(1))
+    assert(Cast.canCast(set.dataType, ArrayType(StringType, false)))
   }
 }
 

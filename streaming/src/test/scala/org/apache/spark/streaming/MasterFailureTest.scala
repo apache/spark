@@ -30,6 +30,7 @@ import scala.util.Random
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.scalatest.Assertions._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.dstream.DStream

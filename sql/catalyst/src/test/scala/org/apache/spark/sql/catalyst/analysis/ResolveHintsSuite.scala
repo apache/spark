@@ -245,4 +245,11 @@ class ResolveHintsSuite extends AnalysisTest {
       e => e.getLevel == Level.WARN &&
         e.getRenderedMessage.contains("Unrecognized hint: unknown_hint")))
   }
+
+  test("SPARK-30003: Do not throw stack overflow exception in non-root unknown hint resolution") {
+    checkAnalysis(
+      Project(testRelation.output, UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE"))),
+      Project(testRelation.output, testRelation),
+      caseSensitive = false)
+  }
 }

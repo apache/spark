@@ -476,7 +476,9 @@ object SparkParallelTestGrouping {
     "org.apache.spark.ml.classification.LinearSVCSuite",
     "org.apache.spark.sql.SQLQueryTestSuite",
     "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite",
-    "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite"
+    "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
+    "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
+    "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -832,6 +834,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hive")))
   }
 
   private def ignoreClasspaths(classpaths: Seq[Classpath]): Seq[Classpath] = {
@@ -978,6 +981,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=false",
     javaOptions in Test += "-Dderby.system.durability=test",
+    javaOptions in Test += "-Dio.netty.tryReflectionSetAccessible=true",
     javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",

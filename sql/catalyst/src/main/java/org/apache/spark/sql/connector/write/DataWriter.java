@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.write;
 
+import java.io.Closeable;
 import java.io.IOException;
 
 import org.apache.spark.annotation.Evolving;
@@ -31,8 +32,9 @@ import org.apache.spark.annotation.Evolving;
  * the {@link #write(Object)}, {@link #abort()} is called afterwards and the remaining records will
  * not be processed. If all records are successfully written, {@link #commit()} is called.
  *
- * Once a data writer returns successfully from {@link #commit()} or {@link #abort()}, its lifecycle
- * is over and Spark will not use it again.
+ * Once a data writer returns successfully from {@link #commit()} or {@link #abort()}, Spark will
+ * call {@link #close()} to let DataWriter doing resource cleanup. After calling {@link #close()},
+ * its lifecycle is over and Spark will not use it again.
  *
  * If this data writer succeeds(all records are successfully written and {@link #commit()}
  * succeeds), a {@link WriterCommitMessage} will be sent to the driver side and pass to
@@ -56,7 +58,7 @@ import org.apache.spark.annotation.Evolving;
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}.
  */
 @Evolving
-public interface DataWriter<T> {
+public interface DataWriter<T> extends Closeable {
 
   /**
    * Writes one record.

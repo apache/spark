@@ -288,15 +288,16 @@ class Word2VecModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val vectors = wordVectors.getVectors
       .mapValues(vv => Vectors.dense(vv.map(_.toDouble)))
       .map(identity) // mapValues doesn't return a serializable map (SI-7005)
     val bVectors = dataset.sparkSession.sparkContext.broadcast(vectors)
     val d = $(vectorSize)
+    val emptyVec = Vectors.sparse(d, Array.emptyIntArray, Array.emptyDoubleArray)
     val word2Vec = udf { sentence: Seq[String] =>
       if (sentence.isEmpty) {
-        Vectors.sparse(d, Array.empty[Int], Array.empty[Double])
+        emptyVec
       } else {
         val sum = Vectors.zeros(d)
         sentence.foreach { word =>
@@ -308,12 +309,18 @@ class Word2VecModel private[ml] (
         sum
       }
     }
-    dataset.withColumn($(outputCol), word2Vec(col($(inputCol))))
+    dataset.withColumn($(outputCol), word2Vec(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), $(vectorSize))
+    }
+    outputSchema
   }
 
   @Since("1.4.1")

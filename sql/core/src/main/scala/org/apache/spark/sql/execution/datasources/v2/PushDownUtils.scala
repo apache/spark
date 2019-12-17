@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.StructType
 
 object PushDownUtils extends PredicateHelper {
   /**
@@ -76,28 +78,46 @@ object PushDownUtils extends PredicateHelper {
    * @return the created `ScanConfig`(since column pruning is the last step of operator pushdown),
    *         and new output attributes after column pruning.
    */
-  // TODO: nested column pruning.
   def pruneColumns(
       scanBuilder: ScanBuilder,
       relation: DataSourceV2Relation,
-      exprs: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
+      projects: Seq[NamedExpression],
+      filters: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
     scanBuilder match {
+      case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
+        val rootFields = SchemaPruning.identifyRootFields(projects, filters)
+        val prunedSchema = if (rootFields.nonEmpty) {
+          SchemaPruning.pruneDataSchema(relation.schema, rootFields)
+        } else {
+          new StructType()
+        }
+        r.pruneColumns(prunedSchema)
+        val scan = r.build()
+        scan -> toOutputAttrs(scan.readSchema(), relation)
+
       case r: SupportsPushDownRequiredColumns =>
+        val exprs = projects ++ filters
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
         if (neededOutput != relation.output) {
           r.pruneColumns(neededOutput.toStructType)
           val scan = r.build()
-          val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-          scan -> scan.readSchema().toAttributes.map {
-            // We have to keep the attribute id during transformation.
-            a => a.withExprId(nameToAttr(a.name).exprId)
-          }
+          scan -> toOutputAttrs(scan.readSchema(), relation)
         } else {
           r.build() -> relation.output
         }
 
       case _ => scanBuilder.build() -> relation.output
+    }
+  }
+
+  private def toOutputAttrs(
+      schema: StructType,
+      relation: DataSourceV2Relation): Seq[AttributeReference] = {
+    val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
+    schema.toAttributes.map {
+      // we have to keep the attribute id during transformation
+      a => a.withExprId(nameToAttr(a.name).exprId)
     }
   }
 }

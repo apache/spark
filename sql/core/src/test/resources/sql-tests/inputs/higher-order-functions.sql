@@ -1,3 +1,8 @@
+-- Test higher order functions with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 create or replace temporary view nested as values
   (1, array(32, 97), array(array(12, 99), array(123, 42), array(1))),
   (2, array(77, -76), array(array(6, 96, 65), array(-1, -2))),
@@ -87,8 +92,3 @@ select transform_values(ys, (k, v) -> k + v) as v from nested;
 -- use non reversed keywords: all is non reversed only if !ansi
 select transform(ys, all -> all * all) as v from values (array(32, 97)) as t(ys);
 select transform(ys, (all, i) -> all + i) as v from values (array(32, 97)) as t(ys);
-
-set spark.sql.ansi.enabled=true;
-select transform(ys, all -> all * all) as v from values (array(32, 97)) as t(ys);
-select transform(ys, (all, i) -> all + i) as v from values (array(32, 97)) as t(ys);
-set spark.sql.ansi.enabled=false;
