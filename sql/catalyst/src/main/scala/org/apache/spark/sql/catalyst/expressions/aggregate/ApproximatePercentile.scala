@@ -106,9 +106,9 @@ case class ApproximatePercentile(
       defaultCheck
     } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
       TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
-    } else if (accuracy <= 0) {
-      TypeCheckFailure(
-        s"The accuracy provided must be a positive integral literal (current value = $accuracy)")
+    } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
+      TypeCheckFailure(s"The accuracy provided must be between (0, ${Int.MaxValue}] literal" +
+        s" (current value = $accuracy)")
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       TypeCheckFailure(
         s"All percentage values must be between 0.0 and 1.0 " +

@@ -238,9 +238,9 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assertEqual(
       wrongAccuracy.checkInputDataTypes(),
       TypeCheckFailure(
-        "The accuracy provided must be a positive integral literal (current value = -1)"))
+        s"The accuracy provided must be between (0, ${Int.MaxValue}] literal (current value = -1)"))
 
-    val correctPercentageExpresions = Seq(
+    val correctPercentageExpressions = Seq(
       Literal(0.1f, FloatType),
       Literal(Decimal(0.2), DecimalType(2, 1)),
       Literal(0D),
@@ -248,7 +248,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       Literal(0.5D),
       CreateArray(Seq(0D, 1D, 0.5D).map(Literal(_)))
     )
-    correctPercentageExpresions.foreach { percentageExpression =>
+    correctPercentageExpressions.foreach { percentageExpression =>
       val correctPercentage = new ApproximatePercentile(
         AttributeReference("a", DoubleType)(),
         percentageExpression = percentageExpression,
