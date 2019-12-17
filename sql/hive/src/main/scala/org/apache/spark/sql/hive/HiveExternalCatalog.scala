@@ -1286,7 +1286,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     isResourceChanged(db, newDefinition) match {
       // as of now Hive only alter name, owner, class name, type but not resource URI
       // So in order to replace function with resource spark needs to delete and create the function
-      case true => client.dropFunction(db, functionName)
+      case true =>
+        client.dropFunction(db, functionName)
         client.createFunction(db, newDefinition)
       // replace the function in the metastore if there is no change in the resource
       case _ =>
@@ -1318,7 +1319,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.listFunctions(db, pattern)
   }
 
-  def isResourceChanged(db: String, newFunction: CatalogFunction): Boolean = {
+  private def isResourceChanged(db: String, newFunction: CatalogFunction): Boolean = {
     val oldFunction = getFunction(db, newFunction.identifier.funcName)
     if (oldFunction.resources.size != newFunction.resources.size) {
       return true
