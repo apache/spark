@@ -107,7 +107,7 @@ private[spark] class ImmutableResourceProfile(
       numPartsMap(rName) = 1
       if (taskReq > 0.0) {
         if (taskReq > execReq.amount) {
-          throw new SparkException(s"The executor resource $rName, amount ${execReq.amount} " +
+          throw new SparkException(s"The executor resource: $rName, amount: ${execReq.amount} " +
             s"needs to be >= the task resource request amount of $taskReq")
         }
         val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
@@ -122,8 +122,8 @@ private[spark] class ImmutableResourceProfile(
         }
         allTaskResources -= rName
       } else {
-        logWarning("The executor resource config $rName was specified but not corresponding" +
-          "task resource request was specified.")
+        logWarning("The executor resource config for resource: $rName was specified but " +
+          " the corresponding task resource request was specified.")
       }
     }
     if (allTaskResources.nonEmpty) {

@@ -736,8 +736,22 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       ("local[2]", 3, None),
       ("local[2, 1]", 3, None),
       ("spark://test-spark-cluster", 2, Option(1)),
-      ("local-cluster[1, 1, 1000]", 2, Option(1)),
-      ("yarn", 2, Option(1))
+      ("local-cluster[1, 1, 1000]", 2, Option(1))
+    ).foreach { case (master, cpusPerTask, executorCores) =>
+      val conf = new SparkConf()
+      conf.set(CPUS_PER_TASK, cpusPerTask)
+      executorCores.map(executorCores => conf.set(EXECUTOR_CORES, executorCores))
+      val ex = intercept[SparkException] {
+        sc = new SparkContext(master, "test", conf)
+      }
+      assert(ex.getMessage.contains(FAIL_REASON))
+      resetSparkContext()
+    }
+  }
+
+  test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192) on yarn") {
+    val FAIL_REASON = s"has to be >= the task resource request of 2"
+    Seq(("yarn", 2, Option(1))
     ).foreach { case (master, cpusPerTask, executorCores) =>
       val conf = new SparkConf()
       conf.set(CPUS_PER_TASK, cpusPerTask)
@@ -810,9 +824,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount " +
-      "needs to be specified since a task requirement config: spark.task.resource.gpu.amount " +
-      "was specified"))
+    assert(error.contains("No executor resource configs were not specified for the following " +
+      "task configs: gpu"))
   }
 
   test("Test parsing resources executor config < task requirements") {
@@ -826,9 +839,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount = 1 " +
-      "has to be >= the requested amount in task resource config: " +
-      "spark.task.resource.gpu.amount = 2"))
+    assert(error.contains("The executor resource: gpu, amount: 1 needs to be >= the task " +
+      "resource request amount of 2.0"))
   }
 
   test("Parse resources executor config not the same multiple numbers of the task requirements") {

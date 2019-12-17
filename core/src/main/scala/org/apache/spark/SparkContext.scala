@@ -53,7 +53,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
-import org.apache.spark.resource.{ResourceID, ResourceInformation, ImmutableResourceProfile, ResourceProfileManager}
+import org.apache.spark.resource.{ImmutableResourceProfile, ResourceID, ResourceInformation, ResourceProfileManager}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
@@ -2776,18 +2776,17 @@ object SparkContext extends Logging {
     // Ensure that default executor's resources satisfies one or more tasks requirement.
     // TODO - can we remove this since done in ResourceProfileManager?
     // DO we really need to know the master?
-    // TODO - test I think this check is broken for standalone mode if task cores > 1
     def checkResourcesPerTask(clusterMode: Boolean, executorCores: Option[Int]): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
-      val execCores = if (clusterMode) {
-        // TODO - this check is wrong for standalone mode, if you specify spark.task.cpus > 1
-        // it triggers even though executor may have enough
-        executorCores.getOrElse(sc.conf.get(EXECUTOR_CORES))
-      } else {
+      val execCores = if (executorCores.isDefined) {
         executorCores.get
+      } else if (clusterMode && sc.conf.contains(EXECUTOR_CORES)) {
+        sc.conf.get(EXECUTOR_CORES)
+      } else {
+        // we can't check cores on certain cluster managers like standalone because cores
+        // are controlled by worker parameters and not passed to SparkContext in all cases
+        return
       }
-      logInfo(s"Tom checkResourcesPerTask executor cores is: $execCores")
-
       // Number of cores per executor must meet at least one task requirement.
       if (execCores < taskCores) {
         throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
