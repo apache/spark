@@ -25,21 +25,6 @@ import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
 class CSVFilters(filters: Seq[sources.Filter], schema: StructType) {
-  private def reorderFilters(): Array[Seq[sources.Filter]] = {
-    val numFields = schema.fields.length
-    val ordered = new Array[Seq[sources.Filter]](numFields)
-    for (filter <- filters) {
-      val maxIndex = filter.references.map(schema.fieldIndex).max
-      if (maxIndex < numFields) {
-        val f = ordered(maxIndex)
-        ordered(maxIndex) = if (f == null) Seq(filter) else f :+ filter
-      } else {
-        throw new IllegalArgumentException(
-          s"The filter $filter has an attribute out of the schema $schema: $maxIndex")
-      }
-    }
-    ordered
-  }
 
   private def toRef(attr: String): Option[BoundReference] = {
     schema.getFieldIndex(attr).map { index =>
@@ -100,7 +85,19 @@ class CSVFilters(filters: Seq[sources.Filter], schema: StructType) {
     translate(filter)
   }
 
-  def skipRow(row: InternalRow): Boolean = {
-    true
+  private val predicates: Array[Seq[BasePredicate]] = {
+    val parr = Array.fill(schema.fields.length)(Seq.empty[BasePredicate])
+    for (filter <- filters) {
+      val index = filter.references.map(schema.fieldIndex).max
+      for (expr <- filterToExpression(filter)) {
+        val predicate = Predicate.create(expr)
+        parr(index) :+= predicate
+      }
+    }
+    parr
+  }
+
+  def skipRow(row: InternalRow, index: Int): Boolean = {
+    predicates(index).exists(!_.eval(row))
   }
 }

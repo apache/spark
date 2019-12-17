@@ -262,7 +262,7 @@ class UnivocityParser(
         } else {
           try {
             r(i) = valueConverters(i).apply(getToken(tokens, i))
-            if (csvFilters.skipRow(r)) {
+            if (csvFilters.skipRow(r, i)) {
               skipValueConversion = true
             }
           } catch {
