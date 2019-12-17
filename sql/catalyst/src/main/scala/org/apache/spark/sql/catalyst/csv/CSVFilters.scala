@@ -85,19 +85,25 @@ class CSVFilters(filters: Seq[sources.Filter], schema: StructType) {
     translate(filter)
   }
 
-  private val predicates: Array[Seq[BasePredicate]] = {
-    val parr = Array.fill(schema.fields.length)(Seq.empty[BasePredicate])
+  private val predicates: Array[BasePredicate] = {
+    val len = schema.fields.length
+    val groupedExprs = Array.fill(len)(Seq.empty[Expression])
     for (filter <- filters) {
       val index = filter.references.map(schema.fieldIndex).max
-      for (expr <- filterToExpression(filter)) {
-        val predicate = Predicate.create(expr)
-        parr(index) :+= predicate
+      groupedExprs(index) ++= filterToExpression(filter)
+    }
+    val groupedPredicates = Array.fill[BasePredicate](len)(null)
+    for (i <- 0 until len) {
+      if (!groupedExprs(i).isEmpty) {
+        val reducedExpr = groupedExprs(i).reduce(And)
+        groupedPredicates(i) = Predicate.create(reducedExpr)
       }
     }
-    parr
+    groupedPredicates
   }
 
   def skipRow(row: InternalRow, index: Int): Boolean = {
-    predicates(index).exists(!_.eval(row))
+    val predicate = predicates(index)
+    predicate != null && !predicate.eval(row)
   }
 }
