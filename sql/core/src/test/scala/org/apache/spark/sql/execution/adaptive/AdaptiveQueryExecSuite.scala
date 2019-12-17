@@ -51,9 +51,9 @@ class AdaptiveQueryExecSuite
   }
 
   protected override def afterAll(): Unit = {
-    super.afterAll()
     spark.catalog.dropTempView("skewData1")
     spark.catalog.dropTempView("skewData2")
+    super.afterAll()
   }
 
   setupTestData()
