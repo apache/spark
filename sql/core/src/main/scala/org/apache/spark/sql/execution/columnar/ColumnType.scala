@@ -725,12 +725,15 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] 
   }
 
   // copy the bytes from ByteBuffer to UnsafeRow
-  override def extract(buffer: ByteBuffer, row: InternalRow, ordinal: Int): Unit = row match {
-    case r: MutableUnsafeRow =>
+  override def extract(buffer: ByteBuffer, row: InternalRow, ordinal: Int): Unit = {
+    if (row.isInstanceOf[MutableUnsafeRow]) {
       val cursor = buffer.position()
       buffer.position(cursor + defaultSize)
-      r.writer.write(ordinal, buffer.array(), buffer.arrayOffset() + cursor, defaultSize)
-    case _ => setField(row, ordinal, extract(buffer))
+      row.asInstanceOf[MutableUnsafeRow].writer.write(ordinal, buffer.array(),
+        buffer.arrayOffset() + cursor, defaultSize)
+    } else {
+      setField(row, ordinal, extract(buffer))
+    }
   }
 
   override def append(v: CalendarInterval, buffer: ByteBuffer): Unit = {
