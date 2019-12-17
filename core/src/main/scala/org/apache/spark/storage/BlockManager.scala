@@ -479,7 +479,7 @@ private[spark] class BlockManager(
 
     hostLocalDirManager =
       if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
-        !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
         externalBlockStoreClient.map { blockStoreClient =>
           new HostLocalDirManager(
             futureExecutionContext,
