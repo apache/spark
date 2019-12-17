@@ -38,6 +38,7 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) extends Loggi
     "--hivevar" -> "hivevar",
     "-d" -> "define",
     "--define" -> "define",
+    "--conf" -> "conf"
   )
 
   /**
@@ -169,6 +170,22 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) extends Loggi
       .filter(_.split("=")(0) == key)
       .map(_.split("=")(1))
       .headOption
+  }
+
+  /**
+   * Collects spark configs values.
+   */
+  lazy val getSparkConfigs: Seq[(String, String)] = {
+    parsed
+      .getOrElse("conf", Nil)
+      .map { x =>
+        Try {
+          val auxConfigs = x.split("=")
+          auxConfigs(0) -> auxConfigs(1)
+        }
+      }
+      .filter(_.isSuccess)
+      .map(x => x.get)
   }
 
   /**

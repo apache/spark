@@ -13,13 +13,29 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
 
 
   val sparkSQLArgs = SparkSQLCLIArguments(args)
-
-
   val sparkConf = new SparkConf(loadDefaults = true)
+
+  sparkSQLArgs
+    .getSparkConfigs
+    .foreach {
+      case (k, v) =>
+      sparkConf.set(k, v)
+    }
+
+  sparkSQLArgs
+    .getHiveConfigs
+    .filter {case (k,v) => k.startsWith("hive.")}
+    .foreach {
+    case (k, v) =>
+      sparkConf.setIfMissing("spark.hadoop." + k, v)
+    }
+
+  println(sparkConf.toDebugString)
+
   val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
 
-  SparkSQLEnv.init()
+  SparkSQLEnv.init(sparkConf)
 
   val allConf: Map[String, String] = (hadoopConf
     .iterator()
