@@ -2503,10 +2503,6 @@ class Dataset[T] private[sql](
    *
    * Use [[summary]] for expanded statistics and control over which statistics to compute.
    *
-   * @note String columns will be implicitly cast to double when performing operations like mean
-   *       and stddev, it will only summarize the records that can be cast to double values, e.g.
-   *       "1", "2.02" are summarized, "0a", "xyz" are cast to nulls and omitted silently.
-   *
    * @param cols Columns to compute statistics on.
    *
    * @group action
@@ -2570,11 +2566,6 @@ class Dataset[T] private[sql](
    * }}}
    *
    * See also [[describe]] for basic statistics.
-   *
-   * @note String columns will be implicitly cast to double when performing operations like mean,
-   *       stddev and percentiles, it will only summarize the records that can be cast to double
-   *       values, e.g. "1", "2.02" are summarized, "0a", "xyz" are cast to nulls and omitted
-   *       silently.
    *
    * @param statistics Statistics from above list to be computed.
    *
