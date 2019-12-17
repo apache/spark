@@ -228,10 +228,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       nameParts @ NonSessionCatalogAndTable(catalog, tbl), propertyKey) =>
       val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tbl.asIdentifier)
       ShowTableProperties(r, propertyKey)
-
-    case CommentOnTable(nameParts @ CatalogAndIdentifier(catalog, tableName), comment) =>
-      val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
-      createAlterTable(nameParts, catalog, tableName.asMultipartIdentifier, Seq(changes))
   }
 
   object NonSessionCatalogAndTable {

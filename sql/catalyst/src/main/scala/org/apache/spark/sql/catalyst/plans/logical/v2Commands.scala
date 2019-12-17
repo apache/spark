@@ -465,7 +465,9 @@ case class ShowTableProperties(
  * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
  *
  */
-case class CommentOnNamespace(namespace: NamespaceNode, comment: String) extends Command
+case class CommentOnNamespace(child: NamespaceNode, comment: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
  * The logical plan that defines or changes the comment of an TABLE for v2 catalogs.
@@ -477,4 +479,6 @@ case class CommentOnNamespace(namespace: NamespaceNode, comment: String) extends
  * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
  *
  */
-case class CommentOnTable(table: TableNode, comment: String) extends Command
+case class CommentOnTable(child: TableNode, comment: String) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}

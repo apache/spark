@@ -20,13 +20,12 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedV2Table, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedV2Table}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1947,18 +1946,18 @@ class DDLParserSuite extends AnalysisTest {
   test("comment on") {
     comparePlans(
       parsePlan("COMMENT ON DATABASE a.b.c IS NULL"),
-      CommentOnNamespace(UnresolvedV2Table(Seq("a", "b", "c")), ""))
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
 
     comparePlans(
       parsePlan("COMMENT ON DATABASE a.b.c IS 'NULL'"),
-      CommentOnNamespace(UnresolvedV2Table(Seq("a", "b", "c")), "NULL"))
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), "NULL"))
 
     comparePlans(
       parsePlan("COMMENT ON NAMESPACE a.b.c IS ''"),
-      CommentOnNamespace(UnresolvedV2Table(Seq("a", "b", "c")), ""))
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
 
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
-      CommentOnTable(Seq("a", "b", "c"), "xYz"))
+      CommentOnTable(UnresolvedV2Table(Seq("a", "b", "c")), "xYz"))
   }
 }

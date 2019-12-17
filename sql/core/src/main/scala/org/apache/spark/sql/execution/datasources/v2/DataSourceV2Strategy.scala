@@ -22,8 +22,8 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetProperties, AlterTable, AppendData, CommentOnNamespace, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, RenameTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
-import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, SupportsNamespaces, TableCapability}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetProperties, AlterTable, AppendData, CommentOnNamespace, CommentOnTable, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, RenameTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
+import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -215,6 +215,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         namespace.catalog,
         namespace.namespace,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
+
+    case CommentOnTable(table, comment) =>
+      val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
+      AlterTableExec(table.catalog, table.tableIdentifier, Seq(changes)) :: Nil
 
     case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
       CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil
