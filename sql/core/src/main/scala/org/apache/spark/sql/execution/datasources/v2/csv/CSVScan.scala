@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -37,7 +38,8 @@ case class CSVScan(
     dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,
-    options: CaseInsensitiveStringMap)
+    options: CaseInsensitiveStringMap,
+    filters: Seq[Filter])
   extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options) {
 
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
@@ -85,6 +87,6 @@ case class CSVScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     CSVPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions)
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, filters)
   }
 }
