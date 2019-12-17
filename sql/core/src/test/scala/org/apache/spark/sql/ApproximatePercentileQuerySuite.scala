@@ -182,7 +182,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
         spark.sql(
           s"""SELECT
              |  key,
-             |  percentile_approx(cast(null as int), 0.5)
+             |  percentile_approx(null, 0.5)
              |FROM $table
              |GROUP BY key
            """.stripMargin),
@@ -200,9 +200,9 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
       checkAnswer(
         spark.sql(
           s"""SELECT
-              |  percentile_approx(cast(null as int), 0.5),
+              |  percentile_approx(null, 0.5),
               |  sum(null),
-              |  percentile_approx(cast(null as int), 0.5)
+              |  percentile_approx(null, 0.5)
               |FROM $table
            """.stripMargin),
          Row(null, null, null)

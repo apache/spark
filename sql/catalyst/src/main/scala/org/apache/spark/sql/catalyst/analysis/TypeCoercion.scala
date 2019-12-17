@@ -656,21 +656,23 @@ object TypeCoercion {
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
 
-      case a @ ApproximatePercentile(_, pe @ NumericType(), ae @ IntegralType(), _, _) =>
-        val newPe = if (pe.dataType.sameType(DoubleType)) pe else Cast(pe, DoubleType)
-        val newAe = if (ae.dataType.sameType(LongType)) ae else Cast(ae, LongType)
-        a.copy(percentageExpression = newPe, accuracyExpression = newAe)
-      case a @ ApproximatePercentile(_, pe, ae @ IntegralType(), _, _)
+      case a @ ApproximatePercentile(child, pe @ NumericType(), ae @ IntegralType(), _, _) =>
+        val newChild = if (child.dataType == NullType) Cast(child, DoubleType) else child
+        val newPe = if (pe.dataType == DoubleType) pe else Cast(pe, DoubleType)
+        val newAe = if (ae.dataType == LongType) ae else Cast(ae, LongType)
+        a.copy(child = newChild, percentageExpression = newPe, accuracyExpression = newAe)
+      case a @ ApproximatePercentile(child, pe, ae @ IntegralType(), _, _)
           if ArrayType.acceptsType(pe.dataType) &&
             pe.dataType.asInstanceOf[ArrayType].elementType.isInstanceOf[NumericType] =>
-        val containsNull = pe.dataType.asInstanceOf[ArrayType].containsNull
-        val newPe = if (pe.dataType.sameType(ArrayType(DoubleType))) {
+        val newChild = if (child.dataType == NullType) Cast(child, DoubleType) else child
+        val ArrayType(elementType, containsNull) = pe.dataType
+        val newPe = if (elementType == DoubleType) {
           pe
         } else {
           Cast(pe, ArrayType(DoubleType, containsNull))
         }
-        val newAe = if (ae.dataType.sameType(LongType)) ae else Cast(ae, LongType)
-        a.copy(percentageExpression = newPe, accuracyExpression = newAe)
+        val newAe = if (ae.dataType == LongType) ae else Cast(ae, LongType)
+        a.copy(child = newChild, percentageExpression = newPe, accuracyExpression = newAe)
     }
   }
 

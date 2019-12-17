@@ -237,8 +237,8 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       accuracyExpression = Literal(-1L))
     assertEqual(
       wrongAccuracy.checkInputDataTypes(),
-      TypeCheckFailure(
-        s"The accuracy provided must be between (0, ${Int.MaxValue}] literal (current value = -1)"))
+      TypeCheckFailure(s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
+        s" (current value = -1)"))
 
     val correctPercentageExpressions = Seq(
       Literal(0.1f, FloatType),

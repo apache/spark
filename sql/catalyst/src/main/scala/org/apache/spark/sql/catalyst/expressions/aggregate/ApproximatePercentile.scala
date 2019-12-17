@@ -85,7 +85,7 @@ case class ApproximatePercentile(
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
   private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Long]
 
-  @transient private val inputTypes: Seq[AbstractDataType] = {
+  def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType and TimestampType since their internal types are all numeric,
     // and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType),
@@ -107,7 +107,7 @@ case class ApproximatePercentile(
     } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
       TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
-      TypeCheckFailure(s"The accuracy provided must be between (0, ${Int.MaxValue}] literal" +
+      TypeCheckFailure(s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
         s" (current value = $accuracy)")
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       TypeCheckFailure(
