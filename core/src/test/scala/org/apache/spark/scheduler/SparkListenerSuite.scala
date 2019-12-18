@@ -677,7 +677,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
    */
   private class DelayInterruptingJobCounter(
     val throwInterruptedException: Boolean,
-    interruptOnJobId: Int) extends SparkListener {
+    val interruptOnJobId: Int) extends SparkListener {
     @volatile var sleep = true
     var count = 0
 
