@@ -149,4 +149,39 @@ class ImmutableResourceProfileSuite extends SparkFunSuite {
     assert(immrprof.getNumSlotsPerAddress("gpu", sparkConf) == 1)
     assert(immrprof.getNumSlotsPerAddress("fpga", sparkConf) == 1)
   }
+
+  test("maxTasksPerExecutor/limiting no executor cores") {
+    val sparkConf = new SparkConf().setMaster("spark://testing")
+    val rprof = new ResourceProfile()
+    val taskReq = new TaskResourceRequests().resource("gpu", 1)
+    val execReq =
+      new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
+    rprof.require(taskReq).require(execReq)
+    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    assert(immrprof.limitingResource(sparkConf) == "gpu")
+    assert(immrprof.maxTasksPerExecutor(sparkConf) == 2)
+    assert(immrprof.isCoresLimitKnown == false)
+  }
+
+  test("maxTasksPerExecutor/limiting no other resource no executor cores") {
+    val sparkConf = new SparkConf().setMaster("spark://testing")
+    val immrprof = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assert(immrprof.limitingResource(sparkConf) == "")
+    assert(immrprof.maxTasksPerExecutor(sparkConf) == 1)
+    assert(immrprof.isCoresLimitKnown == false)
+  }
+
+  test("maxTasksPerExecutor/limiting executor cores") {
+    val sparkConf = new SparkConf().setMaster("spark://testing").set(EXECUTOR_CORES, 2)
+    val rprof = new ResourceProfile()
+    val taskReq = new TaskResourceRequests().resource("gpu", 1)
+    val execReq =
+      new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
+    rprof.require(taskReq).require(execReq)
+    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    assert(immrprof.limitingResource(sparkConf) == ResourceProfile.CPUS)
+    assert(immrprof.maxTasksPerExecutor(sparkConf) == 2)
+    assert(immrprof.isCoresLimitKnown == true)
+  }
+
 }

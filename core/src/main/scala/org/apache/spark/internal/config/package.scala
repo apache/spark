@@ -1490,4 +1490,7 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
+  private[spark] val RESOURCES_WARNING_TESTING =
+    ConfigBuilder("spark.resources.warnings.testing").booleanConf.createWithDefault(false)
+
 }

@@ -730,28 +730,14 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192)") {
-    val FAIL_REASON = s"has to be >= the task config: ${CPUS_PER_TASK.key}"
+    val FAIL_REASON = " has to be >= the number of cpus per task"
     Seq(
       ("local", 2, None),
       ("local[2]", 3, None),
       ("local[2, 1]", 3, None),
       ("spark://test-spark-cluster", 2, Option(1)),
-      ("local-cluster[1, 1, 1000]", 2, Option(1))
-    ).foreach { case (master, cpusPerTask, executorCores) =>
-      val conf = new SparkConf()
-      conf.set(CPUS_PER_TASK, cpusPerTask)
-      executorCores.map(executorCores => conf.set(EXECUTOR_CORES, executorCores))
-      val ex = intercept[SparkException] {
-        sc = new SparkContext(master, "test", conf)
-      }
-      assert(ex.getMessage.contains(FAIL_REASON))
-      resetSparkContext()
-    }
-  }
-
-  test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192) on yarn") {
-    val FAIL_REASON = s"has to be >= the task resource request of 2"
-    Seq(("yarn", 2, Option(1))
+      ("local-cluster[1, 1, 1000]", 2, Option(1)),
+      ("yarn", 2, Option(1))
     ).foreach { case (master, cpusPerTask, executorCores) =>
       val conf = new SparkConf()
       conf.set(CPUS_PER_TASK, cpusPerTask)
@@ -847,6 +833,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val conf = new SparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
+    conf.set(RESOURCES_WARNING_TESTING, true)
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
 
@@ -855,9 +842,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }.getMessage()
 
     assert(error.contains(
-      "The configuration of resource: gpu (exec = 4, task = 2, runnable tasks = 2) will result " +
-      "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
-      "executor to: 1. Please adjust your configuration."))
+      "The configuration of resource: gpu (exec = 4, task = 2.0/1, runnable tasks = 2) will " +
+        "result in wasted resources due to resource cpus limiting the number of runnable " +
+        "tasks per executor to: 1. Please adjust your configuration."))
   }
 
   test("test resource scheduling under local-cluster mode") {
@@ -869,7 +856,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         """{"name": "gpu","addresses":["0", "1", "2", "3", "4", "5", "6", "7", "8"]}""")
 
       val conf = new SparkConf()
-        .setMaster("local-cluster[3, 3, 1024]")
+        .setMaster("local-cluster[3, 1, 1024]")
         .setAppName("test-cluster")
         .set(WORKER_GPU_ID.amountConf, "3")
         .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)

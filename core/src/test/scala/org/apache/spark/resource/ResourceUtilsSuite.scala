@@ -107,7 +107,8 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
       val gpuDiscovery = createTempScriptWithExpectedOutput(
-        dir, "gpuDiscoveryScript", """{"name": "gpu", "addresses": ["0", "1"]}""")
+        dir, "gpuDiscoveryScript",
+        """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(EXECUTOR_GPU_ID.amountConf, "2")
       conf.set(EXECUTOR_GPU_ID.discoveryScriptConf, gpuDiscovery)
       val resourcesFromBoth = getOrDiscoverAllResources(
@@ -137,7 +138,8 @@ class ResourceUtilsSuite extends SparkFunSuite
       val gpuInternalConf =
         ImmutableResourceProfile.ResourceProfileInternalConf(1, GPU)
       val gpuDiscovery = createTempScriptWithExpectedOutput(
-        dir, "gpuDiscoveryScript", """{"name": "gpu", "addresses": ["0", "1"]}""")
+        dir, "gpuDiscoveryScript",
+        """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(gpuInternalConf.amountConf, "2")
       conf.set(gpuInternalConf.discoveryScriptConf, gpuDiscovery)
       val resourcesFromBoth = getOrDiscoverAllResourcesForResourceProfile(1,
@@ -157,7 +159,7 @@ class ResourceUtilsSuite extends SparkFunSuite
 
     conf.set(DRIVER_FPGA_ID.amountConf, "2")
     val resourcesMap = listResourceIds(conf, SPARK_DRIVER_PREFIX)
-      .map{ rId => (rId.resourceName, 1)}.toMap
+      .map { rId => (rId.resourceName, 1) }.toMap
     assert(resourcesMap.size === 2, "should only have GPU for resource")
     assert(resourcesMap.get(GPU).nonEmpty, "should have GPU")
     assert(resourcesMap.get(FPGA).nonEmpty, "should have FPGA")
@@ -285,5 +287,126 @@ class ResourceUtilsSuite extends SparkFunSuite
 
     assert(error.contains("User is expecting to use resource: gpu, but " +
       "didn't specify a discovery script!"))
+  }
+
+  private def testWarningsClusterManagerWithCores(conf: SparkConf) = {
+    // this should pass as default case with just 1 core
+    var rpmanager = new ResourceProfileManager(conf)
+
+    ImmutableResourceProfile.clearDefaultProfile
+    conf.set(EXECUTOR_CORES, 4)
+    conf.set("spark.executor.resource.gpu.amount", "1")
+    conf.set("spark.task.resource.gpu.amount", "1")
+    var error = intercept[SparkException] {
+      rpmanager = new ResourceProfileManager(conf)
+    }.getMessage()
+
+    assert(error.contains(
+      "The configuration of cores (exec = 4 task = 1, runnable tasks = 4) will result in " +
+        "wasted resources due to resource gpu limiting the number of runnable tasks per " +
+        "executor to: 1. Please adjust your configuration."))
+
+    ImmutableResourceProfile.clearDefaultProfile
+    conf.set(EXECUTOR_CORES, 1)
+    conf.set("spark.executor.resource.gpu.amount", "4")
+    conf.set("spark.task.resource.gpu.amount", "1")
+    error = intercept[SparkException] {
+      rpmanager = new ResourceProfileManager(conf)
+    }.getMessage()
+
+    assert(error.contains(
+      "The configuration of resource: gpu (exec = 4, task = 1.0/1, runnable tasks = 4) will " +
+        "result in wasted resources due to resource cpus limiting the number of runnable " +
+        "tasks per executor to: 1. Please adjust your configuration."))
+
+    ImmutableResourceProfile.clearDefaultProfile
+    // multiple resources
+    conf.set("spark.executor.resource.fpga.amount", "6")
+    conf.set("spark.task.resource.fpga.amount", "1")
+    error = intercept[SparkException] {
+      rpmanager = new ResourceProfileManager(conf)
+    }.getMessage()
+
+    assert(error.contains(
+      "The configuration of resource: fpga (exec = 6, task = 1.0/1, runnable tasks = 6) will " +
+        "result in wasted resources due to resource cpus limiting the number of runnable " +
+        "tasks per executor to: 1. Please adjust your configuration."))
+  }
+
+  test("default profile warn on wasted resources yarn") {
+    val conf = new SparkConf().setMaster("yarn")
+    conf.set(RESOURCES_WARNING_TESTING, true)
+    testWarningsClusterManagerWithCores(conf)
+  }
+
+  test("default profile warn on wasted resources k8s") {
+    val conf = new SparkConf().setMaster("k8s://foo")
+    conf.set(RESOURCES_WARNING_TESTING, true)
+    testWarningsClusterManagerWithCores(conf)
+  }
+
+  test("default profile warn on wasted resources standalone") {
+    val conf = new SparkConf().setMaster("spark://testing")
+    conf.set(RESOURCES_WARNING_TESTING, true)
+    // this should pass as default case with just 1 core
+    var rpmanager = new ResourceProfileManager(conf)
+    // cores only resource
+    warnOnWastedResources(rpmanager.defaultResourceProfile, conf, Some(4))
+
+    ImmutableResourceProfile.clearDefaultProfile
+    conf.set("spark.executor.resource.gpu.amount", "4")
+    conf.set("spark.task.resource.gpu.amount", "1")
+    // doesn't error because cores unknown
+    rpmanager = new ResourceProfileManager(conf)
+
+    ImmutableResourceProfile.clearDefaultProfile
+    conf.set("spark.executor.resource.gpu.amount", "1")
+    conf.set("spark.task.resource.gpu.amount", "1")
+    rpmanager = new ResourceProfileManager(conf)
+
+    var error = intercept[SparkException] {
+      warnOnWastedResources(rpmanager.defaultResourceProfile, conf, Some(4))
+    }.getMessage()
+
+    assert(error.contains(
+      "The configuration of cores (exec = 4 task = 1, runnable tasks = 4) will result " +
+        "in wasted resources due to resource gpu limiting the number of runnable tasks per " +
+        "executor to: 1. Please adjust your configuration."))
+
+    ImmutableResourceProfile.clearDefaultProfile
+    conf.set("spark.executor.resource.gpu.amount", "4")
+    conf.set("spark.task.resource.gpu.amount", "1")
+    rpmanager = new ResourceProfileManager(conf)
+
+    error = intercept[SparkException] {
+      warnOnWastedResources(rpmanager.defaultResourceProfile, conf, Some(1))
+    }.getMessage()
+
+    assert(error.contains(
+      "The configuration of resource: gpu (exec = 4, task = 1.0/1, runnable tasks = 4) will " +
+        "result in wasted resources due to resource cpus limiting the number of runnable " +
+        "tasks per executor to: 1. Please adjust your configuration."))
+
+    ImmutableResourceProfile.clearDefaultProfile
+    conf.set("spark.executor.resource.gpu.amount", "4")
+    conf.set("spark.task.resource.gpu.amount", "1")
+    // specify cores should work
+    conf.set(EXECUTOR_CORES, 4)
+    rpmanager = new ResourceProfileManager(conf)
+
+    ImmutableResourceProfile.clearDefaultProfile
+    conf.set("spark.executor.resource.gpu.amount", "2")
+    conf.set("spark.task.resource.gpu.amount", "1")
+    // specify cores that has extra
+    conf.set(EXECUTOR_CORES, 4)
+
+    error = intercept[SparkException] {
+      rpmanager = new ResourceProfileManager(conf)
+    }.getMessage()
+
+    assert(error.contains(
+      "The configuration of cores (exec = 4 task = 1, runnable tasks = 4) will result in wasted " +
+        "resources due to resource gpu limiting the number of runnable tasks per " +
+        "executor to: 2. Please adjust your configuration"))
   }
 }

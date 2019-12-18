@@ -27,7 +27,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, SPARK_EXECUTOR_PREFIX, SPARK_TASK_PREFIX}
+import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, RESOURCES_WARNING_TESTING, SPARK_TASK_PREFIX}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.executeAndGetOutput
 
@@ -309,7 +309,7 @@ private[spark] object ResourceUtils extends Logging {
     // Number of cores per executor must meet at least one task requirement.
     if (execCores < taskCpus) {
       throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
-        s"the task config: ${CPUS_PER_TASK.key} = $taskCpus.")
+        s"the number of cpus per task = $taskCpus.")
     }
     true
   }
@@ -346,16 +346,17 @@ private[spark] object ResourceUtils extends Logging {
     }
     val taskReq = ImmutableResourceProfile.getCustomTaskResources(rp)
     val execReq = ImmutableResourceProfile.getCustomExecutorResources(rp)
+    logInfo(s"cores is $cores limiting $limitingResource max $maxTaskPerExec")
 
     if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
       if ((taskCpus * maxTaskPerExec) < cores) {
         val resourceNumSlots = Math.floor(cores/taskCpus).toInt
-        val message = s"The configuration of cores (exec = ${execCores} " +
+        val message = s"The configuration of cores (exec = ${cores} " +
           s"task = ${taskCpus}, runnable tasks = ${resourceNumSlots}) will " +
           s"result in wasted resources due to resource ${limitingResource} limiting the " +
           s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
           s"your configuration."
-        if (Utils.isTesting) {
+        if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
           throw new SparkException(message)
         } else {
           logWarning(message)
@@ -377,7 +378,7 @@ private[spark] object ResourceUtils extends Logging {
           s"result in wasted resources due to resource ${limitingResource} limiting the " +
           s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
           s"your configuration."
-        if (Utils.isTesting) {
+        if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
           throw new SparkException(message)
         } else {
           logWarning(message)
