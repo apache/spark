@@ -83,13 +83,13 @@ case class ApproximatePercentile(
   }
 
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
-  private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Long]
+  private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue
 
   def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType and TimestampType since their internal types are all numeric,
     // and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType),
-      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), LongType)
+      TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.

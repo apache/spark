@@ -305,7 +305,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         percentageExpression = Literal(0.5),
         accuracyExpression = Literal(acc))
       assert(wrongPercentage.checkInputDataTypes() match {
-        case TypeCheckFailure(msg) if msg.contains("argument 3 requires bigint type") => true
+        case TypeCheckFailure(msg) if msg.contains("argument 3 requires integral type") => true
         case _ => false
       })
     }
