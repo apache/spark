@@ -160,10 +160,14 @@ class RobustScaler (override val uid: String)
     val localLower = $(lower)
 
     val (ranges, medians) = vectors.mapPartitions { iter =>
-      iter.flatMap { vec => Iterator.range(0, numFeatures).map(i => (i, vec(i))) } ++
-        Iterator.range(0, numFeatures).map((_, Double.NaN))
+      if (iter.hasNext) {
+        iter.flatMap { vec => Iterator.range(0, numFeatures).map(i => (i, vec(i))) } ++
+          // add NaN for each feature as the indication of the end of partition
+          Iterator.range(0, numFeatures).map((_, Double.NaN))
+      } else Iterator.empty
     }.aggregateByKey(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))(
+      // compress the QuantileSummaries at the end of partition
       seqOp = (s, v) => if (v.isNaN) s.compress else s.insert(v),
       combOp = (s1, s2) => s1.merge(s2)
     ).mapValues { s =>
