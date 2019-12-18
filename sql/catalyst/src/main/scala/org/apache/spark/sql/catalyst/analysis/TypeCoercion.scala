@@ -429,7 +429,7 @@ object TypeCoercion {
 
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
-      case Average(funcName, e @ StringType()) => Average(funcName, Cast(e, DoubleType))
+      case Average(e @ StringType()) => Average(Cast(e, DoubleType))
       case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
       case StddevSamp( e @ StringType()) => StddevSamp(Cast(e, DoubleType))
       case UnaryMinus(e @ StringType()) => UnaryMinus(Cast(e, DoubleType))
@@ -613,15 +613,15 @@ object TypeCoercion {
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
       case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
 
-      case s @ Average(_, DecimalType()) => s // Decimal is already the biggest.
-      case Average(funcName, e @ IntegralType()) if e.dataType != LongType =>
-        Average(funcName, Cast(e, LongType))
-      case Average(funcName, e @ FractionalType()) if e.dataType != DoubleType =>
-        Average(funcName, Cast(e, DoubleType))
+      case s @ Average(DecimalType()) => s // Decimal is already the biggest.
+      case Average(e @ IntegralType()) if e.dataType != LongType =>
+        Average(Cast(e, LongType))
+      case Average(e @ FractionalType()) if e.dataType != DoubleType =>
+        Average(Cast(e, DoubleType))
 
       // Hive lets you do aggregation of timestamps... for some reason
       case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
-      case Average(funcName, e @ TimestampType()) => Average(funcName, Cast(e, DoubleType))
+      case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
 
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and

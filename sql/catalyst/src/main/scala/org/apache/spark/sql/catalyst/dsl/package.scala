@@ -173,8 +173,8 @@ package object dsl {
     def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
       HyperLogLogPlusPlus(e, rsd).toAggregateExpression()
     def avg(e: Expression): Expression = Average(e).toAggregateExpression()
-    def first(e: Expression): Expression = First(e).toAggregateExpression()
-    def last(e: Expression): Expression = Last(e).toAggregateExpression()
+    def first(e: Expression): Expression = new First(e).toAggregateExpression()
+    def last(e: Expression): Expression = new Last(e).toAggregateExpression()
     def min(e: Expression): Expression = Min(e).toAggregateExpression()
     def minDistinct(e: Expression): Expression = Min(e).toAggregateExpression(isDistinct = true)
     def max(e: Expression): Expression = Max(e).toAggregateExpression()

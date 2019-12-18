@@ -203,7 +203,7 @@ class ReplaceOperatorSuite extends PlanTest {
         Seq(attrA),
         Seq(
           attrA,
-          Alias(First(attrB).toAggregateExpression(), attrB.name)(attrB.exprId)
+          Alias(new First(attrB).toAggregateExpression(), attrB.name)(attrB.exprId)
         ),
         input)
 

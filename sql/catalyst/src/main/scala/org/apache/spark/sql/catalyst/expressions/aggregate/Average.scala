@@ -35,11 +35,10 @@ import org.apache.spark.sql.types._
        -3 days -11 hours -59 minutes -59 seconds
   """,
   since = "1.0.0")
-case class Average(
-    funcName: String, child: Expression)
+case class Average(child: Expression)
   extends DeclarativeAggregate with ImplicitCastInputTypes {
 
-  override def nodeName: String = funcName
+  override def nodeName: String = getTagValue(FUNC_ALIAS).getOrElse("avg")
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -95,10 +94,4 @@ case class Average(
       coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
     /* count = */ If(child.isNull, count, count + 1L)
   )
-
-  override def flatArguments: Iterator[Any] = Iterator(child)
-}
-
-object Average{
-  def apply(child: Expression): Average = Average("avg", child)
 }
