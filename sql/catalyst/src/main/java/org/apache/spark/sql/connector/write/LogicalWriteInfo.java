@@ -28,6 +28,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 @Evolving
 public interface LogicalWriteInfo {
   /**
+   * the options that the user specified when writing the dataset
+   */
+  CaseInsensitiveStringMap options();
+
+  /**
    * `queryId` is a unique string of the query. It's possible that there are many queries
    * running at the same time, or a query is restarted and resumed. {@link BatchWrite} can use
    * this id to identify the query.
@@ -38,9 +43,4 @@ public interface LogicalWriteInfo {
    * the schema of the input data from Spark to data source.
    */
   StructType schema();
-
-  /**
-   * the options that the user specified when writing the dataset
-   */
-  CaseInsensitiveStringMap options();
 }

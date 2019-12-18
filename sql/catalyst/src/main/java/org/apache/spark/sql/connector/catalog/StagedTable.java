@@ -33,9 +33,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * {@link StagingTableCatalog#stageCreate(Identifier, StructType, Transform[], Map)} or
  * {@link StagingTableCatalog#stageReplace(Identifier, StructType, Transform[], Map)} to prepare the
  * table for being written to. This table should usually implement {@link SupportsWrite}. A new
- * writer will be constructed via
- * {@link SupportsWrite#newWriteBuilder(CaseInsensitiveStringMap, LogicalWriteInfo)}, and the write
- * will be committed. The job concludes with a call to {@link #commitStagedChanges()}, at which
+ * writer will be constructed via {@link SupportsWrite#newWriteBuilder(LogicalWriteInfo)}, and the
+ * write will be committed. The job concludes with a call to {@link #commitStagedChanges()}, at which
  * point implementations are expected to commit the table's metadata into the metastore along with
  * the data that was written by the writes from the write builder this table created.
  */

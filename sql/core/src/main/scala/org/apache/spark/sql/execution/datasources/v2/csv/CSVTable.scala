@@ -49,8 +49,7 @@ case class CSVTable(
     CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
 
-  override def newWriteBuilder(
-      info: LogicalWriteInfo): WriteBuilder =
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
     new CSVWriteBuilder(paths, formatName, supportsDataType, info)
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
