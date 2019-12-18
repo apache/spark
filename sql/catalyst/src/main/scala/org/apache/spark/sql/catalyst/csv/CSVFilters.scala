@@ -40,6 +40,18 @@ class CSVFilters(
     StructType(readFields)
   }
 
+  /**
+   * Converted filters to predicates and grouped by maximum field index
+   * in the read schema. For example, if an filter refers to 2 attributes
+   * attrA with field index 5 and attrB with field index 10 in the read schema:
+   *   0 === $"attrA" or $"attrB" < 100
+   * the filter is compiled to a predicate, and placed to the `predicates`
+   * array at the position 10. In this way, if there is a row with initialized
+   * fields from the 0 to 10 index, the predicate can be applied to the row
+   * to check that the row should be skipped or not.
+   * Multiple predicates with the same maximum reference index are combined
+   * by the `And` expression.
+   */
   private val predicates: Array[BasePredicate] = {
     val len = readSchema.fields.length
     val groupedPredicates = Array.fill[BasePredicate](len)(null)
@@ -60,7 +72,7 @@ class CSVFilters(
   }
 
   /**
-   * Apply all filters that refer to row fields at the positions from 0 to index.
+   * Applies all filters that refer to row fields at the positions from 0 to index.
    * @param row The internal row to check.
    * @param index Maximum field index. The function assumes that all fields
    *              from 0 to index position are set.
