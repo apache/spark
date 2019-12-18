@@ -228,7 +228,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         .filter(e => !e.isDistinct && e.children.exists(!_.foldable))
       val regularAggFunChildren = regularAggExprs
         .flatMap(_.aggregateFunction.children.filter(!_.foldable))
-      val regularAggFilterChildren = regularAggExprs.flatMap(_.filterAttributes).flatten
+      val regularAggFilterChildren = regularAggExprs.flatMap(_.filterAttributes)
       val regularAggChildren = (regularAggFunChildren ++ regularAggFilterChildren).distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
 
