@@ -282,42 +282,42 @@ object FunctionRegistry {
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
-    expressionWithTNT[Average]("avg"),
-    expressionWithTNT[Average]("mean"),
+    expressionWithAlias[Average]("avg"),
+    expressionWithAlias[Average]("mean"),
     expression[Corr]("corr"),
     expression[Count]("count"),
     expression[CountIf]("count_if"),
     expression[CovPopulation]("covar_pop"),
     expression[CovSample]("covar_samp"),
-    expressionWithTNT[First]("first"),
-    expressionWithTNT[First]("first_value"),
+    expressionWithAlias[First]("first"),
+    expressionWithAlias[First]("first_value"),
     expression[Kurtosis]("kurtosis"),
-    expressionWithTNT[Last]("last"),
-    expressionWithTNT[Last]("last_value"),
+    expressionWithAlias[Last]("last"),
+    expressionWithAlias[Last]("last_value"),
     expression[Max]("max"),
     expression[MaxBy]("max_by"),
     expression[Min]("min"),
     expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
-    expressionWithTNT[ApproximatePercentile]("percentile_approx"),
-    expressionWithTNT[ApproximatePercentile]("approx_percentile"),
-    expressionWithTNT[StddevSamp]("std"),
-    expressionWithTNT[StddevSamp]("stddev"),
-    expressionWithTNT[StddevSamp]("stddev_samp"),
+    expressionWithAlias[ApproximatePercentile]("percentile_approx"),
+    expressionWithAlias[ApproximatePercentile]("approx_percentile"),
+    expressionWithAlias[StddevSamp]("std"),
+    expressionWithAlias[StddevSamp]("stddev"),
+    expressionWithAlias[StddevSamp]("stddev_samp"),
     expression[StddevPop]("stddev_pop"),
     expression[Sum]("sum"),
-    expressionWithTNT[VarianceSamp]("variance"),
-    expressionWithTNT[VarianceSamp]("var_samp"),
+    expressionWithAlias[VarianceSamp]("variance"),
+    expressionWithAlias[VarianceSamp]("var_samp"),
     expression[VariancePop]("var_pop"),
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expressionWithTNT[BoolAnd]("every"),
-    expressionWithTNT[BoolAnd]("bool_and"),
-    expressionWithTNT[BoolOr]("any"),
-    expressionWithTNT[BoolOr]("some"),
-    expressionWithTNT[BoolOr]("bool_or"),
+    expressionWithAlias[BoolAnd]("every"),
+    expressionWithAlias[BoolAnd]("bool_and"),
+    expressionWithAlias[BoolOr]("any"),
+    expressionWithAlias[BoolOr]("some"),
+    expressionWithAlias[BoolOr]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -632,44 +632,6 @@ object FunctionRegistry {
   }
 
   private def expressionWithAlias[T <: Expression](name: String)
-      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
-    val constructors = tag.runtimeClass.getConstructors
-      .filter(_.getParameterTypes.head == classOf[String])
-    assert(constructors.length >= 1,
-      s"there is no constructor for ${tag.runtimeClass} " +
-        "which takes String as first argument")
-    val builder = (expressions: Seq[Expression]) => {
-      val params = classOf[String] +: Seq.fill(expressions.size)(classOf[Expression])
-      val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-        val validParametersCount = constructors
-          .filter(_.getParameterTypes.tail.forall(_ == classOf[Expression]))
-          .map(_.getParameterCount - 1).distinct.sorted
-        val invalidArgumentsMsg = if (validParametersCount.length == 0) {
-          s"Invalid arguments for function $name"
-        } else {
-          val expectedNumberOfParameters = if (validParametersCount.length == 1) {
-            validParametersCount.head.toString
-          } else {
-            validParametersCount.init.mkString("one of ", ", ", " and ") +
-              validParametersCount.last
-          }
-          s"Invalid number of arguments for function $name. " +
-            s"Expected: $expectedNumberOfParameters; Found: ${expressions.size}"
-        }
-        throw new AnalysisException(invalidArgumentsMsg)
-      }
-      try {
-        f.newInstance(name.toString +: expressions: _*).asInstanceOf[Expression]
-      } catch {
-        // the exception is an invocation exception. To get a meaningful message, we need the
-        // cause.
-        case e: Exception => throw new AnalysisException(e.getCause.getMessage)
-      }
-    }
-    (name, (expressionInfo[T](name), builder))
-  }
-
-  private def expressionWithTNT[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
