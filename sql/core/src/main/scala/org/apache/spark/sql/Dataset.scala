@@ -2522,7 +2522,7 @@ class Dataset[T] private[sql](
    *   <li>stddev</li>
    *   <li>min</li>
    *   <li>max</li>
-   *   <li>arbitrary approximate percentiles specified as a percentage (eg, 75%)</li>
+   *   <li>arbitrary approximate percentiles specified as a percentage (e.g. 75%)</li>
    * </ul>
    *
    * If no statistics are given, this function computes count, mean, stddev, min,
