@@ -24,6 +24,7 @@ import org.apache.spark.sql.{Column, Dataset, Row}
 import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -324,8 +325,18 @@ object CSVBenchmark extends SqlBasedBenchmark {
         toNoop(readback)
       }
 
+      def withFilter(configEnabled: Boolean): Unit = {
+        withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
+          toNoop(readback.filter($"key" === 0))
+        }
+      }
+
+      benchmark.addCase(s"pushdown disabled", numIters) { _ =>
+        withFilter(configEnabled = false)
+      }
+
       benchmark.addCase(s"w/ filters", numIters) { _ =>
-        toNoop(readback.filter($"key" === 0))
+        withFilter(configEnabled = true)
       }
 
       benchmark.run()
