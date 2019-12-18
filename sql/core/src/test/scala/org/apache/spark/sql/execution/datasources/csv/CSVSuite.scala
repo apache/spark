@@ -2221,6 +2221,9 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
           .schema("c1 integer, c2 timestamp")
           .csv(path.getAbsolutePath)
           .where($"c1" === 2)
+        // count() pushes empty schema. This checks handling of a filter
+        // which refers to not existed field.
+        assert(readback.count() === 1)
         checkAnswer(readback, Row(2, Timestamp.valueOf(t)))
       }
     }

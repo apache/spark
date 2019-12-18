@@ -25,16 +25,29 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
-class CSVFilters(filters: Seq[sources.Filter], schema: StructType) {
+class CSVFilters(
+    filters: Seq[sources.Filter],
+    dataSchema: StructType,
+    requiredSchema: StructType) {
+  require(checkFilters(), "All filters must be applicable to dataSchema")
+
+  /** The schema to read from the underlying CSV parser */
+  val readSchema: StructType = {
+    val refs = filters.flatMap(_.references).toSet
+    val readFields = dataSchema.filter { field =>
+      requiredSchema.contains(field) || refs.contains(field.name)
+    }
+    StructType(readFields)
+  }
 
   private val predicates: Array[BasePredicate] = {
-    val len = schema.fields.length
+    val len = readSchema.fields.length
     val groupedPredicates = Array.fill[BasePredicate](len)(null)
-    if (SQLConf.get.getConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED)) {
+    if (SQLConf.get.csvFilterPushDown) {
       val groupedExprs = Array.fill(len)(Seq.empty[Expression])
       for (filter <- filters) {
-        val index = filter.references.map(schema.fieldIndex).max
-        groupedExprs(index) ++= filterToExpression(filter)
+        val index = filter.references.map(readSchema.fieldIndex).max
+        groupedExprs(index) ++= CSVFilters.filterToExpression(filter, toRef)
       }
       for (i <- 0 until len) {
         if (!groupedExprs(i).isEmpty) {
@@ -60,15 +73,42 @@ class CSVFilters(filters: Seq[sources.Filter], schema: StructType) {
     predicate != null && !predicate.eval(row)
   }
 
-  private def filterToExpression(filter: sources.Filter): Option[Expression] = {
-    def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = a.zip(b).headOption
-    def toLiteral(value: Any): Option[Literal] = Try(Literal(value)).toOption
-    def toRef(attr: String): Option[BoundReference] = {
-      schema.getFieldIndex(attr).map { index =>
-        val field = schema(index)
-        BoundReference(schema.fieldIndex(attr), field.dataType, field.nullable)
-      }
+  // Finds a filter attribute in the read schema and converts it to a `BoundReference`
+  private def toRef(attr: String): Option[BoundReference] = {
+    readSchema.getFieldIndex(attr).map { index =>
+      val field = readSchema(index)
+      BoundReference(readSchema.fieldIndex(attr), field.dataType, field.nullable)
     }
+  }
+
+  // Checks that all filters refer to an field in the data schema
+  private def checkFilters(): Boolean = {
+    val refs = filters.flatMap(_.references).toSet
+    val fieldNames = dataSchema.fields.map(_.name).toSet
+    refs.forall(fieldNames.contains(_))
+  }
+}
+
+object CSVFilters {
+
+  def unsupportedFilters(filters: Array[sources.Filter]): Array[sources.Filter] = {
+    filters.filter {
+      case sources.AlwaysFalse | sources.AlwaysTrue => true
+      case _ => !SQLConf.get.csvFilterPushDown
+    }
+  }
+
+  private def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = {
+    a.zip(b).headOption
+  }
+
+  private def toLiteral(value: Any): Option[Literal] = {
+    Try(Literal(value)).toOption
+  }
+
+  def filterToExpression(
+      filter: sources.Filter,
+      toRef: String => Option[BoundReference]): Option[Expression] = {
     def zipAttributeAndValue(name: String, value: Any): Option[(BoundReference, Literal)] = {
       zip(toRef(name), toLiteral(value))
     }

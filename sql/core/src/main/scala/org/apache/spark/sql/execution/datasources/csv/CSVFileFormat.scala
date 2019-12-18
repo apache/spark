@@ -126,8 +126,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
           "df.filter($\"_corrupt_record\".isNotNull).count()."
       )
     }
-    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
-
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
       val actualDataSchema = StructType(
@@ -139,10 +137,9 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         actualRequiredSchema,
         parsedOptions,
         filters)
-      val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(
-        schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
+        parser.readSchema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
       CSVDataSource(parsedOptions).readFile(
         conf,
         file,

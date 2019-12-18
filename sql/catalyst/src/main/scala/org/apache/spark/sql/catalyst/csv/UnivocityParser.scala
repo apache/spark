@@ -58,13 +58,28 @@ class UnivocityParser(
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
+  private val csvFilters = new CSVFilters(filters, dataSchema, requiredSchema)
+
+  val readSchema = csvFilters.readSchema
+
   // This index is used to reorder parsed tokens
   private val tokenIndexArr =
-    requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
+    readSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
+
+  private val readToRequiredIndex: Array[Int] = {
+    val arr = Array.fill(readSchema.length)(-1)
+    for {
+      readIndex <- 0 until readSchema.length
+      reqIndex <- requiredSchema.getFieldIndex(readSchema(readIndex).name)
+    } {
+      arr(readIndex) = reqIndex
+    }
+    arr
+  }
 
   // When column pruning is enabled, the parser only parses the required columns based on
   // their positions in the data schema.
-  private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
+  private val parsedSchema = if (options.columnPruning) readSchema else dataSchema
 
   val tokenizer = {
     val parserSetting = options.asParserSettings
@@ -77,7 +92,8 @@ class UnivocityParser(
     new CsvParser(parserSetting)
   }
 
-  private val singleRow = Seq(new GenericInternalRow(requiredSchema.length))
+  private val readRow = new GenericInternalRow(readSchema.length)
+  private val requiredRow = Seq(new GenericInternalRow(requiredSchema.length))
   private val noRows = Seq.empty[InternalRow]
 
   private val timestampFormatter = TimestampFormatter(
@@ -88,8 +104,6 @@ class UnivocityParser(
     options.dateFormat,
     options.zoneId,
     options.locale)
-
-  private val csvFilters = new CSVFilters(filters, requiredSchema)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -116,7 +130,7 @@ class UnivocityParser(
   //
   //   output row - ["A", 2]
   private val valueConverters: Array[ValueConverter] = {
-    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
+    readSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
   }
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
@@ -199,7 +213,7 @@ class UnivocityParser(
     }
   }
 
-  private val doParse = if (options.columnPruning && requiredSchema.isEmpty) {
+  private val doParse = if (options.columnPruning && readSchema.isEmpty) {
     // If `columnPruning` enabled and partition attributes scanned only,
     // `schema` gets empty.
     (_: String) => Seq(InternalRow.empty)
@@ -252,37 +266,43 @@ class UnivocityParser(
       // When the length of the returned tokens is identical to the length of the parsed schema,
       // we just need to convert the tokens that correspond to the required columns.
       var i = 0
-      val r = singleRow.head
       var skipValueConversion = false
       var badRecordException: Option[Throwable] = None
+      val requiredSingleRow = requiredRow.head
 
       while (i < requiredSchema.length) {
-        if (skipValueConversion) {
-          r.setNullAt(i)
-        } else {
-          try {
-            r(i) = valueConverters(i).apply(getToken(tokens, i))
-            if (csvFilters.skipRow(r, i)) {
-              skipValueConversion = true
+        requiredSingleRow.setNullAt(i)
+        i += 1
+      }
+      i = 0
+      while (!skipValueConversion && i < readSchema.length) {
+        try {
+          val convertedValue = valueConverters(i).apply(getToken(tokens, i))
+          readRow(i) = convertedValue
+          if (csvFilters.skipRow(readRow, i)) {
+            skipValueConversion = true
+          } else {
+            val requiredIndex = readToRequiredIndex(i)
+            if (requiredIndex != -1) {
+              requiredSingleRow(requiredIndex) = convertedValue
             }
-          } catch {
-            case NonFatal(e) =>
-              badRecordException = Some(e)
-              skipValueConversion = true
-              r.setNullAt(i)
           }
+        } catch {
+          case NonFatal(e) =>
+            badRecordException = Some(e)
+            skipValueConversion = true
         }
         i += 1
       }
       if (skipValueConversion) {
         if (badRecordException.isDefined) {
           throw BadRecordException(
-            () => getCurrentInput, () => singleRow.headOption, badRecordException.get)
+            () => getCurrentInput, () => requiredRow.headOption, badRecordException.get)
         } else {
           noRows
         }
       } else {
-        singleRow
+        requiredRow
       }
     }
   }
