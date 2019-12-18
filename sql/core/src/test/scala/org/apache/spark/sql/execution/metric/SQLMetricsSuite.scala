@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -597,5 +598,30 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     testSparkPlanMetrics(spark.range(1).cache().select("id"), 1,
       Map(1L -> (("InMemoryTableScan", Map.empty)))
     )
+  }
+
+  test("SPARK-28332: SQLMetric merge should handle -1 properly") {
+    def checkSparkPlanMetrics(plan: SparkPlan, expected: Map[String, Long]): Unit = {
+      expected.foreach { case (metricName: String, metricValue: Long) =>
+        assert(plan.metrics.contains(metricName), s"The query plan should have metric $metricName")
+        val actualMetric = plan.metrics.get(metricName).get
+        assert(actualMetric.value == metricValue,
+          s"The query plan metric $metricName did not match, " +
+            s"expected:$metricValue, actual:${actualMetric.value}")
+      }
+    }
+
+    val df = testData.join(testData2.filter('b === 0), $"key" === $"a", "left_outer")
+    df.collect()
+    val plan = df.queryExecution.executedPlan
+
+    val exchanges = plan.collect {
+      case s: ShuffleExchangeExec => s
+    }
+
+    assert(exchanges.size == 2, "The query plan should have two shuffle exchanges")
+
+    checkSparkPlanMetrics(exchanges(0), Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
+    checkSparkPlanMetrics(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
   }
 }
