@@ -675,7 +675,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev(e: Column): Column = withAggregateFunction { StddevSamp("stddev", e.expr) }
+  def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -692,7 +692,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev_samp(e: Column): Column = withAggregateFunction { StddevSamp("stddev_samp", e.expr) }
+  def stddev_samp(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
    * Aggregate function: returns the sample standard deviation of
@@ -759,7 +759,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def variance(e: Column): Column = withAggregateFunction { VarianceSamp("variance", e.expr) }
+  def variance(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
 
   /**
    * Aggregate function: alias for `var_samp`.
@@ -775,7 +775,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def var_samp(e: Column): Column = withAggregateFunction { VarianceSamp("var_samp", e.expr) }
+  def var_samp(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
 
   /**
    * Aggregate function: returns the unbiased variance of the values in a group.

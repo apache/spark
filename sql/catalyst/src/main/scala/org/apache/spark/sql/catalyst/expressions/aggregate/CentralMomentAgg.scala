@@ -165,7 +165,7 @@ case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
   """,
   since = "1.6.0")
 // scalastyle:on line.size.limit
-case class StddevSamp(funcName: String, child: Expression) extends CentralMomentAgg(child) {
+case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
 
@@ -174,9 +174,7 @@ case class StddevSamp(funcName: String, child: Expression) extends CentralMoment
       If(n === 1.0, Double.NaN, sqrt(m2 / (n - 1.0))))
   }
 
-  override def nodeName: String = funcName
-
-  override def flatArguments: Iterator[Any] = Iterator(child)
+  override def nodeName: String = getTagValue(FUNC_ALIAS).getOrElse("stddev_samp")
 }
 
 // Compute the population variance of a column
@@ -208,7 +206,7 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
        1.0
   """,
   since = "1.6.0")
-case class VarianceSamp(funcName: String, child: Expression) extends CentralMomentAgg(child) {
+case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
 
@@ -217,9 +215,7 @@ case class VarianceSamp(funcName: String, child: Expression) extends CentralMome
       If(n === 1.0, Double.NaN, m2 / (n - 1.0)))
   }
 
-  override def nodeName: String = funcName
-
-  override def flatArguments: Iterator[Any] = Iterator(child)
+  override def nodeName: String = getTagValue(FUNC_ALIAS).getOrElse("var_samp")
 }
 
 @ExpressionDescription(

@@ -38,8 +38,6 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
       case _ => TypeCheckResult.TypeCheckSuccess
     }
   }
-
-  override def flatArguments: Iterator[Any] = Iterator(arg)
 }
 
 @ExpressionDescription(
@@ -54,8 +52,8 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
        false
   """,
   since = "3.0.0")
-case class BoolAnd(funcName: String, arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = funcName
+case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
+  override def nodeName: String = getTagValue(FUNC_ALIAS).getOrElse("bool_and")
 }
 
 @ExpressionDescription(
@@ -70,6 +68,6 @@ case class BoolAnd(funcName: String, arg: Expression) extends UnevaluableBoolean
        false
   """,
   since = "3.0.0")
-case class BoolOr(funcName: String, arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = funcName
+case class BoolOr(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
+  override def nodeName: String = getTagValue(FUNC_ALIAS).getOrElse("bool_or")
 }
