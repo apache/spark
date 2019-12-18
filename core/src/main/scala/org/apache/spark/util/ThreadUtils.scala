@@ -32,10 +32,12 @@ import org.apache.spark.rpc.RpcAbortException
 
 private[spark] object ThreadUtils {
 
+  private val sameThreadExecutionContext =
+    ExecutionContext.fromExecutorService(sameThreadExecutorService())
+
   // Inspired by Guava MoreExecutors.sameThreadExecutor; inlined and converted
   // to Scala here to avoid Guava version issues
-  private val sameThreadService = new AbstractExecutorService {
-
+  def sameThreadExecutorService(): ExecutorService = new AbstractExecutorService {
     private val lock = new ReentrantLock()
     private val termination = lock.newCondition()
     private var runningTasks = 0
@@ -107,11 +109,6 @@ private[spark] object ThreadUtils {
       }
     }
   }
-
-  private val sameThreadExecutionContext =
-    ExecutionContext.fromExecutorService(sameThreadService)
-
-  def sameThreadExecutorService: ExecutorService = sameThreadService
 
   /**
    * An `ExecutionContextExecutor` that runs each task in the thread that invokes `execute/submit`.
