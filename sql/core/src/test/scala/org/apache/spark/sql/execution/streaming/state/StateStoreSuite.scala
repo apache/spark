@@ -939,6 +939,25 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     checkInvalidVersion(3)
   }
 
+  test("write operations on read-only StateStore") {
+    def assertUnsupportedOperation(fn: => Unit): Unit = {
+      intercept[UnsupportedOperationException] {
+        fn
+      }
+    }
+
+    val provider = newStoreProvider()
+    val store = provider.getStore(0)
+    put(store, "a", 1)
+    store.commit()
+    assert(rowsToSet(store.iterator()) === Set("a" -> 1))
+
+    val storeReadOnly = provider.getReadOnlyStore(1)
+    assertUnsupportedOperation(put(storeReadOnly, "b", 2))
+    assertUnsupportedOperation(remove(storeReadOnly, _ => true))
+    assertUnsupportedOperation(storeReadOnly.commit())
+  }
+
   test("two concurrent StateStores - one for read-only and one for read-write") {
     // During Streaming Aggregation, we have two StateStores per task, one used as read-only in
     // `StateStoreRestoreExec`, and one read-write used in `StateStoreSaveExec`. `StateStore.abort`
@@ -957,7 +976,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     // two state stores
     val provider1 = newStoreProvider(storeId)
-    val restoreStore = provider1.getStore(1)
+    val restoreStore = provider1.getReadOnlyStore(1)
     val saveStore = provider1.getStore(1)
 
     put(saveStore, key, get(restoreStore, key).get + 1)

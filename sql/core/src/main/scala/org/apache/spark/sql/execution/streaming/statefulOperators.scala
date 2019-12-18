@@ -253,7 +253,8 @@ case class StateStoreRestoreExec(
       stateManager.getStateValueSchema,
       indexOrdinal = None,
       sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
+      Some(sqlContext.streams.stateStoreCoordinator),
+      readOnly = true) { case (store, iter) =>
         val hasInput = iter.hasNext
         if (!hasInput && keyExpressions.isEmpty) {
           // If our `keyExpressions` are empty, we're getting a global aggregation. In that case

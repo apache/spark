@@ -109,6 +109,41 @@ trait StateStore {
   def hasCommitted: Boolean
 }
 
+/** A versioned key-value store which is same as [[StateStore]], but write-protected. */
+abstract class ReadOnlyStateStore extends StateStore {
+  /** Not expected to be called. Don't need to override this method. */
+  override def put(key: UnsafeRow, value: UnsafeRow): Unit = throwNotAllowed()
+
+  /** Not expected to be called. Don't need to override this method. */
+  override def remove(key: UnsafeRow): Unit = throwNotAllowed()
+
+  /** Not expected to be called. Don't need to override this method. */
+  override def commit(): Long = throwNotAllowed()
+
+  /** Not expected to be called. Don't need to override this method. */
+  override def metrics: StateStoreMetrics = throwNotAllowed()
+
+  /** Not expected to be called. Don't need to override this method. */
+  override def hasCommitted: Boolean = false
+
+  private def throwNotAllowed[T](): T = {
+    throw new UnsupportedOperationException("Modifying read-only state store is not allowed")
+  }
+}
+
+/** Wraps the instance of StateStore to make the instance write-protected. */
+class WrappedReadOnlyStateStore(store: StateStore) extends ReadOnlyStateStore {
+  override def id: StateStoreId = store.id
+
+  override def version: Long = store.version
+
+  override def get(key: UnsafeRow): UnsafeRow = store.get(key)
+
+  override def abort(): Unit = store.abort()
+
+  override def iterator(): Iterator[UnsafeRowPair] = store.iterator()
+}
+
 /**
  * Metrics reported by a state store
  * @param numKeys         Number of keys in the state store
@@ -205,6 +240,15 @@ trait StateStoreProvider {
 
   /** Return an instance of [[StateStore]] representing state data of the given version */
   def getStore(version: Long): StateStore
+
+  /**
+   * Return an instance of read-only [[StateStore]] representing state data of the given version.
+   * By default it will return the same instance as getStore(version) but wrapped to prevent
+   * modification. Providers can override and return optimized version of [[StateStore]] based on
+   * the fact the instance will be only used for reading - [[ReadOnlyStateStore]] is the good base
+   * class to extend when providers implement their own.
+   */
+  def getReadOnlyStore(version: Long): StateStore = new WrappedReadOnlyStateStore(getStore(version))
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
@@ -387,7 +431,8 @@ object StateStore extends Logging {
       indexOrdinal: Option[Int],
       version: Long,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): StateStore = {
+      hadoopConf: Configuration,
+      readOnly: Boolean = false): StateStore = {
     require(version >= 0)
     val storeProvider = loadedProviders.synchronized {
       startMaintenanceIfNeeded()
@@ -399,7 +444,11 @@ object StateStore extends Logging {
       reportActiveStoreInstance(storeProviderId)
       provider
     }
-    storeProvider.getStore(version)
+    if (readOnly) {
+      storeProvider.getReadOnlyStore(version)
+    } else {
+      storeProvider.getStore(version)
+    }
   }
 
   /** Unload a state store provider */

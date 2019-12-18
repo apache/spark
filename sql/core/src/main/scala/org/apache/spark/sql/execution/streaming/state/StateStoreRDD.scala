@@ -46,8 +46,8 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     indexOrdinal: Option[Int],
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
-    extraOptions: Map[String, String] = Map.empty)
-  extends RDD[U](dataRDD) {
+    extraOptions: Map[String, String] = Map.empty,
+    readOnly: Boolean) extends RDD[U](dataRDD) {
 
   private val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
 
@@ -76,7 +76,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
 
     store = StateStore.get(
       storeProviderId, keySchema, valueSchema, indexOrdinal, storeVersion,
-      storeConf, hadoopConfBroadcast.value.value)
+      storeConf, hadoopConfBroadcast.value.value, readOnly)
     val inputIter = dataRDD.iterator(partition, ctxt)
     storeUpdateFunction(store, inputIter)
   }
