@@ -236,7 +236,7 @@ class PercentileSuite extends SparkFunSuite {
       val percentile4 = new Percentile(child, percentage)
       val checkResult = percentile4.checkInputDataTypes()
       assert(checkResult.isFailure)
-      Seq("argument 2 requires double type, however, ",
+      Seq("argument 2 requires (double or array<double>) type, however, ",
           s"is of ${dataType.simpleString} type.").foreach { errMsg =>
         assert(checkResult.asInstanceOf[TypeCheckFailure].message.contains(errMsg))
       }

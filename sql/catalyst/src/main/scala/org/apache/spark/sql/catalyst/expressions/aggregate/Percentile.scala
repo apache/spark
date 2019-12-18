@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.util
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
@@ -69,7 +69,7 @@ case class Percentile(
     frequencyExpression : Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] with ImplicitCastInputTypes {
+  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, Literal(1L), 0, 0)
@@ -93,12 +93,12 @@ case class Percentile(
 
   @transient
   private lazy val percentages = percentageExpression.eval() match {
-      case num: Double => Seq(num)
-      case arrayData: ArrayData => arrayData.toDoubleArray().toSeq
+    case num: Double => Array(num)
+    case arrayData: ArrayData => arrayData.toDoubleArray()
   }
 
   override def children: Seq[Expression] = {
-    child  :: percentageExpression ::frequencyExpression :: Nil
+    child :: percentageExpression :: frequencyExpression :: Nil
   }
 
   // Returns null for empty inputs
@@ -109,12 +109,8 @@ case class Percentile(
     case _ => DoubleType
   }
 
-  override def inputTypes: Seq[AbstractDataType] = {
-    val percentageExpType = percentageExpression.dataType match {
-      case _: ArrayType => ArrayType(DoubleType)
-      case _ => DoubleType
-    }
-    Seq(NumericType, percentageExpType, IntegralType)
+  def inputTypes: Seq[AbstractDataType] = {
+    Seq(NumericType, TypeCollection(DoubleType, ArrayType(DoubleType, false)), IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -122,7 +118,7 @@ case class Percentile(
   // 2. percentages(s) must be in the range [0.0, 1.0].
   override def checkInputDataTypes(): TypeCheckResult = {
     // Validate the inputTypes
-    val defaultCheck = super.checkInputDataTypes()
+    val defaultCheck = ExpectsInputTypes.checkInputDataTypes(children, inputTypes)
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!percentageExpression.foldable) {

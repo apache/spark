@@ -655,6 +655,29 @@ object TypeCoercion {
       case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
+
+      case p @ Percentile(child, pe @ NumericType(), _, _, _) =>
+        val newChild = if (TypeCollection(NullType, StringType).acceptsType(child.dataType)) {
+          Cast(child, DoubleType)
+        } else {
+          child
+        }
+        val newPe = if (pe.dataType == DoubleType) pe else Cast(pe, DoubleType)
+        p.copy(child = newChild, percentageExpression = newPe)
+      case p @ Percentile(child, pe, _, _, _) if ArrayType.acceptsType(pe.dataType) &&
+        pe.dataType.asInstanceOf[ArrayType].elementType.isInstanceOf[NumericType] =>
+        val newChild = if (TypeCollection(NullType, StringType).acceptsType(child.dataType)) {
+          Cast(child, DoubleType)
+        } else {
+          child
+        }
+        val ArrayType(elementType, containsNull) = pe.dataType
+        val newPe = if (elementType == DoubleType) {
+          pe
+        } else {
+          Cast(pe, ArrayType(DoubleType, containsNull))
+        }
+        p.copy(child = newChild, percentageExpression = newPe)
     }
   }
 
