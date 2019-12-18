@@ -376,6 +376,15 @@ private[hive] object HiveTableUtil {
   }
 }
 
+/**
+ * Object to synchronize on when calling org.apache.hadoop.hive.serde2.Deserializer#initialize.
+ *
+ * [SPARK-17398] org.apache.hive.hcatalog.data.JsonSerDe#initialize calls the non-thread-safe
+ * HCatRecordObjectInspectorFactory.getHCatRecordObjectInspector, the results of which are
+ * returned by JsonSerDe#getObjectInspector.
+ * To protect against this bug in Hive (HIVE-15773/HIVE-21752), we synchronize on this object
+ * when calling initialize on Deserializer instances that could be JsonSerDe instances.
+ */
 private[hive] object DeserializerLock
 
 private[hive] object HadoopTableReader extends HiveInspectors with Logging {
