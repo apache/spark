@@ -46,6 +46,15 @@ class CSVFilters(filters: Seq[sources.Filter], schema: StructType) {
     groupedPredicates
   }
 
+  /**
+   * Apply all filters that refer to row fields at the positions from 0 to index.
+   * @param row The internal row to check.
+   * @param index Maximum field index. The function assumes that all fields
+   *              from 0 to index position are set.
+   * @return false iff row fields at the position from 0 to index pass filters
+   *         or there are no applicable filters
+   *         otherwise false if at least one of the filters returns false.
+   */
   def skipRow(row: InternalRow, index: Int): Boolean = {
     val predicate = predicates(index)
     predicate != null && !predicate.eval(row)
