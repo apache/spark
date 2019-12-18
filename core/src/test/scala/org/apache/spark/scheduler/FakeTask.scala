@@ -98,7 +98,16 @@ object FakeTask {
   }
 
   def createBarrierTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
-    createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0, prefLocs: _*)
+    createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
+      rpId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+  }
+
+  def createBarrierTaskSet(
+      numTasks: Int,
+      rpId: Int,
+      prefLocs: Seq[TaskLocation]*): TaskSet = {
+    createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
+      rpId = rpId, prefLocs: _*)
   }
 
   def createBarrierTaskSet(
@@ -106,6 +115,7 @@ object FakeTask {
       stageId: Int,
       stageAttemptId: Int,
       priority: Int,
+      rpId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
     if (prefLocs.size != 0 && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
@@ -113,7 +123,6 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil, isBarrier = true)
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null,
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId)
   }
 }

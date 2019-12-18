@@ -1493,4 +1493,8 @@ package object config {
   private[spark] val RESOURCES_WARNING_TESTING =
     ConfigBuilder("spark.resources.warnings.testing").booleanConf.createWithDefault(false)
 
+  private[spark] val RESOURCE_PROFILE_MANAGER_TESTING =
+    ConfigBuilder("spark.testing.resourceProfileManager")
+      .booleanConf
+      .createWithDefault(false)
 }

@@ -43,7 +43,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
 
   test("isSupported yarn no dynamic allocation") {
     val conf = new SparkConf().setMaster("yarn").set(EXECUTOR_CORES, 4)
-    conf.set("spark.testing.resourceProfileManager", "true")
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
     val rpmanager = new ResourceProfileManager(conf)
     // default profile should always work
     val defaultProf = rpmanager.defaultResourceProfile
@@ -62,7 +62,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
   test("isSupported yarn with dynamic allocation") {
     val conf = new SparkConf().setMaster("yarn").set(EXECUTOR_CORES, 4)
     conf.set(DYN_ALLOCATION_ENABLED, true)
-    conf.set("spark.testing.resourceProfileManager", "true")
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
     val rpmanager = new ResourceProfileManager(conf)
     // default profile should always work
     val defaultProf = rpmanager.defaultResourceProfile
@@ -76,7 +76,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
 
   test("isSupported yarn with local mode") {
     val conf = new SparkConf().setMaster("local").set(EXECUTOR_CORES, 4)
-    conf.set("spark.testing.resourceProfileManager", "true")
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
     val rpmanager = new ResourceProfileManager(conf)
     // default profile should always work
     val defaultProf = rpmanager.defaultResourceProfile

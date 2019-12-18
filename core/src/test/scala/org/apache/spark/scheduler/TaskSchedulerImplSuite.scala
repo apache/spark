@@ -31,7 +31,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.{ExecutorResourceRequests, ImmutableResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.ManualClock
@@ -1138,6 +1138,99 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(0 === taskDescriptions.length)
   }
 
+  test("don't schedule for a barrier taskSet if available slots are less than " +
+    "pending tasks gpus limiting") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString,
+      "spark.executor.resource.gpu.amount" -> "1", "spark.task.resource.gpu.amount" -> "1")
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0").toBuffer)),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0").toBuffer)))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+  }
+
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together gpus") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString,
+      "spark.executor.resource.gpu.amount" -> "1", "spark.task.resource.gpu.amount" -> "1")
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0").toBuffer)),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0").toBuffer)),
+      new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629"),
+        Map("gpu" -> Seq("0").toBuffer)))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(3 === taskDescriptions.length)
+  }
+
+
+  // barrier scheduling doesn't yet work with dynamic allocation but test it with another
+  // ResourceProfile anyway to make sure code path works when it is supported
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together " +
+    "diff ResourceProfile") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    val rp = new ImmutableResourceProfile(execReqs.requests, taskReqs.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+
+    val numFreeCores = 2
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0", "1").toBuffer), rp.id),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0", "1").toBuffer), rp.id))
+    val attempt1 = FakeTask.createBarrierTaskSet(3, rpId = rp.id)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(3 === taskDescriptions.length)
+  }
+
+
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together " +
+    "diff ResourceProfile, but not enough gpus") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    val rp = new ImmutableResourceProfile(execReqs.requests, taskReqs.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+
+    val numFreeCores = 2
+    // make each of the worker offers only have 1 GPU, thus making it not enough
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0").toBuffer), rp.id),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0").toBuffer), rp.id))
+    val attempt1 = FakeTask.createBarrierTaskSet(3, rpId = rp.id)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+  }
+
+
   test("schedule tasks for a barrier taskSet if all tasks can be launched together") {
     val taskCpus = 2
     val taskScheduler = setupSchedulerWithMaster(
@@ -1168,7 +1261,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
       new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
       new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
-    val barrier = FakeTask.createBarrierTaskSet(3, stageId = 0, stageAttemptId = 0, priority = 1)
+    val barrier = FakeTask.createBarrierTaskSet(3, stageId = 0, stageAttemptId = 0, priority = 1,
+      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val highPrio = FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0, priority = 0)
 
     // submit highPrio and barrier taskSet

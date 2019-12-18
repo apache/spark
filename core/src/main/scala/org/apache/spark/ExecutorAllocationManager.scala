@@ -415,7 +415,6 @@ private[spark] class ExecutorAllocationManager(
               }
             logDebug(s"Starting timer to add more executors (to " +
               s"expire in $sustainedSchedulerBacklogTimeoutS seconds)")
-            // TODO - make sure merges with [SPARK-10614][CORE] Add monotonic time to Clock
             addTime = now + TimeUnit.SECONDS.toNanos(sustainedSchedulerBacklogTimeoutS)
           } else {
             logDebug(s"Lowering target number of executors to" +

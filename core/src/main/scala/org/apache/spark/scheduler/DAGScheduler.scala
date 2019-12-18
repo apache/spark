@@ -487,7 +487,6 @@ private[spark] class DAGScheduler(
         }
         mergedProfile
       } else {
-        // TODO - add more info here about rdds or resource profiles so user can resolve
         throw new IllegalArgumentException("Multiple ResourceProfile's specified in the RDDs for " +
           "this stage, either resolve the conflict ResourceProfile's yourself or enable " +
           "spark.scheduler.resourceProfile.mergeConflicts and understand how Spark handles " +
@@ -1234,7 +1233,6 @@ private[spark] class DAGScheduler(
         outputCommitCoordinator.stageStart(
           stage = s.id, maxPartitionId = s.rdd.partitions.length - 1)
     }
-    // TODO - do we need anything here for resource requests dealing with locality?
     val taskIdToLocations: Map[Int, Seq[TaskLocation]] = try {
       stage match {
         case s: ShuffleMapStage =>

@@ -21,6 +21,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
+import org.apache.spark.resource._
 import org.apache.spark.scheduler.BarrierJobAllocationFailed._
 import org.apache.spark.util.ThreadUtils
 
@@ -259,7 +260,4 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     testSubmitJob(sc, rdd,
       message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
   }
-
-  // TODO - add barrier test with ResourceProfile to make sure max calculated properly
-
 }
