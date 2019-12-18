@@ -180,10 +180,12 @@ private[thriftserver] class HiveThriftServer2Listener(
   }
 
   private def onOperationClosed(e: SparkListenerThriftServerOperationClosed): Unit = {
-    executionList.get(e.id).closeTimestamp = e.closeTime
-    executionList.get(e.id).state = ExecutionState.CLOSED
-    updateStoreWithTriggerEnabled(executionList.get(e.id))
-    executionList.remove(e.id)
+    if (executionList.contains(e.id)) {
+      executionList.get(e.id).closeTimestamp = e.closeTime
+      executionList.get(e.id).state = ExecutionState.CLOSED
+      updateStoreWithTriggerEnabled(executionList.get(e.id))
+      executionList.remove(e.id)
+    }
   }
 
   // Update both live and history stores. Trigger is enabled by default, hence
