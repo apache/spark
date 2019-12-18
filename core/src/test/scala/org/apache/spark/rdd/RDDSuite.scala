@@ -34,6 +34,7 @@ import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.rdd.RDDSuiteUtils._
+import org.apache.spark.resource._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
@@ -168,6 +169,19 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     intercept[IllegalArgumentException] {
       new PartitionerAwareUnionRDD(sc, Seq(rddWithNoPartitioner, rddWithPartitioner))
     }
+  }
+
+  test("withResources raises exception in local mode") {
+    val rp = new ResourceProfile()
+    val ereqs = new ExecutorResourceRequests().resource("gpu", 1)
+    val treqs = new TaskResourceRequests().resource("gpu", 1)
+    rp.require(ereqs).require(treqs)
+    val error = intercept[SparkException] {
+      val rdd = sc.parallelize(Seq(1 -> true)).withResources(rp)
+    }.getMessage()
+
+    assert(error.contains("ResourceProfiles are only supported on YARN with dynamic " +
+      "allocation enabled"))
   }
 
   test("SPARK-23778: empty RDD in union should not produce a UnionRDD") {

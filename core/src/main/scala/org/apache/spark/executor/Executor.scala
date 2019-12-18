@@ -411,8 +411,6 @@ private[spark] class Executor(
         metricsPoller.onTaskStart(taskId, task.stageId, task.stageAttemptId)
         taskStarted = true
 
-        logInfo(s"tom task resources before launch: ${taskDescription.resources}")
-
         // Run the actual task and measure its runtime.
         taskStartTimeNs = System.nanoTime()
         taskStartCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {

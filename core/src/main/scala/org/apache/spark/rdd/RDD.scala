@@ -1723,7 +1723,6 @@ abstract class RDD[T: ClassTag](
     immutableResourceProfile =
       Some(new ImmutableResourceProfile(rp.executorResources, rp.taskResources))
     sc.resourceProfileManager.addResourceProfile(immutableResourceProfile.get)
-    logInfo("adding resource profile to rdd: " + resourceProfile)
     this
   }
 
