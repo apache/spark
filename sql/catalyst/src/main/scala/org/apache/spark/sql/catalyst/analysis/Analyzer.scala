@@ -822,12 +822,18 @@ class Analyzer(
         }
 
       case u: UnresolvedRelation =>
-        lookupRelation(u.multipartIdentifier).map(tryResolveViews).getOrElse(u)
+        lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
     }
 
-    private def tryResolveViews(plan: LogicalPlan): LogicalPlan = plan match {
+    // The current catalog and namespace may be different from when the view was created, we must
+    // resolve the view logical plan here, with the catalog and namespace stored in view metadata.
+    // This is done by keeping the catalog and namespace in `AnalysisContext`, and analyzer will
+    // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
+    // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
+    // with it, instead of current catalog and namespace.
+    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
       case p @ SubqueryAlias(_, view: View) =>
-        p.copy(child = tryResolveViews(view))
+        p.copy(child = resolveViews(view))
 
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
@@ -848,9 +854,10 @@ class Analyzer(
       case _ => plan
     }
 
-    // Look up a relation from the given session catalog with the following logic:
-    // 1) If a relation is not found in the catalog, return None.
-    // 2) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
+    // Look up a relation from the session catalog with the following logic:
+    // 1) If the resolved catalog is not session catalog, return None.
+    // 2) If a relation is not found in the catalog, return None.
+    // 3) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
     private def lookupRelation(identifier: Seq[String]): Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>

@@ -1933,14 +1933,28 @@ class DataSourceV2SQLSuite
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
 
-    withView("v") {
-      sql("USE testcat.ns1.ns2")
-      sql("CREATE TABLE t USING foo AS SELECT 1")
-      checkAnswer(spark.table("t"), Row(1))
+    sql("USE testcat.ns1.ns2")
+    sql("CREATE TABLE t USING foo AS SELECT 1 col")
+    checkAnswer(spark.table("t"), Row(1))
 
-      sql("CREATE VIEW spark_catalog.v AS SELECT * FROM t")
-      sql("USE spark_catalog")
-      checkAnswer(spark.table("v"), Row(1))
+    withTempView("t") {
+      spark.range(10).createTempView("t")
+      withView("spark_catalog.v") {
+        val e = intercept[AnalysisException] {
+          sql("CREATE VIEW spark_catalog.v AS SELECT * FROM t")
+        }
+        assert(e.message.contains("referencing a temporary view"))
+      }
+    }
+
+    withTempView("t") {
+      withView("spark_catalog.v") {
+        sql("CREATE VIEW spark_catalog.v AS SELECT * FROM t")
+        sql("USE spark_catalog")
+        // The view should read data from table `testcat.ns1.ns2.t` not the temp view.
+        spark.range(10).createTempView("t")
+        checkAnswer(spark.table("v"), Row(1))
+      }
     }
   }
 

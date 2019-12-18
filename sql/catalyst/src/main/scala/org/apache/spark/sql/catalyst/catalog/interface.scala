@@ -388,7 +388,7 @@ case class CatalogTable(
 }
 
 object CatalogTable {
-  // Starting from Spark 3.0, we don't use this property any more. `VIEW_TABLE_NAME_CONTEXT` is
+  // Starting from Spark 3.0, we don't use this property any more. `VIEW_CATALOG_AND_NAMESPACE` is
   // used instead.
   val VIEW_DEFAULT_DATABASE = "view.default.database"
 
