@@ -22,7 +22,7 @@ from pyspark.sql.column import Column, _to_java_column
 @since(3.0)
 def vector_to_array(col):
     """
-    Convert MLlib sparse/dense vectors in a DataFrame into dense arrays.
+    Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.functions import vector_to_array

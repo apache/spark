@@ -460,6 +460,7 @@ pyspark_ml = Module(
         "pyspark.ml.evaluation",
         "pyspark.ml.feature",
         "pyspark.ml.fpm",
+        "pyspark.ml.functions",
         "pyspark.ml.image",
         "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",

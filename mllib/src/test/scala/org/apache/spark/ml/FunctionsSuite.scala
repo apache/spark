@@ -27,18 +27,18 @@ class FunctionsSuite extends MLTest {
   import testImplicits._
 
   test("test vector_to_array") {
-    val df1 = Seq(
+    val df = Seq(
       (Vectors.dense(1.0, 2.0, 3.0), OldVectors.dense(10.0, 20.0, 30.0)),
       (Vectors.sparse(3, Seq((0, 2.0), (2, 3.0))), OldVectors.sparse(3, Seq((0, 20.0), (2, 30.0))))
     ).toDF("vec", "oldVec")
 
-    val result = df1.select(vector_to_array('vec), vector_to_array('oldVec))
-      .as[(List[Double], List[Double])]
-      .collect()
+    val result = df.select(vector_to_array('vec), vector_to_array('oldVec))
+      .as[(Seq[Double], Seq[Double])]
+      .collect().toSeq
 
-    val expected = Array(
-      (List(1.0, 2.0, 3.0), List(10.0, 20.0, 30.0)),
-      (List(2.0, 0.0, 3.0), List(20.0, 0.0, 30.0))
+    val expected = Seq(
+      (Seq(1.0, 2.0, 3.0), Seq(10.0, 20.0, 30.0)),
+      (Seq(2.0, 0.0, 3.0), Seq(20.0, 0.0, 30.0))
     )
     assert(result === expected)
   }
