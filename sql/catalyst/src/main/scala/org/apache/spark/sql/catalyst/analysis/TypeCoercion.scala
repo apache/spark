@@ -656,18 +656,18 @@ object TypeCoercion {
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
 
-      case a @ ApproximatePercentile(child, pe @ NumericType(), _, _, _) =>
-        val newChild = if (TypeCollection(StringType, NullType).acceptsType(child.dataType)) {
+      case a @ ApproximatePercentile(child, pe @ NumericType(), IntegralType(), _, _) =>
+        val newChild = if (child.dataType == StringType || child.dataType == NullType) {
           Cast(child, DoubleType)
         } else {
           child
         }
         val newPe = if (pe.dataType == DoubleType) pe else Cast(pe, DoubleType)
         a.copy(child = newChild, percentageExpression = newPe)
-      case a @ ApproximatePercentile(child, pe, _, _, _)
+      case a @ ApproximatePercentile(child, pe, IntegralType(), _, _)
           if ArrayType.acceptsType(pe.dataType) &&
             pe.dataType.asInstanceOf[ArrayType].elementType.isInstanceOf[NumericType] =>
-        val newChild = if (TypeCollection(StringType, NullType).acceptsType(child.dataType)) {
+        val newChild = if (child.dataType == StringType || child.dataType == NullType) {
           Cast(child, DoubleType)
         } else {
           child

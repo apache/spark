@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundRefer
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.{PercentileDigest, PercentileDigestSerializer}
 import org.apache.spark.sql.catalyst.util.{ArrayData, QuantileSummaries}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
-import org.apache.spark.sql.types.{Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType}
+import org.apache.spark.sql.types.{Decimal, DecimalType, DoubleType, FloatType, IntegerType}
 import org.apache.spark.util.SizeEstimator
 
 class ApproximatePercentileSuite extends SparkFunSuite {
@@ -94,13 +94,13 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
   test("class ApproximatePercentile, high level interface, update, merge, eval...") {
     val count = 10000
-    val data = 1 until 10000
+    val data = (1 until 10000).toSeq
     val percentages = Array(0.25D, 0.5D, 0.75D)
-    val accuracy = 10000L
+    val accuracy = 10000
     val expectedPercentiles = percentages.map(count * _)
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = false), DoubleType)
     val percentageExpression = CreateArray(percentages.toSeq.map(Literal(_)))
-    val accuracyExpression = Literal(accuracy)
+    val accuracyExpression = Literal(10000)
     val agg = new ApproximatePercentile(childExpression, percentageExpression, accuracyExpression)
 
     assert(agg.nullable)
@@ -212,7 +212,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     val wrongAccuracy = new ApproximatePercentile(
       attribute,
       percentageExpression = Literal(0.5D),
-      accuracyExpression = AttributeReference("b", LongType)())
+      accuracyExpression = AttributeReference("b", IntegerType)())
 
     assertEqual(
       wrongAccuracy.checkInputDataTypes(),
@@ -222,7 +222,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     val wrongPercentage = new ApproximatePercentile(
       attribute,
       percentageExpression = attribute,
-      accuracyExpression = Literal(10000L))
+      accuracyExpression = Literal(10000))
 
     assertEqual(
       wrongPercentage.checkInputDataTypes(),
@@ -234,7 +234,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     val wrongAccuracy = new ApproximatePercentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(0.5D),
-      accuracyExpression = Literal(-1L))
+      accuracyExpression = Literal(-1))
     assertEqual(
       wrongAccuracy.checkInputDataTypes(),
       TypeCheckFailure(s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
@@ -252,7 +252,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       val correctPercentage = new ApproximatePercentile(
         AttributeReference("a", DoubleType)(),
         percentageExpression = percentageExpression,
-        accuracyExpression = Literal(100L))
+        accuracyExpression = Literal(100))
 
       // no exception should be thrown
       correctPercentage.checkInputDataTypes()
@@ -268,7 +268,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       val wrongPercentage = new ApproximatePercentile(
         AttributeReference("a", DoubleType)(),
         percentageExpression = percentageExpression,
-        accuracyExpression = Literal(100L))
+        accuracyExpression = Literal(100))
 
       assert(
         wrongPercentage.checkInputDataTypes() match {
@@ -286,7 +286,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         val wrongPercentage = new ApproximatePercentile(
           AttributeReference("a", DoubleType)(),
           percentageExpression = percentageExpression,
-          accuracyExpression = Literal(100L))
+          accuracyExpression = Literal(100))
         assert(
           wrongPercentage.checkInputDataTypes() match {
             case TypeCheckFailure(msg)
