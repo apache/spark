@@ -210,9 +210,9 @@ private class AsyncEventQueue(
 
   override def removeListenerOnError(listener: SparkListenerInterface): Unit = {
     if (bus.isInStop) {
-      // If bus is in the progress of stop, we just mark the listener as dead instead of removing
-      // via calling `bus.removeListener` to avoid race condition
-      // dead listeners will be removed eventually in `bus.stop`
+      // If we're in the middle of stopping the bus, we just mark the listener as dead,
+      // instead of removing, to avoid a deadlock.
+      // Dead listeners will be removed eventually in `bus.stop`.
       listener.dead = true
     } else {
       // the listener failed in an unrecoverably way, we want to remove it from the entire

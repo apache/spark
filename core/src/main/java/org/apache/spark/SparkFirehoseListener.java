@@ -30,13 +30,17 @@ import org.apache.spark.scheduler.*;
  */
 public class SparkFirehoseListener implements SparkListenerInterface {
 
+  protected volatile boolean dead;
+
   @Override
   public boolean dead() {
-    return false;
+    return dead;
   }
 
   @Override
-  public void dead_$eq(boolean dead) { }
+  public void dead_$eq(boolean dead) {
+    this.dead = dead;
+  }
 
   public void onEvent(SparkListenerEvent event) { }
 
