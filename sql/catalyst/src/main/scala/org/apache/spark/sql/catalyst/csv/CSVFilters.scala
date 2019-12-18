@@ -27,24 +27,42 @@ import org.apache.spark.sql.types.StructType
 
 class CSVFilters(filters: Seq[sources.Filter], schema: StructType) {
 
-  private def toRef(attr: String): Option[BoundReference] = {
-    schema.getFieldIndex(attr).map { index =>
-      val field = schema(index)
-      BoundReference(schema.fieldIndex(attr), field.dataType, field.nullable)
+  private val predicates: Array[BasePredicate] = {
+    val len = schema.fields.length
+    val groupedPredicates = Array.fill[BasePredicate](len)(null)
+    if (SQLConf.get.getConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED)) {
+      val groupedExprs = Array.fill(len)(Seq.empty[Expression])
+      for (filter <- filters) {
+        val index = filter.references.map(schema.fieldIndex).max
+        groupedExprs(index) ++= filterToExpression(filter)
+      }
+      for (i <- 0 until len) {
+        if (!groupedExprs(i).isEmpty) {
+          val reducedExpr = groupedExprs(i).reduce(And)
+          groupedPredicates(i) = Predicate.create(reducedExpr)
+        }
+      }
     }
+    groupedPredicates
   }
 
-  private def toLiteral(value: Any): Option[Literal] = {
-    Try(Literal(value)).toOption
-  }
-
-  private def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = a.zip(b).headOption
-
-  private def zipAttributeAndValue(name: String, value: Any): Option[(BoundReference, Literal)] = {
-    zip(toRef(name), toLiteral(value))
+  def skipRow(row: InternalRow, index: Int): Boolean = {
+    val predicate = predicates(index)
+    predicate != null && !predicate.eval(row)
   }
 
   private def filterToExpression(filter: sources.Filter): Option[Expression] = {
+    def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = a.zip(b).headOption
+    def toLiteral(value: Any): Option[Literal] = Try(Literal(value)).toOption
+    def toRef(attr: String): Option[BoundReference] = {
+      schema.getFieldIndex(attr).map { index =>
+        val field = schema(index)
+        BoundReference(schema.fieldIndex(attr), field.dataType, field.nullable)
+      }
+    }
+    def zipAttributeAndValue(name: String, value: Any): Option[(BoundReference, Literal)] = {
+      zip(toRef(name), toLiteral(value))
+    }
     def translate(filter: sources.Filter): Option[Expression] = filter match {
       case sources.And(left, right) =>
         zip(translate(left), translate(right)).map(And.tupled)
@@ -84,29 +102,5 @@ class CSVFilters(filters: Seq[sources.Filter], schema: StructType) {
       case _ => None
     }
     translate(filter)
-  }
-
-  private val predicates: Array[BasePredicate] = {
-    val len = schema.fields.length
-    val groupedPredicates = Array.fill[BasePredicate](len)(null)
-    if (SQLConf.get.getConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED)) {
-      val groupedExprs = Array.fill(len)(Seq.empty[Expression])
-      for (filter <- filters) {
-        val index = filter.references.map(schema.fieldIndex).max
-        groupedExprs(index) ++= filterToExpression(filter)
-      }
-      for (i <- 0 until len) {
-        if (!groupedExprs(i).isEmpty) {
-          val reducedExpr = groupedExprs(i).reduce(And)
-          groupedPredicates(i) = Predicate.create(reducedExpr)
-        }
-      }
-    }
-    groupedPredicates
-  }
-
-  def skipRow(row: InternalRow, index: Int): Boolean = {
-    val predicate = predicates(index)
-    predicate != null && !predicate.eval(row)
   }
 }
