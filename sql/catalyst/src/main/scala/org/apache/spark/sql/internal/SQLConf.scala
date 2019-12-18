@@ -2105,6 +2105,11 @@ object SQLConf {
         "defined by `from` and `to`.")
       .booleanConf
       .createWithDefault(false)
+
+  val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
+    .doc("When true, enable filter pushdown to CSV datasource.")
+    .booleanConf
+    .createWithDefault(true)
 }
 
 /**

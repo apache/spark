@@ -2206,21 +2206,23 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   }
 
   test("filters push down") {
-    withTempPath { path =>
-      val t = "2019-12-17 00:01:02"
-      Seq(
-        "c1,c2",
-        "1,2019-11-14 20:35:30",
-        s"2,$t").toDF("data")
-        .repartition(1)
-        .write.text(path.getAbsolutePath)
-      val readback = spark.read
-        .option("header", true)
-        .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
-        .schema("c1 integer, c2 timestamp")
-        .csv(path.getAbsolutePath)
-        .where($"c1" === 2)
-      checkAnswer(readback, Row(2, Timestamp.valueOf(t)))
+    withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { path =>
+        val t = "2019-12-17 00:01:02"
+        Seq(
+          "c1,c2",
+          "1,2019-11-14 20:35:30",
+          s"2,$t").toDF("data")
+          .repartition(1)
+          .write.text(path.getAbsolutePath)
+        val readback = spark.read
+          .option("header", true)
+          .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
+          .schema("c1 integer, c2 timestamp")
+          .csv(path.getAbsolutePath)
+          .where($"c1" === 2)
+        checkAnswer(readback, Row(2, Timestamp.valueOf(t)))
+      }
     }
   }
 }

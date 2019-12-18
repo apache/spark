@@ -21,6 +21,7 @@ import scala.util.Try
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
@@ -87,16 +88,18 @@ class CSVFilters(filters: Seq[sources.Filter], schema: StructType) {
 
   private val predicates: Array[BasePredicate] = {
     val len = schema.fields.length
-    val groupedExprs = Array.fill(len)(Seq.empty[Expression])
-    for (filter <- filters) {
-      val index = filter.references.map(schema.fieldIndex).max
-      groupedExprs(index) ++= filterToExpression(filter)
-    }
     val groupedPredicates = Array.fill[BasePredicate](len)(null)
-    for (i <- 0 until len) {
-      if (!groupedExprs(i).isEmpty) {
-        val reducedExpr = groupedExprs(i).reduce(And)
-        groupedPredicates(i) = Predicate.create(reducedExpr)
+    if (SQLConf.get.getConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED)) {
+      val groupedExprs = Array.fill(len)(Seq.empty[Expression])
+      for (filter <- filters) {
+        val index = filter.references.map(schema.fieldIndex).max
+        groupedExprs(index) ++= filterToExpression(filter)
+      }
+      for (i <- 0 until len) {
+        if (!groupedExprs(i).isEmpty) {
+          val reducedExpr = groupedExprs(i).reduce(And)
+          groupedPredicates(i) = Predicate.create(reducedExpr)
+        }
       }
     }
     groupedPredicates
