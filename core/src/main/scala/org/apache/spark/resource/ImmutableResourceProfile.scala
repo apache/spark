@@ -42,9 +42,12 @@ private[spark] class ImmutableResourceProfile(
   private var _executorResourceNumParts: Option[Map[String, Int]] = None
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
+  private var _coresLimitKnown: Boolean = false
 
   def id: Int = _id
 
+  // Note that some cluster managers don't set the executor cores explicitly so
+  // be sure to check the Option as required
   def getExecutorCores: Option[Int] = {
     executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
   }
@@ -62,6 +65,9 @@ private[spark] class ImmutableResourceProfile(
   }
 
   // maximum tasks you could put on an executor with this profile based on the limiting resource
+  // If the executor cores config is not present this value is based on the other resources
+  // available or 1 if no other resources. You need to check the isCoresLimitKnown to
+  // calculate proper value.
   def maxTasksPerExecutor(sparkConf: SparkConf): Int = {
     _maxTasksPerExecutor.getOrElse {
       calculateTasksAndLimitingResource(sparkConf)
@@ -69,6 +75,13 @@ private[spark] class ImmutableResourceProfile(
     }
   }
 
+  // Returns whether the executor cores was available to use to calculate the max tasks
+  // per executor and limiting resource.
+  def isCoresLimitKnown: Boolean = _coresLimitKnown
+
+  // If the executor cores config is not present this value is based on the other resources
+  // available or 1 if no other resources. You need to check the isCoresLimitKnown to
+  // calculate proper value.
   def limitingResource(sparkConf: SparkConf): String = {
     _limitingResource.getOrElse {
       calculateTasksAndLimitingResource(sparkConf)
@@ -86,20 +99,29 @@ private[spark] class ImmutableResourceProfile(
   private def calculateTasksAndLimitingResource(sparkConf: SparkConf): Unit = synchronized {
     val coresPerExecutor = getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
     val master = sparkConf.getOption("spark.master")
-    // executor cores config is not set for some masters, we also only support yarn right now
-    val shouldCheckExecCoresMeetTaskReq = master.isDefined && master.get.equals("yarn")
+    // executor cores config is not set for some masters by default and the default value
+    // only applies to yarn/k8s
+    val shouldCheckExecCores = sparkConf.contains(EXECUTOR_CORES) ||
+      (master.isDefined && (master.get.equalsIgnoreCase("yarn") || master.get.startsWith("k8s")))
     val cpusPerTask = taskResources.get(ResourceProfile.CPUS)
       .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
-    if (shouldCheckExecCoresMeetTaskReq && cpusPerTask > coresPerExecutor) {
-      throw new SparkException(s"The executor cores (=$coresPerExecutor) has to be >= the task " +
-        s"resource request of $cpusPerTask")
+    if (shouldCheckExecCores) {
+      _coresLimitKnown = true
+      ResourceUtils.validateTaskCpusLargeEnough(coresPerExecutor, cpusPerTask)
     }
     val tasksBasedOnCores = coresPerExecutor / cpusPerTask
-    var limitingResource = ResourceProfile.CPUS
     val numPartsMap = new mutable.HashMap[String, Int]
-    var taskLimit = tasksBasedOnCores
-    val taskResourcesToCheck = new mutable.HashMap[String, TaskResourceRequest] ++= taskResources
-    taskResourcesToCheck -= ResourceProfile.CPUS
+    numPartsMap(ResourceProfile.CORES) = 1
+    // Note that if the cores per executor aren't set properly
+    // this calculation could be off, we default it to just be 1 in order to allow checking
+    // of the rest of the custom resources. We set the limit based on the other resources available.
+    var (taskLimit, limitingResource) = if (shouldCheckExecCores) {
+      (tasksBasedOnCores, ResourceProfile.CPUS)
+    } else {
+      (-1, "")
+    }
+    val taskResourcesToCheck = new mutable.HashMap[String, TaskResourceRequest]
+    taskResourcesToCheck ++= ImmutableResourceProfile.getCustomTaskResources(this)
     val execResourceToCheck = ImmutableResourceProfile.getCustomExecutorResources(this)
     execResourceToCheck.foreach { case (rName, execReq) =>
       val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
@@ -112,14 +134,14 @@ private[spark] class ImmutableResourceProfile(
         val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
         numPartsMap(rName) = parts
         val numTasks = ((execReq.amount * parts) / numPerTask).toInt
-        if (numTasks < taskLimit) {
+        if (taskLimit == -1 || numTasks < taskLimit) {
           limitingResource = rName
           taskLimit = numTasks
         }
         taskResourcesToCheck -= rName
       } else {
         logWarning(s"The executor resource config for resource: $rName was specified but " +
-          "the corresponding task resource request was specified.")
+          "no corresponding task resource request was specified.")
       }
     }
     if (taskResourcesToCheck.nonEmpty) {
@@ -128,10 +150,12 @@ private[spark] class ImmutableResourceProfile(
     }
     logInfo(s"Limiting resource is $limitingResource at $taskLimit tasks per executor")
     _executorResourceNumParts = Some(numPartsMap.toMap)
-    _maxTasksPerExecutor = Some(taskLimit)
+    _maxTasksPerExecutor = if (taskLimit == -1) Some(1) else Some(taskLimit)
     _limitingResource = Some(limitingResource)
+    if (shouldCheckExecCores) {
+      ResourceUtils.warnOnWastedResources(this, sparkConf)
+    }
   }
-
 
   // testing only
   def setToDefaultProfile(): Unit = {
@@ -241,6 +265,11 @@ private[spark] object ImmutableResourceProfile extends Logging {
   // for testing only
   def clearDefaultProfile: Unit = {
     defaultProfileRef = new AtomicReference[ImmutableResourceProfile]()
+  }
+
+  def getCustomTaskResources(
+      rp: ImmutableResourceProfile): Map[String, TaskResourceRequest] = {
+    rp.taskResources.filterKeys(k => !k.equals(ResourceProfile.CPUS))
   }
 
   def getCustomExecutorResources(

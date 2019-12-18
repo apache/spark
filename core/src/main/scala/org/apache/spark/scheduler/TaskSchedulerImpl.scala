@@ -437,7 +437,7 @@ private[spark] class TaskSchedulerImpl(
     true
   }
 
-  // TODO - add unit test
+  // TODO - add unit test - make sure standalone where no executor cores specified at startup works
   // Use the resource that the resourceProfile has as the limiting resource to calculate the
   // total number of slots available based on the current offers.
   private def calculateAvailableSlots(
@@ -449,12 +449,24 @@ private[spark] class TaskSchedulerImpl(
     val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter { case (id, _) =>
       (id == resourceProfile.id)
     }
-    val limitingResource = resourceProfile.limitingResource(sc.getConf)
+    val coresKnown = resourceProfile.isCoresLimitKnown
+    var limitingResource = resourceProfile.limitingResource(sc.getConf)
+    val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(rpId)
 
     offersForResourceProfile.map { case (o, index) =>
+      val numTasksPerExecCores = availableCpus(index) / taskCpus
+      // when executor cores config isn't set, we can't calculate the real limiting resource
+      // and number of tasks per executor ahead of time, so calculate it now.
+      if (!coresKnown) {
+        val numTasksPerExecCustomResource = resourceProfile.maxTasksPerExecutor(sc.getConf)
+        if (limitingResource.isEmpty ||
+          (limitingResource.nonEmpty && numTasksPerExecCores < numTasksPerExecCustomResource)) {
+          limitingResource = ResourceProfile.CPUS
+        }
+      }
+
       if (limitingResource == ResourceProfile.CPUS) {
-        val taskLimit = sc.resourceProfileManager.taskCpusForProfileId(rpId)
-        availableCpus(index) / taskLimit.toInt
+        numTasksPerExecCores
       } else {
         val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).getOrElse(
           throw new SparkException("limitingResource returns from ResourceProfile" +

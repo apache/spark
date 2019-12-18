@@ -53,7 +53,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
-import org.apache.spark.resource.{ImmutableResourceProfile, ResourceID, ResourceInformation, ResourceProfileManager}
+import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
@@ -2774,90 +2774,18 @@ object SparkContext extends Logging {
     val MAX_LOCAL_TASK_FAILURES = 1
 
     // Ensure that default executor's resources satisfies one or more tasks requirement.
-    // TODO - can we remove this since done in ResourceProfileManager?
-    // DO we really need to know the master?
-    def checkResourcesPerTask(clusterMode: Boolean, executorCores: Option[Int]): Unit = {
+    // This function is for cluster managers that don't set the executor cores config, for
+    // others its checked in ImmutableResourceProfile.
+    def checkResourcesPerTask(executorCores: Int): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
-      val execCores = if (executorCores.isDefined) {
-        executorCores.get
-      } else if (clusterMode && sc.conf.contains(EXECUTOR_CORES)) {
-        sc.conf.get(EXECUTOR_CORES)
-      } else {
-        // we can't check cores on certain cluster managers like standalone because cores
-        // are controlled by worker parameters and not passed to SparkContext in all cases
-        return
-      }
-      // Number of cores per executor must meet at least one task requirement.
-      if (execCores < taskCores) {
-        throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
-          s"the task config: ${CPUS_PER_TASK.key} = $taskCores when run on $master.")
-      }
-
-      // Calculate the max slots each executor can provide based on resources available on each
-      // executor and resources required by each task.
-      val taskResourceRequirements = parseResourceRequirements(sc.conf, SPARK_TASK_PREFIX)
-      val executorResourcesAndAmounts =
-        parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
-          .map(request => (request.id.resourceName, request.amount)).toMap
-      var numSlots = execCores / taskCores
-      var limitingResourceName = "CPU"
-
-      taskResourceRequirements.foreach { taskReq =>
-        // Make sure the executor resources were specified through config.
-        val execAmount = executorResourcesAndAmounts.getOrElse(taskReq.resourceName,
-          throw new SparkException("The executor resource config: " +
-            ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName).amountConf +
-            " needs to be specified since a task requirement config: " +
-            ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName).amountConf +
-            " was specified")
-        )
-        // Make sure the executor resources are large enough to launch at least one task.
-        if (execAmount < taskReq.amount) {
-          throw new SparkException("The executor resource config: " +
-            ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName).amountConf +
-            s" = $execAmount has to be >= the requested amount in task resource config: " +
-            ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName).amountConf +
-            s" = ${taskReq.amount}")
-        }
-        // Compare and update the max slots each executor can provide.
-        // If the configured amount per task was < 1.0, a task is subdividing
-        // executor resources. If the amount per task was > 1.0, the task wants
-        // multiple executor resources.
-        val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
-        if (resourceNumSlots < numSlots) {
-          numSlots = resourceNumSlots
-          limitingResourceName = taskReq.resourceName
-        }
-      }
-      // There have been checks above to make sure the executor resources were specified and are
-      // large enough if any task resources were specified.
-      taskResourceRequirements.foreach { taskReq =>
-        val execAmount = executorResourcesAndAmounts(taskReq.resourceName)
-        if ((numSlots * taskReq.amount / taskReq.numParts) < execAmount) {
-          val taskReqStr = if (taskReq.numParts > 1) {
-            s"${taskReq.amount}/${taskReq.numParts}"
-          } else {
-            s"${taskReq.amount}"
-          }
-          val resourceNumSlots = Math.floor(execAmount * taskReq.numParts/taskReq.amount).toInt
-          val message = s"The configuration of resource: ${taskReq.resourceName} " +
-            s"(exec = ${execAmount}, task = ${taskReqStr}, " +
-            s"runnable tasks = ${resourceNumSlots}) will " +
-            s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
-            s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
-            s"your configuration."
-          if (Utils.isTesting) {
-            throw new SparkException(message)
-          } else {
-            logWarning(message)
-          }
-        }
-      }
+      validateTaskCpusLargeEnough(executorCores, taskCores)
+      val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+      ResourceUtils.warnOnWastedResources(defaultProf, sc.conf, Some(executorCores))
     }
 
     master match {
       case "local" =>
-        checkResourcesPerTask(clusterMode = false, Some(1))
+        checkResourcesPerTask(1)
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, 1)
         scheduler.initialize(backend)
@@ -2870,7 +2798,7 @@ object SparkContext extends Logging {
         if (threadCount <= 0) {
           throw new SparkException(s"Asked to run locally with $threadCount threads")
         }
-        checkResourcesPerTask(clusterMode = false, Some(threadCount))
+        checkResourcesPerTask(threadCount)
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES,
           isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
@@ -2882,7 +2810,7 @@ object SparkContext extends Logging {
         // local[*, M] means the number of cores on the computer with M failures
         // local[N, M] means exactly N threads with M failures
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
-        checkResourcesPerTask(clusterMode = false, Some(threadCount))
+        checkResourcesPerTask(threadCount)
         val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt,
           isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
@@ -2890,7 +2818,6 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case SPARK_REGEX(sparkUrl) =>
-        checkResourcesPerTask(clusterMode = true, None)
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
         val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)
@@ -2898,7 +2825,7 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        checkResourcesPerTask(clusterMode = true, Some(coresPerSlave.toInt))
+        checkResourcesPerTask(coresPerSlave.toInt)
         // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
         val memoryPerSlaveInt = memoryPerSlave.toInt
         if (sc.executorMemory > memoryPerSlaveInt) {
@@ -2919,7 +2846,6 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case masterUrl =>
-        checkResourcesPerTask(clusterMode = true, None)
         val cm = getClusterManager(masterUrl) match {
           case Some(clusterMgr) => clusterMgr
           case None => throw new SparkException("Could not parse Master URL: '" + master + "'")

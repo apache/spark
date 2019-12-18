@@ -27,7 +27,8 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.SPARK_TASK_PREFIX
+import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, SPARK_EXECUTOR_PREFIX, SPARK_TASK_PREFIX}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -302,6 +303,87 @@ private[spark] object ResourceUtils extends Logging {
         s"script returned resource name ${result.name} and we were expecting $resourceName.")
     }
     result
+  }
+
+  def validateTaskCpusLargeEnough(execCores: Int, taskCpus: Int): Boolean = {
+    // Number of cores per executor must meet at least one task requirement.
+    if (execCores < taskCpus) {
+      throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
+        s"the task config: ${CPUS_PER_TASK.key} = $taskCpus.")
+    }
+    true
+  }
+
+  def warnOnWastedResources(
+      rp: ImmutableResourceProfile,
+      sparkConf: SparkConf,
+      execCores: Option[Int] = None): Unit = {
+    // There have been checks on the ResourceProfile to make sure the executor resources were
+    // specified and are large enough if any task resources were specified.
+    // Now just do some sanity test and log warnings when it looks like the user will
+    // waste some resources.
+    val coresKnown = rp.isCoresLimitKnown
+    var limitingResource = rp.limitingResource(sparkConf)
+    var maxTaskPerExec = rp.maxTasksPerExecutor(sparkConf)
+    val taskCpus = rp.getTaskCpus.getOrElse(sparkConf.get(CPUS_PER_TASK))
+    val cores = if (execCores.isDefined) {
+      execCores.get
+    } else if (coresKnown) {
+      rp.getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
+    } else {
+      return
+    }
+    // when executor cores config isn't set, we can't calculate the real limiting resource
+    // and number of tasks per executor ahead of time, so calculate it now.
+    if (!coresKnown) {
+      val numTasksPerExecCores = cores / taskCpus
+      val numTasksPerExecCustomResource = rp.maxTasksPerExecutor(sparkConf)
+      if (limitingResource.isEmpty ||
+        (limitingResource.nonEmpty && numTasksPerExecCores < numTasksPerExecCustomResource)) {
+        limitingResource = ResourceProfile.CPUS
+        maxTaskPerExec = numTasksPerExecCores
+      }
+    }
+    val taskReq = ImmutableResourceProfile.getCustomTaskResources(rp)
+    val execReq = ImmutableResourceProfile.getCustomExecutorResources(rp)
+
+    if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
+      if ((taskCpus * maxTaskPerExec) < cores) {
+        val resourceNumSlots = Math.floor(cores/taskCpus).toInt
+        val message = s"The configuration of cores (exec = ${execCores} " +
+          s"task = ${taskCpus}, runnable tasks = ${resourceNumSlots}) will " +
+          s"result in wasted resources due to resource ${limitingResource} limiting the " +
+          s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
+          s"your configuration."
+        if (Utils.isTesting) {
+          throw new SparkException(message)
+        } else {
+          logWarning(message)
+        }
+      }
+    }
+
+    taskReq.foreach { case (rName, treq) =>
+      val execAmount = execReq(rName).amount
+      val numParts = rp.getNumSlotsPerAddress(rName, sparkConf)
+      // handle fractional
+      val taskAmount = if (numParts > 1) 1 else treq.amount
+      if (maxTaskPerExec < (execAmount * numParts / taskAmount)) {
+        val taskReqStr = s"${taskAmount}/${numParts}"
+        val resourceNumSlots = Math.floor(execAmount * numParts / taskAmount).toInt
+        val message = s"The configuration of resource: ${treq.resourceName} " +
+          s"(exec = ${execAmount}, task = ${taskReqStr}, " +
+          s"runnable tasks = ${resourceNumSlots}) will " +
+          s"result in wasted resources due to resource ${limitingResource} limiting the " +
+          s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
+          s"your configuration."
+        if (Utils.isTesting) {
+          throw new SparkException(message)
+        } else {
+          logWarning(message)
+        }
+      }
+    }
   }
 
   // known types of resources
