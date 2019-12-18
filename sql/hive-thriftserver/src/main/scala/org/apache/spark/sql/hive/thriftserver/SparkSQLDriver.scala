@@ -1,20 +1,39 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.{BufferedReader, InputStreamReader}
-import java.util.Locale
+
+import scala.sys.process._
+import scala.util.{Failure, Success, Try}
 
 import org.apache.commons.lang.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.util.Utils
 
-import scala.sys.process._
-import scala.util.{Failure, Success, Try}
+
 
 private[hive] case class SparkSQLDriver(context: SQLContext,
                                          hadoopConf: Configuration)
@@ -29,7 +48,9 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
    */
   def processCmd(cmd: String): Int = {
     val cmd_cleaned = cmd.trim
+    // scalastyle:off println
     println("processCmd>>>>>>>>>>>>>>>>" + cmd_cleaned)
+    // scalastyle:on println
     cmd_cleaned
       .split("\\s+")
       .toList match {
@@ -67,7 +88,9 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
     } match {
       case Success(value) => value
       case Failure(exception) =>
+        // scalastyle:off println
         println(s"Error in query: ${exception.getMessage}")
+        // scalastyle:on println
         None
       case _ => None
     }
@@ -120,10 +143,12 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
    * @return
    */
   def processSQLCmd(cmd: String): Int = {
-    //    println(s">>>>>>> $cmd")
+
     val result = run(cmd)
     if (result.nonEmpty) {
+      // scalastyle:off println
       println(showQueryResults(result.get))
+      // scalastyle:on println
     }
     1
   }
@@ -137,7 +162,9 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
   def processShellCmd(cmd: String): Int = {
     Try(cmd.!!) match {
       case Success(value) =>
+        // scalastyle:off println
         println(value)
+        // scalastyle:on println
         0
       case Failure(exception) =>
         logError(exception.getMessage)
@@ -199,7 +226,7 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
 
           // Avoids auto escaping.
           val avoid_escapes = replacements.head
-            .replaceAll("\"" , "\\\\\"")
+            .replaceAll("\"", "\\\\\"")
             .replaceAll("\'", "\\\\\'")
 
           val rep = lines.head.replaceFirst(replacementTag, avoid_escapes)
@@ -217,9 +244,9 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
     }
 
     val commands = pushBack(allin, replace, List[String]())
-
+    // scalastyle:off println
     commands.foreach(_ => println("processLines>>>>>>>>>>>>>>>>>" + _))
-
+    // scalastyle:on println
     @scala.annotation.tailrec
     def runCommands(cmd: List[String], prevResult: Int): Int = {
       if (cmd.isEmpty) {
