@@ -76,10 +76,10 @@ case class ApproximatePercentile(
   extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes {
 
   def this(
-    funcName: String,
-    child: Expression,
-    percentageExpression: Expression,
-    accuracyExpression: Expression) = {
+      funcName: String,
+      child: Expression,
+      percentageExpression: Expression,
+      accuracyExpression: Expression) = {
     this(funcName, child, percentageExpression, accuracyExpression, 0, 0)
   }
 
@@ -333,17 +333,17 @@ object ApproximatePercentile {
   val serializer: PercentileDigestSerializer = new PercentileDigestSerializer
 
   def apply(
-    child: Expression,
-    percentageExpression: Expression,
-    accuracyExpression: Expression,
-    mutableAggBufferOffset: Int, inputAggBufferOffset: Int): ApproximatePercentile =
+      child: Expression,
+      percentageExpression: Expression,
+      accuracyExpression: Expression,
+      mutableAggBufferOffset: Int, inputAggBufferOffset: Int): ApproximatePercentile =
     new ApproximatePercentile("percentile_approx", child, percentageExpression,
       accuracyExpression, mutableAggBufferOffset, inputAggBufferOffset)
 
   def apply(
-    child: Expression,
-    percentageExpression: Expression,
-    accuracyExpression: Expression): ApproximatePercentile = {
+      child: Expression,
+      percentageExpression: Expression,
+      accuracyExpression: Expression): ApproximatePercentile = {
     new ApproximatePercentile("percentile_approx", child, percentageExpression, accuracyExpression)
   }
 

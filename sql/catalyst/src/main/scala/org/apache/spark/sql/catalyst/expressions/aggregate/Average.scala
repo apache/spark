@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
   """,
   since = "1.0.0")
 case class Average(
-      funcName: String, child: Expression)
+    funcName: String, child: Expression)
   extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def nodeName: String = funcName
