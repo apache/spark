@@ -27,6 +27,7 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Network
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util._
 
@@ -199,6 +200,18 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       if (now - lastSeenMs > executorTimeoutMs) {
         logWarning(s"Removing executor $executorId with no recent heartbeats: " +
           s"${now - lastSeenMs} ms exceeds timeout $executorTimeoutMs ms")
+        sc.schedulerBackend match {
+          case backend: CoarseGrainedSchedulerBackend =>
+            backend.synchronized {
+              // Mark executor pending to remove if executor heartbeat expired
+              // to avoid reschedule task on this executor again
+              if (!backend.executorsPendingToRemove.contains(executorId)) {
+                backend.executorsPendingToRemove(executorId) = false
+              }
+            }
+          case _ =>
+          // ignore
+        }
         scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
           s"timed out after ${now - lastSeenMs} ms"))
           // Asynchronously kill the executor to avoid blocking the current thread
