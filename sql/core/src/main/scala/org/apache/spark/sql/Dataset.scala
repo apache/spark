@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -501,6 +502,67 @@ class Dataset[T] private[sql](
       Column(oldAttribute).as(newName)
     }
     select(newCols : _*)
+  }
+
+  /**
+   * Returns a new Dataset where each record has been mapped on to the specified type.
+   *
+   * This is similar to `as[U]`, which is lazy in terms of the schema. With `as[U]`, the result
+   * `Dataset[U]` still has the schema of `T`, not `U`. Hence, it may contain additional columns or
+   * the columns may be in different order. The schema of `U` manifests only after operations that
+   * utilize the encoder, e.g. `map` or `collect`, but not `save`.
+   *
+   * This method returns a `Dataset[U]` that is strictly derived from `U`. This works for any case
+   * class with standard encoder. This is done through projection of `T`'s columns onto `U`'s
+   * schema, if possible. Otherwise, it throws an `AnalysisException`. Columns are matched by name
+   * and type, where column names' case sensitivity is determined by `spark.sql.caseSensitive`.
+   *
+   * Where `as[U]` supports types with inner classes that have extra fields or different field
+   * order, this is not possible through projection and hence not supported by this method.
+   * An example for an inner type is `Inner`:
+   * {{{
+   *   case class Inner(a: Int)
+   *   case class Outer(i: Inner)
+   * }}}
+   * In that case you should use `map(identity)`, if this is really needed.
+   *
+   * As for `as[U]`, if the schema of the Dataset does not match the desired `U` type, you can use
+   * `select` along with `alias` or `as` to rearrange or rename as required.
+   *
+   * @group basic
+   * @since 3.1.0
+   */
+  def toDS[U : Encoder]: Dataset[U] = {
+    // column names case-sensitivity is configurable
+    def considerCase(field: StructField): StructField = SQLConf.get.caseSensitiveAnalysis match {
+        case true => field
+        case false => field.copy(name = field.name.toLowerCase(Locale.ROOT))
+      }
+
+    // we can project this dataset[T] to Dataset[U] when it provides all of the Encoder[U]'s columns
+    val encoder = implicitly[Encoder[U]]
+    val projectedColumns = encoder.schema.fields
+    val availableColumns = this.schema.fields.map(considerCase).map(col => col.name -> col).toMap
+    val columnsMissing = projectedColumns.map(considerCase).exists(proj =>
+      ! availableColumns.get(proj.name).exists(avail => proj.dataType.acceptsType(avail.dataType))
+    )
+    if (columnsMissing) {
+      // give precedence to `as[U]`s Exception if that one would fail either
+      this.as[U]
+
+      // helper to pretty-print columns in exception message
+      def toString(columns: Iterable[StructField]): String =
+        s"(${ columns.map(c => s"${c.name}: ${c.dataType}").mkString(", ") })"
+
+      throw new AnalysisException(
+        s"Dataset type not supported by toDS[T]: ${encoder.clsTag}, use map(identity)\n" +
+          "Columns\n" +
+          s"\t${toString(availableColumns.values)} cannot be projected to\n" +
+          s"\t${toString(projectedColumns)}"
+      )
+    }
+
+    this.select(projectedColumns.map(c => col(c.name)): _*).as[U]
   }
 
   /**

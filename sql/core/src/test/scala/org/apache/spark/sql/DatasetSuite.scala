@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExam
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
-import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
+import org.apache.spark.sql.execution.{FileSourceScanExec, LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -174,6 +175,31 @@ class DatasetSuite extends QueryTest
       data: _*)
   }
 
+  // expected schemata for the following tests
+  private val classDataSchema = new StructType()
+    .add("a", StringType, nullable = true)
+    .add("b", IntegerType, nullable = false)
+  private val classDataSchemaNullable =
+    StructType(classDataSchema.fields.map(_.copy(nullable = true)))
+  private val classDataUpperCaseSchema =
+    StructType(classDataSchema.fields.map(f => f.copy(name = f.name.toUpperCase(Locale.ROOT))))
+  private val classDataSchemaExtraFields =
+    classDataSchema.add("c", IntegerType, nullable = false)
+  private val classDataSchemaExtraFieldsNullable =
+    StructType(classDataSchemaExtraFields.fields.map(_.copy(nullable = true)))
+  private val classDataSchemaReorderFields =
+    StructType(classDataSchema.fields.reverse)
+  private val javaDataSchema = new StructType()
+    .add("value", BinaryType, nullable = true)
+
+  // inside Seq and Map these schema have all non-nullable fields
+  private val classDataSchemaNotNull =
+    StructType(classDataSchema.fields.map(_.copy(nullable = false)))
+  private val classDataSchemaExtraFieldsNotNull =
+    StructType(classDataSchemaExtraFields.fields.map(_.copy(nullable = false)))
+  private val classDataSchemaReorderFieldsNotNull =
+    StructType(classDataSchemaReorderFields.fields.map(_.copy(nullable = false)))
+
   test("as tuple") {
     val data = Seq(("a", 1), ("b", 2)).toDF("a", "b")
     checkDataset(
@@ -183,6 +209,35 @@ class DatasetSuite extends QueryTest
 
   test("as case class / collect") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("a", "b").as[ClassData]
+    assert(ds.schema === classDataSchema)
+    checkDataset(
+      ds,
+      ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+    assert(ds.collect().head == ClassData("a", 1))
+  }
+
+  test("as case class / collect - case-insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("A", "B").as[ClassData]
+      assert(ds.schema === classDataUpperCaseSchema)
+      checkDataset(
+        ds,
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+      assert(ds.collect().head == ClassData("a", 1))
+    }
+  }
+
+  test("as case class / collect - case-sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("A", "B")
+      val message = intercept[AnalysisException](df.as[ClassData]).getMessage
+      assert(message === "cannot resolve '`a`' given input columns: [A, B];")
+    }
+  }
+
+  test("as case class - extra fields") {
+    val ds = Seq(("a", 1, 0), ("b", 2, 0), ("c", 3, 0)).toDF("a", "b", "c").as[ClassData]
+    assert(ds.schema === classDataSchemaExtraFields)
     checkDataset(
       ds,
       ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
@@ -191,35 +246,388 @@ class DatasetSuite extends QueryTest
 
   test("as case class - reordered fields by name") {
     val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
+    assert(ds.schema === classDataSchemaReorderFields)
     assert(ds.collect() === Array(ClassData("a", 1), ClassData("b", 2), ClassData("c", 3)))
   }
 
   test("as case class - take") {
     val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
+    assert(ds.schema === classDataSchemaReorderFields)
     assert(ds.take(2) === Array(ClassData("a", 1), ClassData("b", 2)))
   }
 
   test("as case class - tail") {
     val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
+    assert(ds.schema === classDataSchemaReorderFields)
     assert(ds.tail(2) === Array(ClassData("b", 2), ClassData("c", 3)))
   }
 
-  test("as seq of case class - reorder fields by name") {
-    val df = spark.range(3).select(array(struct($"id".cast("int").as("b"), lit("a").as("a"))))
+  test("as seq of case class - extra fields") {
+    val df = spark.range(3).select(
+      array(struct(
+        lit("a").as("a"),
+        $"id".cast("int").as("b"),
+        lit(0).as("c")
+      )).as("seq of case class")
+    )
     val ds = df.as[Seq[ClassData]]
+
+    val expectedSchema = new StructType()
+      .add(
+        "seq of case class",
+        ArrayType(classDataSchemaExtraFieldsNotNull, containsNull = false),
+        nullable = false
+      )
+    assert(ds.schema === expectedSchema)
+
     assert(ds.collect() === Array(
       Seq(ClassData("a", 0)),
       Seq(ClassData("a", 1)),
       Seq(ClassData("a", 2))))
   }
 
-  test("as map of case class - reorder fields by name") {
-    val df = spark.range(3).select(map(lit(1), struct($"id".cast("int").as("b"), lit("a").as("a"))))
+  test("as seq of case class - reorder fields by name") {
+    val df = spark.range(3).select(
+      array(struct(
+        $"id".cast("int").as("b"),
+        lit("a").as("a")
+      )).as("seq of case class")
+    )
+    val ds = df.as[Seq[ClassData]]
+
+    val expectedSchema = new StructType()
+      .add(
+        "seq of case class",
+        ArrayType(classDataSchemaReorderFieldsNotNull, containsNull = false),
+        nullable = false
+      )
+    assert(ds.schema == expectedSchema)
+
+    assert(ds.collect() === Array(
+      Seq(ClassData("a", 0)),
+      Seq(ClassData("a", 1)),
+      Seq(ClassData("a", 2))))
+  }
+
+  test("as map of case class - extra fields") {
+    val df = spark.range(3).select(
+      map(
+        lit(1),
+        struct(
+          lit("a").as("a"),
+          $"id".cast("int").as("b"),
+          lit(0).as("c")
+        )
+      ).as("map of case class")
+    )
     val ds = df.as[Map[Int, ClassData]]
+
+    val expectedSchema = new StructType()
+      .add(
+        "map of case class",
+        MapType(IntegerType, classDataSchemaExtraFieldsNotNull, valueContainsNull = false),
+        nullable = false
+      )
+    assert(ds.schema == expectedSchema)
+
     assert(ds.collect() === Array(
       Map(1 -> ClassData("a", 0)),
       Map(1 -> ClassData("a", 1)),
       Map(1 -> ClassData("a", 2))))
+  }
+
+  test("as map of case class - reorder fields by name") {
+    val df = spark.range(3).select(
+      map(
+        lit(1),
+        struct(
+          $"id".cast("int").as("b"),
+          lit("a").as("a")
+        )
+      ).as("map of case class")
+    )
+    val ds = df.as[Map[Int, ClassData]]
+
+    val expectedSchema = new StructType()
+      .add(
+        "map of case class",
+        MapType(
+          IntegerType,
+          classDataSchemaReorderFieldsNotNull,
+          valueContainsNull = false
+        ),
+        nullable = false)
+    assert(ds.schema == expectedSchema)
+
+    assert(ds.collect() === Array(
+      Map(1 -> ClassData("a", 0)),
+      Map(1 -> ClassData("a", 1)),
+      Map(1 -> ClassData("a", 2))))
+  }
+
+  // cf. test("as tuple")
+  test("SPARK-30319: toDS tuple") {
+    val df = Seq(("a", 1), ("b", 2)).toDF("a", "b")
+    val message = intercept[AnalysisException](df.toDS[(String, Int)]).getMessage
+    assert(message === "Dataset type not supported by toDS[T]: scala.Tuple2, use map(identity)\n" +
+      "Columns\n" +
+      "\t(a: StringType, b: IntegerType) cannot be projected to\n" +
+      "\t(_1: StringType, _2: IntegerType);")
+  }
+
+  test("SPARK-30319: toDS tuple - extra fields") {
+    val df = Seq(("a", 1, 0), ("b", 2, 0)).toDF("a", "b", "c")
+    val message = intercept[AnalysisException](df.toDS[(String, Int)]).getMessage
+    assert(message === intercept[AnalysisException](df.as[(String, Int)]).getMessage)
+  }
+
+  // cf. test("as case class / collect")
+  test("SPARK-30319: toDS case class / collect") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("a", "b").toDS[ClassData]
+    assert(ds.schema == classDataSchema)
+    checkDataset(
+      ds,
+      ClassData("a", 1), ClassData("b", 2), ClassData("c", 3)
+    )
+    assert(ds.collect().head == ClassData("a", 1))
+  }
+
+  // cf. test("as case class / collect - case-insensitive")
+  test("SPARK-30319: toDS case class / collect - case-insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("A", "B").toDS[ClassData]
+      assert(ds.schema === classDataSchema)
+      checkDataset(
+        ds,
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+      assert(ds.collect().head == ClassData("a", 1))
+    }
+  }
+
+  // cf. test("as case class / collect - case-sensitive")
+  test("SPARK-30319: toDS case class / collect - case-sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("A", "B")
+      val message = intercept[AnalysisException](df.toDS[ClassData]).getMessage
+      assert(message === "cannot resolve '`a`' given input columns: [A, B];")
+    }
+  }
+
+  // cf. test("as case class - extra fields")
+  test("SPARK-30319: toDS case class - extra fields") {
+    val ds = Seq(("a", 1, 0), ("b", 2, 0), ("c", 3, 0)).toDF("a", "b", "c").toDS[ClassData]
+    assert(ds.schema == classDataSchema)
+    checkDataset(
+      ds,
+      ClassData("a", 1), ClassData("b", 2), ClassData("c", 3)
+    )
+    assert(ds.collect().head == ClassData("a", 1))
+  }
+
+  // cf. test("as case class - reordered fields by name")
+  test("SPARK-30319: toDS case class - reordered fields by name") {
+    val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").toDS[ClassData]
+    assert(ds.schema == classDataSchema)
+    assert(ds.collect() === Array(ClassData("a", 1), ClassData("b", 2), ClassData("c", 3)))
+  }
+
+  test("SPARK-30319: toDS case class - missing field") {
+    val df = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("a", "c")
+    val message = intercept[AnalysisException](df.toDS[ClassData]).getMessage
+    assert(message === intercept[AnalysisException](df.as[ClassData]).getMessage)
+  }
+
+  test("SPARK-30319: toDS case class - datatype mismatch") {
+    val df = Seq(("a", 1L), ("b", 2L), ("c", 3L)).toDF("a", "b")
+    val message = intercept[AnalysisException](df.toDS[ClassData]).getMessage
+    assert(message === intercept[AnalysisException](df.as[ClassData]).getMessage)
+  }
+
+  // cf. test("as case class - take")
+  test("SPARK-30319: toDS case class - take") {
+    val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").toDS[ClassData]
+    assert(ds.schema == classDataSchema)
+    assert(ds.take(2) === Array(ClassData("a", 1), ClassData("b", 2)))
+  }
+
+  // cf. test("as case class - tail")
+  test("SPARK-30319: toDS case class - tail") {
+    val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").toDS[ClassData]
+    assert(ds.schema == classDataSchema)
+    assert(ds.tail(2) === Array(ClassData("b", 2), ClassData("c", 3)))
+  }
+
+  test("SPARK-30319: toDS java class / collect") {
+    implicit val encoder: Encoder[JavaData] = Encoders.javaSerialization
+    val ds = Seq(new JavaData(1), new JavaData(2), new JavaData(3)).toDF("value").toDS[JavaData]
+    assert(ds.schema == javaDataSchema)
+    checkDataset(
+      ds,
+      new JavaData(1), new JavaData(2), new JavaData(3)
+    )
+    assert(ds.collect().head == new JavaData(1))
+  }
+
+  test("SPARK-30319: toDS java class - extra fields") {
+    implicit val encoder: Encoder[JavaData] = Encoders.javaSerialization
+    val df = Seq(new JavaData(1), new JavaData(2), new JavaData(3)).toDF("value")
+    val ds = df.withColumn("a", lit(1)).toDS[JavaData]
+    assert(ds.schema == javaDataSchema)
+    assert(ds.collect().head == new JavaData(1))
+  }
+
+  test("SPARK-30319: toDS seq of case class") {
+    val df = spark.range(3).select(
+      array(struct(
+        lit("a").as("a"),
+        $"id".cast("int").as("b")
+      )).as("value")
+    )
+    val ds = df.toDS[Seq[ClassData]]
+
+    val expectedSchema = new StructType()
+      .add(
+        "value",
+        ArrayType(classDataSchemaNotNull, containsNull = false),
+        nullable = false
+      )
+    assert(ds.schema === expectedSchema)
+
+    assert(ds.collect() === Array(
+      Seq(ClassData("a", 0)),
+      Seq(ClassData("a", 1)),
+      Seq(ClassData("a", 2))))
+  }
+
+  // cf. test("as seq of case class - extra fields")
+  test("SPARK-30319: toDS seq of case class - extra fields") {
+    val df = spark.range(3).select(
+      array(struct(
+        lit("a").as("a"),
+        $"id".cast("int").as("b"),
+        lit(0).as("c")
+      )).as("value")
+    )
+    val message = intercept[AnalysisException](df.toDS[Seq[ClassData]]).getMessage
+    assert(message ===
+      "Dataset type not supported by toDS[T]: scala.collection.Seq, use map(identity)\n" +
+        "Columns\n" +
+        "\t(value: ArrayType(StructType(StructField(a,StringType,false), StructField(b,IntegerTyp" +
+        "e,false), StructField(c,IntegerType,false)),false)) cannot be projected to\n" +
+        "\t(value: ArrayType(StructType(StructField(a,StringType,true), StructField(b,IntegerType" +
+        ",false)),true));"
+    )
+  }
+
+  // cf. test("as seq of case class - reorder fields by name")
+  test("SPARK-30319: toDS seq of case class - reorder fields by name") {
+    val df = spark.range(3).select(
+      array(struct(
+        $"id".cast("int").as("b"),
+        lit("a").as("a")
+      )).as("value")
+    )
+    val message = intercept[AnalysisException](df.toDS[Seq[ClassData]]).getMessage
+    assert(message ===
+      "Dataset type not supported by toDS[T]: scala.collection.Seq, use map(identity)\n" +
+        "Columns\n" +
+        "\t(value: ArrayType(StructType(StructField(b,IntegerType,false), StructField(a,StringTyp" +
+        "e,false)),false)) cannot be projected to\n" +
+        "\t(value: ArrayType(StructType(StructField(a,StringType,true), StructField(b,IntegerType" +
+        ",false)),true));"
+    )
+  }
+
+  test("SPARK-30319: toDS map of case class") {
+    val df = spark.range(3).select(
+      map(
+        lit(1),
+        struct(
+          lit("a").as("a"),
+          $"id".cast("int").as("b")
+        )
+      ).as("value")
+    )
+    val ds = df.toDS[Map[Int, ClassData]]
+
+    val expectedSchema = new StructType()
+      .add(
+        "value",
+        MapType(IntegerType, classDataSchemaNotNull, valueContainsNull = false),
+        nullable = false
+      )
+    assert(ds.schema == expectedSchema)
+
+    assert(ds.collect() === Array(
+      Map(1 -> ClassData("a", 0)),
+      Map(1 -> ClassData("a", 1)),
+      Map(1 -> ClassData("a", 2))))
+  }
+
+  // cf. test("as map of case class - extra fields")
+  test("SPARK-30319: toDS map of case class - extra fields") {
+    val df = spark.range(3).select(
+      map(
+        lit(1),
+        struct(
+          lit("a").as("a"),
+          $"id".cast("int").as("b"),
+          lit(0).as("c")
+        )
+      ).as("value")
+    )
+    val message = intercept[AnalysisException](df.toDS[Map[Int, ClassData]]).getMessage
+    assert(message ===
+      "Dataset type not supported by toDS[T]: scala.collection.immutable.Map, use map(identity)\n" +
+        "Columns\n" +
+        "\t(value: MapType(IntegerType,StructType(StructField(a,StringType,false), StructField(b," +
+        "IntegerType,false), StructField(c,IntegerType,false)),false)) cannot be projected to\n" +
+        "\t(value: MapType(IntegerType,StructType(StructField(a,StringType,true), StructField(b,I" +
+        "ntegerType,false)),true));"
+    )
+  }
+
+  // cf. test("as map of case class - reorder fields by name")
+  test("SPARK-30319: toDS map of case class - reorder fields by name") {
+    val df = spark.range(3).select(
+      map(
+        lit(1),
+        struct(
+          $"id".cast("int").as("b"),
+          lit("a").as("a")
+        )
+      ).as("value")
+    )
+    val message = intercept[AnalysisException](df.toDS[Map[Int, ClassData]]).getMessage
+    assert(message ===
+      "Dataset type not supported by toDS[T]: scala.collection.immutable.Map, use map(identity)\n" +
+        "Columns\n" +
+        "\t(value: MapType(IntegerType,StructType(StructField(b,IntegerType,false), StructField(a" +
+        ",StringType,false)),false)) cannot be projected to\n" +
+        "\t(value: MapType(IntegerType,StructType(StructField(a,StringType,true), StructField(b,I" +
+        "ntegerType,false)),true));"
+    )
+  }
+
+  test("SPARK-30319: toDS enables schema pushdown") {
+    withTempDir { dir =>
+      val df = Seq(("one", 1, 2)).toDF("a", "b", "c")
+      df.write.mode(SaveMode.Overwrite).parquet(dir.getAbsolutePath)
+
+      val read = spark.read.parquet(dir.getAbsolutePath)
+
+      // .as[T] does not allow to push down T's schema
+      val plan1 = read.as[ClassData].queryExecution.sparkPlan
+      assert(plan1.isInstanceOf[FileSourceScanExec])
+      val scan1 = plan1.asInstanceOf[FileSourceScanExec]
+      assert(scan1.requiredSchema === classDataSchemaExtraFieldsNullable)
+
+      // .toDS[T] does allow to push down T's schema
+      val plan2 = read.toDS[ClassData].queryExecution.sparkPlan
+      assert(plan2.isInstanceOf[FileSourceScanExec])
+      val scan2 = plan2.asInstanceOf[FileSourceScanExec]
+      assert(scan2.requiredSchema === classDataSchemaNullable)
+    }
   }
 
   test("map") {
