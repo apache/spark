@@ -111,7 +111,11 @@ class CSVFilters(
 }
 
 object CSVFilters {
-
+  /**
+   * Returns the filters currently not supported by CSV datasource.
+   * @param filters The filters pushed down to CSV datasource.
+   * @return a sub-set of `filters` that cannot be handled by CSV datasource.
+   */
   def unsupportedFilters(filters: Array[sources.Filter]): Array[sources.Filter] = {
     filters.filter {
       case sources.AlwaysFalse | sources.AlwaysTrue => true
@@ -127,6 +131,14 @@ object CSVFilters {
     Try(Literal(value)).toOption
   }
 
+  /**
+   * Converts a filter to an expression and binds it to row positions.
+   *
+   * @param filter The filter to convert.
+   * @param toRef The function converts a filter attribute to a bound reference.
+   * @return some expression with resolved attributes or None if the conversion
+   *         of the given filter to an expression is impossible.
+   */
   def filterToExpression(
       filter: sources.Filter,
       toRef: String => Option[BoundReference]): Option[Expression] = {
