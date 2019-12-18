@@ -53,7 +53,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     }
     assert(compareEquals(buffer, serializer.deserialize(serializer.serialize(buffer))))
 
-    val agg = ApproximatePercentile(BoundReference(0, DoubleType, true), Literal(0.5))
+    val agg = new ApproximatePercentile(BoundReference(0, DoubleType, true), Literal(0.5))
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
 
@@ -103,7 +103,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = false), DoubleType)
     val percentageExpression = CreateArray(percentages.toSeq.map(Literal(_)))
     val accuracyExpression = Literal(10000)
-    val agg = ApproximatePercentile(childExpression, percentageExpression, accuracyExpression)
+    val agg = new ApproximatePercentile(childExpression, percentageExpression, accuracyExpression)
 
     assert(agg.nullable)
     val group1 = (0 until data.length / 2)
@@ -140,7 +140,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     val percentage = 0.5D
 
     // Phase one, partial mode aggregation
-    val agg = ApproximatePercentile(childExpression, Literal(percentage))
+    val agg = new ApproximatePercentile(childExpression, Literal(percentage))
       .withNewInputAggBufferOffset(inputAggregationBufferOffset)
       .withNewMutableAggBufferOffset(mutableAggregationBufferOffset)
 
@@ -170,12 +170,12 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     // sql, single percentile
     assertEqual(
       s"percentile_approx(`a`, 0.5D, $defaultAccuracy)",
-      ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D)).sql: String)
+      new ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D)).sql: String)
 
     // sql, array of percentile
     assertEqual(
       s"percentile_approx(`a`, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
-      ApproximatePercentile(
+      new ApproximatePercentile(
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))
       ).sql: String)
@@ -183,13 +183,13 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     // sql(isDistinct = false), single percentile
     assertEqual(
       s"percentile_approx(`a`, 0.5D, $defaultAccuracy)",
-      ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D))
+      new ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D))
         .sql(isDistinct = false))
 
     // sql(isDistinct = false), array of percentile
     assertEqual(
       s"percentile_approx(`a`, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
-      ApproximatePercentile(
+      new ApproximatePercentile(
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))
       ).sql(isDistinct = false))
@@ -197,13 +197,13 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     // sql(isDistinct = true), single percentile
     assertEqual(
       s"percentile_approx(DISTINCT `a`, 0.5D, $defaultAccuracy)",
-      ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D))
+      new ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D))
         .sql(isDistinct = true))
 
     // sql(isDistinct = true), array of percentile
     assertEqual(
       s"percentile_approx(DISTINCT `a`, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
-      ApproximatePercentile(
+      new ApproximatePercentile(
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))
       ).sql(isDistinct = true))
@@ -211,7 +211,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
   test("class ApproximatePercentile, fails analysis if percentage or accuracy is not a constant") {
     val attribute = AttributeReference("a", DoubleType)()
-    val wrongAccuracy = ApproximatePercentile(
+    val wrongAccuracy = new ApproximatePercentile(
       attribute,
       percentageExpression = Literal(0.5D),
       accuracyExpression = AttributeReference("b", IntegerType)())
@@ -221,7 +221,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       TypeCheckFailure("The accuracy or percentage provided must be a constant literal")
     )
 
-    val wrongPercentage = ApproximatePercentile(
+    val wrongPercentage = new ApproximatePercentile(
       attribute,
       percentageExpression = attribute,
       accuracyExpression = Literal(10000))
@@ -233,7 +233,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
   }
 
   test("class ApproximatePercentile, fails analysis if parameters are invalid") {
-    val wrongAccuracy = ApproximatePercentile(
+    val wrongAccuracy = new ApproximatePercentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(0.5D),
       accuracyExpression = Literal(-1))
@@ -249,7 +249,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       CreateArray(Seq(0D, 1D, 0.5D).map(Literal(_)))
     )
     correctPercentageExpresions.foreach { percentageExpression =>
-      val correctPercentage = ApproximatePercentile(
+      val correctPercentage = new ApproximatePercentile(
         AttributeReference("a", DoubleType)(),
         percentageExpression = percentageExpression,
         accuracyExpression = Literal(100))
@@ -265,7 +265,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     )
 
     wrongPercentageExpressions.foreach { percentageExpression =>
-      val wrongPercentage = ApproximatePercentile(
+      val wrongPercentage = new ApproximatePercentile(
         AttributeReference("a", DoubleType)(),
         percentageExpression = percentageExpression,
         accuracyExpression = Literal(100))
@@ -289,7 +289,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
     accuracyExpressions.foreach { accuracyExpression =>
       percentageExpressions.foreach { percentageExpression =>
-        val agg = ApproximatePercentile(
+        val agg = new ApproximatePercentile(
           UnresolvedAttribute("a"),
           percentageExpression,
           accuracyExpression)
@@ -309,7 +309,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
   test("class ApproximatePercentile, null handling") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
-    val agg = ApproximatePercentile(childExpression, Literal(0.5D))
+    val agg = new ApproximatePercentile(childExpression, Literal(0.5D))
     val buffer = new GenericInternalRow(new Array[Any](1))
     agg.initialize(buffer)
     // Empty aggregation buffer

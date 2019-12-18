@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{TreeNode, TreeNodeTag}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -286,6 +286,8 @@ abstract class Expression extends TreeNode[Expression] {
   override def simpleStringWithNodeId(): String = {
     throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
   }
+
+  val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
 }
 
 

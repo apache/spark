@@ -214,7 +214,7 @@ object CommandUtils extends Logging {
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
-          ApproximatePercentile(attr, Literal(percentiles), Literal(conf.percentileAccuracy))
+          new ApproximatePercentile(attr, Literal(percentiles), Literal(conf.percentileAccuracy))
         val expr = aggFunc.toAggregateExpression()
         Alias(expr, expr.toString)()
       }

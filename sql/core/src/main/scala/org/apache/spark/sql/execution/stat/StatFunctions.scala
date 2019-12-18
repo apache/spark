@@ -248,7 +248,7 @@ object StatFunctions extends Logging {
         percentileIndex += 1
         (child: Expression) =>
           GetArrayItem(
-            ApproximatePercentile(child, Literal.create(percentiles)).toAggregateExpression(),
+            new ApproximatePercentile(child, Literal.create(percentiles)).toAggregateExpression(),
             Literal(index))
       } else {
         stats.toLowerCase(Locale.ROOT) match {

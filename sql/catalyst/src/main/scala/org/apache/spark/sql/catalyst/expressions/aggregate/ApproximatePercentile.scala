@@ -67,7 +67,6 @@ import org.apache.spark.sql.types._
   """,
   since = "2.1.0")
 case class ApproximatePercentile(
-    funcName: String,
     child: Expression,
     percentageExpression: Expression,
     accuracyExpression: Expression,
@@ -75,17 +74,12 @@ case class ApproximatePercentile(
     override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes {
 
-  def this(
-      funcName: String,
-      child: Expression,
-      percentageExpression: Expression,
-      accuracyExpression: Expression) = {
-    this(funcName, child, percentageExpression, accuracyExpression, 0, 0)
+  def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
+    this(child, percentageExpression, accuracyExpression, 0, 0)
   }
 
-  def this(funcName: String, child: Expression, percentageExpression: Expression) = {
-    this(funcName, child, percentageExpression,
-      Literal(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
+  def this(child: Expression, percentageExpression: Expression) = {
+    this(child, percentageExpression, Literal(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
   }
 
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
@@ -191,7 +185,7 @@ case class ApproximatePercentile(
     if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
 
-  override def nodeName: String = funcName
+  override def nodeName: String = getTagValue(FUNC_ALIAS).getOrElse("percentile_approx")
 
   override def serialize(obj: PercentileDigest): Array[Byte] = {
     ApproximatePercentile.serializer.serialize(obj)
@@ -200,10 +194,6 @@ case class ApproximatePercentile(
   override def deserialize(bytes: Array[Byte]): PercentileDigest = {
     ApproximatePercentile.serializer.deserialize(bytes)
   }
-
-  override def flatArguments: Iterator[Any] =
-    Iterator(child, percentageExpression, accuracyExpression,
-      mutableAggBufferOffset, inputAggBufferOffset)
 }
 
 object ApproximatePercentile {
@@ -332,21 +322,4 @@ object ApproximatePercentile {
 
   val serializer: PercentileDigestSerializer = new PercentileDigestSerializer
 
-  def apply(
-      child: Expression,
-      percentageExpression: Expression,
-      accuracyExpression: Expression,
-      mutableAggBufferOffset: Int, inputAggBufferOffset: Int): ApproximatePercentile =
-    new ApproximatePercentile("percentile_approx", child, percentageExpression,
-      accuracyExpression, mutableAggBufferOffset, inputAggBufferOffset)
-
-  def apply(
-      child: Expression,
-      percentageExpression: Expression,
-      accuracyExpression: Expression): ApproximatePercentile = {
-    new ApproximatePercentile("percentile_approx", child, percentageExpression, accuracyExpression)
-  }
-
-  def apply(child: Expression, percentageExpression: Expression): ApproximatePercentile =
-    new ApproximatePercentile("percentile_approx", child, percentageExpression)
 }
