@@ -25,6 +25,15 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
+/**
+ * An instance of the class compiles filters to predicates and allows to
+ * apply the predicates to an internal row with partially initialized values
+ * converted from parsed CSV fields.
+ *
+ * @param filters The filters pushed down to CSV datasource.
+ * @param dataSchema The full schema with all fields in CSV files.
+ * @param requiredSchema The schema with only fields requested by the upper layer.
+ */
 class CSVFilters(
     filters: Seq[sources.Filter],
     dataSchema: StructType,
