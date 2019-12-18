@@ -931,6 +931,7 @@ qualifiedNameList
 
 functionName
     : qualifiedName
+    | FILTER
     | LEFT
     | RIGHT
     ;
