@@ -80,10 +80,7 @@ import org.apache.spark.sql.types.IntegerType
  *   SELECT
  *     COUNT(DISTINCT cat1) as cat1_cnt,
  *     COUNT(DISTINCT cat2) as cat2_cnt,
- *     SUM(value) FILTER (
- *       WHERE
- *         id > 1
- *     ) AS total
+ *     SUM(value) FILTER (WHERE id > 1) AS total
  *  FROM
  *    data
  *  GROUP BY
@@ -231,9 +228,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         .filter(e => !e.isDistinct && e.children.exists(!_.foldable))
       val regularAggFunChildren = regularAggExprs
         .flatMap(_.aggregateFunction.children.filter(!_.foldable))
-      val regularAggFilterChildren = regularAggExprs
-        .flatMap(ae => ae.filter.map(_.children.filter(!_.foldable)))
-        .flatten
+      val regularAggFilterChildren = regularAggExprs.flatMap(_.filterAttributes)
       val regularAggChildren = (regularAggFunChildren ++ regularAggFilterChildren).distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
 
@@ -243,11 +238,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
         val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrLookup.get)
-        val filterOpt = e.filter.map { fe =>
-          val newChildren = fe.children.map(c => regularAggChildAttrLookup.getOrElse(c, c))
-          fe.withNewChildren(newChildren)
-        }
-        val operator = Alias(e.copy(aggregateFunction = af, filter = filterOpt), e.sql)()
+        val operator = Alias(e.copy(aggregateFunction = af), e.sql)()
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(
