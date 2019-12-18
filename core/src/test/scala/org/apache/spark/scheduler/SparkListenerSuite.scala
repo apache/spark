@@ -531,7 +531,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
   Seq(true, false).foreach { throwInterruptedException =>
     val suffix = if (throwInterruptedException) "throw interrupt" else "set Thread interrupted"
-    test(s"SPARK-30285: Fix race condition in AsyncEventQueue.removeListenerOnError: $suffix") {
+    test(s"SPARK-30285: Fix deadlock in AsyncEventQueue.removeListenerOnError: $suffix") {
       val conf = new SparkConf(false)
         .set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 5)
       val bus = new LiveListenerBus(conf)
