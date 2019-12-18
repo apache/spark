@@ -22,7 +22,7 @@ import java.io.{BufferedReader, InputStreamReader}
 import scala.sys.process._
 import scala.util.{Failure, Success, Try}
 
-import org.apache.commons.lang.StringUtils
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
