@@ -35,8 +35,7 @@ import org.apache.spark.sql.types._
        -3 days -11 hours -59 minutes -59 seconds
   """,
   since = "1.0.0")
-case class Average(child: Expression)
-  extends DeclarativeAggregate with ImplicitCastInputTypes {
+case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def nodeName: String = getTagValue(FUNC_ALIAS).getOrElse("avg")
 

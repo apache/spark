@@ -208,7 +208,7 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
 
   private def percentile_approx(
       column: Column, percentage: Double, isDistinct: Boolean = false): Column = {
-    val approxPercentile = ApproximatePercentile(column.expr, Literal(percentage))
+    val approxPercentile = new ApproximatePercentile(column.expr, Literal(percentage))
     Column(approxPercentile.toAggregateExpression(isDistinct))
   }
 
