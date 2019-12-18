@@ -229,7 +229,7 @@ private[thriftserver] class HiveThriftServer2Listener(
     if (countToDelete <= 0L) {
       return
     }
-    val view = kvstore.view(classOf[ExecutionInfo]).index("closeTime").first(0L)
+    val view = kvstore.view(classOf[ExecutionInfo]).index("finishTime").first(0L)
     val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt) { j =>
       j.finishTimestamp != 0
     }
