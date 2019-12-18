@@ -528,6 +528,63 @@ Refer to the [R API docs](api/R/spark.naiveBayes.html) for more details.
 </div>
 
 
+## Factorization machines classifier
+
+[Factorization Machines](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) is able to estimate interactions
+between features even in problems with huge sparsity (like advertising and recommendation system).
+
+Factorization machines classifier formula is:
+
+$$
+\hat{y} = \sigma\left( w_0 + \sum\limits^n_{i-1} w_i x_i +
+  \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j \right)
+$$
+
+First two terms denote intercept and linear term (as same as linear regression),
+and last term denotes pairwise interactions term. $$v_i$$ describes the i-th variable
+with k factors.
+
+The pairwise interactions can be reformulated:
+
+$$
+\sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
+  = \frac{1}{2}\sum\limits^k_{f=1}
+    \left(\left( \sum\limits^n_{i=1}v_{i,f}x_i \right)^2 -
+    \sum\limits^n_{i=1}v_{i,f}^2x_i^2 \right)
+$$
+
+This equation has only linear complexity in both k and n - i.e. its computation is in $$O(kn)$$.
+
+In general, in order to prevent FM gradient explosion, it is best to scale between 0 and 1 for continuous features,
+or bin the continuous features and one-hot.
+
+**Examples**
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.FMClassifier) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/FMClassifierExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/FMClassifier.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaFMClassifierExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.FMClassifier) for more details.
+
+{% include_example python/ml/fm_classifier_example.py %}
+</div>
+
+</div>
+
+
 # Regression
 
 ## Linear regression
@@ -1012,6 +1069,45 @@ Refer to the [`IsotonicRegression` R API docs](api/R/spark.isoreg.html) for more
 </div>
 
 </div>
+
+
+## Factorization machines regressor
+
+Factorization machines regressor formula is:
+
+$$
+\hat{y} = w_0 + \sum\limits^n_{i-1} w_i x_i +
+  \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
+$$
+
+More detail on FM see [Factorization machines classifier](ml-classification-regression.html#factorization-machines-classifier)
+
+**Examples**
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.FMRegressor) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/FMRegressorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/FMRegressor.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaFMRegressorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.FMRegressor) for more details.
+
+{% include_example python/ml/fm_regressor_example.py %}
+</div>
+
+</div>
+
 
 # Linear methods
 
