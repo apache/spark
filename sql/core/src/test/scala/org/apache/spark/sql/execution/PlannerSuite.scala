@@ -421,6 +421,24 @@ class PlannerSuite extends SharedSparkSession {
     }
   }
 
+  test("EnsureRequirements replace Exchange " +
+      "if child has SortExec and RoundRobinPartitioning") {
+    val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
+    val partitioning = RoundRobinPartitioning(5)
+    assert(!partitioning.satisfies(distribution))
+
+    val inputPlan = SortExec(SortOrder(Literal(1), Ascending) :: Nil,
+      global = true,
+      child = ShuffleExchangeExec(
+        partitioning,
+        DummySparkPlan(outputPartitioning = partitioning)))
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assert(outputPlan.find{
+      case e: ShuffleExchangeExec => e.outputPartitioning.isInstanceOf[RoundRobinPartitioning]
+      case _ => false}.isEmpty,
+      "RoundRobinPartitioning should be changed to RangePartitioning")
+  }
+
   test("EnsureRequirements does not eliminate Exchange with different partitioning") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val partitioning = HashPartitioning(Literal(2) :: Nil, 5)

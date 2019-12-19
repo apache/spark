@@ -55,6 +55,10 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         child
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
+      case (ShuffleExchangeExec(partitioning: RoundRobinPartitioning, child, _),
+          distribution: OrderedDistribution) =>
+        ShuffleExchangeExec(
+          distribution.createPartitioning(partitioning.numPartitions), child)
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(defaultNumPreShufflePartitions)
