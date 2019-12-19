@@ -66,30 +66,31 @@ object HiveResult {
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
   def toHiveString(a: (Any, DataType)): String = a match {
-      case (null, _) => "NULL"
-      case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
-      case (t: Timestamp, TimestampType) =>
-        timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t))
-      case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-      case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
-      case (n, _: NumericType) => n.toString
-      case (s: String, StringType) => "\"" + s + "\""
-      case (interval: CalendarInterval, CalendarIntervalType) =>
-        SQLConf.get.intervalOutputStyle match {
-          case SQL_STANDARD => toSqlStandardString(interval)
-          case ISO_8601 => toIso8601String(interval)
-          case MULTI_UNITS => toMultiUnitsString(interval)
-        }
-      case (seq: Seq[_], ArrayType(typ, _)) =>
-        seq.map(v => (v, typ)).map(toHiveString).mkString("[", ",", "]")
-      case (map: Map[_, _], MapType(kType, vType, _)) =>
-        map.map { case (key, value) =>
-          toHiveString((key, kType)) + ":" + toHiveString((value, vType))
-        }.toSeq.sorted.mkString("{", ",", "}")
-      case (struct: Row, StructType(fields)) =>
-        struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveString((v, t.dataType))}"""
-        }.mkString("{", ",", "}")
-      case (other, _ : UserDefinedType[_]) => other.toString
-    }
+    case (null, _) => "NULL"
+    case (b, BooleanType) => b.toString
+    case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
+    case (t: Timestamp, TimestampType) =>
+      timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t))
+    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
+    case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
+    case (n, _: NumericType) => n.toString
+    case (s: String, StringType) => "\"" + s + "\""
+    case (interval: CalendarInterval, CalendarIntervalType) =>
+      SQLConf.get.intervalOutputStyle match {
+        case SQL_STANDARD => toSqlStandardString(interval)
+        case ISO_8601 => toIso8601String(interval)
+        case MULTI_UNITS => toMultiUnitsString(interval)
+      }
+    case (seq: Seq[_], ArrayType(typ, _)) =>
+      seq.map(v => (v, typ)).map(toHiveString).mkString("[", ",", "]")
+    case (m: Map[_, _], MapType(kType, vType, _)) =>
+      m.map { case (key, value) =>
+        toHiveString((key, kType)) + ":" + toHiveString((value, vType))
+      }.toSeq.sorted.mkString("{", ",", "}")
+    case (struct: Row, StructType(fields)) =>
+      struct.toSeq.zip(fields).map { case (v, t) =>
+        s""""${t.name}":${toHiveString((v, t.dataType))}"""
+      }.mkString("{", ",", "}")
+    case (other, _: UserDefinedType[_]) => other.toString
+  }
 }

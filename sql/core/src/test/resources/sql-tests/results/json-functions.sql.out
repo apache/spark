@@ -106,7 +106,7 @@ select from_json('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat
 -- !query 12 schema
 struct<from_json({"time":"26/08/2015"}):struct<time:timestamp>>
 -- !query 12 output
-{"time":2015-08-26 00:00:00.0}
+{"time":2015-08-26 00:00:00}
 
 
 -- !query 13
@@ -245,7 +245,7 @@ select from_json('[1, 2, null]', 'array<int>')
 -- !query 28 schema
 struct<from_json([1, 2, null]):array<int>>
 -- !query 28 output
-[1,2,null]
+[1,2,NULL]
 
 
 -- !query 29
@@ -269,7 +269,7 @@ select from_json('[null, {"a":2}]', 'array<struct<a:int>>')
 -- !query 31 schema
 struct<from_json([null, {"a":2}]):array<struct<a:int>>>
 -- !query 31 output
-[null,{"a":2}]
+[NULL,{"a":2}]
 
 
 -- !query 32
