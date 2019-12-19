@@ -1750,12 +1750,16 @@ class Analyzer(
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction =>
                   // TODO: SPARK-30276 Support Filter expression allows simultaneous use of DISTINCT
-                  if (isDistinct && filter.isDefined) {
-                    failAnalysis("DISTINCT and FILTER cannot be used in aggregate functions " +
-                      "at the same time")
-                  } else {
-                    AggregateExpression(agg, Complete, isDistinct, filter)
+                  if (filter.isDefined) {
+                    if (isDistinct) {
+                      failAnalysis("DISTINCT and FILTER cannot be used in aggregate functions " +
+                        "at the same time")
+                    } else if (!filter.get.deterministic) {
+                      failAnalysis("FILTER expression is non-deterministic, " +
+                        "it cannot be used in aggregate functions")
+                    }
                   }
+                  AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
                   if (isDistinct || filter.isDefined) {

@@ -196,6 +196,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "DISTINCT and FILTER cannot be used in aggregate functions at the same time" :: Nil)
 
   errorTest(
+    "FILTER expression is non-deterministic, it cannot be used in aggregate functions",
+    CatalystSqlParser.parsePlan("SELECT count(DISTINCT a) FILTER (WHERE rand(c) > 1) FROM TaBlE2"),
+    "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
+
+  errorTest(
     "nested aggregate functions",
     testRelation.groupBy($"a")(
       AggregateExpression(
