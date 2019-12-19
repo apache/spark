@@ -284,42 +284,42 @@ object FunctionRegistry {
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
-    expressionWithAlias[Average]("avg"),
-    expressionWithAlias[Average]("mean"),
+    expression[Average]("avg"),
+    expression[Average]("mean", true),
     expression[Corr]("corr"),
     expression[Count]("count"),
     expression[CountIf]("count_if"),
     expression[CovPopulation]("covar_pop"),
     expression[CovSample]("covar_samp"),
-    expressionWithAlias[First]("first"),
-    expressionWithAlias[First]("first_value"),
+    expression[First]("first"),
+    expression[First]("first_value", true),
     expression[Kurtosis]("kurtosis"),
-    expressionWithAlias[Last]("last"),
-    expressionWithAlias[Last]("last_value"),
+    expression[Last]("last"),
+    expression[Last]("last_value", true),
     expression[Max]("max"),
     expression[MaxBy]("max_by"),
     expression[Min]("min"),
     expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
-    expressionWithAlias[ApproximatePercentile]("percentile_approx"),
-    expressionWithAlias[ApproximatePercentile]("approx_percentile"),
-    expressionWithAlias[StddevSamp]("std"),
-    expressionWithAlias[StddevSamp]("stddev"),
-    expressionWithAlias[StddevSamp]("stddev_samp"),
+    expression[ApproximatePercentile]("percentile_approx"),
+    expression[ApproximatePercentile]("approx_percentile", true),
+    expression[StddevSamp]("std", true),
+    expression[StddevSamp]("stddev", true),
+    expression[StddevSamp]("stddev_samp"),
     expression[StddevPop]("stddev_pop"),
     expression[Sum]("sum"),
-    expressionWithAlias[VarianceSamp]("variance"),
-    expressionWithAlias[VarianceSamp]("var_samp"),
+    expression[VarianceSamp]("variance", true),
+    expression[VarianceSamp]("var_samp"),
     expression[VariancePop]("var_pop"),
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expressionWithAlias[BoolAnd]("every"),
-    expressionWithAlias[BoolAnd]("bool_and"),
-    expressionWithAlias[BoolOr]("any"),
-    expressionWithAlias[BoolOr]("some"),
-    expressionWithAlias[BoolOr]("bool_or"),
+    expression[BoolAnd]("every", true),
+    expression[BoolAnd]("bool_and"),
+    expression[BoolOr]("any", true),
+    expression[BoolOr]("some", true),
+    expression[BoolOr]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -634,12 +634,7 @@ object FunctionRegistry {
 
     (name, (expressionInfo[T](name), builder))
   }
-
-  private def expressionWithAlias[T <: Expression](name: String)
-      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
-    expression[T](name, true)
-  }
-
+  
   /**
    * Creates a function registry lookup entry for cast aliases (SPARK-16730).
    * For example, if name is "int", and dataType is IntegerType, this means int(x) would become
