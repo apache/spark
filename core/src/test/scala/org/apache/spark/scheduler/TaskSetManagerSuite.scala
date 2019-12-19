@@ -31,7 +31,7 @@ import org.scalatest.Assertions._
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.resource.{ResourceInformation, ImmutableResourceProfile}
+import org.apache.spark.resource.{ImmutableResourceProfile, ResourceInformation}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.SerializerInstance
@@ -738,7 +738,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
         override def index: Int = 0
       }, Seq(TaskLocation("host1", "execA")), new Properties, null)
     val taskSet = new TaskSet(Array(singleTask), 0, 0, 0,
-      null,  ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      null, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // Offer host1, which should be accepted as a PROCESS_LOCAL location

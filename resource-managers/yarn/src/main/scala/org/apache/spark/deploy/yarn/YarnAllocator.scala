@@ -140,7 +140,6 @@ private[yarn] class YarnAllocator(
   private val containerIdToExecutorId = new HashMap[ContainerId, String]
   private val containerIdToResourceProfileId = new HashMap[ContainerId, Int]
 
-
   // Executor memory in MiB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
   // Executor offHeap memory in MiB.
@@ -281,16 +280,17 @@ private[yarn] class YarnAllocator(
   // if a ResourceProfile hasn't been seen yet, create the corresponding YARN Resource for it
   private def createYarnResourceForResourceProfile(
       resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int]): Unit = {
-
-    // Start with the application or default settings
-    var heapMem = executorMemory.toLong
-    var offHeapMem = executorOffHeapMemory.toLong // TODO - do we want to add to ExecutorResource?
-    var overheadMem = memoryOverhead.toLong
-    var pysparkMem = pysparkWorkerMemory.toLong
-    var cores = defaultExecutorCores
-    val customResources = new mutable.HashMap[String, String]
     resourceProfileToTotalExecs.foreach { case (rp, num) =>
       if (!rpIdToYarnResource.contains(rp.id)) {
+        // Start with the application or default settings
+        var heapMem = executorMemory.toLong
+        // TODO - do we want to add to ExecutorResource?
+        var offHeapMem = executorOffHeapMemory.toLong
+        var overheadMem = memoryOverhead.toLong
+        var pysparkMem = pysparkWorkerMemory.toLong
+        var cores = defaultExecutorCores
+        val customResources = new mutable.HashMap[String, String]
+        // track the resource profile if not already there
         getOrUpdateRunningExecutorForRPId(rp.id)
         logInfo(s"resource profile ${rp.id} doesn't exist, adding it")
         val execResources = rp.executorResources
@@ -687,7 +687,8 @@ private[yarn] class YarnAllocator(
       val executorHostname = container.getNodeId.getHost
       val containerId = container.getId
       val executorId = executorIdCounter.toString
-      assert(container.getResource.getMemory >= resource.getMemory)
+      val yarnResourceForRpId = rpIdToYarnResource(rpId)
+      assert(container.getResource.getMemory >= yarnResourceForRpId.getMemory)
       logInfo(s"Launching container $containerId on host $executorHostname " +
         s"for executor with ID $executorId for ResourceProfile Id $rpId")
 

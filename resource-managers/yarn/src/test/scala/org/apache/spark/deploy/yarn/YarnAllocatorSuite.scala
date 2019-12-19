@@ -204,7 +204,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     ImmutableResourceProfile.reInitDefaultProfile(sparkConf)
   }
 
-
   test("multiple containers allocated with ResourceProfiles") {
     assume(isYarnResourceTypesAvailable())
     val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG)
@@ -215,9 +214,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val rprof = new ImmutableResourceProfile(execReq.requests, taskReq.requests)
 
-    val execReq2 = new ExecutorResourceRequests().resource("fpga", 2)
+    val execReq2 = new ExecutorResourceRequests().memory("8g").resource("fpga", 2)
     val taskReq2 = new TaskResourceRequests().resource("fpga", 1)
     val rprof2 = new ImmutableResourceProfile(execReq2.requests, taskReq2.requests)
+
 
     // request a single container and receive it
     val handler = createAllocator(1)
@@ -230,9 +230,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumExecutorsRunning should be (0)
     handler.getNumContainersPendingAllocate should be (3)
 
+    val containerResourcerp2 = Resource.newInstance(10240, 5)
+
     val container = createContainer("host1", priority = Priority.newInstance(rprof.id))
-    val container2 = createContainer("host2", priority = Priority.newInstance(rprof2.id))
-    val container3 = createContainer("host3", priority = Priority.newInstance(rprof2.id))
+    val container2 = createContainer("host2", resource = containerResourcerp2,
+      priority = Priority.newInstance(rprof2.id))
+    val container3 = createContainer("host3", resource = containerResourcerp2,
+      priority = Priority.newInstance(rprof2.id))
     handler.handleAllocatedContainers(Array(container, container2, container3))
 
     handler.getNumExecutorsRunning should be (3)

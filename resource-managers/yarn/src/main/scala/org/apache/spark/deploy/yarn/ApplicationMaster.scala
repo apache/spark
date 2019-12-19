@@ -776,7 +776,6 @@ private[spark] class ApplicationMaster(
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case r: RequestExecutors =>
-        logWarning("in Request Executors: " + r)
         Option(allocator) match {
           case Some(a) =>
             if (a.requestTotalExecutorsWithPreferredLocalities(

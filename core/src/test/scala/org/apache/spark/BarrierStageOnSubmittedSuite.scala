@@ -21,7 +21,6 @@ import scala.concurrent.duration._
 
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
-import org.apache.spark.resource._
 import org.apache.spark.scheduler.BarrierJobAllocationFailed._
 import org.apache.spark.util.ThreadUtils
 

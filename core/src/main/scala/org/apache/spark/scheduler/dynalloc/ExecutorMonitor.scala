@@ -416,8 +416,7 @@ private[spark] class ExecutorMonitor(
    * event, which is possible because these events are posted in different threads. (see SPARK-4951)
    */
   private def ensureExecutorIsTracked(id: String, resourceProfileId: Int): Tracker = {
-    val numExecsWithRpId = execResourceProfileCount.getOrDefault(resourceProfileId, 0)
-    execResourceProfileCount.putIfAbsent(resourceProfileId, numExecsWithRpId)
+    val numExecsWithRpId = execResourceProfileCount.computeIfAbsent(resourceProfileId, _ => 0)
     val execTracker = executors.computeIfAbsent(id, _ => {
         val newcount = numExecsWithRpId + 1
         execResourceProfileCount.put(resourceProfileId, newcount)
