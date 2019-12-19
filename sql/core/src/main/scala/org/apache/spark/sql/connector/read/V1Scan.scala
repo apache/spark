@@ -40,5 +40,5 @@ trait V1Scan extends Scan {
    *
    * @since 3.0.0
    */
-  def toV1Relation(context: SQLContext): BaseRelation
+  def toV1TableScan(context: SQLContext): BaseRelation
 }

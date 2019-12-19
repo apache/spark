@@ -164,7 +164,7 @@ class TableWithV1ReadFallback(override val name: String) extends Table with Supp
       requiredSchema: StructType,
       filters: Array[Filter]) extends V1Scan {
     override def readSchema(): StructType = requiredSchema
-    override def toV1Relation(context: SQLContext): BaseRelation = {
+    override def toV1TableScan(context: SQLContext): BaseRelation = {
       new BaseRelation with TableScan {
         override def sqlContext: SQLContext = context
         override def schema: StructType = requiredSchema

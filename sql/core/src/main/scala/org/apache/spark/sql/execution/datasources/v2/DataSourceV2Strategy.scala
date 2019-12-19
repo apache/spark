@@ -49,7 +49,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
       val (scanExec, needsUnsafeConversion) = relation.scan match {
         case v1Scan: V1Scan =>
-          val v1Relation = v1Scan.toV1Relation(session.sqlContext)
+          val v1Relation = v1Scan.toV1TableScan(session.sqlContext)
           if (v1Relation.schema != v1Scan.readSchema()) {
             throw new IllegalArgumentException(
               "The fallback v1 relation reports inconsistent schema:\n" +
