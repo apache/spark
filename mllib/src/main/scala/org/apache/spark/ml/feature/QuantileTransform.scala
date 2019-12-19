@@ -79,10 +79,7 @@ private[feature] trait QuantileTransformParams extends Params
 /**
  * QuantileTransform provide a non-parametric transformation to map the data to another
  * distribution, currently both uniform and gaussian are supported.
- * This model transforms the features to follow a uniform or a gaussian distribution.
- * Therefore, for a given feature, this transformation tends to spread out the most frequent
- * values. It also reduces the impact of (marginal) outliers: this is therefore a robust
- * preprocessing scheme.
+ * It also reduces the impact of outliers, so it is a robust preprocessing scheme.
  * The transformation is applied on each feature independently. First an estimate of the
  * cumulative distribution function of a feature is used to map the original values to a
  * uniform distribution. The obtained values are then mapped to the desired output distribution
@@ -135,9 +132,9 @@ class QuantileTransform(override val uid: String)
     ).mapValues { s =>
       val q = Array.tabulate(n)(i => s.query(i.toDouble / (n - 1)).get)
       Vectors.dense(q)
-    }.sortBy(_._1).values.collect()
+    }.collect().sortBy(_._1).map(_._2)
     require(quantiles.length == numFeatures,
-      "QuantileSummaries on some dimensions were not computed")
+      "QuantileSummaries on some dimensions are missing")
 
     copyValues(new QuantileTransformModel(uid, quantiles)
       .setParent(this))
@@ -266,8 +263,6 @@ class QuantileTransformModel private[ml] (
       s"numQuantiles=${$(numQuantiles)}, numFeatures=$numFeatures"
   }
 }
-
-
 
 @Since("3.0.0")
 object QuantileTransformModel extends MLReadable[QuantileTransformModel] {
