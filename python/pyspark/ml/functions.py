@@ -40,3 +40,25 @@ def vector_to_array(col):
     sc = SparkContext._active_spark_context
     return Column(
         sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col)))
+
+
+def _test():
+    import doctest
+    import pyspark.ml.functions
+    globs = pyspark.ml.functions.__dict__.copy()
+    spark = SparkSession.builder \
+        .master("local[2]") \
+        .appName("ml.functions tests") \
+        .getOrCreate()
+    sc = spark.sparkContext
+    globs['sc'] = sc
+    globs['spark'] = spark
+
+    (failure_count, test_count) = doctest.testmod(pyspark.ml.functions, globs=globs)
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
