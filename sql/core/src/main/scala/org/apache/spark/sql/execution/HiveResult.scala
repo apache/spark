@@ -68,8 +68,6 @@ object HiveResult {
     BooleanType,
     ByteType,
     ShortType,
-    DateType,
-    TimestampType,
     BinaryType)
 
   private lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
@@ -90,6 +88,10 @@ object HiveResult {
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
       }.toSeq.sorted.mkString("{", ",", "}")
     case (null, _) => "null"
+    case (d: Date, DateType) =>
+      dateFormatter.format(DateTimeUtils.fromJavaDate(d))
+    case (t: Timestamp, TimestampType) =>
+      DateTimeUtils.timestampToString(timestampFormatter, DateTimeUtils.fromJavaTimestamp(t))
     case (s: String, StringType) => "\"" + s + "\""
     case (decimal, DecimalType()) => decimal.toString
     case (interval: CalendarInterval, CalendarIntervalType) =>
