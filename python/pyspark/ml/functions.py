@@ -44,6 +44,7 @@ def vector_to_array(col):
 
 def _test():
     import doctest
+    from pyspark.sql import SparkSession
     import pyspark.ml.functions
     globs = pyspark.ml.functions.__dict__.copy()
     spark = SparkSession.builder \
