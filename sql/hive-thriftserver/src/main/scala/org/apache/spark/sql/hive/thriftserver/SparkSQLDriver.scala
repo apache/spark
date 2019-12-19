@@ -40,6 +40,7 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
   extends Logging {
 
   type RowResult = Seq[String]
+  type TableResult = Seq[Seq[String]]
 
   /**
    *
@@ -48,14 +49,11 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
    */
   def processCmd(cmd: String): Int = {
     val cmd_cleaned = cmd.trim
-    // scalastyle:off println
-    println("processCmd>>>>>>>>>>>>>>>>" + cmd_cleaned)
-    // scalastyle:on println
     cmd_cleaned
       .split("\\s+")
       .toList match {
       case ("quit" | "exit") :: _ =>
-        System.exit(0)
+        sys.exit(0)
         0
       case "source" :: filepath :: _ =>
         processFile(filepath)
@@ -71,7 +69,7 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
    * @param command
    * @return
    */
-  def run(command: String): Option[Seq[RowResult]] = {
+  def run(command: String): Try[Option[TableResult]] = {
     Try {
       context.sparkContext.setJobDescription(command)
       val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
@@ -85,14 +83,6 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
       } else {
         None
       }
-    } match {
-      case Success(value) => value
-      case Failure(exception) =>
-        // scalastyle:off println
-        println(s"Error in query: ${exception.getMessage}")
-        // scalastyle:on println
-        None
-      case _ => None
     }
   }
 
@@ -133,7 +123,6 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
       case Failure(exception) =>
         logError(exception.getMessage)
         1
-      case _ => 1
     }
   }
 
@@ -144,13 +133,22 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
    */
   def processSQLCmd(cmd: String): Int = {
 
-    val result = run(cmd)
-    if (result.nonEmpty) {
-      // scalastyle:off println
-      println(showQueryResults(result.get))
-      // scalastyle:on println
+    run(cmd) match {
+      case Success(value) =>
+        value match {
+          case Some(results) =>
+            // scalastyle:off println
+            println(showQueryResults(results))
+            // scalastyle:on println
+          case None =>
+        }
+        0
+      case Failure(exception) =>
+        // scalastyle:off println
+        println(s"Error in query: ${exception.getMessage}")
+        // scalastyle:on println
+        1
     }
-    1
   }
 
 
@@ -169,7 +167,6 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
       case Failure(exception) =>
         logError(exception.getMessage)
         1
-      case _ => 1
     }
   }
 
@@ -244,9 +241,7 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
     }
 
     val commands = pushBack(allin, replace, List[String]())
-    // scalastyle:off println
-    commands.foreach(_ => println("processLines>>>>>>>>>>>>>>>>>" + _))
-    // scalastyle:on println
+
     @scala.annotation.tailrec
     def runCommands(cmd: List[String], prevResult: Int): Int = {
       if (cmd.isEmpty) {
@@ -265,7 +260,7 @@ private[hive] case class SparkSQLDriver(context: SQLContext,
    * @param resultRows
    * @return
    */
-  def showQueryResults(resultRows: Seq[Seq[String]]): String = {
+  def showQueryResults(resultRows: TableResult): String = {
 
     val sb = new StringBuilder
 

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import scala.collection.JavaConverters._
+import scala.io.StdIn
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
@@ -26,6 +28,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
+import org.apache.spark.util.ShutdownHookManager
 
 
 private[hive] object SparkSQLCLIDriver extends Logging with App {
@@ -49,10 +52,6 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
       sparkConf.setIfMissing("spark.hadoop." + k, v)
     }
 
-  // scalastyle:off println
-  println(sparkConf.toDebugString)
-  // scalastyle:on println
-
   val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
 
@@ -71,6 +70,7 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
     UserGroupInformation.getCurrentUser.addCredentials(credentials)
   }
 
+  ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
   // TODO: add hive.aux.jars.path as an option to local HiveUtils
   val auxJars: Option[String] = sparkSQLArgs
@@ -134,7 +134,13 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
       val spaces = promptTemplate.length - 2
       " " * spaces + "> "
     }
-    scala.io.StdIn.readLine(prompt) match {
+
+    val promptedLine = Try(StdIn.readLine(prompt)) match {
+      case Failure(exception) => throw new InterruptedException(exception.getMessage)
+      case Success(value) => value
+    }
+
+    promptedLine match {
       case s if s.trim == "" =>
         readLines(previousLine)
       case s if s.startsWith("--") =>
@@ -150,7 +156,10 @@ private[hive] object SparkSQLCLIDriver extends Logging with App {
     }
   }
 
-  readLines()
+  Try(readLines()) match {
+    case Failure(_) => SparkSQLEnv.stop()
+    case Success(_) =>
+  }
 }
 
 private[hive] class SparkSQLCLIDriver
