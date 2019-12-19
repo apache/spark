@@ -111,7 +111,7 @@ SELECT map(1, 2, 3, NULL), 1
 -- !query 9 schema
 struct<map(1, 2):map<int,int>,str:string>
 -- !query 9 output
-{1:2,3:NULL}	1
+{1:2,3:null}	1
 {1:2}	str
 
 
@@ -122,7 +122,7 @@ SELECT array(1, 2, 3, NULL), 1
 -- !query 10 schema
 struct<array(1, 2):array<int>,str:string>
 -- !query 10 output
-[1,2,3,NULL]	1
+[1,2,3,null]	1
 [1,2]	str
 
 

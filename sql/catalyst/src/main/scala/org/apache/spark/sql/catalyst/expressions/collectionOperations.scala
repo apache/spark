@@ -3043,7 +3043,7 @@ trait ArraySetLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3));
-       [1,2,3,NULL]
+       [1,2,3,null]
   """, since = "2.4.0")
 case class ArrayDistinct(child: Expression)
   extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
