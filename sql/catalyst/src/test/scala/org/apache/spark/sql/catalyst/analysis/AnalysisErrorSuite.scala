@@ -197,7 +197,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions",
-    CatalystSqlParser.parsePlan("SELECT count(DISTINCT a) FILTER (WHERE rand(c) > 1) FROM TaBlE2"),
+    CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
 
   errorTest(
