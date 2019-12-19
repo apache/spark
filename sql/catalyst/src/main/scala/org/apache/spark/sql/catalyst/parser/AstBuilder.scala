@@ -3416,8 +3416,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.NULL => ""
       case _ => string(ctx.STRING)
     }
-    CommentOnNamespace(UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
-      comment)
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    CommentOnNamespace(UnresolvedNamespace(nameParts), comment)
   }
 
   override def visitCommentTable(ctx: CommentTableContext): LogicalPlan = withOrigin(ctx) {
@@ -3425,6 +3425,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.NULL => ""
       case _ => string(ctx.STRING)
     }
-    CommentOnTable(UnresolvedV2Table(visitMultipartIdentifier(ctx.multipartIdentifier)), comment)
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    CommentOnTable(UnresolvedV2Table(nameParts), comment)
   }
 }

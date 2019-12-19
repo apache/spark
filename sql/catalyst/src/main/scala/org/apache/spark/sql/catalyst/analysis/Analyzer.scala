@@ -196,7 +196,7 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
-      ResolveCatalogsToV2(catalogManager) ::
+      ResolveNamespaceAndTable(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::

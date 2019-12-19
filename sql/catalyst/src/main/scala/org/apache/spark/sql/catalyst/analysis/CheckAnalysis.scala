@@ -92,6 +92,12 @@ trait CheckAnalysis extends PredicateHelper {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
 
+      case u: UnresolvedNamespace =>
+        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedV2Table =>
+        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 

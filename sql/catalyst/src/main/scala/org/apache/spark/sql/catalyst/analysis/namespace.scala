@@ -21,19 +21,13 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 
-trait NamespaceNode extends LeafNode {
+case class ResolvedNamespace(catalog: SupportsNamespaces, namespace: Seq[String])
+  extends LeafNode {
   override def output: Seq[Attribute] = Nil
-  def catalog: SupportsNamespaces
-  def namespace: Seq[String]
 }
 
-case class ResolvedNamespace(catalog: SupportsNamespaces, namespace: Seq[String])
-  extends NamespaceNode
-
-case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends NamespaceNode {
+case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
 
-  override def catalog: SupportsNamespaces = throw new UnresolvedException(this, "catalog")
-
-  override def namespace: Seq[String] = throw new UnresolvedException(this, "namespace")
+  override def output: Seq[Attribute] = Nil
 }

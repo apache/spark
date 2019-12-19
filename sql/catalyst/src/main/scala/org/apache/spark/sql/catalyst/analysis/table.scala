@@ -21,19 +21,13 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 
-trait TableNode extends LeafNode {
+case class ResolvedV2Table(catalog: TableCatalog, identifier: Identifier)
+  extends LeafNode {
   override def output: Seq[Attribute] = Nil
-  def catalog: TableCatalog
-  def tableIdentifier: Identifier
 }
 
-case class ResolvedV2Table(catalog: TableCatalog, tableIdentifier: Identifier)
-  extends TableNode
-
-case class UnresolvedV2Table(multipartIdentifier: Seq[String]) extends TableNode {
+case class UnresolvedV2Table(multipartIdentifier: Seq[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
 
-  override def catalog: TableCatalog = throw new UnresolvedException(this, "catalog")
-
-  override def tableIdentifier: Identifier = throw new UnresolvedException(this, "tableIdentifier")
+  override def output: Seq[Attribute] = Nil
 }

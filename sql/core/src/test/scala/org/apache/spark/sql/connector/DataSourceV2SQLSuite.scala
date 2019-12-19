@@ -1935,12 +1935,14 @@ class DataSourceV2SQLSuite
     checkNamespaceComment("ns", "minor revision")
     checkNamespaceComment("ns", null)
     checkNamespaceComment("ns", "NULL")
+    intercept[AnalysisException](sql(s"COMMENT ON NAMESPACE abc IS NULL"))
 
     // V2 non-session catalog is used.
     sql(s"CREATE NAMESPACE testcat.ns1")
     checkNamespaceComment("testcat.ns1", "minor revision")
     checkNamespaceComment("testcat.ns1", null)
     checkNamespaceComment("testcat.ns1", "NULL")
+    intercept[AnalysisException](sql(s"COMMENT ON NAMESPACE abc.xyz IS NULL"))
   }
 
   private def checkNamespaceComment(namespace: String, comment: String): Unit = {
@@ -1960,6 +1962,7 @@ class DataSourceV2SQLSuite
       checkTableComment("t", null)
       checkTableComment("t", "NULL")
     }
+    intercept[AnalysisException](sql(s"COMMENT ON TABLE abc IS NULL"))
 
     // V2 non-session catalog is used.
     withTable("testcat.ns1.ns2.t") {
@@ -1968,6 +1971,7 @@ class DataSourceV2SQLSuite
       checkTableComment("testcat.ns1.ns2.t", null)
       checkTableComment("testcat.ns1.ns2.t", "NULL")
     }
+    intercept[AnalysisException](sql(s"COMMENT ON TABLE abc.xyz IS NULL"))
   }
 
   private def checkTableComment(tableName: String, comment: String): Unit = {

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NamespaceNode, Star, TableNode, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
@@ -465,7 +465,7 @@ case class ShowTableProperties(
  * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
  *
  */
-case class CommentOnNamespace(child: NamespaceNode, comment: String) extends Command {
+case class CommentOnNamespace(child: LogicalPlan, comment: String) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
@@ -479,6 +479,6 @@ case class CommentOnNamespace(child: NamespaceNode, comment: String) extends Com
  * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
  *
  */
-case class CommentOnTable(child: TableNode, comment: String) extends Command {
+case class CommentOnTable(child: LogicalPlan, comment: String) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }

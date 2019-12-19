@@ -22,14 +22,14 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-case class ResolveCatalogsToV2(catalogManager: CatalogManager)
+case class ResolveNamespaceAndTable(catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
       ResolvedNamespace(catalog.asNamespaceCatalog, ns)
 
     case u @ UnresolvedV2Table(CatalogAndIdentifier(catalog, ident)) =>
-      CatalogV2Util.loadRelation(catalog, ident).map { _ =>
+      CatalogV2Util.loadTable(catalog, ident).map { _ =>
         ResolvedV2Table(catalog.asTableCatalog, ident)
       }.getOrElse(u)
   }
