@@ -46,6 +46,7 @@ def _test():
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.ml.functions
+    import sys
     globs = pyspark.ml.functions.__dict__.copy()
     spark = SparkSession.builder \
         .master("local[2]") \
@@ -55,7 +56,9 @@ def _test():
     globs['sc'] = sc
     globs['spark'] = spark
 
-    (failure_count, test_count) = doctest.testmod(pyspark.ml.functions, globs=globs)
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.ml.functions, globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
         sys.exit(-1)
