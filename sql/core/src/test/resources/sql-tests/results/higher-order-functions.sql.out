@@ -171,7 +171,7 @@ select zip_with(ys, zs, (a, b) -> a + size(b)) as v from nested
 struct<v:array<int>>
 -- !query 17 output
 [13]
-[34,99,null]
+[34,99,NULL]
 [80,-74]
 
 
@@ -188,7 +188,7 @@ select zip_with(array('a'), array('d', null, 'f'), (x, y) -> coalesce(x, y)) as 
 -- !query 19 schema
 struct<v:array<string>>
 -- !query 19 output
-["a",null,"f"]
+["a",NULL,"f"]
 
 
 -- !query 20
