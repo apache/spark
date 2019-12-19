@@ -157,7 +157,7 @@ case class AdaptiveSparkPlanExec(
                 }
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
-              case e: Exception => events.offer(StageFailure(stage, e))
+              case e: Throwable => events.offer(StageFailure(stage, e))
             }
           }
         }
