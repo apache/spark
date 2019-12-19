@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.util
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.collection.JavaConverters._
@@ -131,15 +132,17 @@ private[spark] class Pool(
   override def updateAvailableSlots(numSlots: Float): Unit = {
     schedulingMode match {
       case SchedulingMode.FAIR =>
-        val queueCopy = new ConcurrentLinkedQueue[Schedulable](schedulableQueue)
-        var shouldRedistribute = false
+        val queueCopy = new util.LinkedList[Schedulable](schedulableQueue)
+        var shouldRedistribute = true
         var totalWeights = schedulableQueue.asScala.map(_.weight).sum
         var totalSlots = numSlots
-        do {
+        while (totalSlots > 0 && shouldRedistribute) {
           shouldRedistribute = false
           var nextWeights = totalWeights
           var nextSlots = totalSlots
-          queueCopy.forEach(schedulable => {
+          val iterator = queueCopy.iterator()
+          while (iterator.hasNext) {
+            val schedulable = iterator.next()
             val numTasksRemaining = schedulable.getSortedTaskSetQueue
               .map(tsm => tsm.tasks.length - tsm.tasksSuccessful).sum
             val allocatedSlots = Math.max(
@@ -150,14 +153,14 @@ private[spark] class Pool(
               nextWeights -= schedulable.weight
               nextSlots -= numTasksRemaining
               shouldRedistribute = true
-              queueCopy.remove(schedulable)
+              iterator.remove()
             }
-          })
+          }
           totalWeights = nextWeights
           totalSlots = nextSlots
-        } while (shouldRedistribute)
+        }
 
-        // All schedulables remaining have more remaining tasks than their share of slots,
+        // All schedulables remaining have more or equal remaining tasks than their share of slots,
         // so no need to recalculate remaining tasks. Just give them their total share of slots.
         queueCopy.forEach(schedulable => {
           val allocatedSlots = Math.max(
@@ -170,11 +173,15 @@ private[spark] class Pool(
           schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
         var remainingSlots = numSlots
         for (schedulable <- sortedSchedulableQueue) {
-          val numTasksRemaining = schedulable.getSortedTaskSetQueue
-            .map(tsm => tsm.tasks.length - tsm.tasksSuccessful).sum
-          val toAssign = Math.min(numTasksRemaining, remainingSlots)
-          schedulable.updateAvailableSlots(toAssign)
-          remainingSlots -= toAssign
+          if (remainingSlots == 0) {
+            schedulable.updateAvailableSlots(0)
+          } else {
+            val numTasksRemaining = schedulable.getSortedTaskSetQueue
+              .map(tsm => tsm.tasks.length - tsm.tasksSuccessful).sum
+            val toAssign = Math.min(numTasksRemaining, remainingSlots)
+            schedulable.updateAvailableSlots(toAssign)
+            remainingSlots -= toAssign
+          }
         }
       case _ =>
         val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
