@@ -285,7 +285,6 @@ object FunctionRegistry {
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
-    expression[Average]("mean", true),
     expression[Corr]("corr"),
     expression[Count]("count"),
     expression[CountIf]("count_if"),
@@ -298,6 +297,7 @@ object FunctionRegistry {
     expression[Last]("last_value", true),
     expression[Max]("max"),
     expression[MaxBy]("max_by"),
+    expression[Average]("mean", true),
     expression[Min]("min"),
     expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
@@ -306,12 +306,12 @@ object FunctionRegistry {
     expression[ApproximatePercentile]("approx_percentile", true),
     expression[StddevSamp]("std", true),
     expression[StddevSamp]("stddev", true),
-    expression[StddevSamp]("stddev_samp"),
     expression[StddevPop]("stddev_pop"),
+    expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
     expression[VarianceSamp]("variance", true),
-    expression[VarianceSamp]("var_samp"),
     expression[VariancePop]("var_pop"),
+    expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
@@ -634,7 +634,7 @@ object FunctionRegistry {
 
     (name, (expressionInfo[T](name), builder))
   }
-  
+
   /**
    * Creates a function registry lookup entry for cast aliases (SPARK-16730).
    * For example, if name is "int", and dataType is IntegerType, this means int(x) would become
