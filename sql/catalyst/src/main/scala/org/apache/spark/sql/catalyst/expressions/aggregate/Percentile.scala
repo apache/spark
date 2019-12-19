@@ -69,7 +69,7 @@ case class Percentile(
     frequencyExpression : Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
+  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] with ImplicitCastInputTypes {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, Literal(1L), 0, 0)
@@ -93,6 +93,7 @@ case class Percentile(
 
   @transient
   private lazy val percentages = percentageExpression.eval() match {
+    case null => null
     case num: Double => Array(num)
     case arrayData: ArrayData => arrayData.toDoubleArray()
   }
@@ -110,7 +111,11 @@ case class Percentile(
   }
 
   def inputTypes: Seq[AbstractDataType] = {
-    Seq(NumericType, TypeCollection(DoubleType, ArrayType(DoubleType, false)), IntegralType)
+    val percentageExpType = percentageExpression.dataType match {
+      case _: ArrayType => ArrayType(DoubleType, false)
+      case _ => DoubleType
+    }
+    Seq(NumericType, percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -118,7 +123,7 @@ case class Percentile(
   // 2. percentages(s) must be in the range [0.0, 1.0].
   override def checkInputDataTypes(): TypeCheckResult = {
     // Validate the inputTypes
-    val defaultCheck = ExpectsInputTypes.checkInputDataTypes(children, inputTypes)
+    val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!percentageExpression.foldable) {

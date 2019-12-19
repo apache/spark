@@ -21,7 +21,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
@@ -236,13 +239,36 @@ class PercentileSuite extends SparkFunSuite {
       val percentile4 = new Percentile(child, percentage)
       val checkResult = percentile4.checkInputDataTypes()
       assert(checkResult.isFailure)
-      Seq("argument 2 requires (double or array<double>) type, however, ",
+      Seq("argument 2 requires double type, however, ",
           s"is of ${dataType.simpleString} type.").foreach { errMsg =>
         assert(checkResult.asInstanceOf[TypeCheckFailure].message.contains(errMsg))
       }
     }
   }
 
+  test("class ApproximatePercentile, automatically add type casting for parameters") {
+    val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+
+    // Compatible percentage types: float, decimal, string
+    val percentageExpressions = Seq(Literal(0.3f), DecimalLiteral(0.5), Literal("0.2"),
+      CreateArray(Seq(Literal(0.3f), Literal(0.5D), DecimalLiteral(0.7))))
+
+    percentageExpressions.foreach { percentageExpression =>
+      val agg = new Percentile(
+        UnresolvedAttribute("a"),
+        percentageExpression)
+      val analyzed = testRelation.select(agg).analyze.expressions.head
+      analyzed match {
+        case Alias(agg: Percentile, _) =>
+          assert(agg.resolved)
+          assert(agg.child.dataType == IntegerType)
+          assert(agg.percentageExpression.dataType == DoubleType ||
+            agg.percentageExpression.dataType == ArrayType(DoubleType, containsNull = false))
+        case _ => fail()
+      }
+    }
+
+  }
   test("nulls in percentage expression") {
     val nullPercentageExprs = Seq(Literal(null), CreateArray(Seq(0.1D, null).map(Literal(_))))
 
@@ -253,13 +279,12 @@ class PercentileSuite extends SparkFunSuite {
           percentageExpression = percentageExpression)
         assert(
           wrongPercentage.checkInputDataTypes() match {
-            case TypeCheckFailure(msg)
-              if msg.contains("argument 2 requires (double or array<double>) type") =>
-              true
+            case TypeCheckFailure(msg) if msg.contains("argument 2 requires") => true
             case _ => false
           })
     }
   }
+
   test("null handling") {
 
     // Percentile without frequency column
