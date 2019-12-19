@@ -251,6 +251,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>SET</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>SETS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SHOW</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>SIMILAR</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>SKEWED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>SOME</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>SORT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>

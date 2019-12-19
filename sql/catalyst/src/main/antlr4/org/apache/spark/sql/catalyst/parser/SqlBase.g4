@@ -1411,6 +1411,7 @@ nonReserved
     | SET
     | SETS
     | SHOW
+    | SIMILAR
     | SKEWED
     | SOME
     | SORT
@@ -1683,6 +1684,7 @@ SET: 'SET';
 SETMINUS: 'MINUS';
 SETS: 'SETS';
 SHOW: 'SHOW';
+SIMILAR: 'SIMILAR';
 SKEWED: 'SKEWED';
 SOME: 'SOME';
 SORT: 'SORT';
