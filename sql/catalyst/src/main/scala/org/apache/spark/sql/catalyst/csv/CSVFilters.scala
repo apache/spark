@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BooleanType, StructType}
 
 /**
  * An instance of the class compiles filters to predicates and allows to
@@ -122,9 +122,10 @@ object CSVFilters {
    * @return a sub-set of `filters` that cannot be handled by CSV datasource.
    */
   def unsupportedFilters(filters: Array[sources.Filter]): Array[sources.Filter] = {
-    filters.filter {
-      case sources.AlwaysFalse | sources.AlwaysTrue => true
-      case _ => !SQLConf.get.csvFilterPushDown
+    if (SQLConf.get.csvFilterPushDown) {
+      Array.empty
+    } else {
+      filters
     }
   }
 
@@ -186,7 +187,10 @@ object CSVFilters {
         zipAttributeAndValue(attribute, value).map(StartsWith.tupled)
       case sources.StringEndsWith(attribute, value) =>
         zipAttributeAndValue(attribute, value).map(EndsWith.tupled)
-      case _ => None
+      case sources.AlwaysTrue() =>
+        Some(Literal(true, BooleanType))
+      case sources.AlwaysFalse() =>
+        Some(Literal(false, BooleanType))
     }
     translate(filter)
   }
