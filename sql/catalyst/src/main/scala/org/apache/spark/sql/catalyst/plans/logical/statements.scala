@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.ViewType
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedNamespace, ViewType}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -362,9 +362,9 @@ case class ShowTableStatement(
  * A CREATE NAMESPACE statement, as parsed from SQL.
  */
 case class CreateNamespaceStatement(
-    namespace: Seq[String],
-    ifNotExists: Boolean,
-    properties: Map[String, String]) extends ParsedStatement
+     namespace: LogicalPlan,
+     ifNotExists: Boolean,
+     properties: Map[String, String]) extends ParsedStatement
 
 /**
  * A DROP NAMESPACE statement, as parsed from SQL.
