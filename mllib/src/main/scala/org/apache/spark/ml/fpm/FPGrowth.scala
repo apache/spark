@@ -286,7 +286,7 @@ class FPGrowthModel private[ml] (
 
     val dt = dataset.schema($(itemsCol)).dataType
     // For each rule, examine the input items and summarize the consequents
-    val predictUDF = udf((items: Seq[_]) => {
+    val predictUDF = udf((items: Seq[Any]) => {
       if (items != null) {
         val itemset = items.toSet
         brRules.value.filter(_._1.forall(itemset.contains))

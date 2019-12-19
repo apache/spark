@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import java.net.{HttpURLConnection, URL}
+import java.net.URL
 import java.util.Locale
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
@@ -752,6 +752,22 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         }
       } finally {
         f.cancel()
+      }
+    }
+  }
+
+  test("description for empty jobs") {
+    withSpark(newSparkContext()) { sc =>
+      sc.emptyRDD[Int].collect
+      val description = "This is my job"
+      sc.setJobDescription(description)
+      sc.emptyRDD[Int].collect
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs")
+        val descriptions = findAll(className("description-input")).toArray
+        descriptions(0).text should be (description)
+        descriptions(1).text should include ("collect")
       }
     }
   }

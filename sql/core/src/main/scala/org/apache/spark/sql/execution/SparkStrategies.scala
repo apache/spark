@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
+import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -422,7 +422,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
-        aggregate.AggUtils.planStreamingAggregation(
+        AggUtils.planStreamingAggregation(
           normalizedGroupingExpressions,
           aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
@@ -517,13 +517,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val aggregateOperator =
           if (functionsWithDistinct.isEmpty) {
-            aggregate.AggUtils.planAggregateWithoutDistinct(
+            AggUtils.planAggregateWithoutDistinct(
               normalizedGroupingExpressions,
               aggregateExpressions,
               resultExpressions,
               planLater(child))
           } else {
-            aggregate.AggUtils.planAggregateWithOneDistinct(
+            AggUtils.planAggregateWithOneDistinct(
               normalizedGroupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,

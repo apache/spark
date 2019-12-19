@@ -134,11 +134,11 @@ class Analyzer(
     this(
       new CatalogManager(conf, FakeV2SessionCatalog, catalog),
       conf,
-      conf.optimizerMaxIterations)
+      conf.analyzerMaxIterations)
   }
 
   def this(catalogManager: CatalogManager, conf: SQLConf) = {
-    this(catalogManager, conf, conf.optimizerMaxIterations)
+    this(catalogManager, conf, conf.analyzerMaxIterations)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
@@ -232,7 +232,6 @@ class Analyzer(
       ResolveBinaryArithmetic(conf) ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
-    Batch("PostgreSQL Dialect", Once, PostgreSQLDialect.postgreSQLDialectRules: _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints(conf)),
@@ -287,11 +286,7 @@ class Analyzer(
           case (_, CalendarIntervalType) => Cast(TimeSub(l, r), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
-          case (_, DateType) => if (conf.usePostgreSQLDialect) {
-            DateDiff(l, r)
-          } else {
-            SubtractDates(l, r)
-          }
+          case (_, DateType) => SubtractDates(l, r)
           case (DateType, _) => DateSub(l, r)
           case _ => s
         }

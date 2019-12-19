@@ -80,18 +80,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
-  test("describe function") {
-    assertEqual("describe function bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = None), isExtended = false))
-    assertEqual("describe function extended bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = None), isExtended = true))
-    assertEqual("describe function foo.bar",
-      DescribeFunctionCommand(
-        FunctionIdentifier("bar", database = Some("foo")), isExtended = false))
-    assertEqual("describe function extended f.bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = Some("f")), isExtended = true))
-  }
-
   private def createTableUsing(
       table: String,
       database: Option[String] = None,
@@ -244,5 +232,23 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("ALTER DATABASE foo SET DBPROPERTIES ('x' = 'y')",
       parser.parsePlan("ALTER SCHEMA foo SET DBPROPERTIES ('x' = 'y')"))
     assertEqual("DESC DATABASE foo", parser.parsePlan("DESC SCHEMA foo"))
+  }
+
+  test("manage resources") {
+    assertEqual("ADD FILE abc.txt", AddFileCommand("abc.txt"))
+    assertEqual("ADD FILE 'abc.txt'", AddFileCommand("abc.txt"))
+    assertEqual("ADD FILE \"/path/to/abc.txt\"", AddFileCommand("/path/to/abc.txt"))
+    assertEqual("LIST FILE abc.txt", ListFilesCommand(Array("abc.txt")))
+    assertEqual("LIST FILE '/path//abc.txt'", ListFilesCommand(Array("/path//abc.txt")))
+    assertEqual("LIST FILE \"/path2/abc.txt\"", ListFilesCommand(Array("/path2/abc.txt")))
+    assertEqual("ADD JAR /path2/_2/abc.jar", AddJarCommand("/path2/_2/abc.jar"))
+    assertEqual("ADD JAR '/test/path_2/jar/abc.jar'", AddJarCommand("/test/path_2/jar/abc.jar"))
+    assertEqual("ADD JAR \"abc.jar\"", AddJarCommand("abc.jar"))
+    assertEqual("LIST JAR /path-with-dash/abc.jar",
+      ListJarsCommand(Array("/path-with-dash/abc.jar")))
+    assertEqual("LIST JAR 'abc.jar'", ListJarsCommand(Array("abc.jar")))
+    assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand(Array("abc.jar")))
+    assertEqual("ADD FILE /path with space/abc.txt", AddFileCommand("/path with space/abc.txt"))
+    assertEqual("ADD JAR /path with space/abc.jar", AddJarCommand("/path with space/abc.jar"))
   }
 }

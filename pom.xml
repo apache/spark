@@ -106,9 +106,6 @@
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
     <module>external/avro</module>
-    <module>graph/api</module>
-    <module>graph/cypher</module>
-    <module>graph/graph</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -127,7 +124,6 @@
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>2.7.1</curator.version>
-    <okapi.version>0.4.2</okapi.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
@@ -627,12 +623,12 @@
       <dependency>
         <groupId>org.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.6.0</version>
+        <version>1.7.0</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.3-1</version>
+        <version>1.4.4-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

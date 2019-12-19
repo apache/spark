@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.execution.streaming.state.StreamingAggregationStateManager
-import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
@@ -277,16 +276,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       ExpectFailure[SparkException](),
       StartStream(),
       CheckLastBatch((1, 1), (2, 1), (3, 1), (4, 1))
-    )
-  }
-
-  testWithAllStateVersions("typed aggregators") {
-    val inputData = MemoryStream[(String, Int)]
-    val aggregated = inputData.toDS().groupByKey(_._1).agg(typed.sumLong(_._2))
-
-    testStream(aggregated, Update)(
-      AddData(inputData, ("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)),
-      CheckLastBatch(("a", 30), ("b", 3), ("c", 1))
     )
   }
 

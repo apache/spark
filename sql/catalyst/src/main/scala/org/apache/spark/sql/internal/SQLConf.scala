@@ -170,6 +170,12 @@ object SQLConf {
     }
   }
 
+  val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
+    .internal()
+    .doc("The max number of iterations the analyzer runs.")
+    .intConf
+    .createWithDefault(100)
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -180,7 +186,7 @@ object SQLConf {
 
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()
-    .doc("The max number of iterations the optimizer and analyzer runs.")
+    .doc("The max number of iterations the optimizer runs.")
     .intConf
     .createWithDefault(100)
 
@@ -1292,6 +1298,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
 
+  val STREAMING_STOP_TIMEOUT =
+    buildConf("spark.sql.streaming.stopTimeout")
+      .doc("How long to wait for the streaming execution thread to stop when calling the " +
+        "streaming query's stop() method in milliseconds. 0 or negative values wait indefinitely.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(0L)
+
   val STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL =
     buildConf("spark.sql.streaming.noDataProgressEventInterval")
       .internal()
@@ -1669,37 +1682,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  object Dialect extends Enumeration {
-    val SPARK, POSTGRESQL = Value
-  }
-
-  val DIALECT =
-    buildConf("spark.sql.dialect")
-      .doc("The specific features of the SQL language to be adopted, which are available when " +
-        "accessing the given database. Currently, Spark supports two database dialects, `Spark` " +
-        "and `PostgreSQL`. With `PostgreSQL` dialect, Spark will: " +
-        "1. perform integral division with the / operator if both sides are integral types; " +
-        "2. accept \"true\", \"yes\", \"1\", \"false\", \"no\", \"0\", and unique prefixes as " +
-        "input and trim input for the boolean data type.")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(Dialect.values.map(_.toString))
-      .createWithDefault(Dialect.SPARK.toString)
-
-  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .internal()
-    .doc("This configuration is deprecated and will be removed in the future releases." +
-      "It is replaced by spark.sql.dialect.spark.ansi.enabled.")
-    .booleanConf
-    .createWithDefault(false)
-
-  val DIALECT_SPARK_ANSI_ENABLED = buildConf("spark.sql.dialect.spark.ansi.enabled")
-    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
-      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser.")
-    .fallbackConf(ANSI_ENABLED)
-
   val VALIDATE_PARTITION_COLUMNS =
     buildConf("spark.sql.sources.validatePartitionColumns")
       .internal()
@@ -1819,6 +1801,14 @@ object SQLConf {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(IntervalStyle.values.map(_.toString))
     .createWithDefault(IntervalStyle.MULTI_UNITS.toString)
+
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
+      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
+      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser.")
+    .booleanConf
+    .createWithDefault(false)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -2104,6 +2094,17 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+
+  val LEGACY_FROM_DAYTIME_STRING =
+    buildConf("spark.sql.legacy.fromDayTimeString.enabled")
+      .internal()
+      .doc("When true, the `from` bound is not taken into account in conversion of " +
+        "a day-time string to an interval, and the `to` bound is used to skip" +
+        "all interval units out of the specified range. If it is set to `false`, " +
+        "`ParseException` is thrown if the input does not match to the pattern " +
+        "defined by `from` and `to`.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -2125,6 +2126,8 @@ class SQLConf extends Serializable with Logging {
   @transient protected val reader = new ConfigReader(settings)
 
   /** ************************ Spark SQL Params/Hints ******************* */
+
+  def analyzerMaxIterations: Int = getConf(ANALYZER_MAX_ITERATIONS)
 
   def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
 
@@ -2555,13 +2558,7 @@ class SQLConf extends Serializable with Logging {
 
   def intervalOutputStyle: IntervalStyle.Value = IntervalStyle.withName(getConf(INTERVAL_STYLE))
 
-  def dialect: Dialect.Value = Dialect.withName(getConf(DIALECT))
-
-  def usePostgreSQLDialect: Boolean = dialect == Dialect.POSTGRESQL
-
-  def dialectSparkAnsiEnabled: Boolean = getConf(DIALECT_SPARK_ANSI_ENABLED)
-
-  def ansiEnabled: Boolean = usePostgreSQLDialect || dialectSparkAnsiEnabled
+  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 

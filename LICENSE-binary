@@ -393,7 +393,6 @@ org.eclipse.jetty:jetty-util
 org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
 org.scala-lang.modules:scala-xml_2.12
-org.opencypher:okapi-shade
 com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.zaxxer.HikariCP
 org.apache.hive:hive-beeline

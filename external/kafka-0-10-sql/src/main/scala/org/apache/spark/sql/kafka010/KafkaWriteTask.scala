@@ -39,13 +39,13 @@ private[kafka010] class KafkaWriteTask(
     inputSchema: Seq[Attribute],
     topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
   // used to synchronize with Kafka callbacks
-  private var producer: CachedKafkaProducer = _
+  private var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
 
   /**
    * Writes key value data out to topics.
    */
   def execute(iterator: Iterator[InternalRow]): Unit = {
-    producer = CachedKafkaProducer.acquire(producerConfiguration)
+    producer = CachedKafkaProducer.getOrCreate(producerConfiguration)
     while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
       sendRow(currentRow, producer)
@@ -53,17 +53,11 @@ private[kafka010] class KafkaWriteTask(
   }
 
   def close(): Unit = {
-    try {
+    checkForErrors()
+    if (producer != null) {
+      producer.flush()
       checkForErrors()
-      if (producer != null) {
-        producer.flush()
-        checkForErrors()
-      }
-    } finally {
-      if (producer != null) {
-        CachedKafkaProducer.release(producer)
-        producer = null
-      }
+      producer = null
     }
   }
 }
@@ -89,7 +83,7 @@ private[kafka010] abstract class KafkaRowWriter(
    * assuming the row is in Kafka.
    */
   protected def sendRow(
-      row: InternalRow, producer: CachedKafkaProducer): Unit = {
+      row: InternalRow, producer: KafkaProducer[Array[Byte], Array[Byte]]): Unit = {
     val projectedRow = projection(row)
     val topic = projectedRow.getUTF8String(0)
     val key = projectedRow.getBinary(1)

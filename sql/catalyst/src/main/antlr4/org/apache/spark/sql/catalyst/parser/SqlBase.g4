@@ -222,7 +222,7 @@ statement
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
@@ -274,7 +274,6 @@ unsupportedHiveNativeCommands
     | kw1=COMMIT
     | kw1=ROLLBACK
     | kw1=DFS
-    | kw1=DELETE kw2=FROM
     ;
 
 createTableHeader
@@ -856,7 +855,7 @@ intervalUnit
     ;
 
 colPosition
-    : FIRST | AFTER multipartIdentifier
+    : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
     ;
 
 dataType
