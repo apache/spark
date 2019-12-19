@@ -70,10 +70,19 @@ class CSVFilters(
     if (SQLConf.get.csvFilterPushDown) {
       val groupedExprs = Array.fill(len)(Seq.empty[Expression])
       for (filter <- filters) {
-        // readSchema must contain attributes of all filters.
-        // Accordingly, fieldIndex() returns a valid index always.
-        val index = filter.references.map(readSchema.fieldIndex).max
-        groupedExprs(index) ++= CSVFilters.filterToExpression(filter, toRef)
+        val expr = CSVFilters.filterToExpression(filter, toRef)
+        val refs = filter.references
+        if (refs.isEmpty) {
+          // For example, AlwaysTrue and AlwaysFalse doesn't have any references
+          for (i <- 0 until len) {
+            groupedExprs(i) ++= expr
+          }
+        } else {
+          // readSchema must contain attributes of all filters.
+          // Accordingly, fieldIndex() returns a valid index always.
+          val index = refs.map(readSchema.fieldIndex).max
+          groupedExprs(index) ++= expr
+        }
       }
       for (i <- 0 until len) {
         if (!groupedExprs(i).isEmpty) {

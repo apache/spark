@@ -18,10 +18,12 @@
 package org.apache.spark.sql.catalyst.csv
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.{AlwaysFalse, AlwaysTrue, Filter}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class CSVFiltersSuite extends SparkFunSuite {
   test("filter to expression conversion") {
@@ -58,7 +60,7 @@ class CSVFiltersSuite extends SparkFunSuite {
     def check(
         dataSchema: String = "i INTEGER, d DOUBLE, s STRING",
         requiredSchema: String = "s STRING",
-        filters: Seq[sources.Filter],
+        filters: Seq[Filter],
         expected: String): Unit = {
       val csvFilters = new CSVFilters(filters, getSchema(dataSchema), getSchema(requiredSchema))
       assert(csvFilters.readSchema === getSchema(expected))
@@ -81,6 +83,77 @@ class CSVFiltersSuite extends SparkFunSuite {
     } catch {
       case e: IllegalArgumentException =>
         assert(e.getMessage.contains("All filters must be applicable to the data schema"))
+    }
+  }
+
+  test("skipping rows") {
+    def check(
+        dataSchema: String = "i INTEGER, d DOUBLE, s STRING",
+        requiredSchema: String = "d DOUBLE",
+        filters: Seq[Filter],
+        row: InternalRow,
+        pos: Int,
+        skip: Boolean): Unit = {
+      val csvFilters = new CSVFilters(filters, getSchema(dataSchema), getSchema(requiredSchema))
+      assert(csvFilters.skipRow(row, pos) === skip)
+    }
+
+    check(filters = Seq(), row = InternalRow(3.14), pos = 0, skip = false)
+    check(filters = Seq(AlwaysTrue), row = InternalRow(1), pos = 0, skip = false)
+    check(filters = Seq(AlwaysFalse), row = InternalRow(1), pos = 0, skip = true)
+    check(
+      filters = Seq(sources.EqualTo("i", 10)),
+      row = InternalRow(10, 3.14),
+      pos = 0,
+      skip = false)
+    check(
+      filters = Seq(sources.IsNotNull("d"), sources.GreaterThanOrEqual("d", 2.96)),
+      row = InternalRow(3.14),
+      pos = 0,
+      skip = false)
+    check(
+      filters = Seq(sources.In("i", Array(10, 20)), sources.LessThanOrEqual("d", 2.96)),
+      row = InternalRow(10, 3.14),
+      pos = 1,
+      skip = true)
+    val filters1 = Seq(
+      sources.Or(
+        sources.AlwaysTrue,
+        sources.And(
+          sources.Not(sources.IsNull("i")),
+          sources.Not(
+            sources.And(
+              sources.StringEndsWith("s", "ab"),
+              sources.StringEndsWith("s", "cd")
+            )
+          )
+        )
+      ),
+      sources.GreaterThan("d", 0),
+      sources.LessThan("i", 500)
+    )
+    val filters2 = Seq(
+      sources.And(
+        sources.StringContains("s", "abc"),
+        sources.And(
+          sources.Not(sources.IsNull("i")),
+          sources.And(
+            sources.StringEndsWith("s", "ab"),
+            sources.StringEndsWith("s", "bc")
+          )
+        )
+      ),
+      sources.GreaterThan("d", 100),
+      sources.LessThan("i", 0)
+    )
+    Seq(filters1 -> false, filters2 -> true).foreach { case (filters, skip) =>
+      for (p <- 0 until 3) {
+        check(
+          filters = filters,
+          row = InternalRow(10, 3.14, UTF8String.fromString("abc")),
+          pos = p,
+          skip = skip)
+      }
     }
   }
 }
