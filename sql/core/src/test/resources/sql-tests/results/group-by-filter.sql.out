@@ -13,7 +13,7 @@ struct<>
 
 
 -- !query 1
-CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
+CREATE OR REPLACE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
   (200, "emp 2", date "2003-01-01", 200.00D, 10),
@@ -31,7 +31,7 @@ struct<>
 
 
 -- !query 2
-CREATE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
+CREATE OR REPLACE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
   (10, "dept 1", "CA"),
   (20, "dept 2", "NY"),
   (30, "dept 3", "TX"),

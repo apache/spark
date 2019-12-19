@@ -5,7 +5,7 @@ CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
 AS testData(a, b);
 
-CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
+CREATE OR REPLACE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
   (200, "emp 2", date "2003-01-01", 200.00D, 10),
@@ -17,7 +17,7 @@ CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (800, "emp 8", date "2016-01-01", 150.00D, 70)
 AS EMP(id, emp_name, hiredate, salary, dept_id);
 
-CREATE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
+CREATE OR REPLACE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
   (10, "dept 1", "CA"),
   (20, "dept 2", "NY"),
   (30, "dept 3", "TX"),
