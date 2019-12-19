@@ -72,7 +72,7 @@ case class ApproximatePercentile(
     accuracyExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[PercentileDigest] {
+  extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes {
 
   def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
     this(child, percentageExpression, accuracyExpression, 0, 0)
@@ -85,7 +85,7 @@ case class ApproximatePercentile(
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
   private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue
 
-  def inputTypes: Seq[AbstractDataType] = {
+  override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType and TimestampType since their internal types are all numeric,
     // and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType),
@@ -93,15 +93,16 @@ case class ApproximatePercentile(
   }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
-  private lazy val (returnPercentileArray: Boolean, percentages: Array[Double]) =
+  private lazy val (returnPercentileArray, percentages) =
     percentageExpression.eval() match {
-      // Rule [[FunctionArgumentConversion]] can cast other numeric types to double
+      // Rule ImplicitTypeCasts can cast other numeric types to double
+      case null => (false, null)
       case num: Double => (false, Array(num))
       case arrayData: ArrayData => (true, arrayData.toDoubleArray())
     }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = ExpectsInputTypes.checkInputDataTypes(children, inputTypes)
+    val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
@@ -109,6 +110,8 @@ case class ApproximatePercentile(
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
       TypeCheckFailure(s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
         s" (current value = $accuracy)")
+    } else if (percentages == null) {
+      TypeCheckFailure("Percentage value must not be null")
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       TypeCheckFailure(
         s"All percentage values must be between 0.0 and 1.0 " +
