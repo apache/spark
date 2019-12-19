@@ -185,7 +185,7 @@ case class ApproximatePercentile(
     if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
 
-  override def nodeName: String =
+  override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile_approx")
 
   override def serialize(obj: PercentileDigest): Array[Byte] = {
