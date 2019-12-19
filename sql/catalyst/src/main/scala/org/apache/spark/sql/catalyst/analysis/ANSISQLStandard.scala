@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.ANSISQL.AnsiSqlCastToDecimal
-import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.expressions.{AnsiCast, Cast}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DecimalType
 
 object ANSISQLStandard {
   val ANSIStandardCastRules: Seq[Rule[LogicalPlan]] = Seq(ANSICast)
@@ -31,11 +29,8 @@ object ANSISQLStandard {
     override def apply(plan: LogicalPlan): LogicalPlan = {
       if (SQLConf.get.ansiEnabled) {
         plan.transformExpressions {
-          case Cast(child, dataType, timeZoneId)
-            if child.dataType != DecimalType =>
-            dataType match {
-              case _: DecimalType => AnsiSqlCastToDecimal(child, timeZoneId)
-            }
+          case Cast(child, dataType, timeZoneId) =>
+            AnsiCast(child, dataType, timeZoneId)
         }
       } else {
         plan

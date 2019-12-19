@@ -23,6 +23,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -481,7 +482,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // LongConverter
-  private[this] def castToLong(from: DataType): Any => Any = from match {
+  protected[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new LongWrapper()
       buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
@@ -498,7 +499,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // IntConverter
-  private[this] def castToInt(from: DataType): Any => Any = from match {
+  protected[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
@@ -517,7 +518,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // ShortConverter
-  private[this] def castToShort(from: DataType): Any => Any = from match {
+  protected[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toShort(result)) {
@@ -558,7 +559,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // ByteConverter
-  private[this] def castToByte(from: DataType): Any => Any = from match {
+  protected[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toByte(result)) {
@@ -658,7 +659,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // DoubleConverter
-  private[this] def castToDouble(from: DataType): Any => Any = from match {
+  protected[this] def castToDouble(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => {
         val doubleStr = s.toString
@@ -678,7 +679,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // FloatConverter
-  private[this] def castToFloat(from: DataType): Any => Any = from match {
+  protected[this] def castToFloat(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => {
         val floatStr = s.toString
@@ -1354,7 +1355,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       """
   }
 
-  private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+  protected[this] def castToByteCode(
+    from: DataType,
+    ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1383,7 +1386,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
   }
 
-  private[this] def castToShortCode(
+  protected[this] def castToShortCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
@@ -1414,7 +1417,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
   }
 
-  private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+  protected[this] def castToIntCode(
+      from: DataType,
+      ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1442,7 +1447,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
   }
 
-  private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+  protected[this] def castToLongCode(
+    from: DataType,
+    ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
 
@@ -1471,7 +1478,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
   }
 
-  private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
+  protected[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case StringType =>
         val floatStr = ctx.freshVariable("floatStr", StringType)
@@ -1502,7 +1509,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  private[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
+  protected[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case StringType =>
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
@@ -1689,6 +1696,229 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
     copy(timeZoneId = Option(timeZoneId))
 
   override protected val ansiEnabled: Boolean = true
+
+  override def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, s => try {
+        changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
+      } catch {
+        case _: NumberFormatException =>
+          throw new AnalysisException(s"invalid input syntax for type numeric: $s")
+      })
+    case _ => super.castToDecimal(from, target)
+  }
+
+  override def castToDouble(from: DataType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, s => {
+        val doubleStr = s.toString
+        try doubleStr.toDouble catch {
+          case _: NumberFormatException =>
+            val d = Cast.processFloatingPointSpecialLiterals(doubleStr, true)
+            if(d == null) {
+              throw new AnalysisException(s"invalid input syntax for type numeric: $s")
+            } else {
+              d.asInstanceOf[Double].doubleValue()
+            }
+        }
+      })
+    case _ => super.castToDouble(from)
+  }
+
+  override def castToFloat(from: DataType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, s => {
+        val floatStr = s.toString
+        try floatStr.toFloat catch {
+          case _: NumberFormatException =>
+            val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
+            if (f == null) {
+              throw new AnalysisException(s"invalid input syntax for type numeric: $s")
+            } else {
+              f.asInstanceOf[Float].floatValue()
+            }
+        }
+      })
+    case _ =>
+      super.castToFloat(from)
+  }
+
+  override def castToLong(from: DataType): Any => Any = from match {
+    case StringType =>
+      val result = new LongWrapper()
+      buildCast[UTF8String](_, s => if (s.toLong(result)) result.value
+      else throw new AnalysisException(s"invalid input syntax for type numeric: $s"))
+    case _ =>
+      super.castToLong(from)
+  }
+
+  override def castToInt(from: DataType): Any => Any = from match {
+    case StringType =>
+      val result = new IntWrapper()
+      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value
+      else throw new AnalysisException(s"invalid input syntax for type numeric: $s"))
+    case _ =>
+      super.castToInt(from)
+  }
+
+  override def castToShort(from: DataType): Any => Any = from match {
+    case StringType =>
+      val result = new IntWrapper()
+      buildCast[UTF8String](_, s => if (s.toShort(result)) {
+        result.value.toShort
+      } else {
+        throw new AnalysisException(s"invalid input syntax for type numeric: $s")
+      })
+    case _ =>
+      super.castToShort(from)
+  }
+
+  override def castToByte(from: DataType): Any => Any = from match {
+    case StringType =>
+      val result = new IntWrapper()
+      buildCast[UTF8String](_, s => if (s.toByte(result)) {
+        result.value.toByte
+      } else {
+        throw new AnalysisException(s"invalid input syntax for type numeric: $s")
+      })
+    case _ =>
+      super.castToByte(from)
+  }
+
+  override def castToDecimalCode(
+    from: DataType,
+    target: DecimalType,
+    ctx: CodegenContext): CastFunction = {
+    val tmp = ctx.freshVariable("tmpDecimal", classOf[Decimal])
+    val canNullSafeCast = Cast.canNullSafeCastToDecimal(from, target)
+    from match {
+      case StringType =>
+        (c, evPrim, evNull) =>
+          code"""
+            try {
+              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString()));
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+            } catch (java.lang.NumberFormatException e) {
+              throw new AnalysisException("invalid input syntax for type numeric: $c")
+            }
+          """
+      case _ => super.castToDecimalCode(from, target, ctx)
+    }
+  }
+
+  override def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+    case StringType =>
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
+      (c, evPrim, evNull) =>
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
+          if ($c.toByte($wrapper)) {
+            $evPrim = (byte) $wrapper.value;
+          } else {
+            throw new AnalysisException("invalid input syntax for type numeric: $c")
+          }
+          $wrapper = null;
+        """
+    case _ =>
+      super.castToByteCode(from, ctx)
+  }
+
+  override def castToShortCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+    case StringType =>
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
+      (c, evPrim, evNull) =>
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
+          if ($c.toShort($wrapper)) {
+            $evPrim = (short) $wrapper.value;
+          } else {
+            throw new AnalysisException("invalid input syntax for type numeric: $c")
+          }
+          $wrapper = null;
+        """
+    case _ =>
+      super.castToShortCode(from, ctx)
+  }
+
+  override def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+    case StringType =>
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
+      (c, evPrim, evNull) =>
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
+          if ($c.toInt($wrapper)) {
+            $evPrim = $wrapper.value;
+          } else {
+            throw new AnalysisException("invalid input syntax for type numeric: $c")
+          }
+          $wrapper = null;
+        """
+    case _ =>
+      super.castToIntCode(from, ctx)
+  }
+
+  override def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
+    case StringType =>
+      val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
+      (c, evPrim, evNull) =>
+        code"""
+          UTF8String.LongWrapper $wrapper = new UTF8String.LongWrapper();
+          if ($c.toLong($wrapper)) {
+            $evPrim = $wrapper.value;
+          } else {
+            throw new AnalysisException("invalid input syntax for type numeric: $c")
+          }
+          $wrapper = null;
+        """
+    case _ =>
+      super.castToLongCode(from, ctx)
+  }
+
+  override def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
+    from match {
+      case StringType =>
+        val floatStr = ctx.freshVariable("floatStr", StringType)
+        (c, evPrim, evNull) =>
+          code"""
+          final String $floatStr = $c.toString();
+          try {
+            $evPrim = Float.valueOf($floatStr);
+          } catch (java.lang.NumberFormatException e) {
+            final Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
+            if (f == null) {
+              throw new AnalysisException("invalid input syntax for type numeric: $c")
+            } else {
+              $evPrim = f.floatValue();
+            }
+          }
+        """
+      case _ =>
+        super.castToFloatCode(from, ctx)
+    }
+  }
+
+  override def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
+    from match {
+      case StringType =>
+        val doubleStr = ctx.freshVariable("doubleStr", StringType)
+        (c, evPrim, evNull) =>
+          code"""
+          final String $doubleStr = $c.toString();
+          try {
+            $evPrim = Double.valueOf($doubleStr);
+          } catch (java.lang.NumberFormatException e) {
+            final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
+            if (d == null) {
+              throw new AnalysisException("invalid input syntax for type numeric: $c")
+            } else {
+              $evPrim = d.doubleValue();
+            }
+          }
+        """
+      case _ =>
+        super.castToDoubleCode(from, ctx)
+    }
+  }
 }
 
 /**
