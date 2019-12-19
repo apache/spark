@@ -67,7 +67,11 @@ private[spark] object Constants {
   val SPARK_CONF_FILE_NAME = "spark.properties"
   val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
   val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
-
+  // The default logging conf mount is chosen to be at root, because in kubernetes,
+  // "subpath volume mount" has limitation that configmap updates are not applied.
+  val LOGGING_MOUNT_DIR = "/conf-logging"
+  // Logging configuration for containers.
+  val JAVA_OPT_FOR_LOGGING = s"-Dlog4j.configuration=file://$LOGGING_MOUNT_DIR/"
   // BINDINGS
   val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
 

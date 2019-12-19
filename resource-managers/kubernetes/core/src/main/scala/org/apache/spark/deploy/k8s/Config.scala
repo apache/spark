@@ -276,6 +276,20 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_LOGGING_CONF_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.loggingConf.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the logging config files, " +
+        "to be mounted on the driver and executors for custom logger configuration.")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_LOGGING_CONF_FILE_NAME =
+    ConfigBuilder("spark.kubernetes.loggingConf.fileName")
+      .doc("Specify the name of the file, containing the logging configuraiton, " +
+        "to be mounted on the driver and executors for custom logger configuration.")
+      .stringConf
+      .createWithDefault("log4j.properties")
+
   val KUBERNETES_KERBEROS_DT_SECRET_NAME =
     ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.name")
       .doc("Specify the name of the secret where your existing delegation tokens are stored. " +
@@ -359,7 +373,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_FILE_UPLOAD_PATH =
     ConfigBuilder("spark.kubernetes.file.upload.path")
       .doc("Hadoop compatible file system path where files from the local file system " +
-        "will be uploded to in cluster mode.")
+        "will be uploaded to in cluster mode.")
       .stringConf
       .createOptional
 

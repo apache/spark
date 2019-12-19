@@ -28,7 +28,8 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE
   }
 
-  override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
+  override protected def buildPod(sparkConf: SparkConf,
+      client: KubernetesClient): SparkPod = {
     sparkConf.set("spark.driver.host", "https://driver.host.com")
     val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
     val secMgr = new SecurityManager(sparkConf)
