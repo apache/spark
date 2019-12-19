@@ -2835,7 +2835,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(1, 3, 4) :: Row(2, 3, 4) :: Row(3, 3, 4) :: Nil)
   }
 
-  test("Support filter clause for aggregate function with hash") {
+  test("Support filter clause for aggregate function with hash aggregate") {
     Seq(("APPROX_COUNT_DISTINCT(a)", 3), ("COUNT(a)", 3), ("FIRST(a)", 1), ("LAST(a)", 3),
       ("MAX(a)", 3), ("AVG(a)", 2.0), ("MIN(a)", 1), ("SUM(a)", 6), ("PERCENTILE(a, 1)", 3),
       ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0), ("COLLECT_LIST(a)", Seq(1, 2, 3)),

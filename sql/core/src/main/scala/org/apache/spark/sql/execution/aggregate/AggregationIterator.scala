@@ -178,8 +178,7 @@ abstract class AggregationIterator(
         case AggregateExpression(_, mode, _, Some(filter), _) =>
           mode match {
             case Partial | Complete =>
-              val filterAttrs = filter.references.toSeq
-              val predicate = Predicate.create(filter, inputAttributes ++ filterAttrs)
+              val predicate = Predicate.create(filter, inputAttributes)
               predicate.initialize(partIndex)
               Some(predicate)
             case _ => None
