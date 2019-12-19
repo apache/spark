@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io.{File, IOException}
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
+import java.time.Duration
 import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
 import javax.security.auth.login.Configuration
@@ -455,7 +456,7 @@ class KafkaTestUtils(
     val kc = new KafkaConsumer[String, String](consumerConfiguration)
     logInfo("Created consumer to get earliest offsets")
     kc.subscribe(topics.asJavaCollection)
-    kc.poll(0)
+    kc.poll(Duration.ZERO)
     val partitions = kc.assignment()
     kc.pause(partitions)
     kc.seekToBeginning(partitions)
@@ -469,7 +470,7 @@ class KafkaTestUtils(
     val kc = new KafkaConsumer[String, String](consumerConfiguration)
     logInfo("Created consumer to get latest offsets")
     kc.subscribe(topics.asJavaCollection)
-    kc.poll(0)
+    kc.poll(Duration.ZERO)
     val partitions = kc.assignment()
     kc.pause(partitions)
     kc.seekToEnd(partitions)
