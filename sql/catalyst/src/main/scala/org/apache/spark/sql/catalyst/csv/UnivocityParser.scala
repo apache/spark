@@ -40,6 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * @param requiredSchema The schema of the data that should be output for each row. This should be a
  *                       subset of the columns in dataSchema.
  * @param options Configuration options for a CSV parser.
+ * @param filters The pushdown filters that should be applied to converted values.
  */
 class UnivocityParser(
     dataSchema: StructType,
@@ -60,12 +61,12 @@ class UnivocityParser(
 
   private val csvFilters = new CSVFilters(filters, dataSchema, requiredSchema)
 
+  // The "minimal" schema to be read from Univocity parser.
+  // It includes `requiredSchema` + the fields referenced by pushed down filters.
   val readSchema = csvFilters.readSchema
 
-  // This index is used to reorder parsed tokens
-  private val tokenIndexArr =
-    readSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
-
+  // Mapping of field indexes of `readSchema` to indexes of `requiredSchema`.
+  // It returns -1 if `requiredSchema` doesn't contain a field from `readSchema`.
   private val readToRequiredIndex: Array[Int] = {
     val arr = Array.fill(readSchema.length)(-1)
     for {
@@ -76,6 +77,10 @@ class UnivocityParser(
     }
     arr
   }
+
+  // This index is used to reorder parsed tokens
+  private val tokenIndexArr =
+    readSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
 
   // When column pruning is enabled, the parser only parses the required columns based on
   // their positions in the data schema.
@@ -92,8 +97,13 @@ class UnivocityParser(
     new CsvParser(parserSetting)
   }
 
+  // The row is used as a temporary placeholder of parsed and converted values.
+  // It is needed for applying the pushdown filters.
   private val readRow = new GenericInternalRow(readSchema.length)
+  // Pre-allocated Seq to avoid the overhead of the seq builder.
   private val requiredRow = Seq(new GenericInternalRow(requiredSchema.length))
+  // Pre-allocated empty sequence returned when the parsed row cannot pass filters.
+  // We preallocate it avoid unnecessary invokes of the seq builder.
   private val noRows = Seq.empty[InternalRow]
 
   private val timestampFormatter = TimestampFormatter(
@@ -264,16 +274,19 @@ class UnivocityParser(
         new RuntimeException("Malformed CSV record"))
     } else {
       // When the length of the returned tokens is identical to the length of the parsed schema,
-      // we just need to convert the tokens that correspond to the required columns.
+      // we just need to:
+      //  1. Convert the tokens that correspond to the read schema.
+      //  2. Apply the pushdown filters to `readRow`.
+      //  3. Convert `readRow` to `requiredRow` by stripping non-required fields.
       var i = 0
-      var skipValueConversion = false
-      var badRecordException: Option[Throwable] = None
       val requiredSingleRow = requiredRow.head
-
       while (i < requiredSchema.length) {
         requiredSingleRow.setNullAt(i)
         i += 1
       }
+
+      var skipValueConversion = false
+      var badRecordException: Option[Throwable] = None
       i = 0
       while (!skipValueConversion && i < readSchema.length) {
         try {

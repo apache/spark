@@ -38,9 +38,12 @@ class CSVFilters(
     filters: Seq[sources.Filter],
     dataSchema: StructType,
     requiredSchema: StructType) {
-  require(checkFilters(), "All filters must be applicable to dataSchema")
+  assert(checkFilters(), "All filters must be applicable to dataSchema")
 
-  /** The schema to read from the underlying CSV parser */
+  /**
+   * The schema to read from the underlying CSV parser.
+   * It combines the required schema and the fields referenced by filters.
+   */
   val readSchema: StructType = {
     val refs = filters.flatMap(_.references).toSet
     val readFields = dataSchema.filter { field =>
@@ -67,6 +70,8 @@ class CSVFilters(
     if (SQLConf.get.csvFilterPushDown) {
       val groupedExprs = Array.fill(len)(Seq.empty[Expression])
       for (filter <- filters) {
+        // readSchema must contain attributes of all filters.
+        // Accordingly, fieldIndex() returns a valid index always.
         val index = filter.references.map(readSchema.fieldIndex).max
         groupedExprs(index) ++= CSVFilters.filterToExpression(filter, toRef)
       }
