@@ -56,80 +56,41 @@ object HiveResult {
       // We need the types so we can output struct field names
       val types = executedPlan.output.map(_.dataType)
       // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
+      result.map(_.zip(types).map(e => toHiveString(e).stripPrefix("\"").stripSuffix("\"")))
+        .map(_.mkString("\t"))
   }
-
-  private val primitiveTypes = Seq(
-    StringType,
-    IntegerType,
-    LongType,
-    DoubleType,
-    FloatType,
-    BooleanType,
-    ByteType,
-    ShortType,
-    BinaryType)
 
   private lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
   private lazy val dateFormatter = DateFormatter(zoneId)
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
 
-  /** Hive outputs fields of structs slightly differently than top level attributes. */
-  private def toHiveStructString(a: (Any, DataType)): String = a match {
-    case (struct: Row, StructType(fields)) =>
-      struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-      }.mkString("{", ",", "}")
-    case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_, _], MapType(kType, vType, _)) =>
-      map.map {
-        case (key, value) =>
-          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-      }.toSeq.sorted.mkString("{", ",", "}")
-    case (null, _) => "null"
-    case (d: Date, DateType) =>
-      dateFormatter.format(DateTimeUtils.fromJavaDate(d))
-    case (t: Timestamp, TimestampType) =>
-      DateTimeUtils.timestampToString(timestampFormatter, DateTimeUtils.fromJavaTimestamp(t))
-    case (s: String, StringType) => "\"" + s + "\""
-    case (decimal, DecimalType()) => decimal.toString
-    case (interval: CalendarInterval, CalendarIntervalType) =>
-      SQLConf.get.intervalOutputStyle match {
-        case SQL_STANDARD => toSqlStandardString(interval)
-        case ISO_8601 => toIso8601String(interval)
-        case MULTI_UNITS => toMultiUnitsString(interval)
-      }
-    case (other, tpe) if primitiveTypes contains tpe => other.toString
-  }
-
   /** Formats a datum (based on the given data type) and returns the string representation. */
   def toHiveString(a: (Any, DataType)): String = a match {
-    case (struct: Row, StructType(fields)) =>
-      struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-      }.mkString("{", ",", "}")
-    case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_, _], MapType(kType, vType, _)) =>
-      map.map {
-        case (key, value) =>
-          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-      }.toSeq.sorted.mkString("{", ",", "}")
-    case (null, _) => "NULL"
-    case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
-    case (t: Timestamp, TimestampType) =>
-      DateTimeUtils.timestampToString(timestampFormatter, DateTimeUtils.fromJavaTimestamp(t))
-    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-    case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
-    case (interval: CalendarInterval, CalendarIntervalType) =>
-      SQLConf.get.intervalOutputStyle match {
-        case SQL_STANDARD => toSqlStandardString(interval)
-        case ISO_8601 => toIso8601String(interval)
-        case MULTI_UNITS => toMultiUnitsString(interval)
-      }
-    case (interval, CalendarIntervalType) => interval.toString
-    case (other, _ : UserDefinedType[_]) => other.toString
-    case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
-  }
+      case (null, _) => "NULL"
+      case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
+      case (t: Timestamp, TimestampType) =>
+        timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t))
+      case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
+      case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
+      case (n, _: NumericType) => n.toString
+      case (bin, BinaryType) => bin.toString
+      case (s: String, StringType) => "\"" + s + "\""
+      case (interval: CalendarInterval, CalendarIntervalType) =>
+        SQLConf.get.intervalOutputStyle match {
+          case SQL_STANDARD => toSqlStandardString(interval)
+          case ISO_8601 => toIso8601String(interval)
+          case MULTI_UNITS => toMultiUnitsString(interval)
+        }
+      case (seq: Seq[_], ArrayType(typ, _)) =>
+        seq.map(v => (v, typ)).map(toHiveString).mkString("[", ",", "]")
+      case (map: Map[_, _], MapType(kType, vType, _)) =>
+        map.map { case (key, value) =>
+          toHiveString((key, kType)) + ":" + toHiveString((value, vType))
+        }.toSeq.sorted.mkString("{", ",", "}")
+      case (struct: Row, StructType(fields)) =>
+        struct.toSeq.zip(fields).map {
+          case (v, t) => s""""${t.name}":${toHiveString((v, t.dataType))}"""
+        }.mkString("{", ",", "}")
+      case (other, _ : UserDefinedType[_]) => other.toString
+    }
 }
