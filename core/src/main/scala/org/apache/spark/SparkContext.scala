@@ -50,7 +50,7 @@ import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.metrics.source.JVMCPUSource
+import org.apache.spark.metrics.source.{JVMCPUSource, PythonMetricsSource}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.resource._
@@ -631,6 +631,9 @@ class SparkContext(config: SparkConf) extends Logging {
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _env.metricsSystem.registerSource(new JVMCPUSource())
+    if (isLocal && conf.get(METRICS_PYTHONMETRICS_SOURCE_ENABLED)) {
+      _env.metricsSystem.registerSource(new PythonMetricsSource())
+    }
     _executorMetricsSource.foreach(_.register(_env.metricsSystem))
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)

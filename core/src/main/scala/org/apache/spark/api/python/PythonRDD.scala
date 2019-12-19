@@ -44,7 +44,6 @@ import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer, SocketFunc
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util._
 
-
 private[spark] class PythonRDD(
     parent: RDD[_],
     func: PythonFunction,
@@ -304,9 +303,9 @@ private[spark] object PythonRDD extends Logging {
         throw new SparkException("Unexpected element type " + other.getClass)
     }
 
-    iter.foreach(write)
+    val numIterations = iter.map(write).size
+    PythonMetrics.incToWorkerBatchCount(numIterations)
   }
-
   /**
    * Create an RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]],
    * key and value class.

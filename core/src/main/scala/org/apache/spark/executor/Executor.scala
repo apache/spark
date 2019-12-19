@@ -42,7 +42,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
-import org.apache.spark.metrics.source.JVMCPUSource
+import org.apache.spark.metrics.source.{JVMCPUSource, PythonMetricsSource}
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
@@ -134,6 +134,9 @@ private[spark] class Executor(
     env.metricsSystem.registerSource(executorSource)
     env.metricsSystem.registerSource(new JVMCPUSource())
     executorMetricsSource.foreach(_.register(env.metricsSystem))
+    if (conf.get(METRICS_PYTHONMETRICS_SOURCE_ENABLED)) {
+      env.metricsSystem.registerSource(new PythonMetricsSource())
+    }
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   } else {
     // This enable the registration of the executor source in local mode.

@@ -24,7 +24,7 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonMetrics, PythonRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.types.StructType
@@ -102,6 +102,9 @@ class CoGroupedArrowPythonRunner(
           }
           arrowWriter.finish()
           writer.writeBatch()
+          val rowCount = root.getRowCount
+          PythonMetrics.incToWorkerBatchCount(1L)
+          PythonMetrics.incPandasUDFWriteRowCount(rowCount)
           writer.end()
         }{
           root.close()

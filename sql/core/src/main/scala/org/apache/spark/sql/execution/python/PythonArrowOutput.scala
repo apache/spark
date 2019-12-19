@@ -26,7 +26,7 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, SpecialLengths}
+import org.apache.spark.api.python.{BasePythonRunner, PythonMetrics, SpecialLengths}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -71,10 +71,15 @@ private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatc
         }
         try {
           if (reader != null && batchLoaded) {
+            val bytesReadStart = reader.bytesRead()
             batchLoaded = reader.loadNextBatch()
             if (batchLoaded) {
               val batch = new ColumnarBatch(vectors)
-              batch.setNumRows(root.getRowCount)
+              val rowCount = root.getRowCount
+              batch.setNumRows(rowCount)
+              val bytesReadEnd = reader.bytesRead()
+              PythonMetrics.incFromWorkerBytesRead(bytesReadEnd - bytesReadStart)
+              PythonMetrics.incPandasUDFReadRowCount(rowCount.toLong)
               batch
             } else {
               reader.close(false)
@@ -91,6 +96,8 @@ private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatc
                 vectors = root.getFieldVectors().asScala.map { vector =>
                   new ArrowColumnVector(vector)
                 }.toArray[ColumnVector]
+                val bytesReadSpecial = reader.bytesRead()
+                PythonMetrics.incFromWorkerBytesRead(bytesReadSpecial)
                 read()
               case SpecialLengths.TIMING_DATA =>
                 handleTimingData()

@@ -1166,6 +1166,14 @@ This is the component with the largest amount of instrumented metrics
   - This source contains memory-related metrics. A full list of available metrics in this 
     namespace can be found in the corresponding entry for the Executor component instance.
  
+- namespace=PythonMetrics
+   - **note:**: these metrics only apply for the driver when running in local mode and are
+   conditional to a configuration parameter:
+   `spark.metrics.pythonMetricsSource.enabled` (default is false).
+   - This source exposes metrics for instrumenting Python UDF.
+   A full list of available metrics in this namespace can be found in the corresponding entry
+   for the Executor component instance.
+
 - namespace=plugin.\<Plugin Class Name>
   - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
   configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
@@ -1276,6 +1284,20 @@ These metrics are exposed by Spark executors.
   - generatedMethodSize (histogram)
   - hiveClientCalls.count
   - sourceCodeSize (histogram)
+
+- namespace=PythonMetrics
+  - **notes:**
+    - These metrics are conditional to a configuration parameter:
+    `spark.metrics.pythonMetricsSource.enabled` (default is false).
+    - Time-based metrics are reported in nanoseconds.
+    - BytesReceivedFromWorkers
+    - BytesSentToWorkers
+    - FetchResultsTimeFromWorkers
+    - NumBatchesFromWorkers
+    - NumBatchesToWorkers
+    - PandasUDFReceivedNumRows
+    - PandasUDFSentNumRows
+    - WriteTimeToWorkers
 
 - namespace=plugin.\<Plugin Class Name>
   - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and

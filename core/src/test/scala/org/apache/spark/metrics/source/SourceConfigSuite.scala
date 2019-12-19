@@ -18,7 +18,7 @@
 package org.apache.spark.metrics.source
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.config.{METRICS_EXECUTORMETRICS_SOURCE_ENABLED, METRICS_STATIC_SOURCES_ENABLED}
+import org.apache.spark.internal.config._
 
 class SourceConfigSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -88,6 +88,34 @@ class SourceConfigSuite extends SparkFunSuite with LocalSparkContext {
 
       // Executor source should be registered
       assert (metricsSystem.getSourcesByName("executor").nonEmpty)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("Test configuration for adding PythonMetrics source registration") {
+    val conf = new SparkConf()
+    conf.set(METRICS_PYTHONMETRICS_SOURCE_ENABLED, true)
+    val sc = new SparkContext("local", "test", conf)
+    try {
+      val metricsSystem = sc.env.metricsSystem
+
+      // ExecutorMetrics source should be registered
+      assert (metricsSystem.getSourcesByName("PythonMetrics").nonEmpty)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("Test configuration for skipping PythonMetrics source registration") {
+    val conf = new SparkConf()
+    conf.set(METRICS_PYTHONMETRICS_SOURCE_ENABLED, false)
+    val sc = new SparkContext("local", "test", conf)
+    try {
+      val metricsSystem = sc.env.metricsSystem
+
+      // ExecutorMetrics source should not be registered
+      assert (metricsSystem.getSourcesByName("PythonMetrics").isEmpty)
     } finally {
       sc.stop()
     }

@@ -61,7 +61,6 @@ class ArrowPythonRunner(
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-
         // Write config for the worker as a number of key -> value pairs of strings
         dataOut.writeInt(conf.size)
         for ((k, v) <- conf) {
@@ -92,6 +91,9 @@ class ArrowPythonRunner(
 
             arrowWriter.finish()
             writer.writeBatch()
+            val rowCount = root.getRowCount
+            PythonMetrics.incToWorkerBatchCount(1L)
+            PythonMetrics.incPandasUDFWriteRowCount(rowCount)
             arrowWriter.reset()
           }
           // end writes footer to the output stream and doesn't clean any resources.

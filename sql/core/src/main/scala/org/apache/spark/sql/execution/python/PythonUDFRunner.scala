@@ -72,6 +72,7 @@ class PythonUDFRunner(
             case length if length > 0 =>
               val obj = new Array[Byte](length)
               stream.readFully(obj)
+              PythonMetrics.incFromWorkerBytesRead(length)
               obj
             case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>

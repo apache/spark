@@ -229,6 +229,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     override def run(): Unit = Utils.logUncaughtExceptions {
       try {
+        // time instrumentation
+        val startTime = System.nanoTime()
+
         TaskContext.setTaskContext(context)
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
@@ -397,6 +400,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
         dataOut.writeInt(SpecialLengths.END_OF_STREAM)
         dataOut.flush()
+
+        val deltaTime = System.nanoTime()-startTime
+        val deltaBytes = dataOut.size()
+        PythonMetrics.incToWorkerWriteTime(deltaTime)
+        PythonMetrics.incToWorkerBytesWritten(deltaBytes)
+
       } catch {
         case t: Throwable if (NonFatal(t) || t.isInstanceOf[Exception]) =>
           if (context.isCompleted || context.isInterrupted) {
@@ -466,7 +475,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     override def hasNext: Boolean = nextObj != null || {
       if (!eos) {
+        val startTime = System.nanoTime()
         nextObj = read()
+        val deltaTime = System.nanoTime()-startTime
+        PythonMetrics.incFromWorkerReadTime(deltaTime)
         hasNext
       } else {
         false
@@ -477,6 +489,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       if (hasNext) {
         val obj = nextObj
         nextObj = null.asInstanceOf[OUT]
+        PythonMetrics.incFromWorkerBatchCount(1L)
         obj
       } else {
         Iterator.empty.next()
@@ -642,6 +655,7 @@ private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
             case length if length > 0 =>
               val obj = new Array[Byte](length)
               stream.readFully(obj)
+              PythonMetrics.incFromWorkerBytesRead(length)
               obj
             case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>

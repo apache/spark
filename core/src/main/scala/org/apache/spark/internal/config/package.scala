@@ -871,6 +871,12 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val METRICS_PYTHONMETRICS_SOURCE_ENABLED =
+    ConfigBuilder("spark.metrics.pythonMetricsSource.enabled")
+      .doc("Whether to register the PythonMetrics source with the metrics system.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
     .version("2.1.0")
     .stringConf
