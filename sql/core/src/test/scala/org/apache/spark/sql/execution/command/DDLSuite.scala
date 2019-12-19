@@ -22,6 +22,7 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
@@ -1978,6 +1979,32 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("TRUNCATE TABLE partTable PARTITION (unknown=1)")
       }
       assert(e.message.contains("unknown is not a valid partition column"))
+    }
+  }
+
+  test("truncate table - keep permission") {
+    import testImplicits._
+
+    withTable("tab1") {
+      sql("CREATE TABLE tab1 (col INT) USING parquet")
+      sql("INSERT INTO tab1 SELECT 1")
+      checkAnswer(spark.table("tab1"), Row(1))
+
+      val tablePath = new Path(spark.sessionState.catalog
+        .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
+
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      val fs = tablePath.getFileSystem(hadoopConf)
+      val fileStatus = fs.getFileStatus(tablePath);
+
+      fs.setPermission(tablePath, new FsPermission("777"))
+      assert(fileStatus.getPermission().toString() == "rwxrwxrwx")
+
+      sql("TRUNCATE TABLE tab1")
+      assert(spark.table("tab1").collect().isEmpty)
+
+      val fileStatus2 = fs.getFileStatus(tablePath)
+      assert(fileStatus2.getPermission().toString() == "rwxrwxrwx")
     }
   }
 

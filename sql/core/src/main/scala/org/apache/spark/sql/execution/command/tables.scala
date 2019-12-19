@@ -499,8 +499,20 @@ case class TruncateTableCommand(
         val path = new Path(location.get)
         try {
           val fs = path.getFileSystem(hadoopConf)
+          val fileStatus = fs.getFileStatus(path)
+          val permission = fileStatus.getPermission()
+          val owner = fileStatus.getOwner()
+          val group = fileStatus.getGroup()
+          // Not all fs support acl APIs.
+          val optAcls = Try(fs.getAclStatus(path).getEntries)
+
           fs.delete(path, true)
+
+          // We should keep original owner/permission/acl of the path.
           fs.mkdirs(path)
+          fs.setOwner(path, owner, group)
+          fs.setPermission(path, permission)
+          optAcls.foreach(acls => fs.setAcl(path, acls))
         } catch {
           case NonFatal(e) =>
             throw new AnalysisException(
