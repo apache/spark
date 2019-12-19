@@ -44,20 +44,18 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
   def defaultResourceProfile: ImmutableResourceProfile = defaultProfile
 
   private val taskCpusDefaultProfile = defaultProfile.getTaskCpus.get
-  private val shouldError = !isTesting || sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
-  private val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
-  private val isNotYarn = master.isDefined && !master.get.equals("yarn")
-
+  val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
+  val isNotYarn = master.isDefined && !master.get.equals("yarn")
 
   // If we use anything except the default profile, its only supported on YARN right now
   // throws exception if not supported
   private[spark] def isSupported(rp: ImmutableResourceProfile): Boolean = {
     // is master isn't defined we go ahead and allow it for testing purposes
-    val isYarn = !isNotYarn
+    val shouldError = !isTesting || sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
     val isNotDefaultProfile = rp.id != ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    logInfo(s"in is supported $shouldError, $isNotDefaultProfile $isNotYarn")
-    if (shouldError &&
-      ((isNotDefaultProfile && isNotYarn) || (isNotDefaultProfile && isYarn && !dynamicEnabled))) {
+    val notYarnAndNotDefaultProfile = isNotDefaultProfile && isNotYarn
+    val YarnNotDynAllocAndNotDefaultProfile = isNotDefaultProfile && !isNotYarn && !dynamicEnabled
+    if (shouldError && (notYarnAndNotDefaultProfile || YarnNotDynAllocAndNotDefaultProfile)) {
       throw new SparkException("ResourceProfiles are only supported on YARN with dynamic " +
         "allocation enabled.")
     }

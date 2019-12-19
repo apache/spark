@@ -30,7 +30,7 @@ import org.apache.spark.annotation.Evolving
  * stage. This allows the user to change the resource requirements between stages.
  */
 @Evolving
-class ResourceProfile() {
+class ResourceProfile() extends Serializable {
 
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()

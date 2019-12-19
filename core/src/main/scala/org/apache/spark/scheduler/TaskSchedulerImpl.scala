@@ -206,7 +206,8 @@ private[spark] class TaskSchedulerImpl(
 
   override def submitTasks(taskSet: TaskSet): Unit = {
     val tasks = taskSet.tasks
-    logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
+    logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks "
+      + "resource profile " + taskSet.resourceProfileId)
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
@@ -337,15 +338,27 @@ private[spark] class TaskSchedulerImpl(
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
+      logInfo(s"trying offer: $i $execId $host ${shuffledOffers(i).resourceProfileId}")
+
       // the specific resource assignments that would be given to a task
       val taskResAssignments = HashMap[String, ResourceInformation]()
       val taskSetRpID = taskSet.taskSet.resourceProfileId
       val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
-      if (resourcesMeetTaskRequirements(taskSet, availableCpus(i), availableResources(i),
-        taskResAssignments)) {
+      if (taskSetRpID == shuffledOffers(i).resourceProfileId) {
+        logInfo(s"resource profile ids do match $taskSetRpID ${shuffledOffers(i).resourceProfileId}")
+      } else {
+        logInfo(s"profile ids don't match $taskSetRpID ${shuffledOffers(i).resourceProfileId}")
+      }
+      // make the resource profile id a hard requirement for now - ie only put tasksets
+      // on executors where resource profile exactly matches.
+      if (taskSetRpID == shuffledOffers(i).resourceProfileId &&
+        resourcesMeetTaskRequirements(taskSet, availableCpus(i), availableResources(i),
+          taskResAssignments)) {
         try {
+          logInfo(s"met resource requirements $i")
           for (task <- taskSet.resourceOffer(execId, host, maxLocality, taskCpus,
             taskResAssignments.toMap)) {
+            logInfo(s"assigned task, assignments are $taskResAssignments")
             tasks(i) += task
             val tid = task.taskId
             taskIdToTaskSetManager.put(tid, taskSet)
@@ -405,7 +418,6 @@ private[spark] class TaskSchedulerImpl(
     if (tsResources.isEmpty) return true
 
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
-    logInfo("task resources are: " + tsResources)
     // we go through all resources here so that we can make sure match and also get what the
     // assignments are for the next task
     for (rName <- tsResources.keys) {
@@ -542,6 +554,7 @@ private[spark] class TaskSchedulerImpl(
     for (taskSet <- sortedTaskSets) {
       // we only need to calculate available slots if using barrier scheduling, otherwise the
       // value is -1
+      logInfo(s"trying taskSet: ${taskSet.stageId}")
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
         val slots = calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
           taskSet.taskSet.resourceProfileId)
@@ -564,6 +577,7 @@ private[spark] class TaskSchedulerImpl(
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
+            logInfo(s"locality level is: $currentMaxLocality ")
             launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
               currentMaxLocality, shuffledOffers, availableCpus,
               availableResources, tasks, addressesWithDescs)

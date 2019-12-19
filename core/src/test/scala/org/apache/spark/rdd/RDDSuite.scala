@@ -32,7 +32,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
+import org.apache.spark.internal.config.{RDD_PARALLEL_LISTING_THRESHOLD, RESOURCE_PROFILE_MANAGER_TESTING}
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.resource._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -176,6 +176,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     val ereqs = new ExecutorResourceRequests().resource("gpu", 1)
     val treqs = new TaskResourceRequests().resource("gpu", 1)
     rp.require(ereqs).require(treqs)
+    sc.conf.set(RESOURCE_PROFILE_MANAGER_TESTING, true)
     val error = intercept[SparkException] {
       val rdd = sc.parallelize(Seq(1 -> true)).withResources(rp)
     }.getMessage()

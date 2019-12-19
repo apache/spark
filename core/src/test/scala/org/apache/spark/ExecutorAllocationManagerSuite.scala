@@ -21,8 +21,8 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
-import org.mockito.Mockito.{mock, never, spy, verify, when}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.executor.ExecutorMetrics
@@ -73,8 +73,6 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     listenerBus.post(event)
     listenerBus.waitUntilEmpty()
   }
-
-  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   test("initialize dynamic allocation in SparkContext") {
     val conf = createConf(0, 1, 0)

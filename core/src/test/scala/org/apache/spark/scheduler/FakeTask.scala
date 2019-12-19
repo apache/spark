@@ -43,7 +43,12 @@ object FakeTask {
    * locations for each task (given as varargs) if this sequence is not empty.
    */
   def createTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
-    createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0, prefLocs: _*)
+    createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
+      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+  }
+
+  def createTaskSet(numTasks: Int, rpId: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
+    createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0, rpId, prefLocs: _*)
   }
 
   def createTaskSet(
@@ -51,7 +56,8 @@ object FakeTask {
       stageId: Int,
       stageAttemptId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
-    createTaskSet(numTasks, stageId, stageAttemptId, priority = 0, prefLocs: _*)
+    createTaskSet(numTasks, stageId, stageAttemptId, priority = 0,
+      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
   }
 
   def createTaskSet(
@@ -59,6 +65,7 @@ object FakeTask {
       stageId: Int,
       stageAttemptId: Int,
       priority: Int,
+      rpId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
     if (prefLocs.size != 0 && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
@@ -66,8 +73,7 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil)
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null,
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId)
   }
 
   def createShuffleMapTaskSet(

@@ -32,6 +32,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.tags.ExtendedYarnTest
 
 /**
@@ -83,6 +85,20 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     if (registeredExecFile != null) {
       assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
     }
+  }
+
+  test("ResourceProfile with yarn dynamic allocation cluster mode") {
+    testResourceProfile(true)
+  }
+
+  private def testResourceProfile(clientMode: Boolean): Unit = {
+    val conf = extraSparkConf()
+    val rpConf = conf ++ Map(DYN_ALLOCATION_ENABLED.key -> "true")
+
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(clientMode, mainClassName(ResourceProfileTestApp.getClass),
+      appArgs = Seq(result.getAbsolutePath), extraConf = extraSparkConf())
+    checkResult(finalState, result, "true")
   }
 }
 
@@ -159,4 +175,27 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
     }
   }
 
+}
+
+private object ResourceProfileTestApp {
+  def main(args: Array[String]): Unit = {
+    val status = args(0)
+    val sparkConf = new SparkConf()
+    val sc = new SparkContext(sparkConf)
+    val rp = new ResourceProfile()
+    val ereqs = new ExecutorResourceRequests().cores(2).resource(GPU, 1, "get1Gpu.sh")
+    val treqs = new TaskResourceRequests().cpus(1).resource(GPU, 1)
+    rp.require(ereqs).require(treqs)
+    val result = sc.parallelize(Seq(1)).mapPartitions { it =>
+      val context = TaskContext.get()
+      if (context.resources().contains(GPU)) {
+        context.resources().get(GPU).get.addresses.iterator
+      } else {
+        Iterator.empty
+      }
+    }.withResources(rp).collect()
+
+    Files.write(result.mkString(","), new File(status), StandardCharsets.UTF_8)
+    sc.stop()
+  }
 }
