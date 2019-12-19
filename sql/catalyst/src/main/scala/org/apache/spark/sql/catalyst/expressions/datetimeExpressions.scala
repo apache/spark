@@ -594,7 +594,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     Arguments:
       * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "uuuu-MM-dd HH:mm:ss". See `java.text.SimpleDateFormat`
+                 Default value is "yyyy-MM-dd HH:mm:ss". See `java.text.SimpleDateFormat`
                  for valid date and time format patterns.
   """,
   examples = """
@@ -640,7 +640,7 @@ case class ToUnixTimestamp(
     Arguments:
       * timeExp - A date/timestamp or string. If not provided, this defaults to current time.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "uuuu-MM-dd HH:mm:ss". See `java.text.SimpleDateFormat`
+                 Default value is "yyyy-MM-dd HH:mm:ss". See `java.text.SimpleDateFormat`
                  for valid date and time format patterns.
   """,
   examples = """
