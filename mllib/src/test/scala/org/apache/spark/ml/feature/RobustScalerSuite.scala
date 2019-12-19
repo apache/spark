@@ -31,6 +31,8 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
   @transient var resWithScaling: Array[Vector] = _
   @transient var resWithCentering: Array[Vector] = _
   @transient var resWithBoth: Array[Vector] = _
+  @transient var dataWithNaN: Array[Vector] = _
+  @transient var resWithNaN: Array[Vector] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -112,6 +114,24 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(0.5, -0.5),
       Vectors.dense(1.0, -1.0)
     )
+
+    dataWithNaN = Array(
+      Vectors.dense(0.0, Double.NaN),
+      Vectors.dense(Double.NaN, 0.0),
+      Vectors.dense(1.0, -1.0),
+      Vectors.dense(2.0, -2.0),
+      Vectors.dense(3.0, -3.0),
+      Vectors.dense(4.0, -4.0)
+    )
+
+    resWithNaN = Array(
+      Vectors.dense(0.0, Double.NaN),
+      Vectors.dense(Double.NaN, 0.0),
+      Vectors.dense(0.5, -0.5),
+      Vectors.dense(1.0, -1.0),
+      Vectors.dense(1.5, -1.5),
+      Vectors.dense(2.0, -2.0)
+    )
   }
 
 
@@ -186,6 +206,19 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
       .setWithScaling(false)
       .fit(df)
     testTransformer[(Vector, Vector)](df, robustScaler, "scaled_features", "expected")(
+      assertResult)
+  }
+
+  test("deal with NaN values") {
+    val df0 = dataWithNaN.zip(resWithNaN).toSeq.toDF("features", "expected")
+
+    val robustScalerEst0 = new RobustScaler()
+      .setInputCol("features")
+      .setOutputCol("scaled_features")
+    val robustScaler0 = robustScalerEst0.fit(df0)
+    MLTestingUtils.checkCopyAndUids(robustScalerEst0, robustScaler0)
+
+    testTransformer[(Vector, Vector)](df0, robustScaler0, "scaled_features", "expected")(
       assertResult)
   }
 

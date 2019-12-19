@@ -161,9 +161,10 @@ class RobustScaler (override val uid: String)
 
     val (ranges, medians) = vectors.mapPartitions { iter =>
       if (iter.hasNext) {
-        iter.flatMap { vec => Iterator.range(0, numFeatures).map(i => (i, vec(i))) } ++
+        iter.flatMap { vec =>
+          Iterator.range(0, numFeatures).map(i => (i, vec(i))).filterNot(_._2.isNaN)
           // add NaN for each feature as the indication of the end of partition
-          Iterator.range(0, numFeatures).map((_, Double.NaN))
+        } ++ Iterator.range(0, numFeatures).map((_, Double.NaN))
       } else Iterator.empty
     }.aggregateByKey(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))(
@@ -174,7 +175,7 @@ class RobustScaler (override val uid: String)
       val range = s.query(localUpper).get - s.query(localLower).get
       val median = s.query(0.5).get
       (range, median)
-    }.sortBy(_._1).values.collect().unzip
+    }.collect().sortBy(_._1).map(_._2).unzip
     require(ranges.length == numFeatures,
       "QuantileSummaries on some features are missing")
 
