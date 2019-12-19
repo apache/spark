@@ -73,7 +73,6 @@ object HiveResult {
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
       case (n, _: NumericType) => n.toString
-      case (bin, BinaryType) => bin.toString
       case (s: String, StringType) => "\"" + s + "\""
       case (interval: CalendarInterval, CalendarIntervalType) =>
         SQLConf.get.intervalOutputStyle match {
