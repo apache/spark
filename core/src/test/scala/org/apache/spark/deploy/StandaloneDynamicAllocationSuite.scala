@@ -518,9 +518,10 @@ class StandaloneDynamicAllocationSuite
       val scheduler = new CoarseGrainedSchedulerBackend(taskScheduler, rpcEnv)
       try {
         scheduler.start()
-        intercept[Exception] {
+        val e = intercept[SparkException] {
           scheduler.driverEndpoint.askSync[Boolean](message)
         }
+        assert(e.getCause().isInstanceOf[IllegalStateException])
         assert(scheduler.getExecutorIds().isEmpty)
       } finally {
         scheduler.stop()
