@@ -47,13 +47,12 @@ class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedS
 }
 
 
-class BucketedReadSuite extends QueryTest with SQLTestUtils with SharedSparkSession {
+abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     spark.sessionState.conf.setConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
   }
 
   protected override def afterAll(): Unit = {
@@ -605,20 +604,23 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with SharedSparkSess
     }
   }
 
-  test("terry") {
-    df1.write.format("parquet").bucketBy(8, "i").sortBy("i", "j").saveAsTable("t1")
-    df1.write.format("parquet").bucketBy(8, "i").sortBy("i", "j").saveAsTable("t2")
-    spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "0")
-    sql("describe extended t1").show
-    sql("describe extended t2").show
-    sql("with t3 as (select i as i2 from t2) select * from t1, t3 where t1.i = t3.i2").explain(true)
-    // sql("select * from t1, t2 where t1.i = t2.i").explain(true)
-    // val table1 = spark.table("table1")
-    // val table2 = spark.table("table2")
-    // table1.join(table2, "i").explain(true)
-    // val df = spark.sql("select * from table1, table2 where table1.i = table2.i")
-    // df.explain(true)
-    // df.show
+  test("SPARK-30298: bucket join should work with SubqueryAlias plan") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t") {
+        withView("v") {
+          val df = (0 until 20).map(i => (i, i)).toDF("i", "j").as("df")
+          df.write.format("parquet").bucketBy(8, "i").saveAsTable("t")
+
+          sql("CREATE VIEW v AS SELECT * FROM t").collect()
+
+          val plan1 = sql("SELECT * FROM t a JOIN t b ON a.i = b.i").queryExecution.executedPlan
+          assert(plan1.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
+
+          val plan2 = sql("SELECT * FROM t a JOIN v b ON a.i = b.i").queryExecution.executedPlan
+          assert(plan2.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
+        }
+      }
+    }
   }
 
   test("avoid shuffle when grouping keys are a super-set of bucket keys") {

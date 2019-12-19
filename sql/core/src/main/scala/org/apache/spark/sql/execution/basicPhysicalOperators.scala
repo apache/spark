@@ -81,30 +81,14 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def outputPartitioning: Partitioning = {
-    def checkProjectList(attr: AttributeReference): Option[Attribute] = {
-      val result = projectList.map{
-        case alias: Alias => alias.child match {
-          case childAttr: AttributeReference =>
-            if (childAttr.semanticEquals(attr)) {
-              Some(alias.toAttribute)
-            } else {
-              None
-            }
-          case _ => None
-        }
-        case _ => None
-      }.filter(_.nonEmpty)
-
-      require(result.size <= 1)
-      result.headOption.getOrElse(None)
-    }
-
-    val outputPartitioning = child.outputPartitioning
-    outputPartitioning match {
-      case h @ HashPartitioning(expressions, numPartitions) =>
-        val newExpressions = expressions.map{
+    child.outputPartitioning match {
+      case HashPartitioning(expressions, numPartitions) =>
+        // Replace aliases in projectList with its child expressions for any matching
+        // expressions in HashPartitioning. This is to ensure that outputPartitioning
+        // correctly matches witch requiredChildDistribution.
+        val newExpressions = expressions.map {
           case a: AttributeReference =>
-            checkProjectList(a).getOrElse(a)
+            removeAlias(a).getOrElse(a)
           case other => other
         }
         HashPartitioning(newExpressions, numPartitions)
@@ -119,8 +103,14 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
        |Input     : ${child.output.mkString("[", ", ", "]")}
      """.stripMargin
   }
-}
 
+  private def removeAlias(attr: AttributeReference): Option[Attribute] = {
+    projectList.collectFirst {
+      case a @ Alias(child @ AttributeReference(_, _, _, _), _) if child.semanticEquals(attr) =>
+        a.toAttribute
+    }
+  }
+}
 
 /** Physical plan for Filter. */
 case class FilterExec(condition: Expression, child: SparkPlan)
