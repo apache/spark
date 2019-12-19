@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class CSVFiltersSuite extends SparkFunSuite {
   test("filter to expression conversion") {
@@ -47,5 +47,40 @@ class CSVFiltersSuite extends SparkFunSuite {
     check(sources.And(sources.AlwaysTrue, sources.AlwaysTrue), And(Literal(true), Literal(true)))
     check(sources.Or(sources.AlwaysTrue, sources.AlwaysTrue), Or(Literal(true), Literal(true)))
     check(sources.In("a", Array(1)), In(ref, Seq(Literal(1))))
+  }
+
+  private def getSchema(str: String): StructType = str match {
+    case "" => new StructType()
+    case _ => StructType.fromDDL(str)
+  }
+
+  test("read schema is based on required schema and filters") {
+    def check(
+        dataSchema: String = "i INTEGER, d DOUBLE, s STRING",
+        requiredSchema: String = "s STRING",
+        filters: Seq[sources.Filter],
+        expected: String): Unit = {
+      val csvFilters = new CSVFilters(filters, getSchema(dataSchema), getSchema(requiredSchema))
+      assert(csvFilters.readSchema === getSchema(expected))
+    }
+
+    check(filters = Seq(), expected = "s STRING")
+    check(filters = Seq(sources.EqualTo("d", 3.14)), expected = "d DOUBLE, s STRING")
+    check(
+      filters = Seq(sources.And(sources.EqualTo("d", 3.14), sources.StringEndsWith("s", "a"))),
+      expected = "d DOUBLE, s STRING")
+    check(
+      filters = Seq(
+        sources.And(sources.EqualTo("d", 3.14), sources.StringEndsWith("s", "a")),
+        sources.GreaterThan("i", 100)),
+      expected = "i INTEGER, d DOUBLE, s STRING")
+
+    try {
+      check(filters = Seq(sources.EqualTo("invalid", 3.14)), expected = "d DOUBLE, s STRING")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("All filters must be applicable to the data schema"))
+    }
   }
 }
