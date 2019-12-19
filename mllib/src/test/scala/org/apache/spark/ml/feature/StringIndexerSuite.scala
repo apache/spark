@@ -459,7 +459,7 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Load StringIndexderModel prior to Spark 3.0") {
-    val modelPath = testFile("test-data/strIndexerModel")
+    val modelPath = testFile("ml-models/strIndexerModel")
 
     val loadedModel = StringIndexerModel.load(modelPath)
     assert(loadedModel.labelsArray === Array(Array("b", "c", "a")))

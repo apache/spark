@@ -30,6 +30,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 /** Params for Multilayer Perceptron. */
 private[classification] trait MultilayerPerceptronParams extends ProbabilisticClassifierParams
@@ -359,10 +360,11 @@ object MultilayerPerceptronClassificationModel
 
     override def load(path: String): MultilayerPerceptronClassificationModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val (majorVersion, _) = majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString
       val df = sparkSession.read.parquet(dataPath)
-      val model = if (df.columns.length == 2) { // model prior to 3.0.0
+      val model = if (majorVersion < 3) { // model prior to 3.0.0
         val data = df.select("layers", "weights").head()
         val layers = data.getAs[Seq[Int]](0).toArray
         val weights = data.getAs[Vector](1)

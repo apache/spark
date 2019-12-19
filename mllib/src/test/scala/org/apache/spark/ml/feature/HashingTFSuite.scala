@@ -89,7 +89,7 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("SPARK-23469: Load HashingTF prior to Spark 3.0") {
-    val hashingTFPath = testFile("test-data/hashingTF-pre3.0")
+    val hashingTFPath = testFile("ml-models/hashingTF-pre3.0")
     val loadedHashingTF = HashingTF.load(hashingTFPath)
     val mLlibHashingTF = new MLlibHashingTF(100)
     assert(loadedHashingTF.indexOf("a") === mLlibHashingTF.indexOf("a"))
