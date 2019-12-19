@@ -139,8 +139,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       val hashDistCol = hashDistUDF(col($(outputCol)))
       val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
 
-      if (numNearestNeighbors < 10000) {
-        log.info(s"using topK")
+      if (numNearestNeighbors < 1000) {
         val topKThreshold = modelDatasetWithDist
           .select(distCol)
           .rdd
@@ -153,7 +152,6 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
           ).toSeq.max
         modelDatasetWithDist.filter(hashDistCol <= topKThreshold)
       } else {
-        log.info(s"using quantile")
         val count = dataset.count()
         // Compute threshold to get around k elements.
         // To guarantee to have enough neighbors in one pass, we need (p - err) * N >= M
