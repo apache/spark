@@ -343,18 +343,13 @@ private[spark] class TaskSchedulerImpl(
       // the specific resource assignments that would be given to a task
       val taskResAssignments = HashMap[String, ResourceInformation]()
       val taskSetRpID = taskSet.taskSet.resourceProfileId
-      val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
-      if (taskSetRpID == shuffledOffers(i).resourceProfileId) {
-        logInfo(s"resource profile ids do match $taskSetRpID ${shuffledOffers(i).resourceProfileId}")
-      } else {
-        logInfo(s"profile ids don't match $taskSetRpID ${shuffledOffers(i).resourceProfileId}")
-      }
       // make the resource profile id a hard requirement for now - ie only put tasksets
       // on executors where resource profile exactly matches.
       if (taskSetRpID == shuffledOffers(i).resourceProfileId &&
         resourcesMeetTaskRequirements(taskSet, availableCpus(i), availableResources(i),
           taskResAssignments)) {
         try {
+          val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(taskSetRpID)
           logInfo(s"met resource requirements $i")
           for (task <- taskSet.resourceOffer(execId, host, maxLocality, taskCpus,
             taskResAssignments.toMap)) {
@@ -405,16 +400,15 @@ private[spark] class TaskSchedulerImpl(
       availCpus: Int,
       availWorkerResources: Map[String, Buffer[String]],
       taskResourceAssignments: HashMap[String, ResourceInformation]): Boolean = {
-
     val rpId = taskSet.taskSet.resourceProfileId
-    val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
     val taskCpus = sc.resourceProfileManager.taskCpusForProfileId(rpId)
+    // check is ResourceProfile has cpus first since that is common case
+    if (availCpus < taskCpus) return false
 
+    val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
     logInfo("task set resources are: " + taskSetProf)
     // remove task cpus since we checked already
     val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
-    // check is ResourceProfile has cpus first since that is common case
-    if (availCpus < taskCpus) return false
     if (tsResources.isEmpty) return true
 
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
@@ -423,18 +417,7 @@ private[spark] class TaskSchedulerImpl(
     for (rName <- tsResources.keys) {
       val resourceReqs = tsResources.get(rName).get
       val taskReqAmount = resourceReqs.amount
-      logInfo("actualCount is: " + taskReqAmount + " " + resourceReqs)
-
-      // TODO - for debugging - perhaps remove
-      if (!availWorkerResources.contains(rName)) {
-        logInfo(s"worker doesn't contain resource: $rName")
-        return false
-      }
       val rInfo = availWorkerResources.get(rName).get
-      val workerAv = rInfo.size
-      logInfo(s"available type is: $rName, count is: $workerAv")
-      // TODO - end debugging
-
       val numWorkerResourceAvail = availWorkerResources.get(rName).map(_.size).getOrElse(0)
       if (numWorkerResourceAvail >= taskReqAmount) {
         logInfo(s"good to go for $rName")
@@ -444,7 +427,6 @@ private[spark] class TaskSchedulerImpl(
         return false
       }
     }
-
     taskResourceAssignments ++= localTaskReqAssign
     true
   }

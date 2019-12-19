@@ -76,8 +76,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // `CoarseGrainedSchedulerBackend.this`.
   private val executorDataMap = new HashMap[String, ExecutorData]
 
-  // Number of executors for the default ResourceProfile requested by the
-  // cluster manager, [[ExecutorAllocationManager]]
+  // Number of executors for each ResourceProfile requested by the cluster
+  // manager, [[ExecutorAllocationManager]]
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private var requestedTotalExecutorsPerResourceProfile = new HashMap[ImmutableResourceProfile, Int]
 
@@ -89,15 +89,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private val executorsPendingToRemove = new HashMap[String, Boolean]
 
-  // A map to store hostname and ResourceProfile with its possible task number running on it
+  // A map of ResourceProfile id to map of hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var rpHostToLocalTaskCount: Map[Int, Map[String, Int]] = Map.empty
 
 
-  // The number of pending tasks which is locality required
+  // The number of pending tasks per ResourceProfile id which is locality required
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var numLocalityAwareTasksPerResourceProfileId = Map.empty[Int, Int]
-    // Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)
 
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
@@ -548,7 +547,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.filter { case (exec, info) => info.resourceProfileId == id }.size
   }
 
-
   override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
   }
@@ -578,7 +576,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     val res = executorDataMap.get(executorId)
     val ret = res.map(_.resourceProfileId)
       .getOrElse(ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
-    logInfo(s"Tom getExecutorResourceProfileId id is $ret")
     ret
   }
 
