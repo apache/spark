@@ -530,35 +530,15 @@ Refer to the [R API docs](api/R/spark.naiveBayes.html) for more details.
 
 ## Factorization machines classifier
 
-[Factorization Machines](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) is able to estimate interactions
-between features even in problems with huge sparsity (like advertising and recommendation system).
-
-Factorization machines classifier formula is:
-
-$$
-\hat{y} = \sigma\left( w_0 + \sum\limits^n_{i-1} w_i x_i +
-  \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j \right)
-$$
-
-First two terms denote intercept and linear term (as same as linear regression),
-and last term denotes pairwise interactions term. $$v_i$$ describes the i-th variable
-with k factors.
-
-The pairwise interactions can be reformulated:
-
-$$
-\sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
-  = \frac{1}{2}\sum\limits^k_{f=1}
-    \left(\left( \sum\limits^n_{i=1}v_{i,f}x_i \right)^2 -
-    \sum\limits^n_{i=1}v_{i,f}^2x_i^2 \right)
-$$
-
-This equation has only linear complexity in both k and n - i.e. its computation is in $$O(kn)$$.
-
-In general, in order to prevent FM gradient explosion, it is best to scale between 0 and 1 for continuous features,
-or bin the continuous features and one-hot.
+Factorization machines are able to estimate interactions between features even in problems with huge sparsity.
+For more background and more details about the implementation of factorization machines,
+refer to [Factorization Machines section](ml-classification-regression.html#factorization-machines).
 
 **Examples**
+
+The following examples load a dataset in LibSVM format, split it into training and test sets,
+train on the first dataset, and then evaluate on the held-out test set.
+We scale features between 0 and 1 to prevent the exploding gradient problem.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1073,16 +1053,15 @@ Refer to the [`IsotonicRegression` R API docs](api/R/spark.isoreg.html) for more
 
 ## Factorization machines regressor
 
-Factorization machines regressor formula is:
-
-$$
-\hat{y} = w_0 + \sum\limits^n_{i-1} w_i x_i +
-  \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
-$$
-
-More detail on FM see [Factorization machines classifier](ml-classification-regression.html#factorization-machines-classifier)
+Factorization machines are able to estimate interactions between features even in problems with huge sparsity.
+For more background and more details about the implementation of factorization machines,
+refer to [Factorization Machines section](ml-classification-regression.html#factorization-machines).
 
 **Examples**
+
+The following examples load a dataset in LibSVM format, split it into training and test sets,
+train on the first dataset, and then evaluate on the held-out test set.
+We scale features between 0 and 1 to prevent the exploding gradient problem.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1137,6 +1116,40 @@ to a [ridge
 regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model.
 We implement Pipelines API for both linear regression and logistic
 regression with elastic net regularization.
+
+# Factorization Machines
+
+[Factorization Machines](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) are able to estimate interactions
+between features even in problems with huge sparsity (like advertising and recommendation system).
+The `spark.ml` implementation supports factorization machines for binary classification and for regression.
+
+Factorization machines formula is:
+
+$$
+\hat{y} = w_0 + \sum\limits^n_{i-1} w_i x_i +
+  \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
+$$
+
+First two terms denote intercept and linear term (as same as linear regression),
+and last term denotes pairwise interactions term. $$v_i$$ describes the i-th variable
+with k factors.
+
+FM can be used directly as the regression and optimization criterion is mean square error. FM also can be used as
+the binary classification through wrap sigmoid function, the optimization criterion is logit loss.
+
+The pairwise interactions can be reformulated:
+
+$$
+\sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
+  = \frac{1}{2}\sum\limits^k_{f=1}
+    \left(\left( \sum\limits^n_{i=1}v_{i,f}x_i \right)^2 -
+    \sum\limits^n_{i=1}v_{i,f}^2x_i^2 \right)
+$$
+
+This equation has only linear complexity in both k and n - i.e. its computation is in $$O(kn)$$.
+
+In general, in order to prevent the exploding gradient problem, it is best to scale continuous features between 0 and 1,
+or bin the continuous features and one-hot.
 
 # Decision trees
 
