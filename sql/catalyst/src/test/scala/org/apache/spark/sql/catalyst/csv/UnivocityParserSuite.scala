@@ -24,9 +24,11 @@ import java.util.{Locale, TimeZone}
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.sources.{EqualTo, Filter, LessThan, StringStartsWith}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -266,5 +268,67 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
 
     assert(convertedValue.isInstanceOf[UTF8String])
     assert(convertedValue == expected)
+  }
+
+  test("skipping rows using pushdown filters") {
+    def check(
+        input: String = "1,a",
+        dataSchema: String = "i INTEGER, s STRING",
+        requiredSchema: String = "i INTEGER",
+        filters: Seq[Filter],
+        expected: Seq[InternalRow]): Unit = {
+      def getSchema(str: String): StructType = str match {
+        case "" => new StructType()
+        case _ => StructType.fromDDL(str)
+      }
+      Seq(false, true).foreach { columnPruning =>
+        val options = new CSVOptions(Map.empty[String, String], columnPruning, "GMT")
+        val parser = new UnivocityParser(
+          getSchema(dataSchema),
+          getSchema(requiredSchema),
+          options,
+          filters)
+        val actual = parser.parse(input)
+        assert(actual === expected)
+      }
+    }
+
+    check(filters = Seq(), expected = Seq(InternalRow(1)))
+    check(filters = Seq(EqualTo("i", 1)), expected = Seq(InternalRow(1)))
+    check(filters = Seq(EqualTo("i", 2)), expected = Seq())
+    check(filters = Seq(StringStartsWith("s", "b")), expected = Seq())
+    check(
+      requiredSchema = "i INTEGER, s STRING",
+      filters = Seq(StringStartsWith("s", "a")),
+      expected = Seq(InternalRow(1, UTF8String.fromString("a"))))
+    check(
+      requiredSchema = "",
+      filters = Seq(LessThan("i", 10)),
+      expected = Seq(InternalRow.empty))
+    check(
+      input = "1,a,3.14",
+      dataSchema = "i INTEGER, s STRING, d DOUBLE",
+      filters = Seq(EqualTo("d", 3.14)),
+      expected = Seq(InternalRow(1)))
+
+    try {
+      check(filters = Seq(EqualTo("invalid attr", 1)), expected = Seq())
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("All filters must be applicable to the data schema"))
+    }
+
+    try {
+      check(
+        dataSchema = "",
+        requiredSchema = "",
+        filters = Seq(EqualTo("i", 1)),
+        expected = Seq(InternalRow.empty))
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("All filters must be applicable to the data schema"))
+    }
   }
 }

@@ -38,7 +38,7 @@ class CSVFilters(
     filters: Seq[sources.Filter],
     dataSchema: StructType,
     requiredSchema: StructType) {
-  assert(checkFilters(), "All filters must be applicable to dataSchema")
+  require(checkFilters(), "All filters must be applicable to the data schema.")
 
   /**
    * The schema to read from the underlying CSV parser.
