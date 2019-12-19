@@ -110,7 +110,7 @@ case class Percentile(
     case _ => DoubleType
   }
 
-  def inputTypes: Seq[AbstractDataType] = {
+  override def inputTypes: Seq[AbstractDataType] = {
     val percentageExpType = percentageExpression.dataType match {
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
