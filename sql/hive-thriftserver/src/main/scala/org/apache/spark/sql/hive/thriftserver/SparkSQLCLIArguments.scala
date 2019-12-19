@@ -35,9 +35,9 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) extends Loggi
    * Options without arguments.
    */
   val optionsMap = Map(
-    'V' -> "verbose", 'v' -> "verbose",
-    'S' -> "silent", 's' -> "silent",
-    'H' -> "help", 'h' -> "help"
+    'H' -> "help",
+    'V' -> "verbose",
+    'S' -> "silent"
   )
 
 
@@ -46,27 +46,27 @@ private[hive] case class SparkSQLCLIArguments(args: Array[String]) extends Loggi
    * Options with arguments.
    */
   val optionsArgMap = Map(
-    "--file" -> "file",
-    "-i" -> "init-file",
+    "--conf" -> "conf",
     "--database" -> "database",
-    "--hiveconf" -> "hiveconf",
+    "--define" -> "define", "-d" -> "define",
     "-e" -> "quoted-query-string",
-    "-f" -> "file",
+    "--file" -> "file", "-f" -> "file",
+    "--hiveconf" -> "hiveconf",
     "--hivevar" -> "hivevar",
-    "-d" -> "define",
-    "--define" -> "define",
-    "--conf" -> "conf"
+    "-i" -> "init-file"
   )
 
   /**
    * Usage string helper to show options for --help and  illegal arguments.
    */
   lazy val usage: String = {
-    var output = "Usage:\n"
-    output += optionsArgMap.map(pair => s"${pair._1} [ARG]\t${pair._2}").mkString("\n")
-    output += "\n\nOptions:\n"
-    output += optionsMap.map(pair => s"-${pair._1}|--${pair._2}\t${pair._2}").mkString("\n")
-    output
+    s"""
+      |Usage:
+      |${optionsArgMap.map(pair => s"${pair._1} [ARG]\t${pair._2}").mkString("\n")}
+      |
+      |Options:
+      |${optionsMap.map(pair => s"-${pair._1}|--${pair._2}\t${pair._2}").mkString("\n")}
+      |""".stripMargin
   }
 
   lazy val parsed: Map[String, Seq[String]] = {
