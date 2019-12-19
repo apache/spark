@@ -1014,10 +1014,10 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     builder ++= s"CREATE$tableTypeString ${table.quotedString}"
 
     if (metadata.tableType == VIEW) {
-      if (metadata.schema.nonEmpty) {
-        builder ++= metadata.schema.map(_.name).mkString("(", ", ", ")")
-      }
-      builder ++= metadata.viewText.mkString(" AS\n", "", "\n")
+      showViewDataColumns(metadata, builder)
+      showTableComment(metadata, builder)
+      showViewProperties(metadata, builder)
+      showViewText(metadata, builder)
     } else {
       showHiveTableHeader(metadata, builder)
       showTableComment(metadata, builder)
@@ -1028,6 +1028,35 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }
 
     builder.toString()
+  }
+
+  private def showViewDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    if (metadata.schema.nonEmpty) {
+      val viewColumns = metadata.schema.map { f =>
+        val comment = f.getComment()
+          .map(escapeSingleQuotedString)
+          .map(" COMMENT '" + _ + "'")
+
+        // view columns shouldn't have data type info
+        s"${quoteIdentifier(f.name)}${comment.getOrElse("")}"
+      }
+      builder ++= viewColumns.mkString("(", ", ", ")\n")
+    }
+  }
+
+  private def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val viewProps = metadata.properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
+    if (viewProps.nonEmpty) {
+      val props = viewProps.map { case (key, value) =>
+        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+      }
+
+      builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
+    }
+  }
+
+  private def showViewText(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    builder ++= metadata.viewText.mkString("AS ", "", "\n")
   }
 
   private def showHiveTableHeader(metadata: CatalogTable, builder: StringBuilder): Unit = {

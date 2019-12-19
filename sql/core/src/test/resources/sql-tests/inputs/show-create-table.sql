@@ -64,3 +64,34 @@ DROP TABLE tbl;
 CREATE TABLE tbl (a REAL, b NUMERIC, c NUMERIC(10), d NUMERIC(10,1)) USING parquet;
 SHOW CREATE TABLE tbl;
 DROP TABLE tbl;
+
+
+-- show create table for view
+CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet;
+
+-- simple
+CREATE VIEW view_SPARK_30302 (aaa, bbb)
+AS SELECT a, b FROM tbl;
+
+SHOW CREATE TABLE view_SPARK_30302;
+DROP VIEW view_SPARK_30302;
+
+
+-- comment
+CREATE VIEW view_SPARK_30302 (aaa COMMENT 'comment for aaa', bbb)
+COMMENT 'This is a comment for view'
+AS SELECT a, b FROM tbl;
+
+SHOW CREATE TABLE view_SPARK_30302;
+DROP VIEW view_SPARK_30302;
+
+
+-- tblproperties
+CREATE VIEW view_SPARK_30302 (aaa, bbb)
+TBLPROPERTIES ('a' = '1')
+AS SELECT a, b FROM tbl;
+
+SHOW CREATE TABLE view_SPARK_30302;
+DROP VIEW view_SPARK_30302;
+
+DROP TABLE tbl;
