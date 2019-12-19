@@ -421,7 +421,7 @@ class PlannerSuite extends SharedSparkSession {
     }
   }
 
-  test("EnsureRequirements replace Exchange " +
+  test("SPARK-30036: EnsureRequirements replace Exchange " +
       "if child has SortExec and RoundRobinPartitioning") {
     val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
     val partitioning = RoundRobinPartitioning(5)
