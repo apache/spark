@@ -21,8 +21,8 @@ import java.io.{File, PrintWriter}
 import java.net.URI
 import java.util.Locale
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, AclStatus, FsAction, FsPermission}
 
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
@@ -1982,29 +1982,45 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("truncate table - keep permission") {
+  test("truncate table - keep acl/permission") {
     import testImplicits._
 
-    withTable("tab1") {
-      sql("CREATE TABLE tab1 (col INT) USING parquet")
-      sql("INSERT INTO tab1 SELECT 1")
-      checkAnswer(spark.table("tab1"), Row(1))
+    withSQLConf(
+      "fs.file.impl" -> classOf[FakeLocalFsFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTable("tab1") {
+        sql("CREATE TABLE tab1 (col INT) USING parquet")
+        sql("INSERT INTO tab1 SELECT 1")
+        checkAnswer(spark.table("tab1"), Row(1))
 
-      val tablePath = new Path(spark.sessionState.catalog
-        .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
+        val tablePath = new Path(spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
 
-      val hadoopConf = spark.sessionState.newHadoopConf()
-      val fs = tablePath.getFileSystem(hadoopConf)
-      val fileStatus = fs.getFileStatus(tablePath);
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fs = tablePath.getFileSystem(hadoopConf)
+        val fileStatus = fs.getFileStatus(tablePath);
 
-      fs.setPermission(tablePath, new FsPermission("777"))
-      assert(fileStatus.getPermission().toString() == "rwxrwxrwx")
+        fs.setPermission(tablePath, new FsPermission("777"))
+        assert(fileStatus.getPermission().toString() == "rwxrwxrwx")
 
-      sql("TRUNCATE TABLE tab1")
-      assert(spark.table("tab1").collect().isEmpty)
+        // Set ACL to table path.
+        val customAcl = new java.util.ArrayList[AclEntry]()
+        customAcl.add(new AclEntry.Builder()
+          .setType(AclEntryType.USER)
+          .setScope(AclEntryScope.ACCESS)
+          .setPermission(FsAction.READ).build())
+        fs.setAcl(tablePath, customAcl)
+        assert(fs.getAclStatus(tablePath).getEntries().get(0) == customAcl.get(0))
 
-      val fileStatus2 = fs.getFileStatus(tablePath)
-      assert(fileStatus2.getPermission().toString() == "rwxrwxrwx")
+        sql("TRUNCATE TABLE tab1")
+        assert(spark.table("tab1").collect().isEmpty)
+
+        val fileStatus2 = fs.getFileStatus(tablePath)
+        assert(fileStatus2.getPermission().toString() == "rwxrwxrwx")
+        val aclEntries = fs.getAclStatus(tablePath).getEntries()
+        assert(aclEntries.size() == 1)
+        assert(aclEntries.get(0) == customAcl.get(0))
+      }
     }
   }
 
@@ -2904,5 +2920,27 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         assert(table.provider == Some("parquet"))
       }
     }
+  }
+}
+
+object FakeLocalFsFileSystem {
+  var aclStatus = new AclStatus.Builder().build()
+}
+
+// A fake test local filesystem used to test ACL. It keeps a ACL status. If deletes
+// a path of this filesystem, it will clean up the ACL status. Note that for test purpose,
+// it has only one ACL status for all paths.
+class FakeLocalFsFileSystem extends RawLocalFileSystem {
+  import FakeLocalFsFileSystem._
+
+  override def delete(f: Path, recursive: Boolean): Boolean = {
+    aclStatus = new AclStatus.Builder().build()
+    super.delete(f, recursive)
+  }
+
+  override def getAclStatus(path: Path): AclStatus = aclStatus
+
+  override def setAcl(path: Path, aclSpec: java.util.List[AclEntry]): Unit = {
+    aclStatus = new AclStatus.Builder().addEntries(aclSpec).build()
   }
 }
