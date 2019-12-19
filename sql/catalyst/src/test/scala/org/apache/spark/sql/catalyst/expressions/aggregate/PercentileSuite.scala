@@ -243,6 +243,23 @@ class PercentileSuite extends SparkFunSuite {
     }
   }
 
+  test("nulls in percentage expression") {
+    val nullPercentageExprs = Seq(Literal(null), CreateArray(Seq(0.1D, null).map(Literal(_))))
+
+    nullPercentageExprs.foreach {
+      percentageExpression =>
+        val wrongPercentage = new Percentile(
+          AttributeReference("a", DoubleType)(),
+          percentageExpression = percentageExpression)
+        assert(
+          wrongPercentage.checkInputDataTypes() match {
+            case TypeCheckFailure(msg)
+              if msg.contains("argument 2 requires (double or array<double>) type") =>
+              true
+            case _ => false
+          })
+    }
+  }
   test("null handling") {
 
     // Percentile without frequency column
