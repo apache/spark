@@ -1107,6 +1107,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.proxyRedirectUri</code></td>
+  <td></td>
+  <td>
+    Where to address redirects when Spark is running behind a proxy. This will make Spark
+    modify redirect responses so they point to the proxy server, instead of the Spark UI's own
+    address. This should be only the address of the server, without any prefix paths for the
+    application; the prefix should be set either by the proxy server itself (by adding the
+    <code>X-Forwarded-Context</code> request header), or by setting the proxy base in the Spark
+    app's configuration.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.showConsoleProgress</code></td>
   <td>false</td>
   <td>
@@ -1852,9 +1864,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
   <td>10000</td>
   <td>
-    Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
-    value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
-    driver using more memory.
+    The default capacity for event queues. Spark will try to initialize an event queue 
+    using capacity specified by `spark.scheduler.listenerbus.eventqueue.queueName.capacity` 
+    first. If it's not configured, Spark will use the default capacity specified by this 
+    config. Note that capacity must be greater than 0. Consider increasing value (e.g. 20000) 
+    if listener events are dropped. Increasing this value may result in the driver using more memory.
   </td>
 </tr>
 <tr>
@@ -2029,6 +2043,19 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.75</td>
   <td>
     Fraction of tasks which must be complete before speculation is enabled for a particular stage.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.speculation.task.duration.threshold</code></td>
+  <td>None</td>
+  <td>
+    Task duration after which scheduler would try to speculative run the task. If provided, tasks
+    would be speculatively run if current stage contains less tasks than or equal to the number of
+    slots on a single executor and the task is taking longer time than the threshold. This config
+    helps speculate stage with very few tasks. Regular speculation configs may also apply if the
+    executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
+    runs even though the threshold hasn't been reached.
+    Default unit is bytes, unless otherwise specified.
   </td>
 </tr>
 <tr>

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class ColumnTypeSuite extends SparkFunSuite with Logging {
   private val DEFAULT_BUFFER_SIZE = 512
@@ -38,7 +39,8 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     val checks = Map(
       NULL -> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
       FLOAT -> 4, DOUBLE -> 8, COMPACT_DECIMAL(15, 10) -> 8, LARGE_DECIMAL(20, 10) -> 12,
-      STRING -> 8, BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 28, MAP_TYPE -> 68)
+      STRING -> 8, BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 28, MAP_TYPE -> 68,
+      CALENDAR_INTERVAL -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
       assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
@@ -76,6 +78,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     checkActualSize(ARRAY_TYPE, Array[Any](1), 4 + 8 + 8 + 8)
     checkActualSize(MAP_TYPE, Map(1 -> "a"), 4 + (8 + 8 + 8 + 8) + (8 + 8 + 8 + 8))
     checkActualSize(STRUCT_TYPE, Row("hello"), 28)
+    checkActualSize(CALENDAR_INTERVAL, CalendarInterval.MAX_VALUE, 4 + 4 + 8)
   }
 
   testNativeColumnType(BOOLEAN)
@@ -94,6 +97,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
   testColumnType(STRUCT_TYPE)
   testColumnType(ARRAY_TYPE)
   testColumnType(MAP_TYPE)
+  testColumnType(CALENDAR_INTERVAL)
 
   def testNativeColumnType[T <: AtomicType](columnType: NativeColumnType[T]): Unit = {
     testColumnType[T#InternalType](columnType)

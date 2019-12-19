@@ -96,6 +96,8 @@ private[sql] object CatalogV2Implicits {
         quote(ident.name)
       }
     }
+
+    def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
   }
 
   implicit class MultipartIdentifierHelper(parts: Seq[String]) {
@@ -116,7 +118,7 @@ private[sql] object CatalogV2Implicits {
     def quoted: String = parts.map(quote).mkString(".")
   }
 
-  private def quote(part: String): String = {
+  def quote(part: String): String = {
     if (part.contains(".") || part.contains("`")) {
       s"`${part.replace("`", "``")}`"
     } else {

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.expressions.{And, SubqueryExpression}
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -27,21 +27,25 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
+    case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
 
-      val (withSubquery, withoutSubquery) = filters.partition(SubqueryExpression.hasSubquery)
-      val normalizedFilters = DataSourceStrategy.normalizeFilters(
-        withoutSubquery, relation.output)
+      val normalizedFilters = DataSourceStrategy.normalizeExprs(filters, relation.output)
+      val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
+        normalizedFilters.partition(SubqueryExpression.hasSubquery)
 
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        scanBuilder, normalizedFilters)
-      val postScanFilters = postScanFiltersWithoutSubquery ++ withSubquery
+        scanBuilder, normalizedFiltersWithoutSubquery)
+      val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+
+      val normalizedProjects = DataSourceStrategy
+        .normalizeExprs(project, relation.output)
+        .asInstanceOf[Seq[NamedExpression]]
       val (scan, output) = PushDownUtils.pruneColumns(
-        scanBuilder, relation, project ++ postScanFilters)
+        scanBuilder, relation, normalizedProjects, postScanFilters)
       logInfo(
         s"""
            |Pushing operators to ${relation.name}
@@ -52,11 +56,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
 
       val scanRelation = DataSourceV2ScanRelation(relation.table, scan, output)
 
+      val projectionOverSchema = ProjectionOverSchema(output.toStructType)
+      val projectionFunc = (expr: Expression) => expr transformDown {
+        case projectionOverSchema(newExpr) => newExpr
+      }
+
       val filterCondition = postScanFilters.reduceLeftOption(And)
-      val withFilter = filterCondition.map(Filter(_, scanRelation)).getOrElse(scanRelation)
+      val newFilterCondition = filterCondition.map(projectionFunc)
+      val withFilter = newFilterCondition.map(Filter(_, scanRelation)).getOrElse(scanRelation)
 
       val withProjection = if (withFilter.output != project) {
-        Project(project, withFilter)
+        val newProjects = normalizedProjects
+          .map(projectionFunc)
+          .asInstanceOf[Seq[NamedExpression]]
+        Project(newProjects, withFilter)
       } else {
         withFilter
       }

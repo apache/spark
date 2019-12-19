@@ -134,11 +134,11 @@ class Analyzer(
     this(
       new CatalogManager(conf, FakeV2SessionCatalog, catalog),
       conf,
-      conf.optimizerMaxIterations)
+      conf.analyzerMaxIterations)
   }
 
   def this(catalogManager: CatalogManager, conf: SQLConf) = {
-    this(catalogManager, conf, conf.optimizerMaxIterations)
+    this(catalogManager, conf, conf.analyzerMaxIterations)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
@@ -198,8 +198,8 @@ class Analyzer(
       ResolveTableValuedFunctions ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
-      ResolveTables ::
       ResolveRelations ::
+      ResolveTables ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -229,9 +229,9 @@ class Analyzer(
       ResolveLambdaVariables(conf) ::
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
+      ResolveBinaryArithmetic(conf) ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
-    Batch("PostgreSQL Dialect", Once, PostgreSQLDialect.postgreSQLDialectRules: _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints(conf)),
@@ -247,6 +247,61 @@ class Analyzer(
       CleanupAliases)
   )
 
+  /**
+   * For [[Add]]:
+   * 1. if both side are interval, stays the same;
+   * 2. else if one side is interval, turns it to [[TimeAdd]];
+   * 3. else if one side is date, turns it to [[DateAdd]] ;
+   * 4. else stays the same.
+   *
+   * For [[Subtract]]:
+   * 1. if both side are interval, stays the same;
+   * 2. else if the right side is an interval, turns it to [[TimeSub]];
+   * 3. else if one side is timestamp, turns it to [[SubtractTimestamps]];
+   * 4. else if the right side is date, turns it to [[DateDiff]]/[[SubtractDates]];
+   * 5. else if the left side is date, turns it to [[DateSub]];
+   * 6. else turns it to stays the same.
+   *
+   * For [[Multiply]]:
+   * 1. If one side is interval, turns it to [[MultiplyInterval]];
+   * 2. otherwise, stays the same.
+   *
+   * For [[Divide]]:
+   * 1. If the left side is interval, turns it to [[DivideInterval]];
+   * 2. otherwise, stays the same.
+   */
+  case class ResolveBinaryArithmetic(conf: SQLConf) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case p: LogicalPlan => p.transformExpressionsUp {
+        case a @ Add(l, r) if a.childrenResolved => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, CalendarIntervalType) => a
+          case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
+          case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
+          case (DateType, _) => DateAdd(l, r)
+          case (_, DateType) => DateAdd(r, l)
+          case _ => a
+        }
+        case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, CalendarIntervalType) => s
+          case (_, CalendarIntervalType) => Cast(TimeSub(l, r), l.dataType)
+          case (TimestampType, _) => SubtractTimestamps(l, r)
+          case (_, TimestampType) => SubtractTimestamps(l, r)
+          case (_, DateType) => SubtractDates(l, r)
+          case (DateType, _) => DateSub(l, r)
+          case _ => s
+        }
+        case m @ Multiply(l, r) if m.childrenResolved => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, _) => MultiplyInterval(l, r)
+          case (_, CalendarIntervalType) => MultiplyInterval(r, l)
+          case _ => m
+        }
+        case d @ Divide(l, r) if d.childrenResolved => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, _) => DivideInterval(l, r)
+          case _ => d
+        }
+      }
+    }
+  }
   /**
    * Substitute child plan with WindowSpecDefinitions.
    */
@@ -666,12 +721,34 @@ class Analyzer(
   }
 
   /**
+   * Resolve relations to temp views. This is not an actual rule, and is called by
+   * [[ResolveTables]] and [[ResolveRelations]].
+   */
+  object ResolveTempViews extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case u @ UnresolvedRelation(ident) =>
+        lookupTempView(ident).getOrElse(u)
+      case i @ InsertIntoStatement(UnresolvedRelation(ident), _, _, _, _) =>
+        lookupTempView(ident)
+          .map(view => i.copy(table = view))
+          .getOrElse(i)
+    }
+
+    def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] =
+      identifier match {
+        case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
+        case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
+        case _ => None
+      }
+  }
+
+  /**
    * Resolve table relations with concrete relations from v2 catalog.
    *
    * [[ResolveRelations]] still resolves v1 tables.
    */
   object ResolveTables extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
           .getOrElse(u)
@@ -699,6 +776,19 @@ class Analyzer(
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
+
+    /**
+     * Performs the lookup of DataSourceV2 Tables from v2 catalog.
+     */
+    private def lookupV2Relation(identifier: Seq[String]): Option[DataSourceV2Relation] =
+      identifier match {
+        case NonSessionCatalogAndIdentifier(catalog, ident) =>
+          CatalogV2Util.loadTable(catalog, ident) match {
+            case Some(table) => Some(DataSourceV2Relation.create(table))
+            case None => None
+          }
+        case _ => None
+      }
   }
 
   /**
@@ -706,9 +796,9 @@ class Analyzer(
    */
   object ResolveRelations extends Rule[LogicalPlan] {
 
-    // If the unresolved relation is running directly on files, we just return the original
-    // UnresolvedRelation, the plan will get resolved later. Else we look up the table from catalog
-    // and change the default database name(in AnalysisContext) if it is a view.
+    // If an unresolved relation is given, it is looked up from the session catalog and either v1
+    // or v2 relation is returned. Otherwise, we look up the table from catalog
+    // and change the default database name (in AnalysisContext) if it is a view.
     // We usually look up a table from the default database if the table identifier has an empty
     // database part, for a view the default database should be the currentDb when the view was
     // created. When the case comes to resolving a nested view, the view may have different default
@@ -733,18 +823,8 @@ class Analyzer(
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
-      case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
-        if v1SessionCatalog.isTemporaryTable(ident) =>
-        resolveRelation(lookupTableFromCatalog(ident, u, AnalysisContext.get.defaultDatabase))
-
-      case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
-        val defaultDatabase = AnalysisContext.get.defaultDatabase
-        val foundRelation = lookupTableFromCatalog(ident, u, defaultDatabase)
-        if (foundRelation != u) {
-          resolveRelation(foundRelation)
-        } else {
-          u
-        }
+      case u @ UnresolvedRelation(SessionCatalogAndIdentifier(catalog, ident)) =>
+        lookupRelation(catalog, ident, recurse = true).getOrElse(u)
 
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
@@ -767,47 +847,65 @@ class Analyzer(
       case _ => plan
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoStatement(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
-          if child.resolved =>
-        EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
+    def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
+      case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
+        val relation = table match {
+          case u @ UnresolvedRelation(SessionCatalogAndIdentifier(catalog, ident)) =>
+            lookupRelation(catalog, ident, recurse = false).getOrElse(u)
+          case other => other
+        }
+
+        EliminateSubqueryAliases(relation) match {
           case v: View =>
-            u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+            table.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
           case other => i.copy(table = other)
         }
+
       case u: UnresolvedRelation => resolveRelation(u)
     }
 
-    // Look up the table with the given name from catalog. The database we used is decided by the
-    // precedence:
-    // 1. Use the database part of the table identifier, if it is defined;
-    // 2. Use defaultDatabase, if it is defined(In this case, no temporary objects can be used,
-    //    and the default database is only used to look up a view);
-    // 3. Use the currentDb of the SessionCatalog.
-    private def lookupTableFromCatalog(
-        tableIdentifier: TableIdentifier,
-        u: UnresolvedRelation,
-        defaultDatabase: Option[String] = None): LogicalPlan = {
-      val tableIdentWithDb = tableIdentifier.copy(
-        database = tableIdentifier.database.orElse(defaultDatabase))
-      try {
-        v1SessionCatalog.lookupRelation(tableIdentWithDb)
-      } catch {
-        case _: NoSuchTableException | _: NoSuchDatabaseException =>
-          u
+    // Look up a relation from the given session catalog with the following logic:
+    // 1) If a relation is not found in the catalog, return None.
+    // 2) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
+    // If recurse is set to true, it will call `resolveRelation` recursively to resolve
+    // relations with the correct database scope.
+    private def lookupRelation(
+        catalog: CatalogPlugin,
+        ident: Identifier,
+        recurse: Boolean): Option[LogicalPlan] = {
+      val newIdent = withNewNamespace(ident)
+      assert(newIdent.namespace.size == 1)
+
+      CatalogV2Util.loadTable(catalog, newIdent) match {
+        case Some(v1Table: V1Table) =>
+          val tableIdent = TableIdentifier(newIdent.name, newIdent.namespace.headOption)
+          val relation = v1SessionCatalog.getRelation(v1Table.v1Table)
+          if (recurse) {
+            Some(resolveRelation(relation))
+          } else {
+            Some(relation)
+          }
+        case Some(table) =>
+          Some(DataSourceV2Relation.create(table))
+        case None => None
       }
     }
 
-    // If the database part is specified, and we support running SQL directly on files, and
-    // it's not a temporary view, and the table does not exist, then let's just return the
-    // original UnresolvedRelation. It is possible we are matching a query like "select *
-    // from parquet.`/path/to/query`". The plan will get resolved in the rule `ResolveDataSource`.
-    // Note that we are testing (!db_exists || !table_exists) because the catalog throws
-    // an exception from tableExists if the database does not exist.
-    private def isRunningDirectlyOnFiles(table: TableIdentifier): Boolean = {
-      table.database.isDefined && conf.runSQLonFile && !v1SessionCatalog.isTemporaryTable(table) &&
-        (!v1SessionCatalog.databaseExists(table.database.get)
-          || !v1SessionCatalog.tableExists(table))
+    // The namespace used for lookup is decided by the following precedence:
+    // 1. Use the existing namespace if it is defined.
+    // 2. Use defaultDatabase fom AnalysisContext, if it is defined. In this case, no temporary
+    //    objects can be used, and the default database is only used to look up a view.
+    // 3. Use the current namespace of the session catalog.
+    private def withNewNamespace(ident: Identifier): Identifier = {
+      if (ident.namespace.nonEmpty) {
+        ident
+      } else {
+        val defaultNamespace = AnalysisContext.get.defaultDatabase match {
+          case Some(db) => Array(db)
+          case None => Array(v1SessionCatalog.getCurrentDatabase)
+        }
+        Identifier.of(defaultNamespace, ident.name)
+      }
     }
   }
 
@@ -2423,6 +2521,10 @@ class Analyzer(
           nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
         }.copy(child = newChild)
 
+      // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
+      // and we want to retain them inside the aggregate functions.
+      case m: CollectMetrics => m
+
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output
       // schema with its child.
@@ -2825,38 +2927,6 @@ class Analyzer(
       }
     }
   }
-
-  /**
-   * Performs the lookup of DataSourceV2 Tables. The order of resolution is:
-   *   1. Check if this relation is a temporary table.
-   *   2. Check if it has a catalog identifier. Here we try to load the table.
-   *      If we find the table, return the v2 relation and catalog.
-   *   3. Try resolving the relation using the V2SessionCatalog if that is defined.
-   *      If the V2SessionCatalog returns a V1 table definition,
-   *      return `None` so that we can fallback to the V1 code paths.
-   *      If the V2SessionCatalog returns a V2 table, return the v2 relation and V2SessionCatalog.
-   */
-  private def lookupV2RelationAndCatalog(
-      identifier: Seq[String]): Option[(DataSourceV2Relation, CatalogPlugin, Identifier)] =
-    identifier match {
-      case AsTemporaryViewIdentifier(ti) if v1SessionCatalog.isTemporaryTable(ti) => None
-      case CatalogObjectIdentifier(catalog, ident) if !CatalogV2Util.isSessionCatalog(catalog) =>
-        CatalogV2Util.loadTable(catalog, ident) match {
-          case Some(table) => Some((DataSourceV2Relation.create(table), catalog, ident))
-          case None => None
-        }
-      case CatalogObjectIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
-        CatalogV2Util.loadTable(catalog, ident) match {
-          case Some(_: V1Table) => None
-          case Some(table) =>
-            Some((DataSourceV2Relation.create(table), catalog, ident))
-          case None => None
-        }
-      case _ => None
-    }
-
-  private def lookupV2Relation(identifier: Seq[String]): Option[DataSourceV2Relation] =
-    lookupV2RelationAndCatalog(identifier).map(_._1)
 }
 
 /**
@@ -2923,6 +2993,12 @@ object CleanupAliases extends Rule[LogicalPlan] {
         windowExprs.map(e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression])
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
+
+    case CollectMetrics(name, metrics, child) =>
+      val cleanedMetrics = metrics.map {
+        e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression]
+      }
+      CollectMetrics(name, cleanedMetrics, child)
 
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.

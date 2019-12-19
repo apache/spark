@@ -459,12 +459,13 @@ abstract class LDAModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val func = getTopicDistributionMethod
     val transformer = udf(func)
     dataset.withColumn($(topicDistributionCol),
-      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
+      outputSchema($(topicDistributionCol)).metadata)
   }
 
   /**
@@ -504,7 +505,12 @@ abstract class LDAModel private[ml] (
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(topicDistributionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(topicDistributionCol), oldLocalModel.k)
+    }
+    outputSchema
   }
 
   /**
