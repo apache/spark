@@ -1060,6 +1060,7 @@ package object config {
 
   private[spark] val SHUFFLE_MANAGER =
     ConfigBuilder("spark.shuffle.manager")
+      .doc("specify short names for shuffle managers.")
       .stringConf
       .createWithDefault("sort")
 

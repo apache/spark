@@ -334,7 +334,15 @@ object SparkEnv extends Logging {
     val shuffleMgrName = conf.get(config.SHUFFLE_MANAGER)
     val shuffleMgrClass =
       shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
-    val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
+    var shuffleManager: ShuffleManager = null
+    try {
+      shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
+    } catch {
+      case e: Throwable =>
+        logError(s"Init shuffle manager error. Maybe $shuffleMgrName " +
+          s"shuffle manager doesn't exist.")
+        throw e
+    }
 
     val memoryManager: MemoryManager = UnifiedMemoryManager(conf, numUsableCores)
 

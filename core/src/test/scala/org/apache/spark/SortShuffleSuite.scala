@@ -61,6 +61,16 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
     }
   }
 
+  test("specify different short names for shuffle managers") {
+    conf.set(config.SHUFFLE_MANAGER, "hash")
+    assertThrows[ClassNotFoundException]{
+      sc = new SparkContext("local", "test", conf)
+    }
+    conf.set(config.SHUFFLE_MANAGER, "sort")
+    sc = new SparkContext("local", "test", conf)
+    assert(sc.env.shuffleManager.isInstanceOf[SortShuffleManager])
+  }
+
   test("SortShuffleManager properly cleans up files for shuffles that use the serialized path") {
     sc = new SparkContext("local", "test", conf)
     // Create a shuffled RDD and verify that it actually uses the new serialized map output path
