@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -113,7 +113,7 @@ case class First(child: Expression, ignoreNullsExpr: Expression)
 
   override lazy val evaluateExpression: AttributeReference = first
 
-  override def nodeName: String = getTagValue(FUNC_ALIAS).getOrElse("first")
+  override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("first")
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 }

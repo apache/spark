@@ -22,7 +22,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.types._
 
 
@@ -192,6 +192,8 @@ object EmptyFunctionRegistry extends FunctionRegistry {
 object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
+
+  val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
 
   // Note: Whenever we add a new entry here, make sure we also update ExpressionToSQLSuite
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
@@ -573,7 +575,7 @@ object FunctionRegistry {
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
   /** See usage above. */
-  private def expression[T <: Expression](name: String, isAliasName: Boolean = false)
+  private def expression[T <: Expression](name: String, setAlias: Boolean = false)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
@@ -620,7 +622,7 @@ object FunctionRegistry {
         }
         try {
           val exp = f.newInstance(expressions : _*).asInstanceOf[Expression]
-          if (isAliasName) exp.setTagValue(exp.FUNC_ALIAS, name)
+          if (setAlias) exp.setTagValue(FUNC_ALIAS, name)
           exp
         } catch {
           // the exception is an invocation exception. To get a meaningful message, we need the
