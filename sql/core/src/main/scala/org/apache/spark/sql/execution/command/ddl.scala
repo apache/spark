@@ -911,12 +911,7 @@ object DDLUtils {
           val serde = table.storage.serde
           if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             OrcFileFormat.checkFieldNames(colNames)
-          } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
-            serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
-            serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
-            ParquetSchemaConverter.checkFieldNames(colNames)
           }
-        case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)
         case "orc" => OrcFileFormat.checkFieldNames(colNames)
         case _ =>
       }
