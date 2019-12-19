@@ -167,12 +167,12 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     val defaultAccuracy = ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
     // sql, single percentile
     assertEqual(
-      s"percentile_approx(`a`, 0.5D, ${defaultAccuracy}L)",
+      s"percentile_approx(`a`, 0.5D, $defaultAccuracy)",
       new ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D)).sql: String)
 
     // sql, array of percentile
     assertEqual(
-      s"percentile_approx(`a`, array(0.25D, 0.5D, 0.75D), ${defaultAccuracy}L)",
+      s"percentile_approx(`a`, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
       new ApproximatePercentile(
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))
@@ -180,13 +180,13 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
     // sql(isDistinct = false), single percentile
     assertEqual(
-      s"percentile_approx(`a`, 0.5D, ${defaultAccuracy}L)",
+      s"percentile_approx(`a`, 0.5D, $defaultAccuracy)",
       new ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D))
         .sql(isDistinct = false))
 
     // sql(isDistinct = false), array of percentile
     assertEqual(
-      s"percentile_approx(`a`, array(0.25D, 0.5D, 0.75D), ${defaultAccuracy}L)",
+      s"percentile_approx(`a`, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
       new ApproximatePercentile(
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))
@@ -194,13 +194,13 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
     // sql(isDistinct = true), single percentile
     assertEqual(
-      s"percentile_approx(DISTINCT `a`, 0.5D, ${defaultAccuracy}L)",
+      s"percentile_approx(DISTINCT `a`, 0.5D, $defaultAccuracy)",
       new ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D))
         .sql(isDistinct = true))
 
     // sql(isDistinct = true), array of percentile
     assertEqual(
-      s"percentile_approx(DISTINCT `a`, array(0.25D, 0.5D, 0.75D), ${defaultAccuracy}L)",
+      s"percentile_approx(DISTINCT `a`, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
       new ApproximatePercentile(
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))

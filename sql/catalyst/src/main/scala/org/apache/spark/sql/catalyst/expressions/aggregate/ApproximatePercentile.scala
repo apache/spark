@@ -200,7 +200,7 @@ object ApproximatePercentile {
 
   // Default accuracy of Percentile approximation. Larger value means better accuracy.
   // The default relative error can be deduced by defaultError = 1.0 / DEFAULT_PERCENTILE_ACCURACY
-  val DEFAULT_PERCENTILE_ACCURACY: Long = 10000L
+  val DEFAULT_PERCENTILE_ACCURACY: Int = 10000
 
   /**
    * PercentileDigest is a probabilistic data structure used for approximating percentiles
