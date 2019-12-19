@@ -26,6 +26,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasRelativeError}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
@@ -121,6 +122,8 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
 class RobustScaler (override val uid: String)
   extends Estimator[RobustScalerModel] with RobustScalerParams with DefaultParamsWritable {
 
+  import RobustScaler._
+
   def this() = this(Identifiable.randomUID("robustScal"))
 
   /** @group setParam */
@@ -155,27 +158,15 @@ class RobustScaler (override val uid: String)
         vec
     }
 
-    val localRelativeError = $(relativeError)
     val localUpper = $(upper)
     val localLower = $(lower)
 
-    val (ranges, medians) = vectors.mapPartitions { iter =>
-      if (iter.hasNext) {
-        iter.flatMap { vec =>
-          Iterator.range(0, numFeatures).map(i => (i, vec(i))).filterNot(_._2.isNaN)
-          // add NaN for each feature as the indication of the end of partition
-        } ++ Iterator.range(0, numFeatures).map((_, Double.NaN))
-      } else Iterator.empty
-    }.aggregateByKey(
-      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))(
-      // compress the QuantileSummaries at the end of partition
-      seqOp = (s, v) => if (v.isNaN) s.compress else s.insert(v),
-      combOp = (s1, s2) => s1.merge(s2)
-    ).mapValues { s =>
-      val range = s.query(localUpper).get - s.query(localLower).get
-      val median = s.query(0.5).get
-      (range, median)
-    }.collect().sortBy(_._1).map(_._2).unzip
+    val (ranges, medians) = computeSummaries(vectors, numFeatures, $(relativeError))
+      .mapValues { s =>
+        val range = s.query(localUpper).get - s.query(localLower).get
+        val median = s.query(0.5).get
+        (range, median)
+      }.collect().sortBy(_._1).map(_._2).unzip
     require(ranges.length == numFeatures,
       "QuantileSummaries on some features are missing")
 
@@ -192,6 +183,26 @@ class RobustScaler (override val uid: String)
 
 @Since("3.0.0")
 object RobustScaler extends DefaultParamsReadable[RobustScaler] {
+
+  // compute QuantileSummaries for each feature
+  private[spark] def computeSummaries(
+      vectors: RDD[Vector],
+      numFeatures: Int,
+      relativeError: Double): RDD[(Int, QuantileSummaries)] = {
+    vectors.mapPartitions { iter =>
+      if (iter.hasNext) {
+        iter.flatMap { vec =>
+          Iterator.range(0, numFeatures).map(i => (i, vec(i))).filterNot(_._2.isNaN)
+          // add NaN for each feature as the indication of the end of partition
+        } ++ Iterator.range(0, numFeatures).map((_, Double.NaN))
+      } else Iterator.empty
+    }.aggregateByKey(
+      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))(
+      // compress the QuantileSummaries at the end of partition
+      seqOp = (s, v) => if (v.isNaN) s.compress else s.insert(v),
+      combOp = (s1, s2) => s1.merge(s2)
+    )
+  }
 
   override def load(path: String): RobustScaler = super.load(path)
 }
