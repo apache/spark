@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Catalogs, Identifier, SupportsCatalogOptions, SupportsWrite, Table, TableCatalog, TableProvider, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, Identifier, SupportsCatalogOptions, SupportsWrite, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.SQLExecution
@@ -263,13 +263,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           lazy val relation = DataSourceV2Relation.create(table, dsOptions)
           mode match {
             case SaveMode.Append =>
-              verifyV2Partitioning(table)
+              checkPartitioningMatchesV2Table(table)
               runCommand(df.sparkSession, "save") {
                 AppendData.byName(relation, df.logicalPlan, extraOptions.toMap)
               }
 
             case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
-              verifyV2Partitioning(table)
+              checkPartitioningMatchesV2Table(table)
               // truncate the table
               runCommand(df.sparkSession, "save") {
                 OverwriteByExpression.byName(
@@ -280,10 +280,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               val catalogOptions = provider.asInstanceOf[SupportsCatalogOptions]
               val ident = catalogOptions.extractIdentifier(dsOptions)
               val sessionState = df.sparkSession.sessionState
-              val catalog = Option(catalogOptions.extractCatalog(dsOptions))
-                .map(Catalogs.load(_, sessionState.conf))
-                .getOrElse(sessionState.catalogManager.v2SessionCatalog)
-                .asInstanceOf[TableCatalog]
+              val catalog = CatalogV2Util.getTableProviderCatalog(
+                catalogOptions, sessionState.catalogManager, dsOptions)
 
               val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
 
@@ -291,7 +289,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 CreateTableAsSelect(
                   catalog,
                   ident,
-                  getV2Transforms,
+                  partitioningAsV2,
                   df.queryExecution.analyzed,
                   Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
                   extraOptions.toMap,
@@ -538,14 +536,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
-        verifyV2Partitioning(table)
+        checkPartitioningMatchesV2Table(table)
         AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
         ReplaceTableAsSelect(
           catalog,
           ident,
-          getV2Transforms,
+          partitioningAsV2,
           df.queryExecution.analyzed,
           Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
           extraOptions.toMap,
@@ -558,7 +556,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         CreateTableAsSelect(
           catalog,
           ident,
-          getV2Transforms,
+          partitioningAsV2,
           df.queryExecution.analyzed,
           Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
           extraOptions.toMap,
@@ -637,7 +635,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /** Converts the provided partitioning and bucketing information to DataSourceV2 Transforms. */
-  private def getV2Transforms: Seq[Transform] = {
+  private def partitioningAsV2: Seq[Transform] = {
     val partitioning = partitioningColumns.map { colNames =>
       colNames.map(name => IdentityTransform(FieldReference(name)))
     }.getOrElse(Seq.empty[Transform])
@@ -651,8 +649,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * For V2 DataSources, performs if the provided partitioning matches that of the table.
    * Partitioning information is not required when appending data to V2 tables.
    */
-  private def verifyV2Partitioning(existingTable: Table): Unit = {
-    val v2Partitions = getV2Transforms
+  private def checkPartitioningMatchesV2Table(existingTable: Table): Unit = {
+    val v2Partitions = partitioningAsV2
     if (v2Partitions.isEmpty) return
     require(v2Partitions.sameElements(existingTable.partitioning()),
       "The provided partitioning does not match of the table.\n" +
