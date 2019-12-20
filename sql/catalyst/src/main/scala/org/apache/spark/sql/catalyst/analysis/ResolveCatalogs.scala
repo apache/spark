@@ -106,8 +106,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case AlterNamespaceSetPropertiesStatement(ResolvedNamespace(catalog, ns), properties)
-        if !isSessionCatalog(catalog) =>
+    case AlterNamespaceSetPropertiesStatement(
+        NonSessionCatalogAndNamespace(catalog, ns), properties) =>
       AlterNamespaceSetProperties(catalog.asNamespaceCatalog, ns, properties)
 
     case AlterNamespaceSetLocationStatement(

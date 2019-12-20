@@ -185,7 +185,7 @@ class ResolveSessionCatalog(
       DescribeDatabaseCommand(ns.head, d.extended)
 
     case AlterNamespaceSetPropertiesStatement(
-        ResolvedNamespace(catalog, ns), properties) if isSessionCatalog(catalog) =>
+        SessionCatalogAndNamespace(_, ns), properties) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
