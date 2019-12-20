@@ -421,8 +421,8 @@ class PlannerSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-30036: EnsureRequirements replace Exchange " +
-      "if child has SortExec and RoundRobinPartitioning") {
+  test("SPARK-30036: Romove unnecessary RoundRobinPartitioning " +
+      "if SortExec is followed by RoundRobinPartitioning") {
     val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
     val partitioning = RoundRobinPartitioning(5)
     assert(!partitioning.satisfies(distribution))
@@ -433,10 +433,28 @@ class PlannerSuite extends SharedSparkSession {
         partitioning,
         DummySparkPlan(outputPartitioning = partitioning)))
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-    assert(outputPlan.find{
-      case e: ShuffleExchangeExec => e.outputPartitioning.isInstanceOf[RoundRobinPartitioning]
+    assert(outputPlan.find {
+      case ShuffleExchangeExec(_: RoundRobinPartitioning, _, _) => true
       case _ => false}.isEmpty,
       "RoundRobinPartitioning should be changed to RangePartitioning")
+  }
+
+  test("SPARK-30036: Romove unnecessary HashPartitioning " +
+    "if SortExec is followed by HashPartitioning") {
+    val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
+    val partitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    assert(!partitioning.satisfies(distribution))
+
+    val inputPlan = SortExec(SortOrder(Literal(1), Ascending) :: Nil,
+      global = true,
+      child = ShuffleExchangeExec(
+        partitioning,
+        DummySparkPlan(outputPartitioning = partitioning)))
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assert(outputPlan.find {
+      case ShuffleExchangeExec(_: HashPartitioning, _, _) => true
+      case _ => false}.isEmpty,
+      "HashPartitioning should be changed to RangePartitioning")
   }
 
   test("EnsureRequirements does not eliminate Exchange with different partitioning") {
