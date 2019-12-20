@@ -41,7 +41,8 @@ public interface SupportsCatalogOptions extends TableProvider {
   /**
    * Return the name of a catalog that can be used to check the existence of, load, and create
    * a table for this DataSource given the identifier that will be extracted by
-   * {@see extractIdentifier}. A `null` value can be used to defer to the V2SessionCatalog.
+   * {@link #extractIdentifier(CaseInsensitiveStringMap) extractIdentifier}. A `null` value can
+   * be used to defer to the V2SessionCatalog.
    *
    * @param options the user-specified options that can identify a table, e.g. file path, Kafka
    *                topic name, etc. It's an immutable case-insensitive string-to-string map.
