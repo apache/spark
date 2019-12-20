@@ -61,6 +61,7 @@ val stream = KafkaUtils.createDirectStream[String, String](
 )
 
 stream.map(record => (record.key, record.value))
+streamingContext.start()            // Start the computation
 {% endhighlight %}
 Each item in the stream is a [ConsumerRecord](http://kafka.apache.org/0100/javadoc/org/apache/kafka/clients/consumer/ConsumerRecord.html)
 </div>
