@@ -154,7 +154,7 @@ private[sql] case class SparkUserDefinedFunction(
  * @since 3.0.0
  */
 @Experimental
-case class UserDefinedAggregator[IN: TypeTag, BUF, OUT](
+private[sql] case class UserDefinedAggregator[IN: TypeTag, BUF, OUT](
     aggregator: Aggregator[IN, BUF, OUT],
     name: Option[String] = None,
     nullable: Boolean = true,
