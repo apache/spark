@@ -548,12 +548,12 @@ class Analyzer(
 
       // If necessary, removes duplicate grouping sets
       val hasDuplicateGroups = selectedGroupByExprs.size !=
-        selectedGroupByExprs.map(_.map(_.semanticHash()).toSet).distinct.size
+        selectedGroupByExprs.map(_.map(_.canonicalized).toSet).distinct.size
       val distinctGroupingSets = if (hasDuplicateGroups) {
-        val groupHashSet = mutable.Set[Set[Int]]()
+        val groupHashSet = mutable.Set[Set[Expression]]()
         val initSet = mutable.ArrayBuffer[Seq[Expression]]()
         selectedGroupByExprs.foldLeft(initSet) { case (b, gs) =>
-          val groupHash = gs.map(_.semanticHash()).toSet
+          val groupHash = gs.map(_.canonicalized).toSet
           if (!groupHashSet.contains(groupHash)) {
             groupHashSet += groupHash
             b += gs
