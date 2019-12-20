@@ -2798,8 +2798,7 @@ object SparkContext extends Logging {
           throw new SparkException(s"Asked to run locally with $threadCount threads")
         }
         checkResourcesPerTask(threadCount)
-        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES,
-          isLocal = true)
+        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
@@ -2810,8 +2809,7 @@ object SparkContext extends Logging {
         // local[N, M] means exactly N threads with M failures
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
         checkResourcesPerTask(threadCount)
-        val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt,
-          isLocal = true)
+        val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
