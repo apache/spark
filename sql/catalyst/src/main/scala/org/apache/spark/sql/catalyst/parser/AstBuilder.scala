@@ -2597,15 +2597,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[ShowNamespaces]] command.
+   * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
       throw new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
     }
 
-    val nameParts = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier).getOrElse(Nil)
-    ShowNamespaces(UnresolvedNamespace(nameParts), Option(ctx.pattern).map(string))
+    ShowNamespacesStatement(
+      Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
+      Option(ctx.pattern).map(string))
   }
 
   /**

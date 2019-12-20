@@ -25,9 +25,6 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 case class ResolveNamespaceAndTable(catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case UnresolvedNamespace(Nil) =>
-      ResolvedNamespace(currentCatalog.asNamespaceCatalog, Nil)
-
     case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
       ResolvedNamespace(catalog.asNamespaceCatalog, ns)
 
