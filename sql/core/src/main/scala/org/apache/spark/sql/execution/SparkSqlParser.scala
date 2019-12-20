@@ -136,10 +136,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     } else {
       ExplainCommand(
         logicalPlan = statement,
-        extended = ctx.EXTENDED != null,
-        codegen = ctx.CODEGEN != null,
-        cost = ctx.COST != null,
-        formatted = ctx.FORMATTED != null)
+        mode = {
+          if (ctx.EXTENDED != null) ExtendedMode
+          else if (ctx.CODEGEN != null) CodegenMode
+          else if (ctx.COST != null) CostMode
+          else if (ctx.FORMATTED != null) FormattedMode
+          else SimpleMode
+        })
     }
   }
 

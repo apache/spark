@@ -36,6 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.SimpleMode
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
@@ -472,7 +473,7 @@ class StreamSuite extends StreamTest {
     val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
 
     // Test `df.explain`
-    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explain = ExplainCommand(df.queryExecution.logical, SimpleMode)
     val explainString =
       spark.sessionState
         .executePlan(explain)
@@ -524,7 +525,7 @@ class StreamSuite extends StreamTest {
     val df = inputData.toDS().map(_ * 2).filter(_ > 5)
 
     // Test `df.explain`
-    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explain = ExplainCommand(df.queryExecution.logical, SimpleMode)
     val explainString =
       spark.sessionState
         .executePlan(explain)

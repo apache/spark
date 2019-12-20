@@ -103,7 +103,16 @@ private[sql] trait LookupCatalog extends Logging {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Identifier)] = {
       assert(nameParts.nonEmpty)
       if (nameParts.length == 1) {
-        Some((currentCatalog, Identifier.of(Array(), nameParts.head)))
+        // If the current catalog is session catalog, the current namespace is not used because
+        // the single-part name could be referencing a temp view, which doesn't belong to any
+        // namespaces. An empty namespace will be resolved inside the session catalog
+        // implementation when a relation is looked up.
+        val ns = if (CatalogV2Util.isSessionCatalog(currentCatalog)) {
+          Array.empty[String]
+        } else {
+          catalogManager.currentNamespace
+        }
+        Some((currentCatalog, Identifier.of(ns, nameParts.head)))
       } else if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
         // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
         // API does not support view yet, and we have to use v1 commands to deal with global temp
@@ -140,20 +149,6 @@ private[sql] trait LookupCatalog extends Logging {
           case _ =>
             None
         }
-      case _ =>
-        None
-    }
-  }
-
-  /**
-   * For temp views, extract a table identifier from a multi-part identifier if it has no catalog.
-   */
-  object AsTemporaryViewIdentifier {
-    def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndMultipartIdentifier(None, Seq(table)) =>
-        Some(TableIdentifier(table))
-      case CatalogAndMultipartIdentifier(None, Seq(database, table)) =>
-        Some(TableIdentifier(table, Some(database)))
       case _ =>
         None
     }

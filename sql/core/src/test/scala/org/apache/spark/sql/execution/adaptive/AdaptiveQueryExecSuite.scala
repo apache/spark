@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import java.io.File
+import java.net.URI
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
   extends QueryTest
@@ -65,9 +69,10 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  private def findReusedExchange(plan: SparkPlan): Seq[ReusedQueryStageExec] = {
+  private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectInPlanAndSubqueries(plan) {
-      case e: ReusedQueryStageExec => e
+      case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
+      case BroadcastQueryStageExec(_, e: ReusedExchangeExec) => e
     }
   }
 
@@ -428,7 +433,7 @@ class AdaptiveQueryExecSuite
       // Even with local shuffle reader, the query stage reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
-      assert(ex.head.plan.isInstanceOf[BroadcastQueryStageExec])
+      assert(ex.head.child.isInstanceOf[BroadcastExchangeExec])
       val sub = findReusedSubquery(adaptivePlan)
       assert(sub.isEmpty)
     }
@@ -550,6 +555,27 @@ class AdaptiveQueryExecSuite
       }
     } finally {
       spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("SPARK-30291: AQE should catch the exceptions when doing materialize") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTable("bucketed_table") {
+        val df1 =
+          (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k").as("df1")
+        df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
+        val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+        val tableDir = new File(warehouseFilePath, "bucketed_table")
+        Utils.deleteRecursively(tableDir)
+        df1.write.parquet(tableDir.getAbsolutePath)
+
+        val agged = spark.table("bucketed_table").groupBy("i").count()
+        val error = intercept[Exception] {
+          agged.count()
+        }
+        assert(error.getCause().toString contains "Failed to materialize query stage")
+      }
     }
   }
 }

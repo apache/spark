@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_('1, 0.8', 'a INT, b DOUBLE');
        {"a":1,"b":0.8}
       > SELECT _FUNC_('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
-       {"time":2015-08-26 00:00:00.0}
+       {"time":2015-08-26 00:00:00}
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit

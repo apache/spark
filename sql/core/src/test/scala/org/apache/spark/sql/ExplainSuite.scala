@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -28,7 +29,7 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
   private def getNormalizedExplain(df: DataFrame, mode: ExplainMode): String = {
     val output = new java.io.ByteArrayOutputStream()
     Console.withOut(output) {
-      df.explain(mode)
+      df.explain(mode.name)
     }
     output.toString.replaceAll("#\\d+", "#x")
   }
@@ -66,7 +67,7 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
   }
 
   private def checkKeywordsExistsInExplain(df: DataFrame, keywords: String*): Unit = {
-    checkKeywordsExistsInExplain(df, ExplainMode.Extended, keywords: _*)
+    checkKeywordsExistsInExplain(df, ExtendedMode, keywords: _*)
   }
 
   test("SPARK-23034 show rdd names in RDD scan nodes (Dataset)") {
@@ -217,7 +218,7 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
     withTable("temptable") {
       val df = sql("create table temptable using parquet as select * from range(2)")
-      withNormalizedExplain(df, ExplainMode.Simple) { normalizedOutput =>
+      withNormalizedExplain(df, SimpleMode) { normalizedOutput =>
         assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 1)
       }
     }
@@ -276,7 +277,7 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
     val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
     val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
 
-    val simpleExplainOutput = getNormalizedExplain(testDf, ExplainMode.Simple)
+    val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
     assert(simpleExplainOutput.startsWith("== Physical Plan =="))
     Seq("== Parsed Logical Plan ==",
         "== Analyzed Logical Plan ==",
@@ -285,7 +286,7 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
     }
     checkKeywordsExistsInExplain(
       testDf,
-      ExplainMode.Extended,
+      ExtendedMode,
       "== Parsed Logical Plan ==" ::
         "== Analyzed Logical Plan ==" ::
         "== Optimized Logical Plan ==" ::
@@ -293,18 +294,18 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
         Nil: _*)
     checkKeywordsExistsInExplain(
       testDf,
-      ExplainMode.Cost,
+      CostMode,
       "Statistics(sizeInBytes=" ::
         Nil: _*)
     checkKeywordsExistsInExplain(
       testDf,
-      ExplainMode.Codegen,
+      CodegenMode,
       "WholeStageCodegen subtrees" ::
         "Generated code:" ::
         Nil: _*)
     checkKeywordsExistsInExplain(
       testDf,
-      ExplainMode.Formatted,
+      FormattedMode,
       "* LocalTableScan (1)" ::
         "(1) LocalTableScan [codegen id :" ::
         Nil: _*)
@@ -313,17 +314,17 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
   test("Dataset.toExplainString has mode as string") {
     val df = spark.range(10).toDF
     def assertExplainOutput(mode: ExplainMode): Unit = {
-      assert(df.toExplainString(mode.toString).replaceAll("#\\d+", "#x").trim ===
+      assert(df.queryExecution.explainString(mode).replaceAll("#\\d+", "#x").trim ===
         getNormalizedExplain(df, mode).trim)
     }
-    assertExplainOutput(ExplainMode.Simple)
-    assertExplainOutput(ExplainMode.Extended)
-    assertExplainOutput(ExplainMode.Codegen)
-    assertExplainOutput(ExplainMode.Cost)
-    assertExplainOutput(ExplainMode.Formatted)
+    assertExplainOutput(SimpleMode)
+    assertExplainOutput(ExtendedMode)
+    assertExplainOutput(CodegenMode)
+    assertExplainOutput(CostMode)
+    assertExplainOutput(FormattedMode)
 
     val errMsg = intercept[IllegalArgumentException] {
-      df.toExplainString("unknown")
+      ExplainMode.fromString("unknown")
     }.getMessage
     assert(errMsg.contains("Unknown explain mode: unknown"))
   }
