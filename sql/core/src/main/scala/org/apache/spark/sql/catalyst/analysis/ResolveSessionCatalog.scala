@@ -192,8 +192,7 @@ class ResolveSessionCatalog(
       }
       AlterDatabasePropertiesCommand(ns.head, properties)
 
-    case AlterNamespaceSetLocationStatement(ResolvedNamespace(catalog, ns), location)
-        if isSessionCatalog(catalog) =>
+    case AlterNamespaceSetLocationStatement(SessionCatalogAndNamespace(_, ns), location) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")

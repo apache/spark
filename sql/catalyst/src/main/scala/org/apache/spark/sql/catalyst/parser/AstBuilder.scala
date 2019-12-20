@@ -2589,9 +2589,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
     withOrigin(ctx) {
-      val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
       AlterNamespaceSetLocationStatement(
-        UnresolvedNamespace(nameParts),
+        visitMultipartIdentifier(ctx.multipartIdentifier),
         visitLocationSpec(ctx.locationSpec))
     }
   }

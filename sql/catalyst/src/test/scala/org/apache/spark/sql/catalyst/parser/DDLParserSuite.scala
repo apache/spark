@@ -32,9 +32,6 @@ import org.apache.spark.unsafe.types.UTF8String
 class DDLParserSuite extends AnalysisTest {
   import CatalystSqlParser._
 
-  private val nameParts = Seq("a", "b", "c")
-  private val unresolvedNamespace = UnresolvedNamespace(nameParts)
-
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
     val e = intercept[ParseException] {
       parsePlan(sql)
@@ -574,12 +571,12 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: set location") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c SET LOCATION 'new location'"),
-      AlterTableSetLocationStatement(nameParts, None, "new location"))
+      AlterTableSetLocationStatement(Seq("a", "b", "c"), None, "new location"))
 
     comparePlans(
       parsePlan("ALTER TABLE a.b.c PARTITION(ds='2017-06-10') SET LOCATION 'new location'"),
       AlterTableSetLocationStatement(
-        nameParts,
+        Seq("a", "b", "c"),
         Some(Map("ds" -> "2017-06-10")),
         "new location"))
   }
@@ -589,7 +586,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name RENAME COLUMN a.b.c TO d"),
       AlterTableRenameColumnStatement(
         Seq("table_name"),
-        nameParts,
+        Seq("a", "b", "c"),
         "d"))
   }
 
@@ -598,7 +595,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint"),
       AlterTableAlterColumnStatement(
         Seq("table_name"),
-        nameParts,
+        Seq("a", "b", "c"),
         Some(LongType),
         None,
         None))
@@ -609,7 +606,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint"),
       AlterTableAlterColumnStatement(
         Seq("table_name"),
-        nameParts,
+        Seq("a", "b", "c"),
         Some(LongType),
         None,
         None))
@@ -620,7 +617,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c COMMENT 'new comment'"),
       AlterTableAlterColumnStatement(
         Seq("table_name"),
-        nameParts,
+        Seq("a", "b", "c"),
         None,
         Some("new comment"),
         None))
@@ -631,7 +628,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c FIRST"),
       AlterTableAlterColumnStatement(
         Seq("table_name"),
-        nameParts,
+        Seq("a", "b", "c"),
         None,
         None,
         Some(first())))
@@ -643,7 +640,7 @@ class DDLParserSuite extends AnalysisTest {
         "TYPE bigint COMMENT 'new comment' AFTER d"),
       AlterTableAlterColumnStatement(
         Seq("table_name"),
-        nameParts,
+        Seq("a", "b", "c"),
         Some(LongType),
         Some("new comment"),
         Some(after("d"))))
@@ -652,7 +649,7 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: drop column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
-      AlterTableDropColumnsStatement(Seq("table_name"), Seq(nameParts)))
+      AlterTableDropColumnsStatement(Seq("table_name"), Seq(Seq("a", "b", "c"))))
   }
 
   test("alter table: drop multiple columns") {
@@ -662,17 +659,17 @@ class DDLParserSuite extends AnalysisTest {
         parsePlan(drop),
         AlterTableDropColumnsStatement(
           Seq("table_name"),
-          Seq(Seq("x"), Seq("y"), nameParts)))
+          Seq(Seq("x"), Seq("y"), Seq("a", "b", "c"))))
     }
   }
 
   test("alter table/view: rename table/view") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
-      RenameTableStatement(nameParts, Seq("x", "y", "z"), isView = false))
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = false))
     comparePlans(
       parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
-      RenameTableStatement(nameParts, Seq("x", "y", "z"), isView = true))
+      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = true))
   }
 
   test("describe table column") {
@@ -1108,7 +1105,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
     val expected = CreateNamespaceStatement(
-      unresolvedNamespace,
+      UnresolvedNamespace(Seq("a", "b", "c")),
       ifNotExists = true,
       Map(
         "a" -> "a",
@@ -1181,7 +1178,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan(sql),
       CreateNamespaceStatement(
-        unresolvedNamespace,
+        UnresolvedNamespace(Seq("a", "b", "c")),
         ifNotExists = false,
         Map(
           "a" -> "1",
@@ -1193,65 +1190,74 @@ class DDLParserSuite extends AnalysisTest {
   test("drop namespace") {
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c"),
-      DropNamespaceStatement(unresolvedNamespace, ifExists = false, cascade = false))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c"),
-      DropNamespaceStatement(unresolvedNamespace, ifExists = true, cascade = false))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c RESTRICT"),
-      DropNamespaceStatement(unresolvedNamespace, ifExists = true, cascade = false))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c CASCADE"),
-      DropNamespaceStatement(unresolvedNamespace, ifExists = true, cascade = true))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = true))
 
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c CASCADE"),
-      DropNamespaceStatement(unresolvedNamespace, ifExists = false, cascade = true))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = true))
   }
 
   test("set namespace properties") {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
       AlterNamespaceSetPropertiesStatement(
-        unresolvedNamespace, Map("a" -> "a", "b" -> "b", "c" -> "c")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
-      AlterNamespaceSetPropertiesStatement(unresolvedNamespace, Map("a" -> "a")))
+      AlterNamespaceSetPropertiesStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
-      AlterNamespaceSetPropertiesStatement(unresolvedNamespace, Map("b" -> "b")))
+      AlterNamespaceSetPropertiesStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
 
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
       AlterNamespaceSetPropertiesStatement(
-        unresolvedNamespace, Map("a" -> "a", "b" -> "b", "c" -> "c")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
-      AlterNamespaceSetPropertiesStatement(unresolvedNamespace, Map("a" -> "a")))
+      AlterNamespaceSetPropertiesStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
-      AlterNamespaceSetPropertiesStatement(unresolvedNamespace, Map("b" -> "b")))
+      AlterNamespaceSetPropertiesStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
   }
 
   test("set namespace location") {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
-      AlterNamespaceSetLocationStatement(unresolvedNamespace, "/home/user/db"))
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
-      AlterNamespaceSetLocationStatement(unresolvedNamespace, "/home/user/db"))
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
-      AlterNamespaceSetLocationStatement(unresolvedNamespace, "/home/user/db"))
+      AlterNamespaceSetLocationStatement(Seq("a", "b", "c"), "/home/user/db"))
   }
 
   test("show databases: basic") {
@@ -1290,42 +1296,42 @@ class DDLParserSuite extends AnalysisTest {
 
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
-      AnalyzeTableStatement(nameParts, Map.empty, noScan = false))
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map.empty, noScan = false))
     comparePlans(parsePlan("analyze table a.b.c compute statistics noscan"),
-      AnalyzeTableStatement(nameParts, Map.empty, noScan = true))
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map.empty, noScan = true))
     comparePlans(parsePlan("analyze table a.b.c partition (a) compute statistics nOscAn"),
-      AnalyzeTableStatement(nameParts, Map("a" -> None), noScan = true))
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("a" -> None), noScan = true))
 
     // Partitions specified
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS"),
       AnalyzeTableStatement(
-        nameParts, Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = false))
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan"),
       AnalyzeTableStatement(
-        nameParts, Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = true))
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan"),
-      AnalyzeTableStatement(nameParts, Map("ds" -> Some("2008-04-09")), noScan = true))
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS"),
       AnalyzeTableStatement(
-        nameParts, Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = false))
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan"),
       AnalyzeTableStatement(
-        nameParts, Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = true))
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr=11) COMPUTE STATISTICS noscan"),
       AnalyzeTableStatement(
-        nameParts, Map("ds" -> None, "hr" -> Some("11")), noScan = true))
+        Seq("a", "b", "c"), Map("ds" -> None, "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS"),
-      AnalyzeTableStatement(nameParts, Map("ds" -> None, "hr" -> None), noScan = false))
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> None, "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS noscan"),
-      AnalyzeTableStatement(nameParts, Map("ds" -> None, "hr" -> None), noScan = true))
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> None, "hr" -> None), noScan = true))
 
     intercept("analyze table a.b.c compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
@@ -1338,7 +1344,7 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS key, value"),
-      AnalyzeColumnStatement(nameParts, Option(Seq("key", "value")), allColumns = false))
+      AnalyzeColumnStatement(Seq("a", "b", "c"), Option(Seq("key", "value")), allColumns = false))
 
     // Partition specified - should be ignored
     comparePlans(
@@ -1347,7 +1353,7 @@ class DDLParserSuite extends AnalysisTest {
            |ANALYZE TABLE a.b.c PARTITION(ds='2017-06-10')
            |COMPUTE STATISTICS FOR COLUMNS key, value
          """.stripMargin),
-      AnalyzeColumnStatement(nameParts, Option(Seq("key", "value")), allColumns = false))
+      AnalyzeColumnStatement(Seq("a", "b", "c"), Option(Seq("key", "value")), allColumns = false))
 
     // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
     comparePlans(
@@ -1356,7 +1362,7 @@ class DDLParserSuite extends AnalysisTest {
            |ANALYZE TABLE a.b.c PARTITION(ds='2017-06-10')
            |COMPUTE STATISTICS FOR ALL COLUMNS
          """.stripMargin),
-      AnalyzeColumnStatement(nameParts, None, allColumns = true))
+      AnalyzeColumnStatement(Seq("a", "b", "c"), None, allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
       "mismatched input 'key' expecting <EOF>")
@@ -1367,21 +1373,21 @@ class DDLParserSuite extends AnalysisTest {
   test("MSCK REPAIR TABLE") {
     comparePlans(
       parsePlan("MSCK REPAIR TABLE a.b.c"),
-      RepairTableStatement(nameParts))
+      RepairTableStatement(Seq("a", "b", "c")))
   }
 
   test("LOAD DATA INTO table") {
     comparePlans(
       parsePlan("LOAD DATA INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadDataStatement(nameParts, "filepath", false, false, None))
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", false, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadDataStatement(nameParts, "filepath", true, false, None))
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c"),
-      LoadDataStatement(nameParts, "filepath", true, true, None))
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, true, None))
 
     comparePlans(
       parsePlan(
@@ -1390,7 +1396,7 @@ class DDLParserSuite extends AnalysisTest {
            |PARTITION(ds='2017-06-10')
          """.stripMargin),
       LoadDataStatement(
-        nameParts,
+        Seq("a", "b", "c"),
         "filepath",
         true,
         true,
@@ -1400,21 +1406,21 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW CREATE table") {
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c"),
-      ShowCreateTableStatement(nameParts))
+      ShowCreateTableStatement(Seq("a", "b", "c")))
   }
 
   test("CACHE TABLE") {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),
-      CacheTableStatement(nameParts, None, false, Map.empty))
+      CacheTableStatement(Seq("a", "b", "c"), None, false, Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c"),
-      CacheTableStatement(nameParts, None, true, Map.empty))
+      CacheTableStatement(Seq("a", "b", "c"), None, true, Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
-      CacheTableStatement(nameParts, None, true, Map("storageLevel" -> "DISK_ONLY")))
+      CacheTableStatement(Seq("a", "b", "c"), None, true, Map("storageLevel" -> "DISK_ONLY")))
 
     intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
       "It is not allowed to add catalog/namespace prefix a.b")
@@ -1423,21 +1429,21 @@ class DDLParserSuite extends AnalysisTest {
   test("UNCACHE TABLE") {
     comparePlans(
       parsePlan("UNCACHE TABLE a.b.c"),
-      UncacheTableStatement(nameParts, ifExists = false))
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
 
     comparePlans(
       parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
-      UncacheTableStatement(nameParts, ifExists = true))
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
   }
 
   test("TRUNCATE table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),
-      TruncateTableStatement(nameParts, None))
+      TruncateTableStatement(Seq("a", "b", "c"), None))
 
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
-      TruncateTableStatement(nameParts, Some(Map("ds" -> "2017-06-10"))))
+      TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
   }
 
   test("SHOW PARTITIONS") {
@@ -1455,9 +1461,9 @@ class DDLParserSuite extends AnalysisTest {
     val expected3 = ShowPartitionsStatement(Seq("t1"),
       Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))
     val parsed4 = parsePlan(sql4)
-    val expected4 = ShowPartitionsStatement(nameParts, None)
+    val expected4 = ShowPartitionsStatement(Seq("a", "b", "c"), None)
     val parsed5 = parsePlan(sql5)
-    val expected5 = ShowPartitionsStatement(nameParts, Some(Map("ds" -> "2017-06-10")))
+    val expected5 = ShowPartitionsStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10")))
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
@@ -1469,7 +1475,7 @@ class DDLParserSuite extends AnalysisTest {
   test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
-      RefreshTableStatement(nameParts))
+      RefreshTableStatement(Seq("a", "b", "c")))
   }
 
   test("show columns") {
@@ -1496,7 +1502,7 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: recover partitions") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
-      AlterTableRecoverPartitionsStatement(nameParts))
+      AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
   }
 
   test("alter table: add partition") {
@@ -1512,13 +1518,13 @@ class DDLParserSuite extends AnalysisTest {
     val parsed2 = parsePlan(sql2)
 
     val expected1 = AlterTableAddPartitionStatement(
-      nameParts,
+      Seq("a", "b", "c"),
       Seq(
         (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
         (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
       ifNotExists = true)
     val expected2 = AlterTableAddPartitionStatement(
-      nameParts,
+      Seq("a", "b", "c"),
       Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
       ifNotExists = false)
 
@@ -1555,7 +1561,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed2 = parsePlan(sql2)
     val expected2 = AlterTableRenamePartitionStatement(
-      nameParts,
+      Seq("a", "b", "c"),
       Map("ds" -> "2017-06-10"),
       Map("ds" -> "2018-06-10"))
     comparePlans(parsed2, expected2)
@@ -1601,7 +1607,7 @@ class DDLParserSuite extends AnalysisTest {
 
     val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
     val expected3_table = AlterTableDropPartitionStatement(
-      nameParts,
+      Seq("a", "b", "c"),
       Seq(Map("ds" -> "2017-06-10")),
       ifExists = true,
       purge = false,
@@ -1681,7 +1687,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed6 = parsePlan(sql6)
     val expected6 = AlterTableSerDePropertiesStatement(
-      nameParts,
+      Seq("a", "b", "c"),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       None)
@@ -1694,7 +1700,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed7 = parsePlan(sql7)
     val expected7 = AlterTableSerDePropertiesStatement(
-      nameParts,
+      Seq("a", "b", "c"),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
@@ -1704,7 +1710,7 @@ class DDLParserSuite extends AnalysisTest {
   test("alter view: AS Query") {
     val parsed = parsePlan("ALTER VIEW a.b.c AS SELECT 1")
     val expected = AlterViewAsStatement(
-      nameParts, "SELECT 1", parsePlan("SELECT 1"))
+      Seq("a", "b", "c"), "SELECT 1", parsePlan("SELECT 1"))
     comparePlans(parsed, expected)
   }
 
@@ -1728,7 +1734,7 @@ class DDLParserSuite extends AnalysisTest {
     val parsed2 = parsePlan(v2)
 
     val expected2 = CreateViewStatement(
-      nameParts,
+      Seq("a", "b", "c"),
       Seq.empty[(String, Option[String])],
       None,
       Map.empty[String, String],
@@ -1772,7 +1778,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed2 = parsePlan(v2)
     val expected2 = CreateViewStatement(
-      nameParts,
+      Seq("a", "b", "c"),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
       Map("prop1Key" -> "prop1Val"),
@@ -1810,11 +1816,11 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTablePropertiesStatement(nameParts, None))
+      ShowTablePropertiesStatement(Seq("a", "b", "c"), None))
 
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
-      ShowTablePropertiesStatement(nameParts, Some("propKey1")))
+      ShowTablePropertiesStatement(Seq("a", "b", "c"), Some("propKey1")))
   }
 
   test("DESCRIBE FUNCTION") {
@@ -1826,10 +1832,10 @@ class DDLParserSuite extends AnalysisTest {
       DescribeFunctionStatement(Seq("a"), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION a.b.c"),
-      DescribeFunctionStatement(nameParts, false))
+      DescribeFunctionStatement(Seq("a", "b", "c"), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION EXTENDED a.b.c"),
-      DescribeFunctionStatement(nameParts, true))
+      DescribeFunctionStatement(Seq("a", "b", "c"), true))
   }
 
   test("SHOW FUNCTIONS") {
@@ -1853,7 +1859,7 @@ class DDLParserSuite extends AnalysisTest {
       ShowFunctionsStatement(true, true, Some("funct*"), None))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
-      ShowFunctionsStatement(true, true, None, Some(nameParts)))
+      ShowFunctionsStatement(true, true, None, Some(Seq("a", "b", "c"))))
     val sql = "SHOW other FUNCTIONS"
     intercept(sql, s"$sql not supported")
   }
@@ -1864,16 +1870,16 @@ class DDLParserSuite extends AnalysisTest {
       DropFunctionStatement(Seq("a"), false, false))
     comparePlans(
       parsePlan("DROP FUNCTION a.b.c"),
-      DropFunctionStatement(nameParts, false, false))
+      DropFunctionStatement(Seq("a", "b", "c"), false, false))
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION a.b.c"),
-      DropFunctionStatement(nameParts, false, true))
+      DropFunctionStatement(Seq("a", "b", "c"), false, true))
     comparePlans(
       parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
-      DropFunctionStatement(nameParts, true, false))
+      DropFunctionStatement(Seq("a", "b", "c"), true, false))
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
-      DropFunctionStatement(nameParts, true, true))
+      DropFunctionStatement(Seq("a", "b", "c"), true, true))
 
   }
 
@@ -1945,18 +1951,18 @@ class DDLParserSuite extends AnalysisTest {
   test("comment on") {
     comparePlans(
       parsePlan("COMMENT ON DATABASE a.b.c IS NULL"),
-      CommentOnNamespace(unresolvedNamespace, ""))
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
 
     comparePlans(
       parsePlan("COMMENT ON DATABASE a.b.c IS 'NULL'"),
-      CommentOnNamespace(unresolvedNamespace, "NULL"))
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), "NULL"))
 
     comparePlans(
       parsePlan("COMMENT ON NAMESPACE a.b.c IS ''"),
-      CommentOnNamespace(unresolvedNamespace, ""))
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
 
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
-      CommentOnTable(UnresolvedV2Table(nameParts), "xYz"))
+      CommentOnTable(UnresolvedV2Table(Seq("a", "b", "c")), "xYz"))
   }
 }

@@ -110,8 +110,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         if !isSessionCatalog(catalog) =>
       AlterNamespaceSetProperties(catalog.asNamespaceCatalog, ns, properties)
 
-    case AlterNamespaceSetLocationStatement(ResolvedNamespace(catalog, ns), location)
-        if !isSessionCatalog(catalog) =>
+    case AlterNamespaceSetLocationStatement(
+        NonSessionCatalogAndNamespace(catalog, ns), location) =>
       AlterNamespaceSetProperties(catalog.asNamespaceCatalog, ns,
         Map(SupportsNamespaces.PROP_LOCATION -> location))
 
