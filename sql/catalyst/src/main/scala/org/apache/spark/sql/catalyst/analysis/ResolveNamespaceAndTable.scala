@@ -29,8 +29,8 @@ case class ResolveNamespaceAndTable(catalogManager: CatalogManager)
       ResolvedNamespace(catalog.asNamespaceCatalog, ns)
 
     case u @ UnresolvedV2Table(CatalogAndIdentifier(catalog, ident)) =>
-      CatalogV2Util.loadTable(catalog, ident).map { _ =>
-        ResolvedV2Table(catalog.asTableCatalog, ident)
+      CatalogV2Util.loadRelation(catalog, ident).map { relation =>
+        ResolvedTable(catalog.asTableCatalog, relation)
       }.getOrElse(u)
   }
 }
