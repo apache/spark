@@ -340,7 +340,7 @@ object SparkEnv extends Logging {
     } catch {
       case e: Throwable =>
         logError(s"Init shuffle manager error. Maybe $shuffleMgrName " +
-          s"shuffle manager doesn't exist.")
+          "shuffle manager doesn't exist.")
         throw e
     }
 
