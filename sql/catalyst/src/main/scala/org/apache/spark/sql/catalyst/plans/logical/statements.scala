@@ -364,19 +364,15 @@ case class ShowTableStatement(
 case class CreateNamespaceStatement(
      namespace: LogicalPlan,
      ifNotExists: Boolean,
-     properties: Map[String, String]) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
+     properties: Map[String, String]) extends ParsedStatement
 
 /**
  * A DROP NAMESPACE statement, as parsed from SQL.
  */
 case class DropNamespaceStatement(
-    namespace: LogicalPlan,
+    namespace: Seq[String],
     ifExists: Boolean,
-    cascade: Boolean) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
+    cascade: Boolean) extends ParsedStatement
 
 /**
  * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES) command, as parsed from SQL.

@@ -328,8 +328,7 @@ class ResolveSessionCatalog(
       val newProperties = c.properties -- SupportsNamespaces.RESERVED_PROPERTIES.asScala
       CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
 
-    case d @ DropNamespaceStatement(ResolvedNamespace(catalog, ns), _, _)
-        if isSessionCatalog(catalog) =>
+    case d @ DropNamespaceStatement(SessionCatalogAndNamespace(_, ns), _, _) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
