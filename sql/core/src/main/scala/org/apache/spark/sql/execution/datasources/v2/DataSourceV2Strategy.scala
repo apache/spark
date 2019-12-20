@@ -39,51 +39,56 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    // projection and filters were already pushed down in the optimizer.
-    // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
-    // not support columnar, a projection is added to convert the rows to UnsafeRow.
-    case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
-      val output = relation.output
+    case PhysicalOperation(project, filters,
+        relation @ DataSourceV2ScanRelation(table, v1Scan: V1Scan, output)) =>
       val pushedFilters = relation.getTagValue(V2ScanRelationPushDown.PUSHED_FILTERS_TAG)
         .getOrElse(Seq.empty)
-
-      val (scanExec, needsUnsafeConversion) = relation.scan match {
-        case v1Scan: V1Scan =>
-          val v1Relation = v1Scan.toV1TableScan(session.sqlContext)
-          if (v1Relation.schema != v1Scan.readSchema()) {
-            throw new IllegalArgumentException(
-              "The fallback v1 relation reports inconsistent schema:\n" +
-                "Schema of v2 scan:     " + v1Scan.readSchema() + "\n" +
-                "Schema of v1 relation: " + v1Relation.schema)
-          }
-          val rdd = v1Relation match {
-            case s: TableScan => s.buildScan()
-            case _ =>
-              throw new IllegalArgumentException(
-                "`V1Scan.toV1Relation` must return a `TableScan` instance.")
-          }
-          val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
-          val originalOutputNames = relation.table.schema().map(_.name)
-          val requiredColumnsIndex = output.map(_.name).map(originalOutputNames.indexOf)
-          val dsScan = RowDataSourceScanExec(
-            output,
-            requiredColumnsIndex,
-            pushedFilters.toSet,
-            pushedFilters.toSet,
-            unsafeRowRDD,
-            v1Relation,
-            tableIdentifier = None)
-          (dsScan, false)
-        case _ =>
-          val batchScan = BatchScanExec(output, relation.scan)
-          (batchScan, !batchScan.supportsColumnar)
+      val v1Relation = v1Scan.toV1TableScan(session.sqlContext)
+      if (v1Relation.schema != v1Scan.readSchema()) {
+        throw new IllegalArgumentException(
+          "The fallback v1 relation reports inconsistent schema:\n" +
+            "Schema of v2 scan:     " + v1Scan.readSchema() + "\n" +
+            "Schema of v1 relation: " + v1Relation.schema)
       }
-
+      val rdd = v1Relation match {
+        case s: TableScan => s.buildScan()
+        case _ =>
+          throw new IllegalArgumentException(
+            "`V1Scan.toV1Relation` must return a `TableScan` instance.")
+      }
+      val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+      val originalOutputNames = relation.table.schema().map(_.name)
+      val requiredColumnsIndex = output.map(_.name).map(originalOutputNames.indexOf)
+      val dsScan = RowDataSourceScanExec(
+        output,
+        requiredColumnsIndex,
+        pushedFilters.toSet,
+        pushedFilters.toSet,
+        unsafeRowRDD,
+        v1Relation,
+        tableIdentifier = None)
 
       val filterCondition = filters.reduceLeftOption(And)
-      val withFilter = filterCondition.map(FilterExec(_, scanExec)).getOrElse(scanExec)
+      val withFilter = filterCondition.map(FilterExec(_, dsScan)).getOrElse(dsScan)
 
-      val withProjection = if (withFilter.output != project || needsUnsafeConversion) {
+      val withProjection = if (withFilter.output != project) {
+        ProjectExec(project, withFilter)
+      } else {
+        withFilter
+      }
+
+      withProjection :: Nil
+
+    case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
+      // projection and filters were already pushed down in the optimizer.
+      // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
+      // not support columnar, a projection is added to convert the rows to UnsafeRow.
+      val batchExec = BatchScanExec(relation.output, relation.scan)
+
+      val filterCondition = filters.reduceLeftOption(And)
+      val withFilter = filterCondition.map(FilterExec(_, batchExec)).getOrElse(batchExec)
+
+      val withProjection = if (withFilter.output != project || !batchExec.supportsColumnar) {
         ProjectExec(project, withFilter)
       } else {
         withFilter
