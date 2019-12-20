@@ -215,8 +215,6 @@ case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEven
  */
 private[spark] trait SparkListenerInterface {
 
-  @volatile var dead = false
-
   /**
    * Called when a stage completes successfully or fails, with information on the completed stage.
    */
