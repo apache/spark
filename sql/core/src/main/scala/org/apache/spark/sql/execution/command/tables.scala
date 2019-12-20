@@ -1015,12 +1015,12 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
     if (metadata.tableType == VIEW) {
       showViewDataColumns(metadata, builder)
-      showTableComment(metadata, builder)
+      showComment(metadata, builder)
       showViewProperties(metadata, builder)
       showViewText(metadata, builder)
     } else {
       showHiveTableHeader(metadata, builder)
-      showTableComment(metadata, builder)
+      showComment(metadata, builder)
       showHiveTableNonDataColumns(metadata, builder)
       showHiveTableStorageInfo(metadata, builder)
       showTableLocation(metadata, builder)
@@ -1121,7 +1121,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }
   }
 
-  private def showTableComment(metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showComment(metadata: CatalogTable, builder: StringBuilder): Unit = {
     metadata
       .comment
       .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
@@ -1145,7 +1145,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     showDataSourceTableDataColumns(metadata, builder)
     showDataSourceTableOptions(metadata, builder)
     showDataSourceTableNonDataColumns(metadata, builder)
-    showTableComment(metadata, builder)
+    showComment(metadata, builder)
     showTableLocation(metadata, builder)
     showTableProperties(metadata, builder)
 

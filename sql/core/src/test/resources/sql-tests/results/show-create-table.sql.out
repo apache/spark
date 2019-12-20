@@ -282,8 +282,8 @@ struct<>
 
 
 -- !query 31
-CREATE VIEW view_SPARK_30302 (aaa COMMENT 'comment for aaa', bbb)
-COMMENT 'This is a comment for view'
+CREATE VIEW view_SPARK_30302 (aaa COMMENT 'comment with \'quoted text\' for aaa', bbb)
+COMMENT 'This is a comment with \'quoted text\' for view'
 AS SELECT a, b FROM tbl
 -- !query 31 schema
 struct<>
@@ -296,8 +296,8 @@ SHOW CREATE TABLE view_SPARK_30302
 -- !query 32 schema
 struct<createtab_stmt:string>
 -- !query 32 output
-CREATE VIEW `view_SPARK_30302`(`aaa` COMMENT 'comment for aaa', `bbb`)
-COMMENT 'This is a comment for view'
+CREATE VIEW `view_SPARK_30302`(`aaa` COMMENT 'comment with \'quoted text\' for aaa', `bbb`)
+COMMENT 'This is a comment with \'quoted text\' for view'
 AS SELECT a, b FROM tbl
 
 
@@ -311,7 +311,7 @@ struct<>
 
 -- !query 34
 CREATE VIEW view_SPARK_30302 (aaa, bbb)
-TBLPROPERTIES ('a' = '1')
+TBLPROPERTIES ('a' = '1', 'b' = '2')
 AS SELECT a, b FROM tbl
 -- !query 34 schema
 struct<>
@@ -326,7 +326,8 @@ struct<createtab_stmt:string>
 -- !query 35 output
 CREATE VIEW `view_SPARK_30302`(`aaa`, `bbb`)
 TBLPROPERTIES (
-  'a' = '1'
+  'a' = '1',
+  'b' = '2'
 )
 AS SELECT a, b FROM tbl
 
