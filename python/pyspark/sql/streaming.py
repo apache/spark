@@ -518,8 +518,8 @@ class DataStreamReader(OptionUtils):
         .. note:: Evolving.
 
         :param mergeSchema: sets whether we should merge schemas collected from all
-            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
-            The default value is specified in ``spark.sql.orc.mergeSchema``.
+                            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
+                            The default value is specified in ``spark.sql.orc.mergeSchema``.
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
@@ -547,8 +547,9 @@ class DataStreamReader(OptionUtils):
         .. note:: Evolving.
 
         :param mergeSchema: sets whether we should merge schemas collected from all
-            Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``.
-            The default value is specified in ``spark.sql.parquet.mergeSchema``.
+                            Parquet part-files. This will override
+                            ``spark.sql.parquet.mergeSchema``. The default value is specified in
+                            ``spark.sql.parquet.mergeSchema``.
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
