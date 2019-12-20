@@ -1218,32 +1218,32 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("b" -> "b")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
 
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a", "b" -> "b", "c" -> "c")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("a" -> "a")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
       AlterNamespaceSetPropertiesStatement(
-        Seq("a", "b", "c"), Map("b" -> "b")))
+        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
   }
 
   test("set namespace location") {

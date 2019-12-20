@@ -382,8 +382,10 @@ case class DropNamespaceStatement(
  * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES) command, as parsed from SQL.
  */
 case class AlterNamespaceSetPropertiesStatement(
-    namespace: Seq[String],
-    properties: Map[String, String]) extends ParsedStatement
+    namespace: LogicalPlan,
+    properties: Map[String, String]) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command, as parsed from SQL.

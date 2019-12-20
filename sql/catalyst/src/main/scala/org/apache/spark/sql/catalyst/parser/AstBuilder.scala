@@ -2558,10 +2558,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitDropNamespace(ctx: DropNamespaceContext): LogicalPlan = withOrigin(ctx) {
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    DropNamespaceStatement(
-      UnresolvedNamespace(nameParts),
-      ctx.EXISTS != null,
-      ctx.CASCADE != null)
+    DropNamespaceStatement(UnresolvedNamespace(nameParts), ctx.EXISTS != null, ctx.CASCADE != null)
   }
 
   /**
@@ -2576,9 +2573,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
       val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-
       AlterNamespaceSetPropertiesStatement(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+        UnresolvedNamespace(nameParts),
         visitPropertyKeyValues(ctx.tablePropertyList))
     }
   }
