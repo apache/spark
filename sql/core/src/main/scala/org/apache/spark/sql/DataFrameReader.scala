@@ -223,7 +223,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             sparkSession.sessionState.catalogManager,
             dsOptions)
           catalog.loadTable(ident)
-        case other =>
+        case _ =>
           userSpecifiedSchema match {
             case Some(schema) => provider.getTable(dsOptions, schema)
             case _ => provider.getTable(dsOptions)
