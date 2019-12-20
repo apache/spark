@@ -1521,4 +1521,10 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
+  private[spark] val MAX_LOCAL_TASK_FAILURES = ConfigBuilder("spark.max.local.task.failures")
+    .doc("The max failure time for a task while SparkContext running in Local mode, " +
+      "SomeTimes we need to ignore some nonfatal task failure or test some cases " +
+      "when speculation or re-executing on")
+    .intConf
+    .createWithDefault(1)
 }

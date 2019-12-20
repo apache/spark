@@ -2768,9 +2768,6 @@ object SparkContext extends Logging {
       deployMode: String): (SchedulerBackend, TaskScheduler) = {
     import SparkMasterRegex._
 
-    // When running locally, don't try to re-execute tasks on failure.
-    val MAX_LOCAL_TASK_FAILURES = 1
-
     // Ensure that executor's resources satisfies one or more tasks requirement.
     def checkResourcesPerTask(clusterMode: Boolean, executorCores: Option[Int]): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
@@ -2851,7 +2848,8 @@ object SparkContext extends Logging {
     master match {
       case "local" =>
         checkResourcesPerTask(clusterMode = false, Some(1))
-        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
+        val scheduler =
+          new TaskSchedulerImpl(sc, sc.conf.get(MAX_LOCAL_TASK_FAILURES), isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, 1)
         scheduler.initialize(backend)
         (backend, scheduler)
@@ -2864,7 +2862,8 @@ object SparkContext extends Logging {
           throw new SparkException(s"Asked to run locally with $threadCount threads")
         }
         checkResourcesPerTask(clusterMode = false, Some(threadCount))
-        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
+        val scheduler =
+          new TaskSchedulerImpl(sc, sc.conf.get(MAX_LOCAL_TASK_FAILURES), isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)

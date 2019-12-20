@@ -110,7 +110,9 @@ class HadoopMapReduceCommitProtocol(
         assert(dir.isDefined,
           "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
         partitionPaths += dir.get
-        this.stagingDir
+        // For speculative or re-executing task, we need to assign different
+        // dir for each task attempt
+        new Path(this.stagingDir, taskContext.getTaskAttemptID.toString)
       // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
         new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
@@ -167,8 +169,8 @@ class HadoopMapReduceCommitProtocol(
     committer.commitJob(jobContext)
 
     if (hasValidPath) {
-      val (allAbsPathFiles, allPartitionPaths) =
-        taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])]).unzip
+      val (allAbsPathFiles, allPartitionPaths, successAttemptIDs) =
+        taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String], String)]).unzip3
       val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
 
       val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
@@ -183,22 +185,25 @@ class HadoopMapReduceCommitProtocol(
       }
 
       if (dynamicPartitionOverwrite) {
-        val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
-        logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
-        for (part <- partitionPaths) {
-          val finalPartPath = new Path(path, part)
-          if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
-            // According to the official hadoop FileSystem API spec, delete op should assume
-            // the destination is no longer present regardless of return value, thus we do not
-            // need to double check if finalPartPath exists before rename.
-            // Also in our case, based on the spec, delete returns false only when finalPartPath
-            // does not exist. When this happens, we need to take action if parent of finalPartPath
-            // also does not exist(e.g. the scenario described on SPARK-23815), because
-            // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
-            // a parent that exists, otherwise we may get unexpected result on the rename.
-            fs.mkdirs(finalPartPath.getParent)
-          }
-          fs.rename(new Path(stagingDir, part), finalPartPath)
+        allPartitionPaths.zip(successAttemptIDs).foreach {
+          case (allPartitionPath, successAttempID) =>
+            allPartitionPath.foreach(part => {
+              val finalPartPath = new Path(path, part)
+              if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
+                // According to the official hadoop FileSystem API spec, delete op should assume
+                // the destination is no longer present regardless of return value, thus we do not
+                // need to double check if finalPartPath exists before rename.
+                // Also in our case, based on the spec, delete returns false only when finalPartPath
+                // does not exist. When this happens, we need to take action if parent of
+                // finalPartPath also does not exist(e.g. the scenario described on SPARK-23815),
+                // because FileSystem API spec on rename op says the rename dest(finalPartPath)
+                // must have a parent that exists, otherwise we may get unexpected result
+                // on the rename.
+                fs.mkdirs(finalPartPath.getParent)
+              }
+              fs.rename(new Path(stagingDir, s"$successAttempID/$part"), finalPartPath)
+            })
+          case _ =>
         }
       }
 
@@ -243,7 +248,7 @@ class HadoopMapReduceCommitProtocol(
     logTrace(s"Commit task ${attemptId}")
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
-    new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
+    new TaskCommitMessage((addedAbsPathFiles.toMap, partitionPaths.toSet, attemptId.toString))
   }
 
   /**
