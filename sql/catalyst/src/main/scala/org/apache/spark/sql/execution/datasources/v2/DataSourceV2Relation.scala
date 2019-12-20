@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
 case class DataSourceV2Relation(
     table: Table,
     output: Seq[AttributeReference],
-    catalog: Option[CatalogPlugin],
+    catalogIdentifier: Option[String],
     identifiers: Seq[Identifier],
     options: CaseInsensitiveStringMap)
   extends LeafNode with MultiInstanceRelation with NamedRelation {
@@ -141,18 +141,18 @@ case class StreamingDataSourceV2Relation(
 object DataSourceV2Relation {
   def create(
       table: Table,
-      catalog: Option[CatalogPlugin],
+      catalogIdentifier: Option[String],
       identifiers: Seq[Identifier],
       options: CaseInsensitiveStringMap): DataSourceV2Relation = {
     val output = table.schema().toAttributes
-    DataSourceV2Relation(table, output, catalog, identifiers, options)
+    DataSourceV2Relation(table, output, catalogIdentifier, identifiers, options)
   }
 
   def create(
       table: Table,
-      catalog: Option[CatalogPlugin],
+      catalogIdentifier: Option[String],
       identifiers: Seq[Identifier]): DataSourceV2Relation =
-    create(table, catalog, identifiers, CaseInsensitiveStringMap.empty)
+    create(table, catalogIdentifier, identifiers, CaseInsensitiveStringMap.empty)
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.
