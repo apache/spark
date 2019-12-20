@@ -302,10 +302,8 @@ case class DescribeTableStatement(
  * A DESCRIBE NAMESPACE statement, as parsed from SQL.
  */
 case class DescribeNamespaceStatement(
-    namespace: LogicalPlan,
-    extended: Boolean) extends ParsedStatement {
-  override def children: Seq[LogicalPlan] = Seq(namespace)
-}
+    namespace: Seq[String],
+    extended: Boolean) extends ParsedStatement
 
 /**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.

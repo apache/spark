@@ -706,10 +706,10 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("describe database") {
-    val sql1 = "DESCRIBE DATABASE EXTENDED a.b.c"
-    val sql2 = "DESCRIBE DATABASE a.b.c"
-    comparePlans(parsePlan(sql1), DescribeNamespaceStatement(unresolvedNamespace, extended = true))
-    comparePlans(parsePlan(sql2), DescribeNamespaceStatement(unresolvedNamespace, extended = false))
+    val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
+    val sql2 = "DESCRIBE DATABASE a.b"
+    comparePlans(parsePlan(sql1), DescribeNamespaceStatement(Seq("a", "b"), extended = true))
+    comparePlans(parsePlan(sql2), DescribeNamespaceStatement(Seq("a", "b"), extended = false))
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
