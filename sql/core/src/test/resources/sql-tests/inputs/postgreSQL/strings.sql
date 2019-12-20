@@ -270,7 +270,6 @@ SELECT 'indio' NOT LIKE 'in__o' AS `false`;
 SELECT 'indio' LIKE 'in_o' AS `false`;
 SELECT 'indio' NOT LIKE 'in_o' AS `true`;
 
--- [SPARK-28083] ANSI SQL: LIKE predicate: ESCAPE clause
 -- unused escape character
 SELECT 'hawkeye' LIKE 'h%' ESCAPE '#' AS `true`;
 SELECT 'hawkeye' NOT LIKE 'h%' ESCAPE '#' AS `false`;
