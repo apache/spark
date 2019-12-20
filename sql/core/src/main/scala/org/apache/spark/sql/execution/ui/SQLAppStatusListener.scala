@@ -237,8 +237,11 @@ class SQLAppStatusListener(
       if (metricTypes.contains(id)) {
         val prev = allMetrics.getOrElse(id, null)
         val updated = if (prev != null) {
+          // If the driver updates same metrics as tasks and has higher value then remove
+          // that entry from maxMetricsFromAllStage. This would make stringValue function default
+          // to "driver" that would be displayed on UI.
           if (maxMetricsFromAllStages.contains(id) && value > maxMetricsFromAllStages(id)(0)) {
-            maxMetricsFromAllStages.remove(id) // Display as "driver" for this metric in UI
+            maxMetricsFromAllStages.remove(id)
           }
           val _copy = Arrays.copyOf(prev, prev.length + 1)
           _copy(prev.length) = value
