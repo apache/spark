@@ -80,13 +80,13 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
-      val rpId = if (resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
+      val rpIdToRegister = if (resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
         DEFAULT_RESOURCE_PROFILE_ID
       } else {
         resourceProfileId
       }
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, resources, rpId))
+        extractAttributes, resources, rpIdToRegister))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>

@@ -186,6 +186,8 @@ private[spark] class DAGScheduler(
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.get(TEST_NO_STAGE_RETRY)
 
+  private val shouldMergeResourceProfiles = sc.getConf.get(config.RESOURCE_PROFILE_MERGE_CONFLICTS)
+
   /**
    * Whether to unregister all the outputs on the host in condition that we receive a FetchFailure,
    * this is set default to false, which means, we only unregister the outputs related to the exact
@@ -449,36 +451,44 @@ private[spark] class DAGScheduler(
     }
   }
 
-  private def mergeResourceProfiles(
+  private[scheduler] def mergeResourceProfiles(
       r1: ImmutableResourceProfile,
       r2: ImmutableResourceProfile): ImmutableResourceProfile = {
-
-    // TODO - add merge functionality
-    throw new SparkException("Merging of ResourceProfiles not yet supported!")
-    r1
-    /*
-    val mergedKeys = r1.getResources.keySet ++ r2.getResources.keySet
-    val merged = mergedKeys.map { rName =>
-      if (r2.getResources.contains(rName) && r1.getResources.contains(rName)) {
-        val r2ri = r2.getResources(rName)
-        val r1ri = r1.getResources(rName)
-        // TODO - need to handle units here
-        // TODO - do we want to sum things like Memory?
-        if (r2ri.amount > r1ri.amount) (rName, r2ri) else (rName, r1ri)
-      } else if (r2.getResources.contains(rName)) {
-        (rName, r2.getResources(rName))
+    val mergedExecKeys = r1.executorResources.keySet ++ r2.executorResources.keySet
+    val mergedExecReq = mergedExecKeys.map { rName =>
+      // For now we just choose the max resource value - eventually we may want to
+      // expand to do sum or something user specified
+      val r2ri = r2.executorResources.get(rName)
+      val r1ri = r1.executorResources.get(rName)
+      if (r2ri.isDefined && r1ri.isDefined) {
+        if (r2ri.get.amount > r1ri.get.amount) (rName, r2ri.get) else (rName, r1ri.get)
+      } else if (r2ri.isDefined) {
+        (rName, r2ri.get)
       } else {
-        (rName, r1.getResources(rName))
+        (rName, r1ri.get)
       }
     }.toMap
-    new ResourceProfile(merged)
-    */
+    val mergedTaskKeys = r1.taskResources.keySet ++ r2.taskResources.keySet
+    val mergedTaskReq = mergedTaskKeys.map { rName =>
+      // For now we just choose the max resource value - eventually we may want to
+      // expand to do sum or something user specified
+      val r2ri = r2.taskResources.get(rName)
+      val r1ri = r1.taskResources.get(rName)
+      if (r2ri.isDefined && r1ri.isDefined) {
+        if (r2ri.get.amount > r1ri.get.amount) (rName, r2ri.get) else (rName, r1ri.get)
+      } else if (r2ri.isDefined) {
+        (rName, r2ri.get)
+      } else {
+        (rName, r1ri.get)
+      }
+    }.toMap
+    new ImmutableResourceProfile(mergedExecReq, mergedTaskReq)
   }
 
-  private def mergeResourceProfilesForStage(rdd: RDD[_]): ImmutableResourceProfile = {
+  private[scheduler] def mergeResourceProfilesForStage(rdd: RDD[_]): ImmutableResourceProfile = {
     val stageResourceProfiles = getResourceProfilesForRDDsInStage(rdd)
     val resourceProfile = if (stageResourceProfiles.size > 1) {
-      if (sc.getConf.get(config.RESOURCE_PROFILE_MERGE_CONFLICTS)) {
+      if (shouldMergeResourceProfiles) {
         // need to resolve conflicts if multiple
         var mergedProfile: ImmutableResourceProfile = stageResourceProfiles.head
         logInfo("create  stage, resource profiles: " + stageResourceProfiles)

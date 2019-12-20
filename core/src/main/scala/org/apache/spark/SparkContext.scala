@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReferenc
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.collection.immutable
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
@@ -219,7 +220,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
-  private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
+  private var _resources: immutable.Map[String, ResourceInformation] = _
   private var _shuffleDriverComponents: ShuffleDriverComponents = _
   private var _plugins: Option[PluginContainer] = None
   private var _resourceProfileManager: ResourceProfileManager = _
@@ -1634,19 +1635,17 @@ class SparkContext(config: SparkConf) extends Logging {
   def requestTotalExecutors(
       numExecutors: Int,
       localityAwareTasks: Int,
-      hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]): Boolean = {
+      hostToLocalTaskCount: immutable.Map[String, Int]
+    ): Boolean = {
     schedulerBackend match {
       case b: ExecutorAllocationClient =>
         // this is being applied to the default resource profile, would need to add api to support
         // others
         val defaultProfId = resourceProfileManager.defaultResourceProfile.id
-        val hostToLocalTaskCountWithResourceProfileId =
-          Map(defaultProfId -> hostToLocalTaskCount).toMap
-        val localityAwareTasksWithResourceProfileId =
-          Map[Int, Int](localityAwareTasks -> defaultProfId)
-        b.requestTotalExecutors(localityAwareTasksWithResourceProfileId.toMap,
-          hostToLocalTaskCountWithResourceProfileId,
-          Map(defaultProfId-> numExecutors).toMap)
+        b.requestTotalExecutors(
+          immutable.Map(localityAwareTasks -> defaultProfId),
+          immutable.Map(defaultProfId -> hostToLocalTaskCount),
+          immutable.Map(defaultProfId-> numExecutors))
       case _ =>
         logWarning("Requesting executors is not supported by current scheduler.")
         false
