@@ -784,7 +784,7 @@ class Analyzer(
       identifier match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
-            case Some(table) => Some(DataSourceV2Relation.create(table))
+            case Some(table) => Some(DataSourceV2Relation.create(table, Some(catalog), Seq(ident)))
             case None => None
           }
         case _ => None
@@ -886,7 +886,7 @@ class Analyzer(
             Some(relation)
           }
         case Some(table) =>
-          Some(DataSourceV2Relation.create(table))
+          Some(DataSourceV2Relation.create(table, Some(catalog), Seq(ident)))
         case None => None
       }
     }

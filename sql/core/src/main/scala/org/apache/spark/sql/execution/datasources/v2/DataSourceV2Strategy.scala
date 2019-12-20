@@ -195,7 +195,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case desc @ DescribeNamespace(catalog, namespace, extended) =>
       DescribeNamespaceExec(desc.output, catalog, namespace, extended) :: Nil
 
-    case desc @ DescribeTable(DataSourceV2Relation(table, _, _), isExtended) =>
+    case desc @ DescribeTable(DataSourceV2Relation(table, _, _, _, _), isExtended) =>
       DescribeTableExec(desc.output, table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
@@ -228,7 +228,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case r: ShowCurrentNamespace =>
       ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
 
-    case r @ ShowTableProperties(DataSourceV2Relation(table, _, _), propertyKey) =>
+    case r @ ShowTableProperties(DataSourceV2Relation(table, _, _, _, _), propertyKey) =>
       ShowTablePropertiesExec(r.output, table, propertyKey) :: Nil
 
     case _ => Nil

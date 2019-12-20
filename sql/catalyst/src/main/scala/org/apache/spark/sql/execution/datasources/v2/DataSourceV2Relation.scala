@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.connector.write.WriteBuilder
@@ -38,6 +38,8 @@ import org.apache.spark.util.Utils
 case class DataSourceV2Relation(
     table: Table,
     output: Seq[AttributeReference],
+    catalog: Option[CatalogPlugin],
+    identifiers: Seq[Identifier],
     options: CaseInsensitiveStringMap)
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
@@ -137,12 +139,20 @@ case class StreamingDataSourceV2Relation(
 }
 
 object DataSourceV2Relation {
-  def create(table: Table, options: CaseInsensitiveStringMap): DataSourceV2Relation = {
+  def create(
+      table: Table,
+      catalog: Option[CatalogPlugin],
+      identifiers: Seq[Identifier],
+      options: CaseInsensitiveStringMap): DataSourceV2Relation = {
     val output = table.schema().toAttributes
-    DataSourceV2Relation(table, output, options)
+    DataSourceV2Relation(table, output, catalog, identifiers, options)
   }
 
-  def create(table: Table): DataSourceV2Relation = create(table, CaseInsensitiveStringMap.empty)
+  def create(
+      table: Table,
+      catalog: Option[CatalogPlugin],
+      identifiers: Seq[Identifier]): DataSourceV2Relation =
+    create(table, catalog, identifiers, CaseInsensitiveStringMap.empty)
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.

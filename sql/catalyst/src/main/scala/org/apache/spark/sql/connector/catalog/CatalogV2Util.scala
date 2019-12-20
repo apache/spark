@@ -256,7 +256,7 @@ private[sql] object CatalogV2Util {
     }
 
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
-    loadTable(catalog, ident).map(DataSourceV2Relation.create)
+    loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Seq(ident)))
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {

@@ -624,7 +624,7 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
     val topic = newTopic()
     val df = createDF(topic)
     assert(df.logicalPlan.collect {
-      case DataSourceV2Relation(_, _, _) => true
+      case DataSourceV2Relation(_, _, _, _, _) => true
     }.nonEmpty)
   }
 }

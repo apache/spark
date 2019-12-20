@@ -264,7 +264,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             throw new AnalysisException("Cannot write data to TableProvider implementation " +
               "if partition columns are specified.")
           }
-          lazy val relation = DataSourceV2Relation.create(table, dsOptions)
+          lazy val relation = DataSourceV2Relation.create(table, None, Seq.empty, dsOptions)
           mode match {
             case SaveMode.Append =>
               runCommand(df.sparkSession, "save") {
@@ -379,7 +379,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case _: V1Table =>
         return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
-        DataSourceV2Relation.create(t)
+        DataSourceV2Relation.create(t, Some(catalog), Seq(ident))
     }
 
     val command = mode match {
@@ -526,7 +526,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
-        AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan, extraOptions.toMap)
+        AppendData.byName(
+          DataSourceV2Relation.create(table, Some(catalog), Seq(ident)),
+          df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
         ReplaceTableAsSelect(
