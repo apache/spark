@@ -410,21 +410,22 @@ private[spark] class TaskSchedulerImpl(
     // remove task cpus since we checked already
     val tsResources = taskSetProf.taskResources.filterKeys(!_.equals(ResourceProfile.CPUS))
     if (tsResources.isEmpty) return true
-
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
-    // we go through all resources here so that we can make sure match and also get what the
+    // we go through all resources here so that we can make sure they match and also get what the
     // assignments are for the next task
-    for (rName <- tsResources.keys) {
-      val resourceReqs = tsResources.get(rName).get
-      val taskReqAmount = resourceReqs.amount
-      val rInfo = availWorkerResources.get(rName).get
-      val numWorkerResourceAvail = availWorkerResources.get(rName).map(_.size).getOrElse(0)
-      if (numWorkerResourceAvail >= taskReqAmount) {
-        logInfo(s"good to go for $rName")
-        localTaskReqAssign.put(rName, new ResourceInformation(rName,
-          rInfo.take(taskReqAmount.toInt).toArray))
-      } else {
-        return false
+    for ((rName, taskReqs) <- tsResources) {
+      availWorkerResources.get(rName) match {
+        case Some(workerRes) =>
+          val taskReqAmount = taskReqs.amount
+          val workerAvail = availWorkerResources.get(rName).map(_.size).getOrElse(0)
+          if (workerAvail >= taskReqAmount) {
+            logInfo(s"Resource $rName =$workerAvail meets requirements of $taskReqAmount")
+            localTaskReqAssign.put(rName, new ResourceInformation(rName,
+              workerRes.take(taskReqAmount.toInt).toArray))
+          } else {
+            return false
+          }
+        case None => return false
       }
     }
     taskResourceAssignments ++= localTaskReqAssign
