@@ -399,12 +399,6 @@ case class AlterNamespaceSetLocationStatement(
 }
 
 /**
- * A SHOW NAMESPACES statement, as parsed from SQL.
- */
-case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
-  extends ParsedStatement
-
-/**
  * A USE statement, as parsed from SQL.
  */
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement

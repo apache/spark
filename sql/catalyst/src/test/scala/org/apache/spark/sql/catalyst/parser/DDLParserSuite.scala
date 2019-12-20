@@ -1257,10 +1257,10 @@ class DDLParserSuite extends AnalysisTest {
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),
-      ShowNamespacesStatement(None, None))
+      ShowNamespaces(UnresolvedNamespace(Nil), None))
     comparePlans(
       parsePlan("SHOW DATABASES LIKE 'defau*'"),
-      ShowNamespacesStatement(None, Some("defau*")))
+      ShowNamespaces(UnresolvedNamespace(Nil), Some("defau*")))
   }
 
   test("show databases: FROM/IN operator is not allowed") {
@@ -1276,16 +1276,16 @@ class DDLParserSuite extends AnalysisTest {
   test("show namespaces") {
     comparePlans(
       parsePlan("SHOW NAMESPACES"),
-      ShowNamespacesStatement(None, None))
+      ShowNamespaces(UnresolvedNamespace(Nil), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
-      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
-      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
-      ShowNamespacesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
+      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1")), Some("*pattern*")))
   }
 
   test("analyze table statistics") {

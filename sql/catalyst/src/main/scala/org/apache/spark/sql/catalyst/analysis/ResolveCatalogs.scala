@@ -202,13 +202,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         if !isSessionCatalog(catalog) =>
       DescribeNamespace(catalog.asNamespaceCatalog, ns, extended)
 
-    case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, ns)), pattern) =>
-      val namespace = if (ns.nonEmpty) Some(ns) else None
-      ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)
-
-    case ShowNamespacesStatement(None, pattern) =>
-      ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
-
     case ShowTablesStatement(Some(NonSessionCatalogAndNamespace(catalog, ns)), pattern) =>
       ShowTables(catalog.asTableCatalog, ns, pattern)
 

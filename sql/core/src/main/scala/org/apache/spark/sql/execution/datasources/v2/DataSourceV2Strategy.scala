@@ -227,8 +227,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case DropNamespace(catalog, namespace, ifExists, cascade) =>
       DropNamespaceExec(catalog, namespace, ifExists, cascade) :: Nil
 
-    case r: ShowNamespaces =>
-      ShowNamespacesExec(r.output, r.catalog, r.namespace, r.pattern) :: Nil
+    case r @ ShowNamespaces(ResolvedNamespace(catalog, namespace), pattern) =>
+      ShowNamespacesExec(r.output, catalog, namespace, pattern) :: Nil
 
     case r : ShowTables =>
       ShowTablesExec(r.output, r.catalog, r.namespace, r.pattern) :: Nil
