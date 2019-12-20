@@ -103,6 +103,7 @@ private[this] object SharedFactory {
   val jsonFactory = new JsonFactoryBuilder()
     // Enabled for Hive compatibility
     .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
+    .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
     .build()
 }
 
