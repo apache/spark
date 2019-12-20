@@ -60,71 +60,86 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     spark.conf.unset(s"spark.sql.catalog.$catalogName")
   }
 
-  def testWithDifferentCatalogs(withCatalogOption: Option[String]): Unit = {
-    Seq(SaveMode.ErrorIfExists, SaveMode.Ignore).foreach { saveMode =>
-      test(s"save works with $saveMode - no table, no partitioning, session catalog") {
-        val df = spark.range(10)
-        val dfw = df.write.format(format).mode(saveMode).option("name", "t1")
-        withCatalogOption.foreach(cName => dfw.option("catalog", cName))
-        dfw.save()
+  private def testCreateAndRead(
+      saveMode: SaveMode,
+      withCatalogOption: Option[String],
+      partitionBy: Seq[String]): Unit = {
+    val df = spark.range(10).withColumn("part", 'id % 5)
+    val dfw = df.write.format(format).mode(saveMode).option("name", "t1")
+    withCatalogOption.foreach(cName => dfw.option("catalog", cName))
+    dfw.partitionBy(partitionBy: _*).save()
 
-        val table = catalog(withCatalogOption.getOrElse(SESSION_CATALOG_NAME)).loadTable("t1")
-        assert(table.name() === "t1", "Table identifier was wrong")
-        assert(table.partitioning().isEmpty, "Partitioning should be empty")
-        assert(table.schema() === df.schema.asNullable, "Schema did not match")
+    val table = catalog(withCatalogOption.getOrElse(SESSION_CATALOG_NAME)).loadTable("t1")
+    assert(table.name() === "t1", "Table identifier was wrong")
+    assert(table.partitioning().length === partitionBy.length, "Partitioning did not match")
+    assert(table.partitioning().map(_.references().head.fieldNames().head) === partitionBy,
+      "Partitioning was incorrect")
+    assert(table.schema() === df.schema.asNullable, "Schema did not match")
 
-        val dfr = spark.read.format(format).option("name", "t1")
-        withCatalogOption.foreach(cName => dfr.option("catalog", cName))
-        checkAnswer(dfr.load(), df.toDF())
-      }
+    val dfr = spark.read.format(format).option("name", "t1")
+    withCatalogOption.foreach(cName => dfr.option("catalog", cName))
+    checkAnswer(dfr.load(), df.toDF())
+  }
 
-      test(s"save works with $saveMode - no table, with partitioning, session catalog") {
-        val df = spark.range(10).withColumn("part", 'id % 5)
-        val dfw = df.write.format(format).mode(saveMode).option("name", "t1").partitionBy("part")
-        withCatalogOption.foreach(cName => dfw.option("catalog", cName))
-        dfw.save()
+  test(s"save works with ErrorIfExists - no table, no partitioning, session catalog") {
+    testCreateAndRead(SaveMode.ErrorIfExists, None, Nil)
+  }
 
-        val table = catalog(withCatalogOption.getOrElse(SESSION_CATALOG_NAME)).loadTable("t1")
-        assert(table.name() === "t1", "Table identifier was wrong")
-        assert(table.partitioning().length === 1, "Partitioning should not be empty")
-        assert(table.partitioning().head.references().head.fieldNames().head === "part",
-          "Partitioning was incorrect")
-        assert(table.schema() === df.schema.asNullable, "Schema did not match")
+  test(s"save works with ErrorIfExists - no table, with partitioning, session catalog") {
+    testCreateAndRead(SaveMode.ErrorIfExists, None, Seq("part"))
+  }
 
-        val dfr = spark.read.format(format).option("name", "t1")
-        withCatalogOption.foreach(cName => dfr.option("catalog", cName))
-        checkAnswer(dfr.load(), df.toDF())
-      }
-    }
+  test(s"save works with Ignore - no table, no partitioning, testcat catalog") {
+    testCreateAndRead(SaveMode.ErrorIfExists, Some(catalogName), Nil)
+  }
 
-    test("save fails with ErrorIfExists if table exists") {
-      sql("create table t1 (id bigint) using foo")
-      val df = spark.range(10)
-      intercept[TableAlreadyExistsException] {
-        val dfw = df.write.format(format).option("name", "t1")
-        withCatalogOption.foreach(cName => dfw.option("catalog", cName))
-        dfw.save()
-      }
-    }
+  test(s"save works with Ignore - no table, with partitioning, testcat catalog") {
+    testCreateAndRead(SaveMode.ErrorIfExists, Some(catalogName), Seq("part"))
+  }
 
-    test("Ignore mode if table exists") {
-      sql("create table t1 (id bigint) using foo")
-      val df = spark.range(10).withColumn("part", 'id % 5)
-      intercept[TableAlreadyExistsException] {
-        val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
-        withCatalogOption.foreach(cName => dfw.option("catalog", cName))
-        dfw.save()
-      }
-
-      val table = catalog(SESSION_CATALOG_NAME).loadTable("t1")
-      assert(table.partitioning().isEmpty, "Partitioning should be empty")
-      assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+  test("save fails with ErrorIfExists if table exists - session catalog") {
+    sql("create table t1 (id bigint) using foo")
+    val df = spark.range(10)
+    intercept[TableAlreadyExistsException] {
+      val dfw = df.write.format(format).option("name", "t1")
+      dfw.save()
     }
   }
 
-  testWithDifferentCatalogs(None)
+  test("save fails with ErrorIfExists if table exists - testcat catalog") {
+    sql("create table t1 (id bigint) using foo")
+    val df = spark.range(10)
+    intercept[TableAlreadyExistsException] {
+      val dfw = df.write.format(format).option("name", "t1").option("catalog", catalogName)
+      dfw.save()
+    }
+  }
 
-  testWithDifferentCatalogs(Some(catalogName))
+  test("Ignore mode if table exists - session catalog") {
+    sql("create table t1 (id bigint) using foo")
+    val df = spark.range(10).withColumn("part", 'id % 5)
+    intercept[TableAlreadyExistsException] {
+      val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
+      dfw.save()
+    }
+
+    val table = catalog(SESSION_CATALOG_NAME).loadTable("t1")
+    assert(table.partitioning().isEmpty, "Partitioning should be empty")
+    assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+  }
+
+  test("Ignore mode if table exists - testcat catalog") {
+    sql("create table t1 (id bigint) using foo")
+    val df = spark.range(10).withColumn("part", 'id % 5)
+    intercept[TableAlreadyExistsException] {
+      val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
+      dfw.option("catalog", catalogName).save()
+    }
+
+    val table = catalog(catalogName).loadTable("t1")
+    assert(table.partitioning().isEmpty, "Partitioning should be empty")
+    assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+  }
 }
 
 class CatalogSupportingInMemoryTableProvider

@@ -277,11 +277,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
 
             case other if classOf[SupportsCatalogOptions].isAssignableFrom(provider.getClass) =>
-              val catalogOptions = provider.asInstanceOf[SupportsCatalogOptions]
-              val ident = catalogOptions.extractIdentifier(dsOptions)
+              val supportsExtract = provider.asInstanceOf[SupportsCatalogOptions]
+              val ident = supportsExtract.extractIdentifier(dsOptions)
               val sessionState = df.sparkSession.sessionState
               val catalog = CatalogV2Util.getTableProviderCatalog(
-                catalogOptions, sessionState.catalogManager, dsOptions)
+                supportsExtract, sessionState.catalogManager, dsOptions)
 
               val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
 
