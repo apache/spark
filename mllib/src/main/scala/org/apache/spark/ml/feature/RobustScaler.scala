@@ -189,19 +189,18 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
       vectors: RDD[Vector],
       numFeatures: Int,
       relativeError: Double): RDD[(Int, QuantileSummaries)] = {
-    vectors.mapPartitions { iter =>
-      if (iter.hasNext) {
-        iter.flatMap { vec =>
-          Iterator.range(0, numFeatures).map(i => (i, vec(i))).filterNot(_._2.isNaN)
-          // add NaN for each feature as the indication of the end of partition
-        } ++ Iterator.range(0, numFeatures).map((_, Double.NaN))
-      } else Iterator.empty
+    // TODO: add op like aggregateByKeyWithinPartitions to compress
+    //  QuantileSummaries ahead of merge and query
+    vectors.flatMap { vec =>
+      Iterator.range(0, numFeatures)
+        .map(i => (i, vec(i)))
+        .filterNot(_._2.isNaN)
     }.aggregateByKey(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))(
       // compress the QuantileSummaries at the end of partition
-      seqOp = (s, v) => if (v.isNaN) s.compress else s.insert(v),
-      combOp = (s1, s2) => s1.merge(s2)
-    )
+      seqOp = (s, v) => s.insert(v),
+      combOp = (s1, s2) => s1.compress.merge(s2.compress)
+    ).mapValues(_.compress)
   }
 
   override def load(path: String): RobustScaler = super.load(path)
