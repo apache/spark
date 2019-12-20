@@ -62,7 +62,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   def testWithDifferentCatalogs(withCatalogOption: Option[String]): Unit = {
     Seq(SaveMode.ErrorIfExists, SaveMode.Ignore).foreach { saveMode =>
-      test(s"save works with $saveMode - no table, no partitioning, session catalog") {
+      test(s"save works with $saveMode - no table, no partitioning, session catalog, " +
+           s"withCatalog: ${withCatalogOption.isDefined}") {
         val df = spark.range(10)
         val dfw = df.write.format(format).mode(saveMode).option("name", "t1")
         withCatalogOption.foreach(cName => dfw.option("catalog", cName))
@@ -78,7 +79,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
         checkAnswer(dfr.load(), df.toDF())
       }
 
-      test(s"save works with $saveMode - no table, with partitioning, session catalog") {
+      test(s"save works with $saveMode - no table, with partitioning, session catalog, " +
+          s"withCatalog: ${withCatalogOption.isDefined}") {
         val df = spark.range(10).withColumn("part", 'id % 5)
         val dfw = df.write.format(format).mode(saveMode).option("name", "t1").partitionBy("part")
         withCatalogOption.foreach(cName => dfw.option("catalog", cName))
@@ -97,7 +99,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       }
     }
 
-    test("save fails with ErrorIfExists if table exists") {
+    test(s"save fails with ErrorIfExists if table exists, withCatalog: ${withCatalogOption.isDefined}") {
       sql("create table t1 (id bigint) using foo")
       val df = spark.range(10)
       intercept[TableAlreadyExistsException] {
@@ -107,7 +109,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       }
     }
 
-    test("Ignore mode if table exists") {
+    test(s"Ignore mode if table exists, withCatalog: ${withCatalogOption.isDefined}") {
       sql("create table t1 (id bigint) using foo")
       val df = spark.range(10).withColumn("part", 'id % 5)
       intercept[TableAlreadyExistsException] {
