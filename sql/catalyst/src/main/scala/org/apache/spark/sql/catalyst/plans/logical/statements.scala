@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedNamespace, ViewType}
+import org.apache.spark.sql.catalyst.analysis.ViewType
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -391,8 +391,10 @@ case class AlterNamespaceSetPropertiesStatement(
  * ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command, as parsed from SQL.
  */
 case class AlterNamespaceSetLocationStatement(
-    namespace: Seq[String],
-    location: String) extends ParsedStatement
+    namespace: LogicalPlan,
+    location: String) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
 /**
  * A SHOW NAMESPACES statement, as parsed from SQL.
