@@ -555,6 +555,11 @@ private[ml] object SummaryBuilderImpl extends Logging {
     def count: Long = totalCnt
 
     /**
+     * Sum of weights.
+     */
+    def weightSum: Double = totalWeightSum
+
+    /**
      * Number of nonzero elements in each dimension.
      *
      */

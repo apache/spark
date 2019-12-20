@@ -166,6 +166,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     transformSchema(dataset.schema, logging = true)
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val instances = extractWeightedLabeledPoints(dataset)
+    val weightSum = instances.map(_._3).reduce(_ + _)
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -173,6 +174,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, featureIndex, isotonic)
     instr.logNumFeatures(1)
+    instr.logSumOfWeights(weightSum)
 
     val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonic))
     val oldModel = isotonicRegression.run(instances)

@@ -199,6 +199,7 @@ class NaiveBayes @Since("1.5.0") (
     val numLabels = aggregated.length
     instr.logNumClasses(numLabels)
     val numDocuments = aggregated.map(_._2).sum
+    instr.logSumOfWeights(numDocuments)
 
     val labelArray = new Array[Double](numLabels)
     val piArray = new Array[Double](numLabels)
@@ -280,6 +281,7 @@ class NaiveBayes @Since("1.5.0") (
     instr.logNumClasses(numLabels)
 
     val numInstances = aggregated.map(_._2).sum
+    instr.logSumOfWeights(numInstances)
 
     // If the ratio of data variance between dimensions is too small, it
     // will cause numerical errors. To address this, we artificially

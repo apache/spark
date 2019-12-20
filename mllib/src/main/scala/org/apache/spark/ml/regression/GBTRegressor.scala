@@ -182,6 +182,12 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval,
       featureSubsetStrategy, validationIndicatorCol, validationTol)
 
+    var weightSum = trainDataset.map(_.weight).reduce(_ + _)
+    if (validationDataset != null) {
+      weightSum += validationDataset.map(_.weight).reduce(_ + _)
+    }
+    instr.logSumOfWeights(weightSum)
+
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
     val (baseLearners, learnerWeights) = if (withValidation) {

@@ -126,6 +126,8 @@ class DecisionTreeClassifier @Since("1.4.0") (
     }
     validateNumClasses(numClasses)
     val instances = extractInstances(dataset, numClasses)
+    val weightSum = instances.map(_.weight).reduce(_ + _)
+    instr.logSumOfWeights(weightSum)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
