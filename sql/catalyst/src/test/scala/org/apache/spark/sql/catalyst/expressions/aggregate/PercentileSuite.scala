@@ -267,8 +267,8 @@ class PercentileSuite extends SparkFunSuite {
         case _ => fail()
       }
     }
-
   }
+
   test("nulls in percentage expression") {
 
     assert(new Percentile(
