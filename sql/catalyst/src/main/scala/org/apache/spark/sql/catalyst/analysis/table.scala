@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
 
-case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: NamedRelation)
+case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: Table)
   extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }

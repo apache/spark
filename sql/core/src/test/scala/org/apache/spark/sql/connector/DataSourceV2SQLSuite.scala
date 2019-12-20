@@ -1930,6 +1930,8 @@ class DataSourceV2SQLSuite
   }
 
   test("COMMENT ON NAMESPACE") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     // Session catalog is used.
     sql(s"CREATE NAMESPACE ns")
     checkNamespaceComment("ns", "minor revision")
@@ -1955,6 +1957,8 @@ class DataSourceV2SQLSuite
   }
 
   test("COMMENT ON TABLE") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     // Session catalog is used.
     withTable("t") {
       sql("CREATE TABLE t(k int) USING json")
@@ -1971,7 +1975,16 @@ class DataSourceV2SQLSuite
       checkTableComment("testcat.ns1.ns2.t", null)
       checkTableComment("testcat.ns1.ns2.t", "NULL")
     }
+
     intercept[AnalysisException](sql(s"COMMENT ON TABLE abc.xyz IS NULL"))
+    // V2 non-session catalog is used.
+    val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+    withTempView("v") {
+      sql("create global temp view v as select 1")
+      val e = intercept[AnalysisException](sql(s"COMMENT ON TABLE global_temp.v IS NULL"))
+      assert(e.getMessage.contains("views"))
+    }
   }
 
   private def checkTableComment(tableName: String, comment: String): Unit = {

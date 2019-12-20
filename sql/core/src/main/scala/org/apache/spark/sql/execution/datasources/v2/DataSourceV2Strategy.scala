@@ -218,9 +218,12 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         namespace,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
-    case CommentOnTable(ResolvedTable(catalog, identifier, _), comment) =>
-      val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
-      AlterTableExec(catalog, identifier, Seq(changes)) :: Nil
+    case CommentOnTable(plan, comment) => plan match {
+      case ResolvedTable(catalog, identifier, _) =>
+        val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
+        AlterTableExec(catalog, identifier, Seq(changes)) :: Nil
+      case _ => throw new AnalysisException("COMMENT ON TABLE does not support views.")
+    }
 
     case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
       CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil
