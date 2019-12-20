@@ -454,7 +454,7 @@ class Analyzer(
         gid: Attribute): LogicalPlan = {
       // Change the nullability of group by aliases if necessary. For example, if we have
       // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
-      // should change the nullabilty of b to be TRUE.
+      // should change the nullability of b to be TRUE.
       // TODO: For Cube/Rollup just set nullability to be `true`.
       val expandedAttributes = groupByAliases.map { alias =>
         if (selectedGroupByExprs.exists(!_.contains(alias.child))) {
@@ -546,7 +546,26 @@ class Analyzer(
       // that will only be used for the intended purpose.
       val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
 
-      val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
+      // If necessary, removes duplicate grouping sets
+      val hasDuplicateGroups = selectedGroupByExprs.size !=
+        selectedGroupByExprs.map(_.map(_.semanticHash()).toSet).distinct.size
+      val distinctGroupingSets = if (hasDuplicateGroups) {
+        val groupHashSet = mutable.Set[Set[Int]]()
+        val initSet = mutable.ArrayBuffer[Seq[Expression]]()
+        selectedGroupByExprs.foldLeft(initSet) { case (b, gs) =>
+          val groupHash = gs.map(_.semanticHash()).toSet
+          if (!groupHashSet.contains(groupHash)) {
+            groupHashSet += groupHash
+            b += gs
+          } else {
+            b
+          }
+        }
+      } else {
+        selectedGroupByExprs
+      }
+
+      val expand = constructExpand(distinctGroupingSets, child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 
       val aggregations = constructAggregateExprs(

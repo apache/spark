@@ -110,8 +110,8 @@ SELECT a + b, b, sum(c) FROM (VALUES (1,1,1),(2,2,2)) AS t(a,b,c) GROUP BY GROUP
 -- !query 10 schema
 struct<(a + b):int,b:int,sum(c):bigint>
 -- !query 10 output
-2	NULL	2
-4	NULL	4
+2	NULL	1
+4	NULL	2
 NULL	1	1
 NULL	2	2
 
