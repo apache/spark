@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenerator, CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils, quoteIdentifier}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the expressions to extract values out of complex types.
@@ -62,6 +63,17 @@ object ExtractValue {
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
 
       case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
+
+      case (StringType, NonNullLiteral(v: UTF8String, StringType)) =>
+        val path = v.toString
+        child match {
+          case GetJsonObject(c, NonNullLiteral(existingPath: UTF8String, StringType)) =>
+            val extractPath = existingPath.toString + "." + path
+            GetJsonObject(c, Literal(UTF8String.fromString(extractPath), StringType))
+          case other =>
+            val extractPath = "$." + path
+            GetJsonObject(other, Literal(UTF8String.fromString(extractPath), StringType))
+        }
 
       case (otherType, _) =>
         val errorMsg = otherType match {

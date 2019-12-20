@@ -68,6 +68,45 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       expected)
   }
 
+  test("json parsing through dot notation") {
+    val df: DataFrame = tuples.toDF("key", "jstring")
+    val expected =
+      Row("1", "value1", "value2", "3", null, "5.23") ::
+          Row("2", "value12", "2", "value3", "4.01", null) ::
+          Row("3", "value13", "2", "value33", "value44", "5.01") ::
+          Row("4", null, null, null, null, null) ::
+          Row("5", "", null, null, null, null) ::
+          Row("6", null, null, null, null, null) ::
+          Nil
+
+    checkAnswer(
+      df.select($"key", $"jstring.f1", $"jstring.f2", $"jstring.f3", $"jstring.f4", $"jstring.f5"),
+      expected)
+
+    checkAnswer(
+      df.selectExpr("key", "jstring.f1", "jstring.f2", "jstring.f3", "jstring.f4", "jstring.f5"),
+      expected)
+
+    val df2 = Seq(("7",
+        """{"a":{"b": "c", "d":{"f1": "value1", "f3": 3, "f5": 5.23}}, "e": 1}""")
+    ).toDF("key", "jstring")
+
+    val res = df2.select($"key", $"jstring.a.b", $"jstring.a.d", $"jstring.a.d.f1",
+      $"jstring.a.d.f2", $"jstring.a.d.f3", $"jstring.a.d.f5", $"jstring.e")
+
+    checkAnswer(
+      df2.select($"key", $"jstring.a.b", $"jstring.a.d", $"jstring.a.d.f1", $"jstring.a.d.f2",
+        $"jstring.a.d.f3", $"jstring.a.d.f5", $"jstring.e"),
+      Row("7", "c", """{"f1":"value1","f3":3,"f5":5.23}""", "value1", null,
+        "3", "5.23", "1"))
+
+    checkAnswer(
+      df2.selectExpr("key", "jstring.a.b", "jstring.a.d", "jstring.a.d.f1", "jstring.a.d.f2",
+        "jstring.a.d.f3", "jstring.a.d.f5", "jstring.e"),
+      Row("7", "c", """{"f1":"value1","f3":3,"f5":5.23}""", "value1", null,
+        "3", "5.23", "1"))
+  }
+
   test("json_tuple select") {
     val df: DataFrame = tuples.toDF("key", "jstring")
     val expected =
