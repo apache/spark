@@ -389,7 +389,7 @@ private[spark] class DAGScheduler(
     val rdd = shuffleDep.rdd
 
     // TODO - need to make sure RDD across stages get profile in both - like groupby
-    // is this a ShuffledRDD?
+    // TODO - later do we want to track the merged so we don't recreate it
     val resourceProfile = mergeResourceProfilesForStage(rdd)
     // this ResourceProfile could be different if it was merged so we have to add it to
     // our ResourceProfileManager
@@ -524,7 +524,8 @@ private[spark] class DAGScheduler(
       callSite: CallSite): ResultStage = {
     val resourceProfile = mergeResourceProfilesForStage(rdd)
     // this ResourceProfile could be different if it was merged so we have to add it to
-    // our ResourceProfileManager
+    // our ResourceProfileManager.
+    // TODO - later do we want to track the merged so we don't recreate it
     sc.resourceProfileManager.addResourceProfile(resourceProfile)
 
     checkBarrierStageWithDynamicAllocation(rdd)

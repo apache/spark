@@ -486,7 +486,7 @@ private[spark] class ExecutorAllocationManager(
       math.min(numExecutorsTargetPerResourceProfileId(rpId), maxNumExecutors), minNumExecutors)
 
     val delta = numExecutorsTargetPerResourceProfileId(rpId) - oldNumExecutorsTarget
-    logWarning("add executors delta is: " + delta + " old is: " + oldNumExecutorsTarget)
+    // logWarning("add executors delta is: " + delta + " old is: " + oldNumExecutorsTarget)
 
     // If our target has not changed, do not send a message
     // to the cluster manager and reset our exponential growth
