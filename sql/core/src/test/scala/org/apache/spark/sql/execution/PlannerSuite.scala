@@ -435,7 +435,8 @@ class PlannerSuite extends SharedSparkSession {
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assert(outputPlan.find {
       case ShuffleExchangeExec(_: RoundRobinPartitioning, _, _) => true
-      case _ => false}.isEmpty,
+      case _ => false
+    }.isEmpty,
       "RoundRobinPartitioning should be changed to RangePartitioning")
   }
 
@@ -453,7 +454,8 @@ class PlannerSuite extends SharedSparkSession {
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assert(outputPlan.find {
       case ShuffleExchangeExec(_: HashPartitioning, _, _) => true
-      case _ => false}.isEmpty,
+      case _ => false
+    }.isEmpty,
       "HashPartitioning should be changed to RangePartitioning")
   }
 
