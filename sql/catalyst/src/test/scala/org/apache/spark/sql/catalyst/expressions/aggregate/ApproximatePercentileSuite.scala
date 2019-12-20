@@ -314,6 +314,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       }
     }
   }
+
   test("ApproximatePercentile: nulls in percentage expression") {
 
     assert(new ApproximatePercentile(

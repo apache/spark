@@ -130,6 +130,8 @@ case class Percentile(
       // percentageExpression must be foldable
       TypeCheckFailure("The percentage(s) must be a constant literal, " +
         s"but got $percentageExpression")
+    } else if (percentages == null) {
+      TypeCheckFailure("Percentage value must not be null")
     } else if (percentages.exists(percentage => percentage < 0.0 || percentage > 1.0)) {
       // percentages(s) must be in the range [0.0, 1.0]
       TypeCheckFailure("Percentage(s) must be between 0.0 and 1.0, " +

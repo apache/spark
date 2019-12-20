@@ -270,16 +270,22 @@ class PercentileSuite extends SparkFunSuite {
 
   }
   test("nulls in percentage expression") {
-    val nullPercentageExprs = Seq(Literal(null), CreateArray(Seq(0.1D, null).map(Literal(_))))
 
-    nullPercentageExprs.foreach {
-      percentageExpression =>
+    assert(new Percentile(
+      AttributeReference("a", DoubleType)(),
+      percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
+      TypeCheckFailure("Percentage value must not be null"))
+
+    val nullPercentageExprs =
+      Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))
+
+    nullPercentageExprs.foreach { percentageExpression =>
         val wrongPercentage = new Percentile(
           AttributeReference("a", DoubleType)(),
           percentageExpression = percentageExpression)
         assert(
           wrongPercentage.checkInputDataTypes() match {
-            case TypeCheckFailure(msg) if msg.contains("argument 2 requires") => true
+            case TypeCheckFailure(msg) if msg.contains("argument 2 requires array<double>") => true
             case _ => false
           })
     }
