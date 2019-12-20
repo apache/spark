@@ -2541,9 +2541,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       properties += SupportsNamespaces.PROP_LOCATION -> _
     }
 
-    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
     CreateNamespaceStatement(
-      UnresolvedNamespace(nameParts),
+      visitMultipartIdentifier(ctx.multipartIdentifier),
       ctx.EXISTS != null,
       properties)
   }
