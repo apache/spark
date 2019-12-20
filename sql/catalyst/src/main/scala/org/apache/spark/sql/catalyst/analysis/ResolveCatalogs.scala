@@ -194,7 +194,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         if !isSessionCatalog(catalog) =>
       CreateNamespace(catalog.asNamespaceCatalog, ns, c.ifNotExists, c.properties)
 
-    case DropNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), ifExists, cascade) =>
+    case DropNamespaceStatement(ResolvedNamespace(catalog, ns), ifExists, cascade)
+        if !isSessionCatalog(catalog) =>
       DropNamespace(catalog, ns, ifExists, cascade)
 
     case DescribeNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), extended) =>

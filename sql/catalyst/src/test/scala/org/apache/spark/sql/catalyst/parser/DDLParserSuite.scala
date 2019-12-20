@@ -1190,23 +1190,28 @@ class DDLParserSuite extends AnalysisTest {
   test("drop namespace") {
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = false))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c RESTRICT"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
 
     comparePlans(
       parsePlan("DROP NAMESPACE IF EXISTS a.b.c CASCADE"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = true))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = true))
 
     comparePlans(
       parsePlan("DROP NAMESPACE a.b.c CASCADE"),
-      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = true))
+      DropNamespaceStatement(
+        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = true))
   }
 
   test("set namespace properties") {
