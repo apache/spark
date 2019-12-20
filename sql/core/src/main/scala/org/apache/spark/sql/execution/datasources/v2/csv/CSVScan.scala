@@ -39,7 +39,7 @@ case class CSVScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,
-    filters: Seq[Filter])
+    pushedFilters: Array[Filter])
   extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options) {
 
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
@@ -87,6 +87,20 @@ case class CSVScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     CSVPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, filters)
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, pushedFilters)
+  }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case o: CSVScan =>
+      fileIndex == o.fileIndex && dataSchema == o.dataSchema &&
+        readDataSchema == o.readDataSchema && readPartitionSchema == o.readPartitionSchema &&
+        options == o.options && equivalentFilters(pushedFilters, o.pushedFilters)
+    case _ => false
+  }
+
+  override def hashCode(): Int = getClass.hashCode()
+
+  override def description(): String = {
+    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
   }
 }
