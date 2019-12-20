@@ -530,15 +530,14 @@ Refer to the [R API docs](api/R/spark.naiveBayes.html) for more details.
 
 ## Factorization machines classifier
 
-Factorization machines are able to estimate interactions between features even in problems with huge sparsity.
 For more background and more details about the implementation of factorization machines,
-refer to [Factorization Machines section](ml-classification-regression.html#factorization-machines).
+refer to the [Factorization Machines section](ml-classification-regression.html#factorization-machines).
 
 **Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets,
 train on the first dataset, and then evaluate on the held-out test set.
-We scale features between 0 and 1 to prevent the exploding gradient problem.
+We scale features to be between 0 and 1 to prevent the exploding gradient problem.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1053,15 +1052,14 @@ Refer to the [`IsotonicRegression` R API docs](api/R/spark.isoreg.html) for more
 
 ## Factorization machines regressor
 
-Factorization machines are able to estimate interactions between features even in problems with huge sparsity.
 For more background and more details about the implementation of factorization machines,
-refer to [Factorization Machines section](ml-classification-regression.html#factorization-machines).
+refer to the [Factorization Machines section](ml-classification-regression.html#factorization-machines).
 
 **Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets,
 train on the first dataset, and then evaluate on the held-out test set.
-We scale features between 0 and 1 to prevent the exploding gradient problem.
+We scale features to be between 0 and 1 to prevent the exploding gradient problem.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1130,12 +1128,12 @@ $$
   \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
 $$
 
-First two terms denote intercept and linear term (as same as linear regression),
-and last term denotes pairwise interactions term. $$v_i$$ describes the i-th variable
+The first two terms denote intercept and linear term (same as in linear regression),
+and the last term denotes pairwise interactions term. $$v_i$$ describes the i-th variable
 with k factors.
 
-FM can be used directly as the regression and optimization criterion is mean square error. FM also can be used as
-the binary classification through wrap sigmoid function, the optimization criterion is logit loss.
+FM can be used for regression and optimization criterion is mean square error. FM also can be used for
+binary classification through sigmoid function. The optimization criterion is logistic loss.
 
 The pairwise interactions can be reformulated:
 
@@ -1148,8 +1146,8 @@ $$
 
 This equation has only linear complexity in both k and n - i.e. its computation is in $$O(kn)$$.
 
-In general, in order to prevent the exploding gradient problem, it is best to scale continuous features between 0 and 1,
-or bin the continuous features and one-hot.
+In general, in order to prevent the exploding gradient problem, it is best to scale continuous features to be between 0 and 1,
+or bin the continuous features and one-hot encode them.
 
 # Decision trees
 
