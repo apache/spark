@@ -45,16 +45,23 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    * An execution strategy for rules that indicates the maximum number of executions. If the
    * execution reaches fix point (i.e. converge) before maxIterations, it will stop.
    */
-  abstract class Strategy { def maxIterations: Int }
+  abstract class Strategy {
+
+    /** The maximum number of executions. */
+    def maxIterations: Int
+
+    /** Whether to throw exception when exceeding the maximum number. */
+    def errorOnExceed: Boolean
+  }
 
   /** A strategy that is run once and idempotent. */
-  case object Once extends Strategy { val maxIterations = 1 }
+  case object Once extends Strategy { val maxIterations = 1; val errorOnExceed = false }
 
   /**
    * A strategy that runs until fix point or maxIterations times, whichever comes first.
    * Especially, a FixedPoint(1) batch is supposed to run only once.
    */
-  case class FixedPoint(maxIterations: Int) extends Strategy
+  case class FixedPoint(maxIterations: Int, errorOnExceed: Boolean = false) extends Strategy
 
   /** A batch of rules. */
   protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
@@ -156,7 +163,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
             val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}"
-            if (Utils.isTesting) {
+            if (batch.strategy.errorOnExceed) {
               throw new TreeNodeException(curPlan, message, null)
             } else {
               logWarning(message)
