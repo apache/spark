@@ -200,6 +200,14 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("a not like 'pattern%' escape ''", message)
   }
 
+  test("similar to escape expressions") {
+    val message = "Escape string must contains only one character."
+    intercept("a similar to 'pattern%' escape '##'", message)
+    intercept("a similar to 'pattern%' escape ''", message)
+    intercept("a not similar to 'pattern%' escape '\"/'", message)
+    intercept("a not similar to 'pattern%' escape ''", message)
+  }
+
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
     val conf = new SQLConf()
     conf.setConfString(SQLConf.ESCAPED_STRING_LITERALS.key, "true")
