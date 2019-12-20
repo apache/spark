@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsCatalogOptions, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsCatalogOptions}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
