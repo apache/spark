@@ -62,10 +62,13 @@ private[kafka010] class MockScheduler(val time: Time) extends Scheduler {
       delay: Long = 0,
       period: Long = -1,
       unit: TimeUnit = TimeUnit.MILLISECONDS): ScheduledFuture[_] = synchronized {
+    val runnable = new Runnable {
+      override def run(): Unit = fun()
+    }
     if (period >= 0) {
-      scheduler.scheduleAtFixedRate(() => fun(), delay, period, unit)
+      scheduler.scheduleAtFixedRate(runnable, delay, period, unit)
     } else {
-      scheduler.schedule(() => fun(), delay, unit)
+      scheduler.schedule(runnable, delay, unit)
     }
   }
 }
