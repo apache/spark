@@ -3109,6 +3109,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("test 2 resource profiles errors by default") {
+    import org.apache.spark.resource._
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfile().require(ereqs).require(treqs)
@@ -3167,7 +3168,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val treqs4 = new TaskResourceRequests().cpus(2)
     val rp4 = new ImmutableResourceProfile(ereqs4.requests, treqs4.requests)
 
-    mergedRp = scheduler.mergeResourceProfiles(rp1, rp2)
+    mergedRp = scheduler.mergeResourceProfiles(rp3, rp4)
 
     assert(mergedRp.getTaskCpus.get == 2)
     assert(mergedRp.getExecutorCores.get == 2)
@@ -3186,7 +3187,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val treqs6 = new TaskResourceRequests().cpus(2).resource(FPGA, 1)
     val rp6 = new ImmutableResourceProfile(ereqs6.requests, treqs6.requests)
 
-    mergedRp = scheduler.mergeResourceProfiles(rp1, rp2)
+    mergedRp = scheduler.mergeResourceProfiles(rp5, rp6)
 
     assert(mergedRp.getTaskCpus.get == 2)
     assert(mergedRp.getExecutorCores.get == 8)
@@ -3196,9 +3197,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mergedRp.executorResources.get(GPU).get.discoveryScript == "disc")
     assert(mergedRp.taskResources.get(GPU).get.amount == 1)
     assert(mergedRp.executorResources.get(FPGA).get.amount == 2)
-    assert(mergedRp.executorResources.get(FPGA).get.discoveryScript == "Fdisc")
+    assert(mergedRp.executorResources.get(FPGA).get.discoveryScript == "fdisc")
     assert(mergedRp.taskResources.get(FPGA).get.amount == 1)
-    assert(mergedRp.executorResources.get(ResourceProfile.MEMORY).get.amount == 3096)
+    assert(mergedRp.executorResources.get(ResourceProfile.MEMORY).get.amount == 3072)
     assert(mergedRp.executorResources.get(ResourceProfile.PYSPARK_MEM).get.amount == 2048)
     assert(mergedRp.executorResources.get(ResourceProfile.OVERHEAD_MEM).get.amount == 1024)
   }
