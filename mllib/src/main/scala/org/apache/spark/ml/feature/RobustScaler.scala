@@ -117,6 +117,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
  * Typically this is done by removing the mean and scaling to unit variance. However,
  * outliers can often influence the sample mean / variance in a negative way.
  * In such cases, the median and the quantile range often give better results.
+ * Note that NaN values are ignored in the computation of medians and ranges.
  */
 @Since("3.0.0")
 class RobustScaler (override val uid: String)
