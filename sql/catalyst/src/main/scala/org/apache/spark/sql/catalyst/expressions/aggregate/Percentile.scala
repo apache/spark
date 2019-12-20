@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.util
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
@@ -93,12 +93,13 @@ case class Percentile(
 
   @transient
   private lazy val percentages = percentageExpression.eval() match {
-      case num: Double => Seq(num)
-      case arrayData: ArrayData => arrayData.toDoubleArray().toSeq
+    case null => null
+    case num: Double => Array(num)
+    case arrayData: ArrayData => arrayData.toDoubleArray()
   }
 
   override def children: Seq[Expression] = {
-    child  :: percentageExpression ::frequencyExpression :: Nil
+    child :: percentageExpression :: frequencyExpression :: Nil
   }
 
   // Returns null for empty inputs
@@ -111,7 +112,7 @@ case class Percentile(
 
   override def inputTypes: Seq[AbstractDataType] = {
     val percentageExpType = percentageExpression.dataType match {
-      case _: ArrayType => ArrayType(DoubleType)
+      case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
     Seq(NumericType, percentageExpType, IntegralType)
