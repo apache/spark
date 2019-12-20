@@ -148,13 +148,17 @@ case class AdaptiveSparkPlanExec(
 
           // Start materialization of all new stages.
           result.newStages.foreach { stage =>
-            stage.materialize().onComplete { res =>
-              if (res.isSuccess) {
-                events.offer(StageSuccess(stage, res.get))
-              } else {
-                events.offer(StageFailure(stage, res.failed.get))
-              }
-            }(AdaptiveSparkPlanExec.executionContext)
+            try {
+              stage.materialize().onComplete { res =>
+                if (res.isSuccess) {
+                  events.offer(StageSuccess(stage, res.get))
+                } else {
+                  events.offer(StageFailure(stage, res.failed.get))
+                }
+              }(AdaptiveSparkPlanExec.executionContext)
+            } catch {
+              case e: Throwable => events.offer(StageFailure(stage, e))
+            }
           }
         }
 
