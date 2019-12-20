@@ -557,7 +557,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("AQE should catch the exceptions when doing materialize") {
+  test("SPARK-30291: AQE should catch the exceptions when doing materialize") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTable("bucketed_table") {
