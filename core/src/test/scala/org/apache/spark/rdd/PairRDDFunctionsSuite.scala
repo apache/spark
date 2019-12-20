@@ -49,6 +49,23 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(valuesFor5.toList.sorted === List(1, 3))
   }
 
+  test("aggregateByKeyWithinPartitions") {
+    val maps = sc.parallelize(Seq(0, 1), 2).mapPartitionsWithIndex {
+      case (pid, _) => pid match {
+        case 0 => Seq((0, 0), (2, 1), (2, 2), (0, 1)).iterator
+        case 1 => Seq((0, 2), (1, 1), (2, 2), (0, 3)).iterator
+      }
+    }.aggregateByKeyWithinPartitions(0)(
+      seqOp = _ + _,
+      combOp = _ + _
+    ).mapPartitions { iter => Iterator.single(iter.toMap)
+    }.collect()
+
+    assert(maps.length === 2)
+    assert(maps(0) === Map(0 -> 1, 2 -> 3))
+    assert(maps(1) === Map(0 -> 5, 1 -> 1, 2 -> 2))
+  }
+
   test("groupByKey") {
     val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)))
     val groups = pairs.groupByKey().collect()
@@ -207,6 +224,21 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     }
     visit(sums)
     assert(deps.size === 2) // ShuffledRDD, ParallelCollection.
+  }
+
+  test("reduceByKeyWithinPartitions") {
+    val maps = sc.parallelize(Seq(0, 1), 2).mapPartitionsWithIndex {
+      case (pid, _) => pid match {
+        case 0 => Seq((0, 0), (2, 1), (2, 2), (0, 1)).iterator
+        case 1 => Seq((0, 2), (1, 1), (2, 2), (0, 3)).iterator
+      }
+    }.reduceByKeyWithinPartitions { _ + _
+    }.mapPartitions { iter => Iterator.single(iter.toMap)
+    }.collect()
+
+    assert(maps.length === 2)
+    assert(maps(0) === Map(0 -> 1, 2 -> 3))
+    assert(maps(1) === Map(0 -> 5, 1 -> 1, 2 -> 2))
   }
 
   test("countApproxDistinctByKey") {
