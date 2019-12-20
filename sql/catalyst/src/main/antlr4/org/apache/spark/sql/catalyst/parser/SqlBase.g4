@@ -734,7 +734,8 @@ predicate
     | NOT? kind=IN '(' expression (',' expression)* ')'
     | NOT? kind=IN '(' query ')'
     | NOT? kind=RLIKE pattern=valueExpression
-    | NOT? kind=(LIKE | SIMILAR) TO pattern=valueExpression (ESCAPE escapeChar=STRING)?
+    | NOT? kind=LIKE pattern=valueExpression (ESCAPE escapeChar=STRING)?
+    | NOT? kind=SIMILAR TO pattern=valueExpression (ESCAPE escapeChar=STRING)?
     | IS NOT? kind=NULL
     | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
