@@ -1233,6 +1233,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_STRING_NESTED_FIELD_ACCESS =
+    buildConf("spark.sql.semiStructured.string.enabled")
+        .doc("Whether to treat a string column as a JSON string if someone wants to access a " +
+          "nested field from it.")
+        .booleanConf
+        .createWithDefault(true)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")

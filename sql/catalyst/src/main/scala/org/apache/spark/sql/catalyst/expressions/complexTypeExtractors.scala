@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenerator, CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils, quoteIdentifier}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -64,7 +65,7 @@ object ExtractValue {
 
       case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
 
-      case (StringType, NonNullLiteral(v: UTF8String, StringType)) =>
+      case (StringType, NonNullLiteral(v: UTF8String, StringType)) if enableNestedStringAccess =>
         val path = v.toString
         child match {
           case GetJsonObject(c, NonNullLiteral(existingPath: UTF8String, StringType)) =>
@@ -84,6 +85,10 @@ object ExtractValue {
         }
         throw new AnalysisException(errorMsg)
     }
+  }
+
+  private def enableNestedStringAccess: Boolean = {
+    SQLConf.get.getConf(SQLConf.ENABLE_STRING_NESTED_FIELD_ACCESS)
   }
 
   /**
