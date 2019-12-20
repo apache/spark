@@ -218,12 +218,9 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         namespace,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
-    case CommentOnTable(
-        ResolvedTable(catalog, r: DataSourceV2Relation), comment) =>
+    case CommentOnTable(ResolvedTable(catalog, identifier, _), comment) =>
       val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
-      val nameParts = r.name.stripPrefix(catalog.asTableCatalog.name() + ".").split('.')
-      val (namespaces, table) = (nameParts.init, nameParts.last)
-      AlterTableExec(catalog, Identifier.of(namespaces, table), Seq(changes)) :: Nil
+      AlterTableExec(catalog, identifier, Seq(changes)) :: Nil
 
     case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
       CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil

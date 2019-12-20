@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
-import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 
-case class ResolvedTable(catalog: TableCatalog, table: NamedRelation)
+case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: NamedRelation)
   extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
 
-case class UnresolvedV2Table(multipartIdentifier: Seq[String]) extends LeafNode {
+case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
 
   override def output: Seq[Attribute] = Nil

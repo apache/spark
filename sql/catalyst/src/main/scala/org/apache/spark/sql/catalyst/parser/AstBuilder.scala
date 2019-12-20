@@ -3426,6 +3426,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case _ => string(ctx.STRING)
     }
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CommentOnTable(UnresolvedV2Table(nameParts), comment)
+    CommentOnTable(UnresolvedTable(nameParts), comment)
   }
 }
