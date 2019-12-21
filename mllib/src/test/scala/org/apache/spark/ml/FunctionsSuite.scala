@@ -58,9 +58,8 @@ class FunctionsSuite extends MLTest {
       }
       assert(thrown1.getCause.getMessage.contains(
         "function vector_to_array requires a non-null input argument and input type must be " +
-          "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
-          s"but got ${valType}"))
-
+        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
+        s"but got ${valType}"))
     }
   }
 }
