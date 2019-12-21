@@ -19,9 +19,11 @@ package org.apache.spark.util
 
 import java.io.File
 
+import scala.util.Try
+
 import org.apache.spark.SparkFunSuite
 
-class SparkUncaughtExceptionSuite extends SparkFunSuite {
+class SparkUncaughtExceptionHandlerSuite extends SparkFunSuite {
 
   private val sparkHome =
     sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
@@ -32,7 +34,7 @@ class SparkUncaughtExceptionSuite extends SparkFunSuite {
     Utils.executeCommand(
       Seq(s"$sparkHome/bin/spark-class",
         exceptionThrower.getClass.getCanonicalName.dropRight(1), // drops the "$" at the end
-        if (exitOnUncaughtException) "true" else "false"),
+        exitOnUncaughtException.toString),
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
   }
@@ -93,43 +95,62 @@ class ThrowableThrowerThread(t: Throwable,
 
 // Objects to be invoked by spark-class for different Throwable types
 // that SparkUncaughtExceptionHandler handles.  spark-class will exit with
-// exit code dictated by either SparkUncaughtExceptionHandler (SparkExitCode)
-// or main() (0)
+// exit code dictated by either:
+// - SparkUncaughtExceptionHandler (SparkExitCode)
+// - main() (0, or -1 when args is empty)
 
 object RuntimeExceptionThrower {
   def main(args: Array[String]): Unit = {
-    val t = new ThrowableThrowerThread(new RuntimeException, if (args(0) == "true") true else false)
-    t.start()
-    t.join()
-    System.exit(0)
+    if (args.length > 0) {
+      val t = new ThrowableThrowerThread(new RuntimeException,
+        Try(args(0).toBoolean).getOrElse(false))
+      t.start()
+      t.join()
+      System.exit(0)
+    } else {
+      System.exit(-1)
+    }
   }
 }
 
 object OutOfMemoryErrorThrower {
   def main(args: Array[String]): Unit = {
-    val t = new ThrowableThrowerThread(new OutOfMemoryError, if (args(0) == "true") true else false)
-    t.start()
-    t.join()
-    System.exit(0)
+    if (args.length > 0) {
+      val t = new ThrowableThrowerThread(new OutOfMemoryError,
+        Try(args(0).toBoolean).getOrElse(false))
+      t.start()
+      t.join()
+      System.exit(0)
+    } else {
+      System.exit(-1)
+    }
   }
 }
 
 object SparkFatalExceptionThrower {
   def main(args: Array[String]): Unit = {
-    val t = new ThrowableThrowerThread(new SparkFatalException(new RuntimeException),
-      if (args(0) == "true") true else false)
-    t.start()
-    t.join()
-    System.exit(0)
+    if (args.length > 0) {
+      val t = new ThrowableThrowerThread(new SparkFatalException(new RuntimeException),
+        Try(args(0).toBoolean).getOrElse(false))
+      t.start()
+      t.join()
+      System.exit(0)
+    } else {
+      System.exit(-1)
+    }
   }
 }
 
 object SparkFatalExceptionWithOOMThrower {
   def main(args: Array[String]): Unit = {
-    val t = new ThrowableThrowerThread(new SparkFatalException(new OutOfMemoryError),
-      if (args(0) == "true") true else false)
-    t.start()
-    t.join()
-    System.exit(0)
+    if (args.length > 0) {
+      val t = new ThrowableThrowerThread(new SparkFatalException(new OutOfMemoryError),
+        Try(args(0).toBoolean).getOrElse(false))
+      t.start()
+      t.join()
+      System.exit(0)
+    } else {
+      System.exit(-1)
+    }
   }
 }
