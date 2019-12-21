@@ -505,7 +505,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
     testUtils.createTopic(topic)
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
 
-    Seq(SaveMode.Ignore, SaveMode.Overwrite).foreach { mode =>
+    Seq(SaveMode.Overwrite).foreach { mode =>
       val ex = intercept[AnalysisException] {
         df.write
           .format("kafka")

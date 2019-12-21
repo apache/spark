@@ -24,9 +24,9 @@ import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{QueryTest, SaveMode}
+import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsCatalogOptions}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsCatalogOptions, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
@@ -41,8 +41,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   private val catalogName = "testcat"
   private val format = classOf[CatalogSupportingInMemoryTableProvider].getName
 
-  private def catalog(name: String): InMemoryTableSessionCatalog = {
-    spark.sessionState.catalogManager.catalog(name).asInstanceOf[InMemoryTableSessionCatalog]
+  private def catalog(name: String): TableCatalog = {
+    spark.sessionState.catalogManager.catalog(name).asInstanceOf[TableCatalog]
   }
 
   private implicit def stringToIdentifier(value: String): Identifier = {
@@ -53,13 +53,14 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     spark.conf.set(
       V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
     spark.conf.set(
-      s"spark.sql.catalog.$catalogName", classOf[InMemoryTableSessionCatalog].getName)
+      s"spark.sql.catalog.$catalogName", classOf[InMemoryTableCatalog].getName)
   }
 
   override def afterEach(): Unit = {
     super.afterEach()
-    Try(catalog(SESSION_CATALOG_NAME).clearTables())
-    Try(catalog(catalogName).clearTables())
+    Try(catalog(SESSION_CATALOG_NAME).asInstanceOf[InMemoryTableSessionCatalog].clearTables())
+    catalog(catalogName).listTables(Array.empty).foreach(
+      catalog(catalogName).dropTable(_))
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     spark.conf.unset(s"spark.sql.catalog.$catalogName")
   }
@@ -74,15 +75,14 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     dfw.partitionBy(partitionBy: _*).save()
 
     val table = catalog(withCatalogOption.getOrElse(SESSION_CATALOG_NAME)).loadTable("t1")
-    assert(table.name() === "t1", "Table identifier was wrong")
+    val namespace = withCatalogOption.getOrElse("default")
+    assert(table.name() === s"$namespace.t1", "Table identifier was wrong")
     assert(table.partitioning().length === partitionBy.length, "Partitioning did not match")
     assert(table.partitioning().map(_.references().head.fieldNames().head) === partitionBy,
       "Partitioning was incorrect")
     assert(table.schema() === df.schema.asNullable, "Schema did not match")
 
-    val dfr = spark.read.format(format).option("name", "t1")
-    withCatalogOption.foreach(cName => dfr.option("catalog", cName))
-    checkAnswer(dfr.load(), df.toDF())
+    checkAnswer(load("t1", withCatalogOption), df.toDF())
   }
 
   test(s"save works with ErrorIfExists - no table, no partitioning, session catalog") {
@@ -94,11 +94,11 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test(s"save works with Ignore - no table, no partitioning, testcat catalog") {
-    testCreateAndRead(SaveMode.ErrorIfExists, Some(catalogName), Nil)
+    testCreateAndRead(SaveMode.Ignore, Some(catalogName), Nil)
   }
 
   test(s"save works with Ignore - no table, with partitioning, testcat catalog") {
-    testCreateAndRead(SaveMode.ErrorIfExists, Some(catalogName), Seq("part"))
+    testCreateAndRead(SaveMode.Ignore, Some(catalogName), Seq("part"))
   }
 
   test("save fails with ErrorIfExists if table exists - session catalog") {
@@ -111,7 +111,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("save fails with ErrorIfExists if table exists - testcat catalog") {
-    sql(s"create table testcat.t1 (id bigint) using $format")
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
     val df = spark.range(10)
     intercept[TableAlreadyExistsException] {
       val dfw = df.write.format(format).option("name", "t1").option("catalog", catalogName)
@@ -122,27 +122,59 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   test("Ignore mode if table exists - session catalog") {
     sql(s"create table t1 (id bigint) using $format")
     val df = spark.range(10).withColumn("part", 'id % 5)
-    intercept[TableAlreadyExistsException] {
-      val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
-      dfw.save()
-    }
+    val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
+    dfw.save()
 
     val table = catalog(SESSION_CATALOG_NAME).loadTable("t1")
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
     assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+    assert(load("t1", None).count() === 0)
   }
 
   test("Ignore mode if table exists - testcat catalog") {
-    sql(s"create table testcat.t1 (id bigint) using $format")
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
     val df = spark.range(10).withColumn("part", 'id % 5)
-    intercept[TableAlreadyExistsException] {
-      val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
-      dfw.option("catalog", catalogName).save()
-    }
+    val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
+    dfw.option("catalog", catalogName).save()
 
     val table = catalog(catalogName).loadTable("t1")
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
     assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+    assert(load("t1", Some(catalogName)).count() === 0)
+  }
+
+  test("append and overwrite modes - session catalog") {
+    sql(s"create table t1 (id bigint) using $format")
+    val df = spark.range(10)
+    df.write.format(format).option("name", "t1").mode(SaveMode.Append).save()
+
+    checkAnswer(load("t1", None), df.toDF())
+
+    val df2 = spark.range(10, 20)
+    df2.write.format(format).option("name", "t1").mode(SaveMode.Overwrite).save()
+
+    checkAnswer(load("t1", None), df2.toDF())
+  }
+
+  test("append and overwrite modes - testcat catalog") {
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
+    val df = spark.range(10)
+    df.write.format(format).option("name", "t1").option("catalog", catalogName)
+      .mode(SaveMode.Append).save()
+
+    checkAnswer(load("t1", Some(catalogName)), df.toDF())
+
+    val df2 = spark.range(10, 20)
+    df2.write.format(format).option("name", "t1").option("catalog", catalogName)
+      .mode(SaveMode.Overwrite).save()
+
+    checkAnswer(load("t1", Some(catalogName)), df2.toDF())
+  }
+
+  private def load(name: String, catalogOpt: Option[String]): DataFrame = {
+    val dfr = spark.read.format(format).option("name", "t1")
+    catalogOpt.foreach(cName => dfr.option("catalog", cName))
+    dfr.load()
   }
 }
 
