@@ -258,26 +258,42 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      provider.getTable(dsOptions) match {
-        case table: SupportsWrite if table.supports(BATCH_WRITE) =>
-          lazy val relation = DataSourceV2Relation.create(table, dsOptions)
-          mode match {
-            case SaveMode.Append =>
-              checkPartitioningMatchesV2Table(table)
-              runCommand(df.sparkSession, "save") {
-                AppendData.byName(relation, df.logicalPlan, extraOptions.toMap)
-              }
+      mode match {
+        case SaveMode.Append | SaveMode.Overwrite =>
+          val table = provider match {
+            case supportsExtract: SupportsCatalogOptions =>
+              val ident = supportsExtract.extractIdentifier(dsOptions)
+              val sessionState = df.sparkSession.sessionState
+              val catalog = CatalogV2Util.getTableProviderCatalog(
+                supportsExtract, sessionState.catalogManager, dsOptions)
 
-            case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
-              checkPartitioningMatchesV2Table(table)
-              // truncate the table
-              runCommand(df.sparkSession, "save") {
-                OverwriteByExpression.byName(
-                  relation, df.logicalPlan, Literal(true), extraOptions.toMap)
-              }
+              catalog.loadTable(ident)
+            case tableProvider: TableProvider => tableProvider.getTable(dsOptions)
+            case _ =>
+              // Streaming also uses the data source V2 API. So it may be that the data source
+              // implements v2, but has no v2 implementation for batch writes. In that case, we fall
+              // back to saving as though it's a V1 source.
+              return saveToV1Source()
+          }
 
-            case other if classOf[SupportsCatalogOptions].isAssignableFrom(provider.getClass) =>
-              val supportsExtract = provider.asInstanceOf[SupportsCatalogOptions]
+          val relation = DataSourceV2Relation.create(table, dsOptions)
+          checkPartitioningMatchesV2Table(table)
+          if (mode == SaveMode.Append) {
+            runCommand(df.sparkSession, "save") {
+              AppendData.byName(relation, df.logicalPlan, extraOptions.toMap)
+            }
+          } else {
+            // Truncate the table. TableCapabilityCheck will throw a nice exception if this
+            // isn't supported
+            runCommand(df.sparkSession, "save") {
+              OverwriteByExpression.byName(
+                relation, df.logicalPlan, Literal(true), extraOptions.toMap)
+            }
+          }
+
+        case create =>
+          provider match {
+            case supportsExtract: SupportsCatalogOptions =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
               val sessionState = df.sparkSession.sessionState
               val catalog = CatalogV2Util.getTableProviderCatalog(
@@ -293,20 +309,22 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                   df.queryExecution.analyzed,
                   Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
                   extraOptions.toMap,
-                  ignoreIfExists = other == SaveMode.Ignore)
+                  ignoreIfExists = create == SaveMode.Ignore)
               }
-
-            case other =>
-              throw new AnalysisException(s"TableProvider implementation $source cannot be " +
-                s"written with $other mode, please use Append or Overwrite " +
-                "modes instead.")
+            case tableProvider: TableProvider =>
+              if (tableProvider.getTable(dsOptions).supports(BATCH_WRITE)) {
+                throw new AnalysisException(s"TableProvider implementation $source cannot be " +
+                    s"written with $create mode, please use Append or Overwrite " +
+                    "modes instead.")
+              } else {
+                // Streaming also uses the data source V2 API. So it may be that the data source
+                // implements v2, but has no v2 implementation for batch writes. In that case, we
+                // fallback to saving as though it's a V1 source.
+                saveToV1Source()
+              }
           }
-
-        // Streaming also uses the data source V2 API. So it may be that the data source implements
-        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
-        // as though it's a V1 source.
-        case _ => saveToV1Source()
       }
+
     } else {
       saveToV1Source()
     }

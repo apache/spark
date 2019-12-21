@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector
 
+import java.util
+
 import scala.language.implicitConversions
+import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
@@ -25,6 +28,7 @@ import org.apache.spark.sql.{QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsCatalogOptions}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -54,8 +58,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   override def afterEach(): Unit = {
     super.afterEach()
-    catalog(SESSION_CATALOG_NAME).clearTables()
-    catalog(catalogName).clearTables()
+    Try(catalog(SESSION_CATALOG_NAME).clearTables())
+    Try(catalog(catalogName).clearTables())
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     spark.conf.unset(s"spark.sql.catalog.$catalogName")
   }
@@ -98,7 +102,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("save fails with ErrorIfExists if table exists - session catalog") {
-    sql("create table t1 (id bigint) using foo")
+    sql(s"create table t1 (id bigint) using $format")
     val df = spark.range(10)
     intercept[TableAlreadyExistsException] {
       val dfw = df.write.format(format).option("name", "t1")
@@ -107,7 +111,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("save fails with ErrorIfExists if table exists - testcat catalog") {
-    sql("create table t1 (id bigint) using foo")
+    sql(s"create table testcat.t1 (id bigint) using $format")
     val df = spark.range(10)
     intercept[TableAlreadyExistsException] {
       val dfw = df.write.format(format).option("name", "t1").option("catalog", catalogName)
@@ -116,7 +120,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("Ignore mode if table exists - session catalog") {
-    sql("create table t1 (id bigint) using foo")
+    sql(s"create table t1 (id bigint) using $format")
     val df = spark.range(10).withColumn("part", 'id % 5)
     intercept[TableAlreadyExistsException] {
       val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
@@ -129,7 +133,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("Ignore mode if table exists - testcat catalog") {
-    sql("create table t1 (id bigint) using foo")
+    sql(s"create table testcat.t1 (id bigint) using $format")
     val df = spark.range(10).withColumn("part", 'id % 5)
     intercept[TableAlreadyExistsException] {
       val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
