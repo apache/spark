@@ -142,18 +142,6 @@ private[sql] case class SparkUserDefinedFunction(
   }
 }
 
-/**
- * A User Defined Function for wrapping an [[Aggregator]] in a form consumable by Data Frames.
- * Can be either instantiated directly or via registration, for example:
- * {{{
- *   val agg: Aggregator[IN, BUF, OUT] = // typed aggregator
- *   val udaf1 = UserDefinedAggregator(agg)
- *   val udaf2 = spark.udf.registerAggregator("agg", agg)
- * }}}
- *
- * @since 3.0.0
- */
-@Experimental
 private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     aggregator: Aggregator[IN, BUF, OUT],
     inputEncoder: Encoder[IN],
@@ -166,6 +154,7 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     Column(AggregateExpression(scalaAggregator(exprs.map(_.expr)), Complete, isDistinct = false))
   }
 
+  // This is also used by udf.register(...) when it detects a UserDefinedAggregator
   def scalaAggregator(exprs: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
     val iEncoder = inputEncoder.asInstanceOf[ExpressionEncoder[IN]].resolveAndBind()
     ScalaAggregator(exprs, aggregator, iEncoder, nullable, deterministic)

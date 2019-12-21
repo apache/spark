@@ -4230,10 +4230,45 @@ object functions {
   // Scala UDF functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
+  /**
+   * Obtains a [[UserDefinedFunction]] that wraps the given [[Aggregator]]
+   * so that it may be used with untyped Data Frames.
+   * {{{
+   *   val agg = // Aggregator[IN, BUF, OUT]
+   *   spark.udf.register("myAggName", udaf(agg))
+   * }}}
+   *
+   * @tparam IN the aggregator input type
+   * @tparam BUF the aggregating buffer type
+   * @tparam OUT the finalized output type
+   *
+   * @param agg the typed Aggregator
+   *
+   * @return a UserDefinedFunction that can be used as an aggregating expression.
+   * The input encoder is inferred from the input type IN.
+   */
   def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
     udaf(agg, ExpressionEncoder[IN]())
   }
 
+  /**
+   * Obtains a [[UserDefinedFunction]] that wraps the given [[Aggregator]]
+   * so that it may be used with untyped Data Frames.
+   * {{{
+   *   val agg = // Aggregator[IN, BUF, OUT]
+   *   val enc = // Encoder[IN]
+   *   spark.udf.register("myAggName", udaf(agg, enc))
+   * }}}
+   *
+   * @tparam IN the aggregator input type
+   * @tparam BUF the aggregating buffer type
+   * @tparam OUT the finalized output type
+   *
+   * @param agg the typed Aggregator
+   * @param inputEncoder a specific input encoder to use
+   *
+   * @return a UserDefinedFunction that can be used as an aggregating expression
+   */
   def udaf[IN, BUF, OUT](
       agg: Aggregator[IN, BUF, OUT],
       inputEncoder: Encoder[IN]): UserDefinedFunction = {
