@@ -515,7 +515,10 @@ case class ScalaAggregator[IN, BUF, OUT](
     CatalystTypeConverters.createToCatalystConverter(dataType)
   }
 
-  def eval(buffer: BUF): Any = outputToCatalystConverter(agg.finish(buffer))
+  def eval(buffer: BUF): Any = {
+    val row = outputEncoder.toRow(agg.finish(buffer))
+    if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
+  }
 
   private[this] lazy val bufferSerializer = bufferEncoder.namedExpressions
   private[this] lazy val bufferDeserializer = bufferEncoder.resolveAndBind().deserializer
