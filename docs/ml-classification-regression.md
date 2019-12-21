@@ -670,7 +670,7 @@ others.
     <tr>
       <td>Gamma</td>
       <td>Continuous</td>
-      <td>Inverse*, Idenity, Log</td>
+      <td>Inverse*, Identity, Log</td>
     </tr>
     <tr>
       <td>Tweedie</td>
