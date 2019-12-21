@@ -32,7 +32,7 @@ other `SQL` constructs.
 1. [Null handling in comparison operators](#comp-operators)
 2. [Null handling in Logical operators](#logical-operators)
 3. [Null handling in Expressions](#expressions)
-      1. [Null handling in null-in-tolerant expressions](#null-in-tolerant)
+      1. [Null handling in null-intolerant expressions](#null-intolerant)
       2. [Null handling Expressions that can process null value operands](#can-process-null)
       3. [Null handling in built-in aggregate expressions](#built-in-aggregate)
 4. [Null handling in WHERE, HAVING and JOIN conditions](#condition-expressions)
@@ -236,12 +236,12 @@ The comparison operators and logical operators are treated as expressions in
 Spark. Other than these two kinds of expressions, Spark supports other form of
 expressions such as function expressions, cast expressions, etc. The expressions
 in Spark can be broadly classified as :
-- Null in-tolerant expressions
+- Null intolerant expressions
 - Expressions that can process `NULL` value operands
   - The result of these expressions depends on the expression itself.
 
-#### Null in-tolerant expressions <a name="null-in-tolerant"></a>
-Null in-tolerant expressions return `NULL` when one or more arguments of 
+#### Null intolerant expressions <a name="null-intolerant"></a>
+Null intolerant expressions return `NULL` when one or more arguments of 
 expression are `NULL` and most of the expressions fall in this category.
 
 ##### Examples
