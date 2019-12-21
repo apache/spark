@@ -532,9 +532,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   Seq(true, false).foreach { throwInterruptedException =>
     val suffix = if (throwInterruptedException) "throw interrupt" else "set Thread interrupted"
     test(s"SPARK-30285: Fix deadlock in AsyncEventQueue.removeListenerOnError: $suffix") {
-      val conf = new SparkConf(false)
-        .set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 5)
-      val bus = new LiveListenerBus(conf)
+      val LISTENER_BUS_STOP_WAITING_TIMEOUT_MILLIS = 10 * 1000L // 10 seconds
+      val bus = new LiveListenerBus(new SparkConf(false))
       val counter1 = new BasicJobCounter()
       val counter2 = new BasicJobCounter()
       val interruptingListener = new DelayInterruptingJobCounter(throwInterruptedException, 3)
@@ -559,8 +558,10 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       // Notify interrupting listener starts to work
       interruptingListener.sleep = false
       // Wait for bus to stop
-      stoppingThread.join()
+      stoppingThread.join(LISTENER_BUS_STOP_WAITING_TIMEOUT_MILLIS)
 
+      // Stopping has been finished
+      assert(stoppingThread.isAlive === false)
       // All queues are removed
       assert(bus.activeQueues() === Set.empty)
       assert(counter1.count === 5)
@@ -676,8 +677,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
    *    else count SparkListenerJobEnd numbers
    */
   private class DelayInterruptingJobCounter(
-    val throwInterruptedException: Boolean,
-    val interruptOnJobId: Int) extends SparkListener {
+      val throwInterruptedException: Boolean,
+      val interruptOnJobId: Int) extends SparkListener {
     @volatile var sleep = true
     var count = 0
 
