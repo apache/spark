@@ -32,9 +32,10 @@ object functions {
     vec match {
       case v: Vector => v.toArray
       case v: OldVector => v.toArray
-      case _ => throw new IllegalArgumentException(
+      case v => throw new IllegalArgumentException(
         "function vector_to_array requires a non-null input argument and input type must be " +
-        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`.")
+        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
+        s"but got ${ if (v == null) "null" else v.getClass.getName }.")
     }
   }.asNonNullable()
 
