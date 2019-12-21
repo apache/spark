@@ -176,7 +176,7 @@ class Analyzer(
 
   def resolver: Resolver = conf.resolver
 
-  protected val fixedPoint = FixedPoint(maxIterations, true)
+  protected val fixedPoint = FixedPoint(maxIterations, errorOnExceed = true)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.

@@ -64,7 +64,7 @@ class RuleExecutorSuite extends SparkFunSuite {
 
   test("to maxIterations") {
     object ToFixedPoint extends RuleExecutor[Expression] {
-      val batches = Batch("fixedPoint", FixedPoint(10, true), DecrementLiterals) :: Nil
+      val batches = Batch("fixedPoint", FixedPoint(10), DecrementLiterals) :: Nil
     }
 
     val message = intercept[TreeNodeException[LogicalPlan]] {
