@@ -469,12 +469,12 @@ case class ScalaAggregator[IN, BUF, OUT](
   with ImplicitCastInputTypes
   with Logging {
 
-  val bufferEncoder = agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
-  val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
+  private[this] lazy val bufferEncoder = agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
+  private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
 
-  val dataType: DataType = outputEncoder.objSerializer.dataType
+  def dataType: DataType = outputEncoder.objSerializer.dataType
 
-  val inputTypes: Seq[DataType] = inputEncoder.schema.map(_.dataType)
+  def inputTypes: Seq[DataType] = inputEncoder.schema.map(_.dataType)
 
   def nullable: Boolean = isNullable
 
