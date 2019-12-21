@@ -158,7 +158,7 @@ class ObjectAggregationIterator(
         val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
         processRow(buffer, newInput)
 
-        // The the hash map gets too large, makes a sorted spill and clear the map.
+        // The hash map gets too large, makes a sorted spill and clear the map.
         if (hashMap.size >= fallbackCountThreshold) {
           logInfo(
             s"Aggregation hash map size ${hashMap.size} reaches threshold " +

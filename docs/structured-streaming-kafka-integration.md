@@ -405,7 +405,7 @@ The following configurations are optional:
   </td>
   <td>latest</td>
   <td>batch query</td>
-  <td>The end point when a batch query is ended, a json string specifying an ending timesamp for each TopicPartition.
+  <td>The end point when a batch query is ended, a json string specifying an ending timestamp for each TopicPartition.
   The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to
   the given timestamp in the corresponding partition. If the matched offset doesn't exist, the offset will
   be set to latest.<p/>

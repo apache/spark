@@ -120,7 +120,7 @@ ALTER TABLE table_identifier [ partition_spec ] SET SERDE serde_class_name
 
 #### SET LOCATION And SET FILE FORMAT
 `ALTER TABLE SET` command can also be used for changing the file location and file format for 
-exsisting tables. 
+existing tables. 
 
 ##### Syntax
 {% highlight sql %}
