@@ -498,7 +498,7 @@ case class ScalaAggregator[IN, BUF, OUT](
     val inputAttributes = childrenSchema.toAttributes
     log.debug(
       s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
-    MutableProjection.create(children, inputAttributes)
+    UnsafeProjection.create(children, inputAttributes)
   }
 
   def createAggregationBuffer(): BUF = agg.zero
