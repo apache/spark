@@ -119,7 +119,7 @@ One of the most important pieces of Spark SQL's Hive support is interaction with
 which enables Spark SQL to access metadata of Hive tables. Starting from Spark 1.4.0, a single binary
 build of Spark SQL can be used to query different versions of Hive metastores, using the configuration described below.
 Note that independent of the version of Hive that is being used to talk to the metastore, internally Spark SQL
-will compile against Hive 2.3.6 and use those classes for internal execution (serdes, UDFs, UDAFs, etc).
+will compile against built-in Hive and use those classes for internal execution (serdes, UDFs, UDAFs, etc).
 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
