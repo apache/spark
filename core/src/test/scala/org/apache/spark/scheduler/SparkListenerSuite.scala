@@ -83,7 +83,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
 
     // Five messages should be marked as received and queued, but no messages should be posted to
-    // listeners yet because the the listener bus hasn't been started.
+    // listeners yet because the listener bus hasn't been started.
     assert(bus.metrics.numEventsPosted.getCount === 5)
     assert(bus.queuedEvents.size === 5)
 
@@ -206,7 +206,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(sharedQueueSize(bus) === 1)
     assert(numDroppedEvents(bus) === 1)
 
-    // Allow the the remaining events to be processed so we can stop the listener bus:
+    // Allow the remaining events to be processed so we can stop the listener bus:
     listenerWait.release(2)
     bus.stop()
   }
