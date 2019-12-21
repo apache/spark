@@ -32,11 +32,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here provides
@@ -4230,6 +4229,16 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
+    udaf(agg, ExpressionEncoder[IN]())
+  }
+
+  def udaf[IN, BUF, OUT](
+      agg: Aggregator[IN, BUF, OUT],
+      inputEncoder: Encoder[IN]): UserDefinedFunction = {
+    UserDefinedAggregator(agg, inputEncoder)
+  }
 
   /**
    * Defines a Scala closure of 0 arguments as user-defined function (UDF).

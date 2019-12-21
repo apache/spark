@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregator}
+import org.apache.spark.sql.expressions.{Aggregator}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -178,9 +178,9 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     emptyDF.createOrReplaceTempView("emptyTable")
 
     // Register UDAs
-    spark.udf.registerAggregator("mydoublesum", MyDoubleSumAgg)
-    spark.udf.registerAggregator("mydoubleavg", MyDoubleAvgAgg)
-    spark.udf.registerAggregator("longProductSum", LongProductSumAgg)
+    spark.udf.register("mydoublesum", udaf(MyDoubleSumAgg))
+    spark.udf.register("mydoubleavg", udaf(MyDoubleAvgAgg))
+    spark.udf.register("longProductSum", udaf(LongProductSumAgg))
   }
 
   override def afterAll(): Unit = {
@@ -352,7 +352,7 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
 
   test("verify aggregator ser/de behavior") {
     val data = sparkContext.parallelize((1 to 100).toSeq, 3).toDF("value1")
-    val agg = UserDefinedAggregator(CountSerDeAgg)
+    val agg = udaf(CountSerDeAgg)
     checkAnswer(
       data.agg(agg($"value1")),
       Row(CountSerDeSQL(4, 4, 5050)) :: Nil)

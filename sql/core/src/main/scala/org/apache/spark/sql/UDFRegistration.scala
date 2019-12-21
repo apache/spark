@@ -81,24 +81,6 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Registers a typed [[Aggregator]] for use with untyped Data Frames
-   *
-   * @param name the name to register under
-   * @param agg the typed Aggregator
-   * @return a UserDefinedAggregator that can be used as an aggregating UDF
-   *
-   * @since 3.0.0
-   */
-  def registerAggregator[IN: TypeTag, BUF, OUT](
-      name: String,
-      agg: Aggregator[IN, BUF, OUT]): UserDefinedAggregator[IN, BUF, OUT] = {
-    val inputEncoder = (ExpressionEncoder[IN]()).resolveAndBind()
-    def builder(children: Seq[Expression]) = ScalaAggregator(children, agg, inputEncoder)
-    functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedAggregator(agg)
-  }
-
-  /**
    * Registers a user-defined function (UDF), for a UDF that's already defined using the Dataset
    * API (i.e. of type UserDefinedFunction). To change a UDF to nondeterministic, call the API
    * `UserDefinedFunction.asNondeterministic()`. To change a UDF to nonNullable, call the API
@@ -120,9 +102,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.2.0
    */
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
-    def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
-    functionRegistry.createOrReplaceTempFunction(name, builder)
-    udf
+    udf match {
+      case udaf: UserDefinedAggregator[_, _, _] =>
+        def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
+        functionRegistry.createOrReplaceTempFunction(name, builder)
+        udf
+      case _ =>
+        def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
+        functionRegistry.createOrReplaceTempFunction(name, builder)
+        udf
+    }
   }
 
   // scalastyle:off line.size.limit

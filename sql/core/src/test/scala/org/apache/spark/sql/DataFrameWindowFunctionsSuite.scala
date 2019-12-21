@@ -22,7 +22,7 @@ import org.scalatest.Matchers.the
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, UserDefinedAggregator, Window}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -413,7 +413,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("window function with aggregator") {
-    val agg = UserDefinedAggregator(new Aggregator[(Long, Long), Long, Long] {
+    val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
       def zero: Long = 0L
       def reduce(b: Long, a: (Long, Long)): Long = b + (a._1 * a._2)
       def merge(b1: Long, b2: Long): Long = b1 + b2

@@ -20,7 +20,7 @@ package org.apache.spark.sql.expressions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.{Experimental, Stable}
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
@@ -154,21 +154,21 @@ private[sql] case class SparkUserDefinedFunction(
  * @since 3.0.0
  */
 @Experimental
-private[sql] case class UserDefinedAggregator[IN: TypeTag, BUF, OUT](
+private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     aggregator: Aggregator[IN, BUF, OUT],
+    inputEncoder: Encoder[IN],
     name: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
 
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
-    val inputEncoder = (ExpressionEncoder[IN]()).resolveAndBind()
-    val aggregateExpression =
-      AggregateExpression(
-        ScalaAggregator(exprs.map(_.expr), aggregator, inputEncoder, nullable, deterministic),
-        Complete,
-        isDistinct = false)
-    Column(aggregateExpression)
+    Column(AggregateExpression(scalaAggregator(exprs.map(_.expr)), Complete, isDistinct = false))
+  }
+
+  def scalaAggregator(exprs: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
+    val iEncoder = inputEncoder.asInstanceOf[ExpressionEncoder[IN]].resolveAndBind()
+    ScalaAggregator(exprs, aggregator, iEncoder, nullable, deterministic)
   }
 
   override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {
