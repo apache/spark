@@ -31,7 +31,6 @@ needs_sphinx = '1.2'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
-    'epytext',
     'sphinx.ext.mathjax',
 ]
 

@@ -29,7 +29,7 @@ import org.apache.spark.network.client.{RpcResponseCallback, StreamCallbackWithI
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.protocol._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, ShuffleBlockBatchId, ShuffleBlockId, StorageLevel}
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.
@@ -56,12 +56,47 @@ class NettyBlockRpcServer(
     message match {
       case openBlocks: OpenBlocks =>
         val blocksNum = openBlocks.blockIds.length
-        val blocks = for (i <- (0 until blocksNum).view)
-          yield blockManager.getBlockData(BlockId.apply(openBlocks.blockIds(i)))
+        val blocks = (0 until blocksNum).map { i =>
+          val blockId = BlockId.apply(openBlocks.blockIds(i))
+          assert(!blockId.isInstanceOf[ShuffleBlockBatchId],
+            "Continuous shuffle block fetching only works for new fetch protocol.")
+          blockManager.getLocalBlockData(blockId)
+        }
         val streamId = streamManager.registerStream(appId, blocks.iterator.asJava,
           client.getChannel)
         logTrace(s"Registered streamId $streamId with $blocksNum buffers")
         responseContext.onSuccess(new StreamHandle(streamId, blocksNum).toByteBuffer)
+
+      case fetchShuffleBlocks: FetchShuffleBlocks =>
+        val blocks = fetchShuffleBlocks.mapIds.zipWithIndex.flatMap { case (mapId, index) =>
+          if (!fetchShuffleBlocks.batchFetchEnabled) {
+            fetchShuffleBlocks.reduceIds(index).map { reduceId =>
+              blockManager.getLocalBlockData(
+                ShuffleBlockId(fetchShuffleBlocks.shuffleId, mapId, reduceId))
+            }
+          } else {
+            val startAndEndId = fetchShuffleBlocks.reduceIds(index)
+            if (startAndEndId.length != 2) {
+              throw new IllegalStateException(s"Invalid shuffle fetch request when batch mode " +
+                s"is enabled: $fetchShuffleBlocks")
+            }
+            Array(blockManager.getLocalBlockData(
+              ShuffleBlockBatchId(
+                fetchShuffleBlocks.shuffleId, mapId, startAndEndId(0), startAndEndId(1))))
+          }
+        }
+
+        val numBlockIds = if (fetchShuffleBlocks.batchFetchEnabled) {
+          fetchShuffleBlocks.mapIds.length
+        } else {
+          fetchShuffleBlocks.reduceIds.map(_.length).sum
+        }
+
+        val streamId = streamManager.registerStream(appId, blocks.iterator.asJava,
+          client.getChannel)
+        logTrace(s"Registered streamId $streamId with $numBlockIds buffers")
+        responseContext.onSuccess(
+          new StreamHandle(streamId, numBlockIds).toByteBuffer)
 
       case uploadBlock: UploadBlock =>
         // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.

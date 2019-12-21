@@ -81,13 +81,13 @@ object Edge {
 
     override def copyElement(
         src: Array[Edge[ED]], srcPos: Int,
-        dst: Array[Edge[ED]], dstPos: Int) {
+        dst: Array[Edge[ED]], dstPos: Int): Unit = {
       dst(dstPos) = src(srcPos)
     }
 
     override def copyRange(
         src: Array[Edge[ED]], srcPos: Int,
-        dst: Array[Edge[ED]], dstPos: Int, length: Int) {
+        dst: Array[Edge[ED]], dstPos: Int, length: Int): Unit = {
       System.arraycopy(src, srcPos, dst, dstPos, length)
     }
 

@@ -130,11 +130,12 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
-      val parser = new UnivocityParser(
-        StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
-        StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
-        parsedOptions)
-      val schema = if (columnPruning) requiredSchema else dataSchema
+      val actualDataSchema = StructType(
+        dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      val actualRequiredSchema = StructType(
+        requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      val parser = new UnivocityParser(actualDataSchema, actualRequiredSchema, parsedOptions)
+      val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(
         schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)

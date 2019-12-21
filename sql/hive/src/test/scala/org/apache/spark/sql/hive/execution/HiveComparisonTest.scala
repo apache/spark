@@ -228,7 +228,7 @@ abstract class HiveComparisonTest
       sql: String,
       reset: Boolean = true,
       tryWithoutResettingFirst: Boolean = false,
-      skip: Boolean = false) {
+      skip: Boolean = false): Unit = {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -373,9 +373,11 @@ abstract class HiveComparisonTest
 
             // We will ignore the ExplainCommand, ShowFunctions, DescribeFunction
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[ShowFunctionsCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeFunctionCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[ShowFunctionsStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeFunctionStatement]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeTableStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeColumnStatement]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive

@@ -60,12 +60,18 @@ object TypeUtils {
     }
   }
 
-  def getNumeric(t: DataType): Numeric[Any] =
-    t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+  def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
+    if (exactNumericRequired) {
+      t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
+    } else {
+      t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+    }
+  }
 
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
+      case c: CalendarIntervalType => c.ordering.asInstanceOf[Ordering[Any]]
       case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)

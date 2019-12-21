@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.status.api.v1.{JobData, StageData}
 import org.apache.spark.streaming.Time
@@ -37,10 +37,13 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private def columns: Seq[Node] = {
     <th>Output Op Id</th>
       <th>Description</th>
-      <th>Output Op Duration</th>
+      <th>Output Op Duration {SparkUIUtils.tooltip("Time taken for all the jobs of this batch to" +
+        " finish processing from the time they were submitted.",
+        "top")}</th>
       <th>Status</th>
       <th>Job Id</th>
-      <th>Job Duration</th>
+      <th>Job Duration {SparkUIUtils.tooltip("Time taken from submission time to completion " +
+        "time of the job", "top")}</th>
       <th class="sorttable_nosort">Stages: Succeeded/Total</th>
       <th class="sorttable_nosort">Tasks (for all stages): Succeeded/Total</th>
       <th>Error</th>
@@ -104,7 +107,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       }
     }
     val lastFailureReason =
-      sparkJob.stageIds.sorted.reverse.flatMap(getStageData).
+      sparkJob.stageIds.sorted(Ordering.Int.reverse).flatMap(getStageData).
       dropWhile(_.failureReason == None).take(1). // get the first info that contains failure
       flatMap(info => info.failureReason).headOption.getOrElse("")
     val formattedDuration = duration.map(d => SparkUIUtils.formatDuration(d)).getOrElse("-")
@@ -381,7 +384,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       <thead>
         <tr>
           <th>Input</th>
-          <th>Metadata</th>
+          <th>Metadata {SparkUIUtils.tooltip("Batch Input Details", "right")}</th>
         </tr>
       </thead>
       <tbody>

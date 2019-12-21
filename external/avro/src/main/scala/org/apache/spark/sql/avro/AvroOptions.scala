@@ -41,6 +41,14 @@ class AvroOptions(
   val schema: Option[String] = parameters.get("avroSchema")
 
   /**
+   * Optional Avro schema (in JSON format) that was used to serialize the data.
+   * This should be set if the schema provided for deserialization is compatible
+   * with - but not the same as - the one used to originally convert the data to Avro.
+   * See SPARK-27506 for more details.
+   */
+  val actualSchema: Option[String] = parameters.get("actualSchema")
+
+  /**
    * Top level record name in write result, which is required in Avro spec.
    * See https://avro.apache.org/docs/1.8.2/spec.html#schema_record .
    * Default value is "topLevelRecord"
@@ -59,6 +67,7 @@ class AvroOptions(
    * If the option is not set, the Hadoop's config `avro.mapred.ignore.inputs.without.extension`
    * is taken into account. If the former one is not set too, file extensions are ignored.
    */
+  @deprecated("Use the general data source option pathGlobFilter for filtering file names", "3.0")
   val ignoreExtension: Boolean = {
     val ignoreFilesWithoutExtensionByDefault = false
     val ignoreFilesWithoutExtension = conf.getBoolean(
@@ -66,7 +75,7 @@ class AvroOptions(
       ignoreFilesWithoutExtensionByDefault)
 
     parameters
-      .get("ignoreExtension")
+      .get(AvroOptions.ignoreExtensionKey)
       .map(_.toBoolean)
       .getOrElse(!ignoreFilesWithoutExtension)
   }
@@ -93,4 +102,6 @@ object AvroOptions {
       .getOrElse(new Configuration())
     new AvroOptions(CaseInsensitiveMap(parameters), hadoopConf)
   }
+
+  val ignoreExtensionKey = "ignoreExtension"
 }

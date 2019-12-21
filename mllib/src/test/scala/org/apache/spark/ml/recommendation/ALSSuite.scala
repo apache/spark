@@ -488,8 +488,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   }
 
   test("implicit feedback regression") {
-    val trainingWithNeg = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
-    val trainingWithZero = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
+    val trainingWithNeg = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
+    val trainingWithZero = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
     val modelWithNeg =
       trainALS(trainingWithNeg, rank = 1, maxIter = 5, regParam = 0.01, implicitPrefs = true)
     val modelWithZero =
@@ -916,6 +916,38 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val itemSubsetRecs = model.recommendForItemSubset(itemSubset, k)
     val allItemRecs = model.recommendForAllItems(k).as[(Int, Seq[(Int, Float)])].collect().toMap
     checkRecommendations(itemSubsetRecs, allItemRecs, "user")
+  }
+
+  test("ALS should not introduce unnecessary shuffle") {
+    def getShuffledDependencies(rdd: RDD[_]): Seq[ShuffleDependency[_, _, _]] = {
+      rdd.dependencies.flatMap {
+        case s: ShuffleDependency[_, _, _] =>
+          Seq(s) ++ getShuffledDependencies(s.rdd)
+        case o =>
+          Seq.empty ++ getShuffledDependencies(o.rdd)
+      }
+    }
+
+    val spark = this.spark
+    import spark.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    val data = ratings.toDF
+    val model = new ALS()
+      .setMaxIter(2)
+      .setImplicitPrefs(true)
+      .setCheckpointInterval(-1)
+      .fit(data)
+
+    val userFactors = model.userFactors
+    val itemFactors = model.itemFactors
+    val shuffledUserFactors = getShuffledDependencies(userFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("userFactors")
+    }
+    val shuffledItemFactors = getShuffledDependencies(itemFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("itemFactors")
+    }
+    assert(shuffledUserFactors.size == 0)
+    assert(shuffledItemFactors.size == 0)
   }
 
   private def checkRecommendations(

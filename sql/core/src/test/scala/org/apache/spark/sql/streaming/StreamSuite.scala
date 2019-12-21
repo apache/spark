@@ -19,8 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 
+import scala.concurrent.TimeoutException
 import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
@@ -35,6 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.SimpleMode
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
@@ -42,7 +44,7 @@ import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreCon
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -201,7 +203,7 @@ class StreamSuite extends StreamTest {
   }
 
   test("DataFrame reuse") {
-    def assertDF(df: DataFrame) {
+    def assertDF(df: DataFrame): Unit = {
       withTempDir { outputDir =>
         withTempDir { checkpointDir =>
           val query = df.writeStream.format("parquet")
@@ -219,8 +221,12 @@ class StreamSuite extends StreamTest {
     }
 
     val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
-    assertDF(df)
-    assertDF(df)
+    Seq("", "parquet").foreach { useV1Source =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1Source) {
+        assertDF(df)
+        assertDF(df)
+      }
+    }
   }
 
   test("Within the same streaming query, one StreamingRelation should only be transformed to one " +
@@ -467,7 +473,7 @@ class StreamSuite extends StreamTest {
     val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
 
     // Test `df.explain`
-    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explain = ExplainCommand(df.queryExecution.logical, SimpleMode)
     val explainString =
       spark.sessionState
         .executePlan(explain)
@@ -519,7 +525,7 @@ class StreamSuite extends StreamTest {
     val df = inputData.toDS().map(_ * 2).filter(_ > 5)
 
     // Test `df.explain`
-    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explain = ExplainCommand(df.queryExecution.logical, SimpleMode)
     val explainString =
       spark.sessionState
         .executePlan(explain)
@@ -751,9 +757,9 @@ class StreamSuite extends StreamTest {
         inputData.addData(9)
         streamingQuery.processAllAvailable()
 
-        QueryTest.checkAnswer(spark.table("counts").toDF(),
-          Row("1", 1) :: Row("2", 1) :: Row("3", 2) :: Row("4", 2) ::
-          Row("5", 2) :: Row("6", 2) :: Row("7", 1) :: Row("8", 1) :: Row("9", 1) :: Nil)
+        checkAnswer(spark.table("counts").toDF(),
+          Row(1, 1L) :: Row(2, 1L) :: Row(3, 2L) :: Row(4, 2L) ::
+          Row(5, 2L) :: Row(6, 2L) :: Row(7, 1L) :: Row(8, 1L) :: Row(9, 1L) :: Nil)
       } finally {
         if (streamingQuery ne null) {
           streamingQuery.stop()
@@ -867,7 +873,7 @@ class StreamSuite extends StreamTest {
 
   testQuietly("specify custom state store provider") {
     val providerClassName = classOf[TestStateStoreProvider].getCanonicalName
-    withSQLConf("spark.sql.streaming.stateStore.providerClass" -> providerClassName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName) {
       val input = MemoryStream[Int]
       val df = input.toDS().groupBy().count()
       val query = df.writeStream.outputMode("complete").format("memory").queryName("name").start()
@@ -884,9 +890,9 @@ class StreamSuite extends StreamTest {
   testQuietly("custom state store provider read from offset log") {
     val input = MemoryStream[Int]
     val df = input.toDS().groupBy().count()
-    val providerConf1 = "spark.sql.streaming.stateStore.providerClass" ->
+    val providerConf1 = SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider"
-    val providerConf2 = "spark.sql.streaming.stateStore.providerClass" ->
+    val providerConf2 = SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[TestStateStoreProvider].getCanonicalName
 
     def runQuery(queryName: String, checkpointLoc: String): Unit = {
@@ -1121,6 +1127,36 @@ class StreamSuite extends StreamTest {
       }
     )
   }
+
+  // ProcessingTime trigger generates MicroBatchExecution, and ContinuousTrigger starts a
+  // ContinuousExecution
+  Seq(Trigger.ProcessingTime("1 second"), Trigger.Continuous("1 second")).foreach { trigger =>
+    test(s"SPARK-30143: stop waits until timeout if blocked - trigger: $trigger") {
+      BlockOnStopSourceProvider.enableBlocking()
+      val sq = spark.readStream.format(classOf[BlockOnStopSourceProvider].getName)
+        .load()
+        .writeStream
+        .format("console")
+        .trigger(trigger)
+        .start()
+      failAfter(60.seconds) {
+        val startTime = System.nanoTime()
+        withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "2000") {
+          intercept[TimeoutException] {
+            sq.stop()
+          }
+        }
+        val duration = (System.nanoTime() - startTime) / 1e6
+        assert(duration >= 2000,
+          s"Should have waited more than 2000 millis, but waited $duration millis")
+
+        BlockOnStopSourceProvider.disableBlocking()
+        withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "0") {
+          sq.stop()
+        }
+      }
+    }
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
@@ -1171,7 +1207,7 @@ class FakeDefaultSource extends FakeSource {
         ds.toDF("a")
       }
 
-      override def stop() {}
+      override def stop(): Unit = {}
     }
   }
 }

@@ -92,7 +92,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
         spark.internalCreateDataFrame(spark.sparkContext.emptyRDD, schema, isStreaming = true)
       }
 
-      override def stop() {}
+      override def stop(): Unit = {}
     }
   }
 
@@ -203,7 +203,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .stop()
     assert(LastOptions.partitionColumns == Seq("a"))
 
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       df.writeStream
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)

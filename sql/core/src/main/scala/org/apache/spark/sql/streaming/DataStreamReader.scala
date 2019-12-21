@@ -24,13 +24,13 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
+import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -83,6 +83,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -120,6 +123,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -136,6 +142,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -254,10 +263,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
@@ -315,10 +324,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * value.</li>
    * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
    * value.</li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns

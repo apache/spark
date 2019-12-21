@@ -17,19 +17,16 @@
 
 package org.apache.spark.sql.execution.python
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.arrow.ArrowUtils
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.python.PandasGroupUtils._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.util.ArrowUtils
+
 
 /**
  * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandas]]
@@ -53,13 +50,16 @@ case class FlatMapGroupsInPandasExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode {
+  extends SparkPlan with UnaryExecNode {
 
+  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
+  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private val pandasFunction = func.asInstanceOf[PythonUDF].func
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (groupingAttributes.isEmpty) {
@@ -75,87 +75,23 @@ case class FlatMapGroupsInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-    val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+    val (dedupAttributes, argOffsets) = resolveArgOffsets(child, groupingAttributes)
 
-    // Deduplicate the grouping attributes.
-    // If a grouping attribute also appears in data attributes, then we don't need to send the
-    // grouping attribute to Python worker. If a grouping attribute is not in data attributes,
-    // then we need to send this grouping attribute to python worker.
-    //
-    // We use argOffsets to distinguish grouping attributes and data attributes as following:
-    //
-    // argOffsets[0] is the length of grouping attributes
-    // argOffsets[1 .. argOffsets[0]+1] is the arg offsets for grouping attributes
-    // argOffsets[argOffsets[0]+1 .. ] is the arg offsets for data attributes
+    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
 
-    val dataAttributes = child.output.drop(groupingAttributes.length)
-    val groupingIndicesInData = groupingAttributes.map { attribute =>
-      dataAttributes.indexWhere(attribute.semanticEquals)
-    }
+      val data = groupAndProject(iter, groupingAttributes, child.output, dedupAttributes)
+        .map { case (_, x) => x }
 
-    val groupingArgOffsets = new ArrayBuffer[Int]
-    val nonDupGroupingAttributes = new ArrayBuffer[Attribute]
-    val nonDupGroupingSize = groupingIndicesInData.count(_ == -1)
-
-    // Non duplicate grouping attributes are added to nonDupGroupingAttributes and
-    // their offsets are 0, 1, 2 ...
-    // Duplicate grouping attributes are NOT added to nonDupGroupingAttributes and
-    // their offsets are n + index, where n is the total number of non duplicate grouping
-    // attributes and index is the index in the data attributes that the grouping attribute
-    // is a duplicate of.
-
-    groupingAttributes.zip(groupingIndicesInData).foreach {
-      case (attribute, index) =>
-        if (index == -1) {
-          groupingArgOffsets += nonDupGroupingAttributes.length
-          nonDupGroupingAttributes += attribute
-        } else {
-          groupingArgOffsets += index + nonDupGroupingSize
-        }
-    }
-
-    val dataArgOffsets = nonDupGroupingAttributes.length until
-      (nonDupGroupingAttributes.length + dataAttributes.length)
-
-    val argOffsets = Array(Array(groupingAttributes.length) ++ groupingArgOffsets ++ dataArgOffsets)
-
-    // Attributes after deduplication
-    val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes
-    val dedupSchema = StructType.fromAttributes(dedupAttributes)
-
-    inputRDD.mapPartitionsInternal { iter =>
-      val grouped = if (groupingAttributes.isEmpty) {
-        Iterator(iter)
-      } else {
-        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
-        val dedupProj = UnsafeProjection.create(dedupAttributes, child.output)
-        groupedIter.map {
-          case (_, groupedRowIter) => groupedRowIter.map(dedupProj)
-        }
-      }
-
-      val context = TaskContext.get()
-
-      val columnarBatchIter = new ArrowPythonRunner(
+      val runner = new ArrowPythonRunner(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-        argOffsets,
-        dedupSchema,
+        Array(argOffsets),
+        StructType.fromAttributes(dedupAttributes),
         sessionLocalTimeZone,
-        pythonRunnerConf).compute(grouped, context.partitionId(), context)
+        pythonRunnerConf)
 
-      val unsafeProj = UnsafeProjection.create(output, output)
-
-      columnarBatchIter.flatMap { batch =>
-        // Grouped Map UDF returns a StructType column in ColumnarBatch, select the children here
-        val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
-        val outputVectors = output.indices.map(structVector.getChild)
-        val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
-        flattenedBatch.setNumRows(batch.numRows())
-        flattenedBatch.rowIterator.asScala
-      }.map(unsafeProj)
-    }
+      executePython(data, output, runner)
+    }}
   }
 }

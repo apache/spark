@@ -81,6 +81,13 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
+  val UI_PROMETHEUS_ENABLED = ConfigBuilder("spark.ui.prometheus.enabled")
+    .internal()
+    .doc("Expose executor metrics at /metrics/executors/prometheus. " +
+      "For master/worker/driver metrics, you need to configure `conf/metrics.properties`.")
+    .booleanConf
+    .createWithDefault(false)
+
   val UI_X_XSS_PROTECTION = ConfigBuilder("spark.ui.xXssProtection")
     .doc("Value for HTTP X-XSS-Protection response header")
     .stringConf
@@ -142,6 +149,11 @@ private[spark] object UI {
   val USER_GROUPS_MAPPING = ConfigBuilder("spark.user.groups.mapping")
     .stringConf
     .createWithDefault("org.apache.spark.security.ShellBasedGroupsMappingProvider")
+
+  val PROXY_REDIRECT_URI = ConfigBuilder("spark.ui.proxyRedirectUri")
+    .doc("Proxy address to use when responding with HTTP redirects.")
+    .stringConf
+    .createOptional
 
   val CUSTOM_EXECUTOR_LOG_URL = ConfigBuilder("spark.ui.custom.executor.log.url")
     .doc("Specifies custom spark executor log url for supporting external log service instead of " +

@@ -17,7 +17,10 @@
 
 package org.apache.spark.kafka010
 
+import java.{util => ju}
 import java.security.PrivilegedExceptionAction
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.UserGroupInformation
@@ -25,25 +28,10 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.internal.config._
 
 class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
-  private val identifier1 = "cluster1"
-  private val identifier2 = "cluster2"
-  private val tokenService1 = KafkaTokenUtil.getTokenService(identifier1)
-  private val tokenService2 = KafkaTokenUtil.getTokenService(identifier2)
-  private val bootStrapServers = "127.0.0.1:0"
-  private val matchingTargetServersRegex = "127.0.0.*:0"
-  private val nonMatchingTargetServersRegex = "127.0.1.*:0"
-  private val trustStoreLocation = "/path/to/trustStore"
-  private val trustStorePassword = "trustStoreSecret"
-  private val keyStoreLocation = "/path/to/keyStore"
-  private val keyStorePassword = "keyStoreSecret"
-  private val keyPassword = "keySecret"
-  private val keytab = "/path/to/keytab"
-  private val principal = "user@domain.com"
-
   private var sparkConf: SparkConf = null
 
   override def beforeEach(): Unit = {
@@ -68,7 +56,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
 
   test("createAdminClientProperties with SASL_PLAINTEXT protocol should not include " +
       "keystore and truststore config") {
-    val clusterConf = createClusterConf(SASL_PLAINTEXT.name)
+    val clusterConf = createClusterConf(identifier1, SASL_PLAINTEXT.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -84,7 +72,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties with SASL_SSL protocol should include truststore config") {
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -103,7 +91,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
 
   test("createAdminClientProperties with SSL protocol should include keystore and truststore " +
       "config") {
-    val clusterConf = createClusterConf(SSL.name)
+    val clusterConf = createClusterConf(identifier1, SSL.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -121,7 +109,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties with global config should not set dynamic jaas config") {
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
     setGlobalKafkaClientConfig()
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
@@ -137,7 +125,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   test("createAdminClientProperties with keytab should set keytab dynamic jaas config") {
     sparkConf.set(KEYTAB, keytab)
     sparkConf.set(PRINCIPAL, principal)
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -155,7 +143,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties without keytab should set ticket cache dynamic jaas config") {
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -170,6 +158,15 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(saslJaasConfig.contains("useTicketCache=true"))
   }
 
+  test("createAdminClientProperties with specified params should include it") {
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name,
+      Map("customKey" -> "customValue"))
+
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
+
+    assert(adminClientProperties.get("customKey") === "customValue")
+  }
+
   test("isGlobalJaasConfigurationProvided without global config should return false") {
     assert(!KafkaTokenUtil.isGlobalJaasConfigurationProvided)
   }
@@ -180,73 +177,102 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(KafkaTokenUtil.isGlobalJaasConfigurationProvided)
   }
 
-  test("findMatchingToken without token should return None") {
-    assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) === None)
+  test("findMatchingTokenClusterConfig without token should return None") {
+    assert(KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf, bootStrapServers) === None)
   }
 
-  test("findMatchingToken with non-matching tokens should return None") {
+  test("findMatchingTokenClusterConfig with non-matching tokens should return None") {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       nonMatchingTargetServersRegex)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    addTokenToUGI(tokenService1)
-    addTokenToUGI(new Text("intentionally_garbage"))
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+    addTokenToUGI(new Text("intentionally_garbage"), tokenId1, tokenPassword1)
 
-    assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) === None)
+    assert(KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf, bootStrapServers) === None)
   }
 
-  test("findMatchingToken with one matching token should return cluster configuration") {
+  test("findMatchingTokenClusterConfig with one matching token should return token and cluster " +
+    "configuration") {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
 
-    assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) ===
-      Some(KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1)))
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf, bootStrapServers)
+    assert(clusterConfig.get === KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1))
   }
 
-  test("findMatchingToken with multiple matching tokens should throw exception") {
+  test("findMatchingTokenClusterConfig with multiple matching tokens should throw exception") {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    addTokenToUGI(tokenService1)
-    addTokenToUGI(tokenService2)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+    addTokenToUGI(tokenService2, tokenId1, tokenPassword1)
 
     val thrown = intercept[IllegalArgumentException] {
-      KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers)
+      KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf, bootStrapServers)
     }
     assert(thrown.getMessage.contains("More than one delegation token matches"))
   }
 
   test("getTokenJaasParams with token should return scram module") {
-    addTokenToUGI(tokenService1)
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
 
     assert(jaasParams.contains("ScramLoginModule required"))
     assert(jaasParams.contains("tokenauth=true"))
-    assert(jaasParams.contains(tokenId))
-    assert(jaasParams.contains(tokenPassword))
+    assert(jaasParams.contains(tokenId1))
+    assert(jaasParams.contains(tokenPassword1))
   }
 
-  private def createClusterConf(securityProtocol: String): KafkaTokenClusterConf = {
-    KafkaTokenClusterConf(
-      identifier1,
-      bootStrapServers,
-      KafkaTokenSparkConf.DEFAULT_TARGET_SERVERS_REGEX,
-      securityProtocol,
-      KafkaTokenSparkConf.DEFAULT_SASL_KERBEROS_SERVICE_NAME,
-      Some(trustStoreLocation),
-      Some(trustStorePassword),
-      Some(keyStoreLocation),
-      Some(keyStorePassword),
-      Some(keyPassword),
-      KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM)
+  test("isConnectorUsingCurrentToken without security should return true") {
+    val kafkaParams = Map[String, Object]().asJava
+
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
+  }
+
+  test("isConnectorUsingCurrentToken with same token should return true") {
+    setSparkEnv(
+      Map(
+        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
+      )
+    )
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+    val kafkaParams = getKafkaParams()
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
+      kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
+
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, clusterConfig))
+  }
+
+  test("isConnectorUsingCurrentToken with different token should return false") {
+    setSparkEnv(
+      Map(
+        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
+      )
+    )
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+    val kafkaParams = getKafkaParams()
+    addTokenToUGI(tokenService1, tokenId2, tokenPassword2)
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
+      kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
+
+    assert(!KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, clusterConfig))
+  }
+
+  private def getKafkaParams(): ju.Map[String, Object] = {
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
+    Map[String, Object](
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers,
+      SaslConfigs.SASL_JAAS_CONFIG -> KafkaTokenUtil.getTokenJaasParams(clusterConf)
+    ).asJava
   }
 }

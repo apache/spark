@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.logging
 
-import java.io.{BufferedInputStream, File, FileInputStream}
+import java.io.File
 
 import org.apache.commons.io.FileUtils
 

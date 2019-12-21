@@ -113,6 +113,15 @@
 #     /metrics/applications/json # App information
 #     /metrics/master/json       # Master information
 
+# org.apache.spark.metrics.sink.PrometheusServlet
+#   Name:     Default:   Description:
+#   path      VARIES*    Path prefix from the web server root
+#
+# * Default path is /metrics/prometheus for all instances except the master. The
+#   master has two paths:
+#     /metrics/applications/prometheus # App information
+#     /metrics/master/prometheus       # Master information
+
 # org.apache.spark.metrics.sink.GraphiteSink
 #   Name:     Default:      Description:
 #   host      NONE          Hostname of the Graphite server, must be set
@@ -121,6 +130,7 @@
 #   unit      seconds       Unit of the poll period
 #   prefix    EMPTY STRING  Prefix to prepend to every metric's name
 #   protocol  tcp           Protocol ("tcp" or "udp") to use
+#   regex     NONE          Optional filter to send only metrics matching this regex string
 
 # org.apache.spark.metrics.sink.StatsdSink
 #   Name:     Default:      Description:
@@ -192,3 +202,9 @@
 #driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
 #executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+# Example configuration for PrometheusServlet
+#*.sink.prometheusServlet.class=org.apache.spark.metrics.sink.PrometheusServlet
+#*.sink.prometheusServlet.path=/metrics/prometheus
+#master.sink.prometheusServlet.path=/metrics/master/prometheus
+#applications.sink.prometheusServlet.path=/metrics/applications/prometheus

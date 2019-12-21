@@ -178,6 +178,14 @@ sealed trait Vector extends Serializable {
    */
   @Since("2.0.0")
   def argmax: Int
+
+  /**
+   * Calculate the dot product of this vector with another.
+   *
+   * If `size` does not match an [[IllegalArgumentException]] is thrown.
+   */
+  @Since("3.0.0")
+  def dot(v: Vector): Double = BLAS.dot(this, v)
 }
 
 /**
@@ -602,6 +610,15 @@ class SparseVector @Since("2.0.0") (
   }
 
   private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
+
+  override def apply(i: Int): Double = {
+    if (i < 0 || i >= size) {
+      throw new IndexOutOfBoundsException(s"Index $i out of bounds [0, $size)")
+    }
+
+    val j = util.Arrays.binarySearch(indices, i)
+    if (j < 0) 0.0 else values(j)
+  }
 
   override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0

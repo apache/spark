@@ -248,7 +248,7 @@ Our experience suggests that the effect of GC tuning depends on your application
 There are [many more tuning options](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/index.html) described online,
 but at a high level, managing how frequently full GC takes place can help in reducing the overhead.
 
-GC tuning flags for executors can be specified by setting `spark.executor.extraJavaOptions` in
+GC tuning flags for executors can be specified by setting `spark.executor.defaultJavaOptions` or `spark.executor.extraJavaOptions` in
 a job's configuration.
 
 # Other Considerations

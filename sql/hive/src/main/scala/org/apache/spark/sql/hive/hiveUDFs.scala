@@ -247,7 +247,7 @@ private[hive] case class HiveGenericUDTF(
   protected class UDTFCollector extends Collector {
     var collected = new ArrayBuffer[InternalRow]
 
-    override def collect(input: java.lang.Object) {
+    override def collect(input: java.lang.Object): Unit = {
       // We need to clone the input here because implementations of
       // GenericUDTF reuse the same object. Luckily they are always an array, so
       // it is easy to clone.
@@ -468,13 +468,19 @@ private[hive] case class HiveUDAFFunction(
   }
 
   override def eval(buffer: HiveUDAFBuffer): Any = {
-    resultUnwrapper(finalHiveEvaluator.evaluator.terminate(buffer.buf))
+    resultUnwrapper(finalHiveEvaluator.evaluator.terminate(
+      if (buffer == null) {
+        finalHiveEvaluator.evaluator.getNewAggregationBuffer
+      } else {
+        buffer.buf
+      }
+    ))
   }
 
   override def serialize(buffer: HiveUDAFBuffer): Array[Byte] = {
     // Serializes an `AggregationBuffer` that holds partial aggregation results so that we can
     // shuffle it for global aggregation later.
-    aggBufferSerDe.serialize(buffer.buf)
+    aggBufferSerDe.serialize(if (buffer == null) null else buffer.buf)
   }
 
   override def deserialize(bytes: Array[Byte]): HiveUDAFBuffer = {

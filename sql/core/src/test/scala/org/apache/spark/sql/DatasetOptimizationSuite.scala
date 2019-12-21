@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression}
 import org.apache.spark.sql.catalyst.expressions.objects.ExternalMapToCatalyst
 import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DatasetOptimizationSuite extends QueryTest with SharedSQLContext {
+class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
@@ -49,13 +50,10 @@ class DatasetOptimizationSuite extends QueryTest with SharedSQLContext {
 
     def collectNamedStruct: PartialFunction[Expression, Seq[CreateNamedStruct]] = {
       case c: CreateNamedStruct => Seq(c)
-      case m: ExternalMapToCatalyst =>
-        m.keyConverter.collect(collectNamedStruct).flatten ++
-          m.valueConverter.collect(collectNamedStruct).flatten
     }
 
-    serializer.serializer.zip(structFields).foreach { case (serializer, fields) =>
-      val structs: Seq[CreateNamedStruct] = serializer.collect(collectNamedStruct).flatten
+    serializer.serializer.zip(structFields).foreach { case (ser, fields) =>
+      val structs: Seq[CreateNamedStruct] = ser.collect(collectNamedStruct).flatten
       assert(structs.size == fields.size)
       structs.zip(fields).foreach { case (struct, fieldNames) =>
         assert(struct.names.map(_.toString) == fieldNames)
@@ -164,6 +162,46 @@ class DatasetOptimizationSuite extends QueryTest with SharedSQLContext {
       val df = mapDs.select(expr("map_keys(map_keys(_1)[0])._1[0]"))
       testSerializer(df, Seq(Seq("_1")))
       checkAnswer(df, Seq(Row("1"), Row("2"), Row("3")))
+    }
+  }
+
+  test("SPARK-27871: Dataset encoder should benefit from codegen cache") {
+    def checkCodegenCache(createDataset: () => Dataset[_]): Unit = {
+      def getCodegenCount(): Long = CodegenMetrics.METRIC_COMPILATION_TIME.getCount()
+
+      val count1 = getCodegenCount()
+      // trigger codegen for Dataset
+      createDataset().collect()
+      val count2 = getCodegenCount()
+      // codegen happens
+      assert(count2 > count1)
+
+      // trigger codegen for another Dataset of same type
+      createDataset().collect()
+      // codegen cache should work for Datasets of same type.
+      val count3 = getCodegenCount()
+      assert(count3 == count2)
+
+      withSQLConf(SQLConf.OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID.key -> "false") {
+        // trigger codegen for another Dataset of same type
+        createDataset().collect()
+        // with the rule disabled, codegen happens again for encoder serializer and encoder
+        // deserializer
+        val count4 = getCodegenCount()
+        assert(count4 == (count3 + 2))
+      }
+    }
+
+    withClue("array type") {
+      checkCodegenCache(() => Seq(Seq("abc")).toDS())
+    }
+
+    withClue("map type") {
+      checkCodegenCache(() => Seq(Map("abc" -> 1)).toDS())
+    }
+
+    withClue("array of map") {
+      checkCodegenCache(() => Seq(Seq(Map("abc" -> 1))).toDS())
     }
   }
 }

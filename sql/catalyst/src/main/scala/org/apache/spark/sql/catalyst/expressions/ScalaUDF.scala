@@ -57,8 +57,7 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  override def toString: String =
-    s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"
+  override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
 
   // scalastyle:off line.size.limit
 
@@ -1003,22 +1002,38 @@ case class ScalaUDF(
     // such as IntegerType, its javaType is `int` and the returned type of user-defined
     // function is Object. Trying to convert an Object to `int` will cause casting exception.
     val evalCode = evals.map(_.code).mkString("\n")
-    val (funcArgs, initArgs) = evals.zipWithIndex.map { case (eval, i) =>
-      val argTerm = ctx.freshName("arg")
-      val convert = s"$convertersTerm[$i].apply(${eval.value})"
-      val initArg = s"Object $argTerm = ${eval.isNull} ? null : $convert;"
-      (argTerm, initArg)
+    val (funcArgs, initArgs) = evals.zipWithIndex.zip(children.map(_.dataType)).map {
+      case ((eval, i), dt) =>
+        val argTerm = ctx.freshName("arg")
+        val initArg = if (CatalystTypeConverters.isPrimitive(dt)) {
+          val convertedTerm = ctx.freshName("conv")
+          s"""
+             |${CodeGenerator.boxedType(dt)} $convertedTerm = ${eval.value};
+             |Object $argTerm = ${eval.isNull} ? null : $convertedTerm;
+           """.stripMargin
+        } else {
+          s"Object $argTerm = ${eval.isNull} ? null : $convertersTerm[$i].apply(${eval.value});"
+        }
+        (argTerm, initArg)
     }.unzip
 
     val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
     val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
     val resultConverter = s"$convertersTerm[${children.length}]"
     val boxedType = CodeGenerator.boxedType(dataType)
+
+    val funcInvokation = if (CatalystTypeConverters.isPrimitive(dataType)
+        // If the output is nullable, the returned value must be unwrapped from the Option
+        && !nullable) {
+      s"$resultTerm = ($boxedType)$getFuncResult"
+    } else {
+      s"$resultTerm = ($boxedType)$resultConverter.apply($getFuncResult)"
+    }
     val callFunc =
       s"""
          |$boxedType $resultTerm = null;
          |try {
-         |  $resultTerm = ($boxedType)$resultConverter.apply($getFuncResult);
+         |  $funcInvokation;
          |} catch (Exception e) {
          |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
          |}

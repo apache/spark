@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming.continuous
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED
 import org.apache.spark.sql.streaming.OutputMode
 
 class ContinuousAggregationSuite extends ContinuousSuiteBase {
@@ -36,7 +37,7 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
   }
 
   test("basic") {
-    withSQLConf(("spark.sql.streaming.unsupportedOperationCheck", "false")) {
+    withSQLConf((UNSUPPORTED_OPERATION_CHECK_ENABLED.key, "false")) {
       val input = ContinuousMemoryStream.singlePartition[Int]
 
       testStream(input.toDF().agg(max('value)), OutputMode.Complete)(
@@ -112,7 +113,7 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
   }
 
   test("repeated restart") {
-    withSQLConf(("spark.sql.streaming.unsupportedOperationCheck", "false")) {
+    withSQLConf((UNSUPPORTED_OPERATION_CHECK_ENABLED.key, "false")) {
       val input = ContinuousMemoryStream.singlePartition[Int]
 
       testStream(input.toDF().agg(max('value)), OutputMode.Complete)(

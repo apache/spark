@@ -37,6 +37,7 @@ class ByteType private() extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Byte]]
   private[sql] val integral = implicitly[Integral[Byte]]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  override private[sql] val exactNumeric = ByteExactNumeric
 
   /**
    * The default size of a value of the ByteType is 1 byte.

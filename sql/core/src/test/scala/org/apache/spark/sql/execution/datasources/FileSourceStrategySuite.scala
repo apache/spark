@@ -31,15 +31,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
+class FileSourceStrategySuite extends QueryTest with SharedSparkSession with PredicateHelper {
   import testImplicits._
 
   protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
@@ -201,7 +202,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("partitioned table - case insensitive") {
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val table =
         createTable(
           files = Seq(
@@ -279,7 +280,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("Locality support for FileScanRDD") {
-    val partition = FilePartition(0, Seq(
+    val partition = FilePartition(0, Array(
       PartitionedFile(InternalRow.empty, "fakePath0", 0, 10, Array("host0", "host1")),
       PartitionedFile(InternalRow.empty, "fakePath0", 10, 20, Array("host1", "host2")),
       PartitionedFile(InternalRow.empty, "fakePath1", 0, 5, Array("host3")),
@@ -415,7 +416,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
   test("[SPARK-16818] partition pruned file scans implement sameResult correctly") {
     Seq("orc", "").foreach { useV1ReaderList =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1ReaderList) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1ReaderList) {
         withTempPath { path =>
           val tempDir = path.getCanonicalPath
           spark.range(100)
@@ -437,7 +438,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("[SPARK-16818] exchange reuse respects differences in partition pruning") {
-    spark.conf.set("spark.sql.exchange.reuse", true)
+    spark.conf.set(SQLConf.EXCHANGE_REUSE_ENABLED.key, true)
     withTempPath { path =>
       val tempDir = path.getCanonicalPath
       spark.range(10)
@@ -494,6 +495,36 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       val readBack = spark.read.parquet(path).filter($"_1" === "true")
       val filtered = ds.filter($"_1" === "true").toDF()
       checkAnswer(readBack, filtered)
+    }
+  }
+
+  test("SPARK-29768: Column pruning through non-deterministic expressions") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(10)
+          .selectExpr("id as key", "id * 3 as s1", "id * 5 as s2")
+          .write.format("parquet").save(path.getAbsolutePath)
+        val df1 = spark.read.parquet(path.getAbsolutePath)
+        val df2 = df1.selectExpr("key", "rand()").where("key > 5")
+        val plan = df2.queryExecution.sparkPlan
+        val scan = plan.collect { case scan: FileSourceScanExec => scan }
+        assert(scan.size === 1)
+        assert(scan.head.requiredSchema == StructType(StructField("key", LongType) :: Nil))
+      }
+    }
+
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(10)
+          .selectExpr("id as key", "id * 3 as s1", "id * 5 as s2")
+          .write.format("parquet").save(path.getAbsolutePath)
+        val df1 = spark.read.parquet(path.getAbsolutePath)
+        val df2 = df1.selectExpr("key", "rand()").where("key > 5")
+        val plan = df2.queryExecution.optimizedPlan
+        val scan = plan.collect { case r: DataSourceV2ScanRelation => r }
+        assert(scan.size === 1)
+        assert(scan.head.scan.readSchema() == StructType(StructField("key", LongType) :: Nil))
+      }
     }
   }
 

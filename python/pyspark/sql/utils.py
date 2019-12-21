@@ -16,6 +16,10 @@
 #
 
 import py4j
+import sys
+
+if sys.version_info.major >= 3:
+    unicode = str
 
 
 class CapturedException(Exception):
@@ -25,7 +29,12 @@ class CapturedException(Exception):
         self.cause = convert_exception(cause) if cause is not None else None
 
     def __str__(self):
-        return repr(self.desc)
+        desc = self.desc
+        # encode unicode instance for python2 for human readable description
+        if sys.version_info.major < 3 and isinstance(desc, unicode):
+            return str(desc.encode('utf-8'))
+        else:
+            return str(desc)
 
 
 class AnalysisException(CapturedException):
@@ -131,7 +140,7 @@ def require_minimum_pandas_version():
     """ Raise ImportError if minimum version of Pandas is not installed
     """
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pandas_version = "0.19.2"
+    minimum_pandas_version = "0.23.2"
 
     from distutils.version import LooseVersion
     try:
@@ -151,9 +160,10 @@ def require_minimum_pyarrow_version():
     """ Raise ImportError if minimum version of pyarrow is not installed
     """
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "0.12.1"
+    minimum_pyarrow_version = "0.15.1"
 
     from distutils.version import LooseVersion
+    import os
     try:
         import pyarrow
         have_arrow = True
@@ -165,6 +175,9 @@ def require_minimum_pyarrow_version():
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
         raise ImportError("PyArrow >= %s must be installed; however, "
                           "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
+    if os.environ.get("ARROW_PRE_0_15_IPC_FORMAT", "0") == "1":
+        raise RuntimeError("Arrow legacy IPC format is not supported in PySpark, "
+                           "please unset ARROW_PRE_0_15_IPC_FORMAT")
 
 
 def require_test_compiled():
@@ -207,3 +220,16 @@ class ForeachBatchFunction(object):
 
     class Java:
         implements = ['org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction']
+
+
+def to_str(value):
+    """
+    A wrapper over str(), but converts bool values to lower case strings.
+    If None is given, just returns None, instead of converting it to string "None".
+    """
+    if isinstance(value, bool):
+        return str(value).lower()
+    elif value is None:
+        return value
+    else:
+        return str(value)

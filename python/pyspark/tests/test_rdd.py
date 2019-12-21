@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from datetime import datetime, timedelta
 import hashlib
 import os
 import random
 import sys
 import tempfile
+import time
 from glob import glob
 
 from py4j.protocol import Py4JJavaError
@@ -67,6 +69,26 @@ class RDDTests(ReusedPySparkTestCase):
         rdd2 = rdd.repartition(1000)
         it2 = rdd2.toLocalIterator()
         self.assertEqual([1, 2, 3], sorted(it2))
+
+    def test_to_localiterator_prefetch(self):
+        # Test that we fetch the next partition in parallel
+        # We do this by returning the current time and:
+        # reading the first elem, waiting, and reading the second elem
+        # If not in parallel then these would be at different times
+        # But since they are being computed in parallel we see the time
+        # is "close enough" to the same.
+        rdd = self.sc.parallelize(range(2), 2)
+        times1 = rdd.map(lambda x: datetime.now())
+        times2 = rdd.map(lambda x: datetime.now())
+        times_iter_prefetch = times1.toLocalIterator(prefetchPartitions=True)
+        times_iter = times2.toLocalIterator(prefetchPartitions=False)
+        times_prefetch_head = next(times_iter_prefetch)
+        times_head = next(times_iter)
+        time.sleep(2)
+        times_next = next(times_iter)
+        times_prefetch_next = next(times_iter_prefetch)
+        self.assertTrue(times_next - times_head >= timedelta(seconds=2))
+        self.assertTrue(times_prefetch_next - times_prefetch_head < timedelta(seconds=1))
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
@@ -681,8 +703,8 @@ class RDDTests(ReusedPySparkTestCase):
         data = ['1', '2', '3']
         rdd = self.sc.parallelize(data)
         with QuietTest(self.sc):
-            self.assertEqual([], rdd.pipe('cc').collect())
-            self.assertRaises(Py4JJavaError, rdd.pipe('cc', checkCode=True).collect)
+            self.assertEqual([], rdd.pipe('java').collect())
+            self.assertRaises(Py4JJavaError, rdd.pipe('java', checkCode=True).collect)
         result = rdd.pipe('cat').collect()
         result.sort()
         for x, y in zip(data, result):
@@ -768,7 +790,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -34,7 +34,7 @@ object SparkSQLExample {
   case class Person(name: String, age: Long)
   // $example off:create_ds$
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // $example on:init_session$
     val spark = SparkSession
       .builder()

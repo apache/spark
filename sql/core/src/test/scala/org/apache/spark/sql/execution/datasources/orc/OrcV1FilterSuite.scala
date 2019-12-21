@@ -32,8 +32,7 @@ class OrcV1FilterSuite extends OrcFilterSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "orc")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 
   override def checkFilterPredicate(
       df: DataFrame,

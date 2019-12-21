@@ -25,7 +25,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 object QueueStream {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     StreamingExamples.setStreamingLogLevels()
     val sparkConf = new SparkConf().setAppName("QueueStream")

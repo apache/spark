@@ -22,11 +22,11 @@ import scala.collection.JavaConverters._
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.reader.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -42,6 +42,8 @@ case class OrcScanBuilder(
     // Hadoop Configurations are case sensitive.
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
+
+  override protected val supportsNestedSchemaPruning: Boolean = true
 
   override def build(): Scan = {
     OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,

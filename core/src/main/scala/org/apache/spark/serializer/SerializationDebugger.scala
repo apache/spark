@@ -303,7 +303,7 @@ private[spark] object SerializationDebugger extends Logging {
 
   /** An output stream that emulates /dev/null */
   private class NullOutputStream extends OutputStream {
-    override def write(b: Int) { }
+    override def write(b: Int): Unit = { }
   }
 
   /**

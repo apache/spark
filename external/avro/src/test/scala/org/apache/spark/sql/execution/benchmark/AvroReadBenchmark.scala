@@ -22,7 +22,6 @@ import scala.util.Random
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.types._
 
 /**
@@ -36,7 +35,7 @@ import org.apache.spark.sql.types._
  *      Results will be written to "benchmarks/AvroReadBenchmark-results.txt".
  * }}}
  */
-object AvroReadBenchmark extends SqlBasedBenchmark with SQLHelper {
+object AvroReadBenchmark extends SqlBasedBenchmark {
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }

@@ -23,35 +23,37 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
 /**
  * Tests for the sameResult function for [[SparkPlan]]s.
  */
-class SameResultSuite extends QueryTest with SharedSQLContext {
+class SameResultSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("FileSourceScanExec: different orders of data filters and partition filters") {
-    withTempPath { path =>
-      val tmpDir = path.getCanonicalPath
-      spark.range(10)
-        .selectExpr("id as a", "id + 1 as b", "id + 2 as c", "id + 3 as d")
-        .write
-        .partitionBy("a", "b")
-        .parquet(tmpDir)
-      val df = spark.read.parquet(tmpDir)
-      // partition filters: a > 1 AND b < 9
-      // data filters: c > 1 AND d < 9
-      val plan1 = getFileSourceScanExec(df.where("a > 1 AND b < 9 AND c > 1 AND d < 9"))
-      val plan2 = getFileSourceScanExec(df.where("b < 9 AND a > 1 AND d < 9 AND c > 1"))
-      assert(plan1.sameResult(plan2))
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        val tmpDir = path.getCanonicalPath
+        spark.range(10)
+          .selectExpr("id as a", "id + 1 as b", "id + 2 as c", "id + 3 as d")
+          .write
+          .partitionBy("a", "b")
+          .parquet(tmpDir)
+        val df = spark.read.parquet(tmpDir)
+        // partition filters: a > 1 AND b < 9
+        // data filters: c > 1 AND d < 9
+        val plan1 = getFileSourceScanExec(df.where("a > 1 AND b < 9 AND c > 1 AND d < 9"))
+        val plan2 = getFileSourceScanExec(df.where("b < 9 AND a > 1 AND d < 9 AND c > 1"))
+        assert(plan1.sameResult(plan2))
+      }
     }
   }
 
   test("FileScan: different orders of data filters and partition filters") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
-      Seq("orc", "json", "csv").foreach { format =>
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      Seq("orc", "json", "csv", "parquet").foreach { format =>
         withTempPath { path =>
           val tmpDir = path.getCanonicalPath
           spark.range(10)
@@ -73,7 +75,7 @@ class SameResultSuite extends QueryTest with SharedSQLContext {
           val plan3 = df.where("b < 9 AND a > 1 AND d < 8 AND c > 1").queryExecution.sparkPlan
           assert(!plan1.sameResult(plan3))
           // The [[FileScan]]s should have different results if they support filter pushdown.
-          if (format == "orc") {
+          if (format == "orc" || format == "parquet") {
             val scan3 = getBatchScanExec(plan3)
             assert(!scan1.sameResult(scan3))
           }
@@ -83,7 +85,7 @@ class SameResultSuite extends QueryTest with SharedSQLContext {
   }
 
   test("TextScan") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
         val tmpDir = path.getCanonicalPath
         spark.range(10)

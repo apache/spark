@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.Locale
+
 import org.apache.spark.util.Utils
 
 
@@ -42,6 +44,7 @@ object StaticSQLConf {
   val GLOBAL_TEMP_DATABASE = buildStaticConf("spark.sql.globalTempDatabase")
     .internal()
     .stringConf
+    .transform(_.toLowerCase(Locale.ROOT))
     .createWithDefault("global_temp")
 
   // This is used to control when we will split a schema's JSON string to multiple pieces
@@ -132,6 +135,19 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(1000)
 
+  val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to fetch and broadcast the table. " +
+        "If we encounter memory issue like frequently full GC or OOM when broadcast table " +
+        "we can decrease this number in order to reduce memory usage. " +
+        "Notice the number should be carefully chosen since decreasing parallelism might " +
+        "cause longer waiting for other broadcasting. Also, increasing parallelism may " +
+        "cause memory problem.")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in [0,128].")
+      .createWithDefault(128)
+
   val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
     .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
       "event. Defaults to no truncation. If set to 0, callsite will be logged instead.")
@@ -145,4 +161,11 @@ object StaticSQLConf {
         "defaults, dropping any overrides in its parent SparkSession.")
       .booleanConf
       .createWithDefault(false)
+
+  val DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED =
+    buildStaticConf("spark.sql.defaultUrlStreamHandlerFactory.enabled")
+      .doc("When true, set FsUrlStreamHandlerFactory to support ADD JAR against HDFS locations")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
 }

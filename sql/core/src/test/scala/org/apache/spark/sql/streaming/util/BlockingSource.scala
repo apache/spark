@@ -52,7 +52,7 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
         import spark.implicits._
         Seq[Int]().toDS().toDF()
       }
-      override def stop() {}
+      override def stop(): Unit = {}
     }
   }
 

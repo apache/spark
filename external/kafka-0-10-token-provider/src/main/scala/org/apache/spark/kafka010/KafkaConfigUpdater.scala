@@ -36,19 +36,33 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
 
   def set(key: String, value: Object): this.type = {
     map.put(key, value)
-    logDebug(s"$module: Set $key to $value, earlier value: ${kafkaParams.getOrElse(key, "")}")
+    if (log.isDebugEnabled()) {
+      val redactedValue = KafkaRedactionUtil.redactParams(Seq((key, value))).head._2
+      val redactedOldValue = KafkaRedactionUtil
+        .redactParams(Seq((key, kafkaParams.getOrElse(key, "")))).head._2
+      logDebug(s"$module: Set $key to $redactedValue, earlier value: $redactedOldValue")
+    }
     this
   }
 
   def setIfUnset(key: String, value: Object): this.type = {
     if (!map.containsKey(key)) {
       map.put(key, value)
-      logDebug(s"$module: Set $key to $value")
+      if (log.isDebugEnabled()) {
+        val redactedValue = KafkaRedactionUtil.redactParams(Seq((key, value))).head._2
+        logDebug(s"$module: Set $key to $redactedValue")
+      }
     }
     this
   }
 
   def setAuthenticationConfigIfNeeded(): this.type = {
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
+      kafkaParams(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
+    setAuthenticationConfigIfNeeded(clusterConfig)
+  }
+
+  def setAuthenticationConfigIfNeeded(clusterConfig: Option[KafkaTokenClusterConf]): this.type = {
     // There are multiple possibilities to log in and applied in the following order:
     // - JVM global security provided -> try to log in with JVM global security configuration
     //   which can be configured for example with 'java.security.auth.login.config'.
@@ -58,10 +72,9 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
     if (KafkaTokenUtil.isGlobalJaasConfigurationProvided) {
       logDebug("JVM global security configuration detected, using it for login.")
     } else {
-      val clusterConfig = KafkaTokenUtil.findMatchingToken(SparkEnv.get.conf,
-        map.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
       clusterConfig.foreach { clusterConf =>
         logDebug("Delegation token detected, using it for login.")
+        setIfUnset(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, clusterConf.securityProtocol)
         val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
         set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
         require(clusterConf.tokenMechanism.startsWith("SCRAM"),

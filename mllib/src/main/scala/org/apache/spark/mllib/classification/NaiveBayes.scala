@@ -75,10 +75,10 @@ class NaiveBayesModel private[spark] (
   private val (thetaMinusNegTheta, negThetaSum) = modelType match {
     case Multinomial => (None, None)
     case Bernoulli =>
-      val negTheta = thetaMatrix.map(value => math.log(1.0 - math.exp(value)))
+      val negTheta = thetaMatrix.map(value => math.log1p(-math.exp(value)))
       val ones = new DenseVector(Array.fill(thetaMatrix.numCols) {1.0})
       val thetaMinusNegTheta = thetaMatrix.map { value =>
-        value - math.log(1.0 - math.exp(value))
+        value - math.log1p(-math.exp(value))
       }
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
     case _ =>

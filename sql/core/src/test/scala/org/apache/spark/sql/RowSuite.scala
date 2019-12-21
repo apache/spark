@@ -19,11 +19,11 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class RowSuite extends SparkFunSuite with SharedSQLContext {
+class RowSuite extends SparkFunSuite with SharedSparkSession {
   import testImplicits._
 
   test("create row") {

@@ -690,7 +690,8 @@ class TypeCoercionSuite extends AnalysisTest {
       Some(new StructType().add("a", StringType)))
   }
 
-  private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
+  private def ruleTest(rule: Rule[LogicalPlan],
+      initial: Expression, transformed: Expression): Unit = {
     ruleTest(Seq(rule), initial, transformed)
   }
 
@@ -1126,14 +1127,14 @@ class TypeCoercionSuite extends AnalysisTest {
       Concat(Seq(Cast(Literal(new java.sql.Date(0)), StringType),
         Cast(Literal(new Timestamp(0)), StringType))))
 
-    withSQLConf("spark.sql.function.concatBinaryAsString" -> "true") {
+    withSQLConf(SQLConf.CONCAT_BINARY_AS_STRING.key -> "true") {
       ruleTest(rule,
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Cast(Literal("123".getBytes), StringType),
           Cast(Literal("456".getBytes), StringType))))
     }
 
-    withSQLConf("spark.sql.function.concatBinaryAsString" -> "false") {
+    withSQLConf(SQLConf.CONCAT_BINARY_AS_STRING.key -> "false") {
       ruleTest(rule,
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))))
@@ -1180,14 +1181,14 @@ class TypeCoercionSuite extends AnalysisTest {
       Elt(Seq(Literal(2), Cast(Literal(new java.sql.Date(0)), StringType),
         Cast(Literal(new Timestamp(0)), StringType))))
 
-    withSQLConf("spark.sql.function.eltOutputAsString" -> "true") {
+    withSQLConf(SQLConf.ELT_OUTPUT_AS_STRING.key -> "true") {
       ruleTest(rule,
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Cast(Literal("123".getBytes), StringType),
           Cast(Literal("456".getBytes), StringType))))
     }
 
-    withSQLConf("spark.sql.function.eltOutputAsString" -> "false") {
+    withSQLConf(SQLConf.ELT_OUTPUT_AS_STRING.key -> "false") {
       ruleTest(rule,
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
@@ -1400,32 +1401,6 @@ class TypeCoercionSuite extends AnalysisTest {
     }
   }
 
-  test("rule for date/timestamp operations") {
-    val dateTimeOperations = TypeCoercion.DateTimeOperations
-    val date = Literal(new java.sql.Date(0L))
-    val timestamp = Literal(new Timestamp(0L))
-    val interval = Literal(new CalendarInterval(0, 0))
-    val str = Literal("2015-01-01")
-
-    ruleTest(dateTimeOperations, Add(date, interval), Cast(TimeAdd(date, interval), DateType))
-    ruleTest(dateTimeOperations, Add(interval, date), Cast(TimeAdd(date, interval), DateType))
-    ruleTest(dateTimeOperations, Add(timestamp, interval),
-      Cast(TimeAdd(timestamp, interval), TimestampType))
-    ruleTest(dateTimeOperations, Add(interval, timestamp),
-      Cast(TimeAdd(timestamp, interval), TimestampType))
-    ruleTest(dateTimeOperations, Add(str, interval), Cast(TimeAdd(str, interval), StringType))
-    ruleTest(dateTimeOperations, Add(interval, str), Cast(TimeAdd(str, interval), StringType))
-
-    ruleTest(dateTimeOperations, Subtract(date, interval), Cast(TimeSub(date, interval), DateType))
-    ruleTest(dateTimeOperations, Subtract(timestamp, interval),
-      Cast(TimeSub(timestamp, interval), TimestampType))
-    ruleTest(dateTimeOperations, Subtract(str, interval), Cast(TimeSub(str, interval), StringType))
-
-    // interval operations should not be effected
-    ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
-    ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
-  }
-
   /**
    * There are rules that need to not fire before child expressions get resolved.
    * We use this test to make sure those rules do not fire early.
@@ -1490,26 +1465,15 @@ class TypeCoercionSuite extends AnalysisTest {
       GreaterThan(Literal("1.5"), Literal(BigDecimal("0.5"))),
       GreaterThan(Cast(Literal("1.5"), DoubleType), Cast(Literal(BigDecimal("0.5")),
         DoubleType)))
-    Seq(true, false).foreach { convertToTS =>
-      withSQLConf(
-        "spark.sql.legacy.compareDateTimestampInTimestamp" -> convertToTS.toString) {
-        val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
-        val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
-        val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))
-        if (convertToTS) {
-          // `Date` should be treated as timestamp at 00:00:00 See SPARK-23549
-          ruleTest(rule, EqualTo(date0301, timestamp0301000000),
-            EqualTo(Cast(date0301, TimestampType), timestamp0301000000))
-          ruleTest(rule, LessThan(date0301, timestamp0301000001),
-            LessThan(Cast(date0301, TimestampType), timestamp0301000001))
-        } else {
-          ruleTest(rule, LessThan(date0301, timestamp0301000000),
-            LessThan(Cast(date0301, StringType), Cast(timestamp0301000000, StringType)))
-          ruleTest(rule, LessThan(date0301, timestamp0301000001),
-            LessThan(Cast(date0301, StringType), Cast(timestamp0301000001, StringType)))
-        }
-      }
-    }
+    // Checks that dates/timestamps are not promoted to strings
+    val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
+    val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
+    val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))
+    // `Date` should be treated as timestamp at 00:00:00 See SPARK-23549
+    ruleTest(rule, EqualTo(date0301, timestamp0301000000),
+      EqualTo(Cast(date0301, TimestampType), timestamp0301000000))
+    ruleTest(rule, LessThan(date0301, timestamp0301000001),
+      LessThan(Cast(date0301, TimestampType), timestamp0301000001))
   }
 
   test("cast WindowFrame boundaries to the type they operate upon") {
@@ -1546,6 +1510,20 @@ class TypeCoercionSuite extends AnalysisTest {
         Seq(SortOrder(Literal(1L), Ascending)),
         SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing))
     )
+  }
+
+  test("SPARK-29000: skip to handle decimals in ImplicitTypeCasts") {
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
+        Cast(100, DecimalType(34, 24))), Literal(1)),
+      Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
+        Cast(100, DecimalType(34, 24))), Literal(1)))
+
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
+        Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)),
+      Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
+        Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)))
   }
 }
 

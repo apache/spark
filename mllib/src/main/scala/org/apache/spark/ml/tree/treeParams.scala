@@ -23,6 +23,8 @@ import scala.util.Try
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.classification.ProbabilisticClassifierParams
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -38,6 +40,16 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  */
 private[ml] trait DecisionTreeParams extends PredictorParams
   with HasCheckpointInterval with HasSeed with HasWeightCol {
+
+  /**
+   * Leaf indices column name.
+   * Predicted leaf index of each instance in each tree by preorder.
+   * (default = "")
+   * @group param
+   */
+  final val leafCol: Param[String] =
+    new Param[String](this, "leafCol", "Leaf indices column name. " +
+      "Predicted leaf index of each instance in each tree by preorder")
 
   /**
    * Maximum depth of the tree (nonnegative).
@@ -122,9 +134,15 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
 
-  setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1,
+  setDefault(leafCol -> "", maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1,
     minWeightFractionPerNode -> 0.0, minInfoGain -> 0.0, maxMemoryInMB -> 256,
     cacheNodeIds -> false, checkpointInterval -> 10)
+
+  /** @group setParam */
+  final def setLeafCol(value: String): this.type = set(leafCol, value)
+
+  /** @group getParam */
+  final def getLeafCol: String = $(leafCol)
 
   /** @group getParam */
   final def getMaxDepth: Int = $(maxDepth)
@@ -178,6 +196,7 @@ private[ml] trait TreeClassifierParams extends Params {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
+   * This impurity type is used in DecisionTreeClassifier and RandomForestClassifier,
    * Supported: "entropy" and "gini".
    * (default = gini)
    * @group param
@@ -213,11 +232,26 @@ private[ml] object TreeClassifierParams {
 }
 
 private[ml] trait DecisionTreeClassifierParams
-  extends DecisionTreeParams with TreeClassifierParams
+  extends DecisionTreeParams with TreeClassifierParams with ProbabilisticClassifierParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), DoubleType)
+    }
+    outputSchema
+  }
+}
 
 private[ml] trait HasVarianceImpurity extends Params {
   /**
    * Criterion used for information gain calculation (case-insensitive).
+   * This impurity type is used in DecisionTreeRegressor, RandomForestRegressor, GBTRegressor
+   * and GBTClassifier (since GBTClassificationModel is internally composed of
+   * DecisionTreeRegressionModels).
    * Supported: "variance".
    * (default = variance)
    * @group param
@@ -263,12 +297,14 @@ private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      SchemaUtils.appendColumn(newSchema, $(varianceCol), DoubleType)
-    } else {
-      newSchema
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(varianceCol), DoubleType)
     }
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), DoubleType)
+    }
+    outputSchema
   }
 }
 
@@ -353,7 +389,41 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
 }
 
+/**
+ * Parameters for Decision Tree-based ensemble classification algorithms.
+ */
+private[ml] trait TreeEnsembleClassifierParams
+  extends TreeEnsembleParams with ProbabilisticClassifierParams {
 
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+    }
+    outputSchema
+  }
+}
+
+/**
+ * Parameters for Decision Tree-based ensemble regression algorithms.
+ */
+private[ml] trait TreeEnsembleRegressorParams
+  extends TreeEnsembleParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+    }
+    outputSchema
+  }
+}
 
 /**
  * Parameters for Random Forest algorithms.
@@ -382,10 +452,10 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 }
 
 private[ml] trait RandomForestClassifierParams
-  extends RandomForestParams with TreeClassifierParams
+  extends RandomForestParams with TreeEnsembleClassifierParams with TreeClassifierParams
 
 private[ml] trait RandomForestRegressorParams
-  extends RandomForestParams with TreeRegressorParams
+  extends RandomForestParams with TreeEnsembleRegressorParams with TreeRegressorParams
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
@@ -455,7 +525,8 @@ private[ml] object GBTClassifierParams {
     Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with HasVarianceImpurity {
+private[ml] trait GBTClassifierParams
+  extends GBTParams with TreeEnsembleClassifierParams with HasVarianceImpurity {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
@@ -492,7 +563,8 @@ private[ml] object GBTRegressorParams {
     Array("squared", "absolute").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
+private[ml] trait GBTRegressorParams
+  extends GBTParams with TreeEnsembleRegressorParams with TreeRegressorParams {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
