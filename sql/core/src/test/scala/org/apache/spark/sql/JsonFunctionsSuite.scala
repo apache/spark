@@ -107,6 +107,33 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         "3", "5.23", "1"))
   }
 
+  test("json parsing through bracket notation") {
+    val df: DataFrame = tuples.toDF("key", "jstring")
+    val expected =
+      Row("1", "value1", "value2", "3", null, "5.23") ::
+          Row("2", "value12", "2", "value3", "4.01", null) ::
+          Row("3", "value13", "2", "value33", "value44", "5.01") ::
+          Row("4", null, null, null, null, null) ::
+          Row("5", "", null, null, null, null) ::
+          Row("6", null, null, null, null, null) ::
+          Nil
+
+    checkAnswer(
+      df.selectExpr("key", "jstring['f1']", "jstring['f2']", "jstring['f3']",
+         "jstring['f4']", "jstring['f5']"),
+      expected)
+  }
+
+  test("parsing json arrays with dot and bracket notation") {
+    // get_json_object will not work here, therefore we first need to explode
+    val df = Seq("""[{"a":"value1"},{"a":"value2"}]""").toDF("jstring")
+      .withColumn("jstring", explode(from_json($"jstring", lit("array<string>"))))
+
+    checkAnswer(
+      df.select($"jstring.a"),
+      Seq(Row("value1"), Row("value2")))
+  }
+
   test("json_tuple select") {
     val df: DataFrame = tuples.toDF("key", "jstring")
     val expected =
