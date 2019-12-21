@@ -134,6 +134,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row("value1"), Row("value2")))
   }
 
+  test("json parsing through dot and bracket notation disabled with flag") {
+    val df: DataFrame = tuples.toDF("key", "jstring")
+
+    withSQLConf(SQLConf.ENABLE_STRING_NESTED_FIELD_ACCESS.key -> "false") {
+      intercept[AnalysisException] {
+        df.selectExpr("key", "jstring.f1")
+      }
+
+      intercept[AnalysisException] {
+        df.selectExpr("key", "jstring['f1']")
+      }
+    }
+  }
+
   test("json_tuple select") {
     val df: DataFrame = tuples.toDF("key", "jstring")
     val expected =
