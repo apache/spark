@@ -201,9 +201,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       if (now - lastSeenMs > executorTimeoutMs) {
         logWarning(s"Removing executor $executorId with no recent heartbeats: " +
           s"${now - lastSeenMs} ms exceeds timeout $executorTimeoutMs ms")
-        scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
-          s"timed out after ${now - lastSeenMs} ms"))
-          // Asynchronously kill the executor to avoid blocking the current thread
+        // Asynchronously kill the executor to avoid blocking the current thread
         killExecutorThread.submit(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             // Note: we want to get an executor back after expiring this one,
@@ -213,7 +211,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             // lost executors from CoarseGrainedSchedulerBackend manually here (SPARK-27348)
             sc.schedulerBackend match {
               case backend: CoarseGrainedSchedulerBackend =>
-                backend.driverEndpoint.send(RemoveExecutor(executorId, ExecutorKilled))
+                backend.driverEndpoint.send(RemoveExecutor(executorId,
+                  SlaveLost(s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
               case _ =>
             }
           }
