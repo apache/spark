@@ -27,8 +27,12 @@ import org.apache.spark.sql.types.StructType
  * Conversion helpers for working with v2 [[CatalogPlugin]].
  */
 private[sql] object CatalogV2Implicits {
+  import LogicalExpressions._
+
   implicit class PartitionTypeHelper(partitionType: StructType) {
-    def asTransforms: Array[Transform] = partitionType.names.map(LogicalExpressions.identity)
+    def asTransforms: Array[Transform] = {
+      partitionType.names.map(col => identity(reference(Seq(col)))).toArray
+    }
   }
 
   implicit class BucketSpecHelper(spec: BucketSpec) {
@@ -38,7 +42,8 @@ private[sql] object CatalogV2Implicits {
           s"Cannot convert bucketing with sort columns to a transform: $spec")
       }
 
-      LogicalExpressions.bucket(spec.numBuckets, spec.bucketColumnNames: _*)
+      val references = spec.bucketColumnNames.map(col => reference(Seq(col)))
+      bucket(spec.numBuckets, references.toArray)
     }
   }
 
@@ -91,6 +96,8 @@ private[sql] object CatalogV2Implicits {
         quote(ident.name)
       }
     }
+
+    def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
   }
 
   implicit class MultipartIdentifierHelper(parts: Seq[String]) {
@@ -111,7 +118,7 @@ private[sql] object CatalogV2Implicits {
     def quoted: String = parts.map(quote).mkString(".")
   }
 
-  private def quote(part: String): String = {
+  def quote(part: String): String = {
     if (part.contains(".") || part.contains("`")) {
       s"`${part.replace("`", "``")}`"
     } else {

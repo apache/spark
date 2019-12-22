@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.LabeledPoint
@@ -79,6 +81,8 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
 
     assert(ovaModel.numClasses === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
+    checkNominalOnDF(transformedDataset, "prediction", ovaModel.numClasses)
+    checkVectorSizeOnDF(transformedDataset, "rawPrediction", ovaModel.numClasses)
 
     // check for label metadata in prediction col
     val predictionColSchema = transformedDataset.schema(ovaModel.getPredictionCol)

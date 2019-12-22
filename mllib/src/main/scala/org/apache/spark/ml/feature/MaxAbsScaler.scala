@@ -117,19 +117,25 @@ class MaxAbsScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val scale = maxAbs.toArray.map { v => if (v == 0) 1.0 else 1 / v }
     val func = StandardScalerModel.getTransformFunc(
       Array.empty, scale, false, true)
     val transformer = udf(func)
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), maxAbs.size)
+    }
+    outputSchema
   }
 
   @Since("2.0.0")

@@ -253,10 +253,18 @@ class DataFrame(object):
         print(self._jdf.schema().treeString())
 
     @since(1.3)
-    def explain(self, extended=False):
+    def explain(self, extended=None, mode=None):
         """Prints the (logical and physical) plans to the console for debugging purpose.
 
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+        :param mode: specifies the expected output format of plans.
+
+            * ``simple``: Print only a physical plan.
+            * ``extended``: Print both logical and physical plans.
+            * ``codegen``: Print a physical plan and generated codes if they are available.
+            * ``cost``: Print a logical plan and statistics if they are available.
+            * ``formatted``: Split explain output into two sections: a physical plan outline \
+                and node details.
 
         >>> df.explain()
         == Physical Plan ==
@@ -271,11 +279,48 @@ class DataFrame(object):
         ...
         == Physical Plan ==
         ...
+
+        >>> df.explain(mode="formatted")
+        == Physical Plan ==
+        * Scan ExistingRDD (1)
+        (1) Scan ExistingRDD [codegen id : 1]
+        Output: [age#0, name#1]
+
+        .. versionchanged:: 3.0.0
+           Added optional argument `mode` to specify the expected output format of plans.
         """
-        if extended:
-            print(self._jdf.queryExecution().toString())
-        else:
-            print(self._jdf.queryExecution().simpleString())
+
+        if extended is not None and mode is not None:
+            raise Exception("extended and mode can not be specified simultaneously")
+
+        # For the no argument case: df.explain()
+        is_no_argument = extended is None and mode is None
+
+        # For the cases below:
+        #   explain(True)
+        #   explain(extended=False)
+        is_extended_case = extended is not None and isinstance(extended, bool)
+
+        # For the mode specified: df.explain(mode="formatted")
+        is_mode_case = mode is not None and isinstance(mode, basestring)
+
+        if not is_no_argument and not (is_extended_case or is_mode_case):
+            if extended is not None:
+                err_msg = "extended (optional) should be provided as bool" \
+                    ", got {0}".format(type(extended))
+            else:  # For mode case
+                err_msg = "mode (optional) should be provided as str, got {0}".format(type(mode))
+            raise TypeError(err_msg)
+
+        # Sets an explain mode depending on a given argument
+        if is_no_argument:
+            explain_mode = "simple"
+        elif is_extended_case:
+            explain_mode = "extended" if extended else "simple"
+        elif is_mode_case:
+            explain_mode = mode
+
+        print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
     @since(2.4)
     def exceptAll(self, other):
@@ -2110,6 +2155,7 @@ class DataFrame(object):
         from pyspark.sql.utils import require_minimum_pandas_version
         require_minimum_pandas_version()
 
+        import numpy as np
         import pandas as pd
 
         if self.sql_ctx._conf.pandasRespectSessionTimeZone():
@@ -2190,6 +2236,11 @@ class DataFrame(object):
                 not(isinstance(field.dataType, IntegralType) and field.nullable and
                     pdf[field.name].isnull().any()):
                 dtype[field.name] = pandas_type
+            # Ensure we fall back to nullable numpy types, even when whole column is null:
+            if isinstance(field.dataType, IntegralType) and pdf[field.name].isnull().any():
+                dtype[field.name] = np.float64
+            if isinstance(field.dataType, BooleanType) and pdf[field.name].isnull().any():
+                dtype[field.name] = np.object
 
         for f, t in dtype.items():
             pdf[f] = pdf[f].astype(t, copy=False)
@@ -2311,8 +2362,16 @@ def _to_corrected_pandas_type(dt):
         return np.int16
     elif type(dt) == IntegerType:
         return np.int32
+    elif type(dt) == LongType:
+        return np.int64
     elif type(dt) == FloatType:
         return np.float32
+    elif type(dt) == DoubleType:
+        return np.float64
+    elif type(dt) == BooleanType:
+        return np.bool
+    elif type(dt) == TimestampType:
+        return np.datetime64
     else:
         return None
 

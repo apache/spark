@@ -2073,15 +2073,6 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
     }
   }
 
-  test("do not produce empty files for empty partitions") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.emptyDataset[String].write.csv(path)
-      val files = new File(path).listFiles()
-      assert(!files.exists(_.getName.endsWith("csv")))
-    }
-  }
-
   test("Do not reuse last good value for bad input field") {
     val schema = StructType(
       StructField("col1", StringType) ::
@@ -2166,6 +2157,51 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
           .count()
         assert(expectedCount == count)
       }
+    }
+  }
+
+  test("parse timestamp in microsecond precision") {
+    withTempPath { path =>
+      val t = "2019-11-14 20:35:30.123456"
+      Seq(t).toDF("t").write.text(path.getAbsolutePath)
+      val readback = spark.read
+        .schema("t timestamp")
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+        .csv(path.getAbsolutePath)
+      checkAnswer(readback, Row(Timestamp.valueOf(t)))
+    }
+  }
+
+  test("Roundtrip in reading and writing timestamps in microsecond precision") {
+    withTempPath { path =>
+      val timestamp = Timestamp.valueOf("2019-11-18 11:56:00.123456")
+      Seq(timestamp).toDF("t")
+        .write
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+        .csv(path.getAbsolutePath)
+      val readback = spark.read
+        .schema("t timestamp")
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+        .csv(path.getAbsolutePath)
+      checkAnswer(readback, Row(timestamp))
+    }
+  }
+
+  test("return correct results when data columns overlap with partition columns") {
+    withTempPath { path =>
+      val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
+
+      val inputDF = Seq((1, 2, 3, 4, 5)).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+      inputDF.write
+        .option("header", "true")
+        .csv(tablePath.getCanonicalPath)
+
+      val resultDF = spark.read
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .csv(path.getCanonicalPath)
+        .select("CoL1", "Col2", "CoL5", "CoL3")
+      checkAnswer(resultDF, Row("a", 2, "e", "c"))
     }
   }
 }

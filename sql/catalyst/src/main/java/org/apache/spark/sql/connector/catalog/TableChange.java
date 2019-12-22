@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.types.DataType;
-
 import java.util.Arrays;
 import java.util.Objects;
+import javax.annotation.Nullable;
+
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.types.DataType;
 
 /**
  * TableChange subclasses represent requested changes to a table. These are passed to
@@ -76,7 +77,7 @@ public interface TableChange {
    * @return a TableChange for the addition
    */
   static TableChange addColumn(String[] fieldNames, DataType dataType) {
-    return new AddColumn(fieldNames, dataType, true, null);
+    return new AddColumn(fieldNames, dataType, true, null, null);
   }
 
   /**
@@ -92,7 +93,7 @@ public interface TableChange {
    * @return a TableChange for the addition
    */
   static TableChange addColumn(String[] fieldNames, DataType dataType, boolean isNullable) {
-    return new AddColumn(fieldNames, dataType, isNullable, null);
+    return new AddColumn(fieldNames, dataType, isNullable, null, null);
   }
 
   /**
@@ -113,7 +114,30 @@ public interface TableChange {
       DataType dataType,
       boolean isNullable,
       String comment) {
-    return new AddColumn(fieldNames, dataType, isNullable, comment);
+    return new AddColumn(fieldNames, dataType, isNullable, comment, null);
+  }
+
+  /**
+   * Create a TableChange for adding a column.
+   * <p>
+   * If the field already exists, the change will result in an {@link IllegalArgumentException}.
+   * If the new field is nested and its parent does not exist or is not a struct, the change will
+   * result in an {@link IllegalArgumentException}.
+   *
+   * @param fieldNames field names of the new column
+   * @param dataType the new column's data type
+   * @param isNullable whether the new column can contain null
+   * @param comment the new field's comment string
+   * @param position the new columns's position
+   * @return a TableChange for the addition
+   */
+  static TableChange addColumn(
+      String[] fieldNames,
+      DataType dataType,
+      boolean isNullable,
+      String comment,
+      ColumnPosition position) {
+    return new AddColumn(fieldNames, dataType, isNullable, comment, position);
   }
 
   /**
@@ -178,6 +202,21 @@ public interface TableChange {
    */
   static TableChange updateColumnComment(String[] fieldNames, String newComment) {
     return new UpdateColumnComment(fieldNames, newComment);
+  }
+
+  /**
+   * Create a TableChange for updating the position of a field.
+   * <p>
+   * The name is used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
+   *
+   * @param fieldNames field names of the column to update
+   * @param newPosition the new position
+   * @return a TableChange for the update
+   */
+  static TableChange updateColumnPosition(String[] fieldNames, ColumnPosition newPosition) {
+    return new UpdateColumnPosition(fieldNames, newPosition);
   }
 
   /**
@@ -259,6 +298,69 @@ public interface TableChange {
     }
   }
 
+  interface ColumnPosition {
+
+    static ColumnPosition first() {
+      return First.SINGLETON;
+    }
+
+    static ColumnPosition after(String column) {
+      return new After(column);
+    }
+  }
+
+  /**
+   * Column position FIRST means the specified column should be the first column.
+   * Note that, the specified column may be a nested field, and then FIRST means this field should
+   * be the first one within the struct.
+   */
+  final class First implements ColumnPosition {
+    private static final First SINGLETON = new First();
+
+    private First() {}
+
+    @Override
+    public String toString() {
+      return "FIRST";
+    }
+  }
+
+  /**
+   * Column position AFTER means the specified column should be put after the given `column`.
+   * Note that, the specified column may be a nested field, and then the given `column` refers to
+   * a field in the same struct.
+   */
+  final class After implements ColumnPosition {
+    private final String column;
+
+    private After(String column) {
+      assert column != null;
+      this.column = column;
+    }
+
+    public String column() {
+      return column;
+    }
+
+    @Override
+    public String toString() {
+      return "AFTER " + column;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      After after = (After) o;
+      return column.equals(after.column);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(column);
+    }
+  }
+
   interface ColumnChange extends TableChange {
     String[] fieldNames();
   }
@@ -275,12 +377,19 @@ public interface TableChange {
     private final DataType dataType;
     private final boolean isNullable;
     private final String comment;
+    private final ColumnPosition position;
 
-    private AddColumn(String[] fieldNames, DataType dataType, boolean isNullable, String comment) {
+    private AddColumn(
+        String[] fieldNames,
+        DataType dataType,
+        boolean isNullable,
+        String comment,
+        ColumnPosition position) {
       this.fieldNames = fieldNames;
       this.dataType = dataType;
       this.isNullable = isNullable;
       this.comment = comment;
+      this.position = position;
     }
 
     @Override
@@ -296,8 +405,14 @@ public interface TableChange {
       return isNullable;
     }
 
+    @Nullable
     public String comment() {
       return comment;
+    }
+
+    @Nullable
+    public ColumnPosition position() {
+      return position;
     }
 
     @Override
@@ -308,12 +423,13 @@ public interface TableChange {
       return isNullable == addColumn.isNullable &&
         Arrays.equals(fieldNames, addColumn.fieldNames) &&
         dataType.equals(addColumn.dataType) &&
-        comment.equals(addColumn.comment);
+        Objects.equals(comment, addColumn.comment) &&
+        Objects.equals(position, addColumn.position);
     }
 
     @Override
     public int hashCode() {
-      int result = Objects.hash(dataType, isNullable, comment);
+      int result = Objects.hash(dataType, isNullable, comment, position);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
@@ -448,6 +564,48 @@ public interface TableChange {
     @Override
     public int hashCode() {
       int result = Objects.hash(newComment);
+      result = 31 * result + Arrays.hashCode(fieldNames);
+      return result;
+    }
+  }
+
+  /**
+   * A TableChange to update the position of a field.
+   * <p>
+   * The field names are used to find the field to update.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   */
+  final class UpdateColumnPosition implements ColumnChange {
+    private final String[] fieldNames;
+    private final ColumnPosition position;
+
+    private UpdateColumnPosition(String[] fieldNames, ColumnPosition position) {
+      this.fieldNames = fieldNames;
+      this.position = position;
+    }
+
+    @Override
+    public String[] fieldNames() {
+      return fieldNames;
+    }
+
+    public ColumnPosition position() {
+      return position;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      UpdateColumnPosition that = (UpdateColumnPosition) o;
+      return Arrays.equals(fieldNames, that.fieldNames) &&
+        position.equals(that.position);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(position);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }

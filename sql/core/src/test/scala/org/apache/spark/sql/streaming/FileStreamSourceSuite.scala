@@ -29,6 +29,7 @@ import org.apache.hadoop.util.Progressable
 import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
@@ -146,6 +147,20 @@ abstract class FileStreamSourceTest
       tmpDir.listFiles().foreach { f =>
         f.renameTo(new File(src, s"${f.getName}"))
       }
+    }
+  }
+
+  case class AddFilesToFileStreamSinkLog(
+      fs: FileSystem,
+      srcDir: Path,
+      sinkLog: FileStreamSinkLog,
+      batchId: Int)(
+      pathFilter: Path => Boolean) extends ExternalAction {
+    override def runAction(): Unit = {
+      val statuses = fs.listStatus(srcDir, new PathFilter {
+        override def accept(path: Path): Boolean = pathFilter(path)
+      })
+      sinkLog.add(batchId, statuses.map(SinkFileStatus(_)))
     }
   }
 
@@ -1617,14 +1632,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("remove completed files when remove option is enabled") {
-    def assertFileIsRemoved(files: Array[String], fileName: String): Unit = {
-      assert(!files.exists(_.startsWith(fileName)))
-    }
-
-    def assertFileIsNotRemoved(files: Array[String], fileName: String): Unit = {
-      assert(files.exists(_.startsWith(fileName)))
-    }
-
     withTempDirs { case (src, tmp) =>
       withSQLConf(
         SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
@@ -1642,28 +1649,24 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           CheckAnswer("keep1"),
           AssertOnQuery("input file removed") { _: StreamExecution =>
             // it doesn't rename any file yet
-            assertFileIsNotRemoved(src.list(), "keep1")
+            assertFileIsNotRemoved(src, "keep1")
             true
           },
           AddTextFileData("keep2", src, tmp, tmpFilePrefix = "ke ep2 %"),
           CheckAnswer("keep1", "keep2"),
           AssertOnQuery("input file removed") { _: StreamExecution =>
-            val files = src.list()
-
             // it renames input file for first batch, but not for second batch yet
-            assertFileIsRemoved(files, "keep1")
-            assertFileIsNotRemoved(files, "ke ep2 %")
+            assertFileIsRemoved(src, "keep1")
+            assertFileIsNotRemoved(src, "ke ep2 %")
 
             true
           },
           AddTextFileData("keep3", src, tmp, tmpFilePrefix = "keep3"),
           CheckAnswer("keep1", "keep2", "keep3"),
           AssertOnQuery("input file renamed") { _: StreamExecution =>
-            val files = src.list()
-
             // it renames input file for second batch, but not third batch yet
-            assertFileIsRemoved(files, "ke ep2 %")
-            assertFileIsNotRemoved(files, "keep3")
+            assertFileIsRemoved(src, "ke ep2 %")
+            assertFileIsNotRemoved(src, "keep3")
 
             true
           }
@@ -1739,6 +1742,44 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  Seq("delete", "archive").foreach { cleanOption =>
+    test(s"Throw UnsupportedOperationException on configuring $cleanOption when source path" +
+      " refers the output dir of FileStreamSink") {
+      withThreeTempDirs { case (src, tmp, archiveDir) =>
+        withSQLConf(
+          SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
+          // Force deleting the old logs
+          SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+        ) {
+          val option = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1",
+            "cleanSource" -> cleanOption, "sourceArchiveDir" -> archiveDir.getAbsolutePath)
+
+          val fileStream = createFileStream("text", src.getCanonicalPath, options = option)
+          val filtered = fileStream.filter($"value" contains "keep")
+
+          // create FileStreamSinkLog under source directory
+          val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
+            new File(src, FileStreamSink.metadataDir).getCanonicalPath)
+          val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
+          val srcPath = new Path(src.getCanonicalPath)
+          val fileSystem = srcPath.getFileSystem(hadoopConf)
+
+          // Here we will just check whether the source file is removed or not, as we cover
+          // functionality test of "archive" in other UT.
+          testStream(filtered)(
+            AddTextFileData("keep1", src, tmp, tmpFilePrefix = "keep1"),
+            AddFilesToFileStreamSinkLog(fileSystem, srcPath, sinkLog, 0) { path =>
+              path.getName.startsWith("keep1")
+            },
+            ExpectFailure[UnsupportedOperationException](
+              t => assert(t.getMessage.startsWith("Clean up source files is not supported")),
+              isFatalError = false)
+          )
+        }
+      }
+    }
+  }
+
   class FakeFileSystem(scheme: String) extends FileSystem {
     override def exists(f: Path): Boolean = true
 
@@ -1795,6 +1836,14 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       new SourceFileArchiver(fakeFileSystem, sourcePatternPath, fakeFileSystem2,
         baseArchiveDirPath)
     }
+  }
+
+  private def assertFileIsRemoved(sourceDir: File, fileName: String): Unit = {
+    assert(!sourceDir.list().exists(_.startsWith(fileName)))
+  }
+
+  private def assertFileIsNotRemoved(sourceDir: File, fileName: String): Unit = {
+    assert(sourceDir.list().exists(_.startsWith(fileName)))
   }
 
   private def assertFileIsNotMoved(sourceDir: File, expectedDir: File, filePrefix: String): Unit = {

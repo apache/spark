@@ -3267,6 +3267,11 @@ object functions {
   /**
    * Returns an array containing all the elements in `x` from index `start` (or starting from the
    * end if `start` is negative) with the specified `length`.
+   *
+   * @param x the array column to be sliced
+   * @param start the starting index
+   * @param length the length of the slice
+   *
    * @group collection_funcs
    * @since 2.4.0
    */
@@ -3335,7 +3340,7 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
+  def array_sort(e: Column): Column = withExpr { new ArraySort(e.expr) }
 
   /**
    * Remove all elements that equal to element from the given array.

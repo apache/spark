@@ -488,8 +488,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   }
 
   test("implicit feedback regression") {
-    val trainingWithNeg = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
-    val trainingWithZero = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
+    val trainingWithNeg = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
+    val trainingWithZero = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
     val modelWithNeg =
       trainALS(trainingWithNeg, rank = 1, maxIter = 5, regParam = 0.01, implicitPrefs = true)
     val modelWithZero =

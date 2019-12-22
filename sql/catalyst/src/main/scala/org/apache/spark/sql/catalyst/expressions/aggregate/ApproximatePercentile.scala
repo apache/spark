@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import com.google.common.primitives.{Doubles, Ints, Longs}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
@@ -63,7 +63,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(10.0, array(0.5, 0.4, 0.1), 100);
        [10.0,10.0,10.0]
       > SELECT _FUNC_(10.0, 0.5, 100);
-       10
+       10.0
   """,
   since = "2.1.0")
 case class ApproximatePercentile(
@@ -185,7 +185,8 @@ case class ApproximatePercentile(
     if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
 
-  override def prettyName: String = "percentile_approx"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile_approx")
 
   override def serialize(obj: PercentileDigest): Array[Byte] = {
     ApproximatePercentile.serializer.serialize(obj)
@@ -321,4 +322,5 @@ object ApproximatePercentile {
   }
 
   val serializer: PercentileDigestSerializer = new PercentileDigestSerializer
+
 }

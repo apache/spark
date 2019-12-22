@@ -33,6 +33,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.StructType
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a>
@@ -192,8 +193,17 @@ class RandomForestRegressionModel private[ml] (
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateField(outputSchema, getLeafField($(leafCol)))
+    }
+    outputSchema
+  }
+
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
@@ -204,12 +214,14 @@ class RandomForestRegressionModel private[ml] (
       val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
+        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
+        .as($(leafCol), outputSchema($(leafCol)).metadata)
     }
 
     if (predictionColNames.nonEmpty) {

@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, Star, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -250,10 +250,34 @@ case class CreateNamespace(
  * The logical plan of the DROP NAMESPACE command that works for v2 catalogs.
  */
 case class DropNamespace(
-    catalog: SupportsNamespaces,
+    catalog: CatalogPlugin,
     namespace: Seq[String],
     ifExists: Boolean,
     cascade: Boolean) extends Command
+
+/**
+ * The logical plan of the DESCRIBE NAMESPACE command that works for v2 catalogs.
+ */
+case class DescribeNamespace(
+    catalog: SupportsNamespaces,
+    namespace: Seq[String],
+    extended: Boolean) extends Command {
+
+  override def output: Seq[Attribute] = Seq(
+    AttributeReference("name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the column").build())(),
+    AttributeReference("value", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "value of the column").build())())
+}
+
+/**
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES)
+ * command that works for v2 catalogs.
+ */
+case class AlterNamespaceSetProperties(
+    catalog: SupportsNamespaces,
+    namespace: Seq[String],
+    properties: Map[String, String]) extends Command
 
 /**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
@@ -290,8 +314,7 @@ case class DeleteFromTable(
  */
 case class UpdateTable(
     table: LogicalPlan,
-    columns: Seq[Expression],
-    values: Seq[Expression],
+    assignments: Seq[Assignment],
     condition: Option[Expression]) extends Command with SupportsSubquery {
   override def children: Seq[LogicalPlan] = table :: Nil
 }
@@ -378,6 +401,14 @@ case class AlterTable(
 }
 
 /**
+ * The logical plan of the ALTER TABLE RENAME command that works for v2 tables.
+ */
+case class RenameTable(
+    catalog: TableCatalog,
+    oldIdent: Identifier,
+    newIdent: Identifier) extends Command
+
+/**
  * The logical plan of the SHOW TABLE command that works for v2 catalogs.
  */
 case class ShowTables(
@@ -411,4 +442,15 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command 
   override val output: Seq[Attribute] = Seq(
     AttributeReference("catalog", StringType, nullable = false)(),
     AttributeReference("namespace", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the SHOW TBLPROPERTIES command that works for v2 catalogs.
+ */
+case class ShowTableProperties(
+    table: NamedRelation,
+    propertyKey: Option[String]) extends Command{
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("key", StringType, nullable = false)(),
+    AttributeReference("value", StringType, nullable = false)())
 }

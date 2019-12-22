@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.implicitConversions
 
 import org.apache.commons.codec.digest.DigestUtils
 import org.scalatest.exceptions.TestFailedException
@@ -36,6 +37,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val random = new scala.util.Random
+  implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
 
   test("md5") {
     checkEvaluation(Md5(Literal("ABC".getBytes(StandardCharsets.UTF_8))),
@@ -252,7 +254,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("hive-hash for CalendarInterval type") {
     def checkHiveHashForIntervalType(interval: String, expected: Long): Unit = {
-      checkHiveHash(IntervalUtils.fromString(interval), CalendarIntervalType, expected)
+      checkHiveHash(IntervalUtils.stringToInterval(UTF8String.fromString(interval)),
+        CalendarIntervalType, expected)
     }
 
     // ----- MICROSEC -----
