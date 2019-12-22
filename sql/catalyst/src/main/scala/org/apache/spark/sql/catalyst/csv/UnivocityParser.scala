@@ -65,9 +65,7 @@ class UnivocityParser(
     requiredSchema,
     options.columnPruning)
 
-  // When column pruning is enabled, the parser only parses the required columns based on
-  // their positions in the data schema.
-  private[sql] val parsedSchema = if (options.columnPruning) csvFilters.readSchema else dataSchema
+  private[sql] val parsedSchema = csvFilters.readSchema
 
   // Mapping of field indexes of `parsedSchema` to indexes of `requiredSchema`.
   // It returns -1 if `requiredSchema` doesn't contain a field from `parsedSchema`.
