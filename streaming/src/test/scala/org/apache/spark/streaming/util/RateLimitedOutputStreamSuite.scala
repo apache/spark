@@ -40,6 +40,6 @@ class RateLimitedOutputStreamSuite extends SparkFunSuite {
     val seconds = SECONDS.convert(elapsedNs, NANOSECONDS)
     assert(seconds >= 4, s"Seconds value ($seconds) is less than 4.")
     assert(seconds <= 30, s"Took more than 30 seconds ($seconds) to write data.")
-    assert(underlying.toString("UTF-8") === data)
+    assert(underlying.toString(StandardCharsets.UTF_8.name()) === data)
   }
 }

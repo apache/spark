@@ -101,13 +101,13 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
     assert(
       inferSchema.mergeRowTypes(Array(StringType),
-        Array(DoubleType)).deep == Array(StringType).deep)
+        Array(DoubleType)).sameElements(Array(StringType)))
     assert(
       inferSchema.mergeRowTypes(Array(IntegerType),
-        Array(LongType)).deep == Array(LongType).deep)
+        Array(LongType)).sameElements(Array(LongType)))
     assert(
       inferSchema.mergeRowTypes(Array(DoubleType),
-        Array(LongType)).deep == Array(DoubleType).deep)
+        Array(LongType)).sameElements(Array(DoubleType)))
   }
 
   test("Null fields are handled properly when a nullValue is specified") {
@@ -133,7 +133,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     val inferSchema = new CSVInferSchema(options)
 
     val mergedNullTypes = inferSchema.mergeRowTypes(Array(NullType), Array(NullType))
-    assert(mergedNullTypes.deep == Array(NullType).deep)
+    assert(mergedNullTypes.sameElements(Array(NullType)))
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
@@ -185,6 +185,8 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
       assert(inferSchema.inferField(NullType, input) == expectedType)
     }
 
-    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
+    // input like '1,0' is inferred as strings for backward compatibility.
+    Seq("en-US").foreach(checkDecimalInfer(_, StringType))
+    Seq("ko-KR", "ru-RU", "de-DE").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
   }
 }

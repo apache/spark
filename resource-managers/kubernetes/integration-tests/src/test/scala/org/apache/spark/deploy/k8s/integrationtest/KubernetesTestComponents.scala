@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import org.scalatest.concurrent.Eventually
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.JARS
@@ -93,6 +94,8 @@ private[spark] class SparkAppConf {
   override def toString: String = map.toString
 
   def toStringArray: Iterable[String] = map.toList.flatMap(t => List("--conf", s"${t._1}=${t._2}"))
+
+  def toSparkConf: SparkConf = new SparkConf().setAll(map)
 }
 
 private[spark] case class SparkAppArguments(
@@ -125,7 +128,7 @@ private[spark] object SparkAppLauncher extends Logging {
         appConf.toStringArray :+ appArguments.mainAppResource
 
     if (appArguments.appArgs.nonEmpty) {
-      commandLine ++= appArguments.appArgs.to[ArrayBuffer]
+      commandLine ++= appArguments.appArgs
     }
     logInfo(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
     ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs)

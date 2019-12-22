@@ -45,7 +45,7 @@ private[spark] object SparkCuratorUtil extends Logging {
     zk
   }
 
-  def mkdir(zk: CuratorFramework, path: String) {
+  def mkdir(zk: CuratorFramework, path: String): Unit = {
     if (zk.checkExists().forPath(path) == null) {
       try {
         zk.create().creatingParentsIfNeeded().forPath(path)
@@ -57,7 +57,7 @@ private[spark] object SparkCuratorUtil extends Logging {
     }
   }
 
-  def deleteRecursive(zk: CuratorFramework, path: String) {
+  def deleteRecursive(zk: CuratorFramework, path: String): Unit = {
     if (zk.checkExists().forPath(path) != null) {
       for (child <- zk.getChildren.forPath(path).asScala) {
         zk.delete().forPath(path + "/" + child)

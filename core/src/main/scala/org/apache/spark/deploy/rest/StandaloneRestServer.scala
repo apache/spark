@@ -24,6 +24,8 @@ import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.internal.config
+import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -135,6 +137,7 @@ private[rest] class StandaloneSubmitRequestServlet(
     val sparkProperties = request.sparkProperties
     val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
     val driverCores = sparkProperties.get(config.DRIVER_CORES.key)
+    val driverDefaultJavaOptions = sparkProperties.get(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
     val driverExtraJavaOptions = sparkProperties.get(config.DRIVER_JAVA_OPTIONS.key)
     val driverExtraClassPath = sparkProperties.get(config.DRIVER_CLASS_PATH.key)
     val driverExtraLibraryPath = sparkProperties.get(config.DRIVER_LIBRARY_PATH.key)
@@ -160,9 +163,11 @@ private[rest] class StandaloneSubmitRequestServlet(
       .set("spark.master", updatedMasters)
     val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
+    val defaultJavaOpts = driverDefaultJavaOptions.map(Utils.splitCommandString)
+      .getOrElse(Seq.empty)
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
     val sparkJavaOpts = Utils.sparkJavaOpts(conf)
-    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    val javaOpts = sparkJavaOpts ++ defaultJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.worker.DriverWrapper",
       Seq("{{WORKER_URL}}", "{{USER_JAR}}", mainClass) ++ appArgs, // args to the DriverWrapper
@@ -170,8 +175,11 @@ private[rest] class StandaloneSubmitRequestServlet(
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
     val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
+    val driverResourceReqs = ResourceUtils.parseResourceRequirements(conf,
+      config.SPARK_DRIVER_PREFIX)
     new DriverDescription(
-      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
+      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command,
+      driverResourceReqs)
   }
 
   /**

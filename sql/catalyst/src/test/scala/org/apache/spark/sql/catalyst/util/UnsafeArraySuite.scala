@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.ZoneId
+import java.time.{ZoneId, ZoneOffset}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
@@ -38,9 +38,8 @@ class UnsafeArraySuite extends SparkFunSuite {
   val doubleArray = Array(1.1, 2.2, 3.3)
   val stringArray = Array("1", "10", "100")
   val dateArray = Array(
-    DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1")).get,
-    DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26")).get)
-  private def defaultTz = DateTimeUtils.defaultTimeZone()
+    DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1"), ZoneOffset.UTC).get,
+    DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26"), ZoneOffset.UTC).get)
   private def defaultZoneId = ZoneId.systemDefault()
   val timestampArray = Array(
     DateTimeUtils.stringToTimestamp(
@@ -54,11 +53,22 @@ class UnsafeArraySuite extends SparkFunSuite {
     BigDecimal("1.2345678901234567890123456").setScale(21, BigDecimal.RoundingMode.FLOOR),
     BigDecimal("2.3456789012345678901234567").setScale(21, BigDecimal.RoundingMode.FLOOR))
 
-  val calenderintervalArray = Array(new CalendarInterval(3, 321), new CalendarInterval(1, 123))
+  val calenderintervalArray = Array(
+    new CalendarInterval(3, 2, 321), new CalendarInterval(1, 2, 123))
 
   val intMultiDimArray = Array(Array(1), Array(2, 20), Array(3, 30, 300))
   val doubleMultiDimArray = Array(
     Array(1.1, 11.1), Array(2.2, 22.2, 222.2), Array(3.3, 33.3, 333.3, 3333.3))
+
+  val serialArray = {
+    val offset = 32
+    val data = new Array[Byte](1024)
+    Platform.putLong(data, offset, 1)
+    val arrayData = new UnsafeArrayData()
+    arrayData.pointTo(data, offset, data.length)
+    arrayData.setLong(0, 19285)
+    arrayData
+  }
 
   test("read array") {
     val unsafeBoolean = ExpressionEncoder[Array[Boolean]].resolveAndBind().
@@ -214,14 +224,15 @@ class UnsafeArraySuite extends SparkFunSuite {
   }
 
   test("unsafe java serialization") {
-    val offset = 32
-    val data = new Array[Byte](1024)
-    Platform.putLong(data, offset, 1)
-    val arrayData = new UnsafeArrayData()
-    arrayData.pointTo(data, offset, data.length)
-    arrayData.setLong(0, 19285)
     val ser = new JavaSerializer(new SparkConf).newInstance()
-    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(arrayData))
+    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(serialArray))
+    assert(arrayDataSer.getLong(0) == 19285)
+    assert(arrayDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
+  }
+
+  test("unsafe Kryo serialization") {
+    val ser = new KryoSerializer(new SparkConf).newInstance()
+    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(serialArray))
     assert(arrayDataSer.getLong(0) == 19285)
     assert(arrayDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
   }

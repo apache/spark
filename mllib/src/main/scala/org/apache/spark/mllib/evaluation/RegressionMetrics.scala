@@ -60,29 +60,23 @@ class RegressionMetrics @Since("2.0.0") (
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
    */
   private lazy val summary: MultivariateStatisticalSummary = {
-    val summary: MultivariateStatisticalSummary = predictionAndObservations.map {
+    predictionAndObservations.map {
       case (prediction: Double, observation: Double, weight: Double) =>
-        (Vectors.dense(observation, observation - prediction), weight)
+        (Vectors.dense(observation, observation - prediction, prediction), weight)
       case (prediction: Double, observation: Double) =>
-        (Vectors.dense(observation, observation - prediction), 1.0)
+        (Vectors.dense(observation, observation - prediction, prediction), 1.0)
     }.treeAggregate(new MultivariateOnlineSummarizer())(
         (summary, sample) => summary.add(sample._1, sample._2),
         (sum1, sum2) => sum1.merge(sum2)
       )
-    summary
   }
 
   private lazy val SSy = math.pow(summary.normL2(0), 2)
   private lazy val SSerr = math.pow(summary.normL2(1), 2)
   private lazy val SStot = summary.variance(0) * (summary.weightSum - 1)
-  private lazy val SSreg = {
-    val yMean = summary.mean(0)
-    predictionAndObservations.map {
-      case (prediction: Double, _: Double, weight: Double) =>
-        math.pow(prediction - yMean, 2) * weight
-      case (prediction: Double, _: Double) => math.pow(prediction - yMean, 2)
-    }.sum()
-  }
+  private lazy val SSreg = math.pow(summary.normL2(2), 2) +
+    math.pow(summary.mean(0), 2) * summary.weightSum -
+    2 * summary.mean(0) * summary.mean(2) * summary.weightSum
 
   /**
    * Returns the variance explained by regression.

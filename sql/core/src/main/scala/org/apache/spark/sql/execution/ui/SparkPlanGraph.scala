@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
 
@@ -78,7 +78,7 @@ object SparkPlanGraph {
       subgraph: SparkPlanGraphCluster,
       exchanges: mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]): Unit = {
     planInfo.nodeName match {
-      case "WholeStageCodegen" =>
+      case name if name.startsWith("WholeStageCodegen") =>
         val metrics = planInfo.metrics.map { metric =>
           SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
         }
@@ -96,6 +96,15 @@ object SparkPlanGraph {
       case "InputAdapter" =>
         buildSparkPlanGraphNode(
           planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+      case "BroadcastQueryStage" | "ShuffleQueryStage" =>
+        if (exchanges.contains(planInfo.children.head)) {
+          // Point to the re-used exchange
+          val node = exchanges(planInfo.children.head)
+          edges += SparkPlanGraphEdge(node.id, parent.id)
+        } else {
+          buildSparkPlanGraphNode(
+            planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+        }
       case "Subquery" if subgraph != null =>
         // Subquery should not be included in WholeStageCodegen
         buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)

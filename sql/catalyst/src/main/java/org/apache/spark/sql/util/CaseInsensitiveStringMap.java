@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -177,5 +178,22 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
    */
   public Map<String, String> asCaseSensitiveMap() {
     return Collections.unmodifiableMap(original);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    CaseInsensitiveStringMap that = (CaseInsensitiveStringMap) o;
+    return delegate.equals(that.delegate);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(delegate);
   }
 }

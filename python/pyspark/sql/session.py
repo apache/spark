@@ -136,7 +136,7 @@ class SparkSession(object):
         @since(2.0)
         def enableHiveSupport(self):
             """Enables Hive support, including connectivity to a persistent Hive metastore, support
-            for Hive serdes, and Hive user-defined functions.
+            for Hive SerDes, and Hive user-defined functions.
             """
             return self.config("spark.sql.catalogImplementation", "hive")
 
@@ -189,7 +189,7 @@ class SparkSession(object):
                 return session
 
     builder = Builder()
-    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
+    """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances."""
 
     _instantiatedSession = None
     _activeSession = None
@@ -310,7 +310,7 @@ class SparkSession(object):
     @since(2.0)
     def catalog(self):
         """Interface through which the user may create, drop, alter or query underlying
-        databases, tables, functions etc.
+        databases, tables, functions, etc.
 
         :return: :class:`Catalog`
         """
@@ -530,7 +530,6 @@ class SparkSession(object):
         to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
-        from distutils.version import LooseVersion
         from pyspark.serializers import ArrowStreamPandasSerializer
         from pyspark.sql.types import from_arrow_type, to_arrow_type, TimestampType
         from pyspark.sql.utils import require_minimum_pandas_version, \
@@ -544,11 +543,7 @@ class SparkSession(object):
 
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
-            if LooseVersion(pa.__version__) < LooseVersion("0.12.0"):
-                temp_batch = pa.RecordBatch.from_pandas(pdf[0:100], preserve_index=False)
-                arrow_schema = temp_batch.schema
-            else:
-                arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
+            arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             struct = StructType()
             for name, field in zip(schema, arrow_schema):
                 struct.add(name, from_arrow_type(field.type), nullable=field.nullable)
@@ -629,20 +624,20 @@ class SparkSession(object):
         will be inferred from ``data``.
 
         When ``schema`` is ``None``, it will try to infer the schema (column names and types)
-        from ``data``, which should be an RDD of :class:`Row`,
-        or :class:`namedtuple`, or :class:`dict`.
+        from ``data``, which should be an RDD of either :class:`Row`,
+        :class:`namedtuple`, or :class:`dict`.
 
         When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must match
         the real data, or an exception will be thrown at runtime. If the given schema is not
         :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-        :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value",
-        each record will also be wrapped into a tuple, which can be converted to row later.
+        :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value".
+        Each record will also be wrapped into a tuple, which can be converted to row later.
 
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        :param data: an RDD of any kind of SQL data representation(e.g. row, tuple, int, boolean,
-            etc.), or :class:`list`, or :class:`pandas.DataFrame`.
+        :param data: an RDD of any kind of SQL data representation (e.g. row, tuple, int, boolean,
+            etc.), :class:`list`, or :class:`pandas.DataFrame`.
         :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is ``None``.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
@@ -656,7 +651,12 @@ class SparkSession(object):
         .. versionchanged:: 2.1
            Added verifySchema.
 
-        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+
+        .. note:: When Arrow optimization is enabled, strings inside Pandas DataFrame in Python
+            2 are converted into bytes as they are bytes in Python 2 whereas regular strings are
+            left as strings. When using strings in Python 2, use unicode `u""` as Python standard
+            practice.
 
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
@@ -736,28 +736,28 @@ class SparkSession(object):
                           (x.encode('utf-8') if not isinstance(x, str) else x)
                           for x in data.columns]
 
-            if self._wrapped._conf.arrowEnabled() and len(data) > 0:
+            if self._wrapped._conf.arrowPySparkEnabled() and len(data) > 0:
                 try:
                     return self._create_from_pandas_with_arrow(data, schema, timezone)
                 except Exception as e:
                     from pyspark.util import _exception_message
 
-                    if self._wrapped._conf.arrowFallbackEnabled():
+                    if self._wrapped._conf.arrowPySparkFallbackEnabled():
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
                             "failed by the reason below:\n  %s\n"
                             "Attempting non-optimization as "
-                            "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                            "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                             "true." % _exception_message(e))
                         warnings.warn(msg)
                     else:
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                            "the error below and will not continue because automatic fallback "
-                            "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
-                            "false.\n  %s" % _exception_message(e))
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                            "reached the error below and will not continue because automatic "
+                            "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
+                            "has been set to false.\n  %s" % _exception_message(e))
                         warnings.warn(msg)
                         raise
             data = self._convert_from_pandas(data, schema, timezone)
@@ -846,7 +846,7 @@ class SparkSession(object):
     @since(2.0)
     def streams(self):
         """Returns a :class:`StreamingQueryManager` that allows managing all the
-        :class:`StreamingQuery` StreamingQueries active on `this` context.
+        :class:`StreamingQuery` instances active on `this` context.
 
         .. note:: Evolving.
 

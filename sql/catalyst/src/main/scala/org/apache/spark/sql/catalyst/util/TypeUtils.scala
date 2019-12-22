@@ -60,12 +60,18 @@ object TypeUtils {
     }
   }
 
-  def getNumeric(t: DataType): Numeric[Any] =
-    t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+  def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
+    if (exactNumericRequired) {
+      t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
+    } else {
+      t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+    }
+  }
 
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
+      case c: CalendarIntervalType => c.ordering.asInstanceOf[Ordering[Any]]
       case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
@@ -73,11 +79,12 @@ object TypeUtils {
   }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    for (i <- 0 until x.length; if i < y.length) {
-      val v1 = x(i) & 0xff
-      val v2 = y(i) & 0xff
-      val res = v1 - v2
+    val limit = if (x.length <= y.length) x.length else y.length
+    var i = 0
+    while (i < limit) {
+      val res = (x(i) & 0xff) - (y(i) & 0xff)
       if (res != 0) return res
+      i += 1
     }
     x.length - y.length
   }

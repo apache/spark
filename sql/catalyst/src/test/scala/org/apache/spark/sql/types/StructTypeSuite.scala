@@ -82,4 +82,9 @@ class StructTypeSuite extends SparkFunSuite {
     assert(7 == schema.treeString(0).split("\n").length)
     assert(7 == schema.treeString(-1).split("\n").length)
   }
+
+  test("interval keyword in schema string") {
+    val interval = "`a` INTERVAL"
+    assert(fromDDL(interval).toDDL === interval)
+  }
 }

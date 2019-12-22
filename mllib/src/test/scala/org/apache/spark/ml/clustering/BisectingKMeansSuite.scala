@@ -17,15 +17,13 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.language.existentials
-
 import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.DistanceMeasure
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.DataFrame
 
 
 class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
@@ -33,9 +31,8 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   import testImplicits._
 
   final val k = 5
-  @transient var dataset: Dataset[_] = _
-
-  @transient var sparseDataset: Dataset[_] = _
+  @transient var dataset: DataFrame = _
+  @transient var sparseDataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -74,7 +71,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       rows =>
         val numClusters = rows.distinct.length
         // Verify we hit the edge case
-        assert(numClusters < k && numClusters > 1)
+        assert(numClusters > 1)
     }
   }
 
@@ -152,7 +149,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
 
   test("BisectingKMeans with cosine distance is not supported for 0-length vectors") {
     val model = new BisectingKMeans().setK(2).setDistanceMeasure(DistanceMeasure.COSINE).setSeed(1)
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(0.0, 0.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5)
@@ -163,7 +160,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("BisectingKMeans with cosine distance") {
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(1.0, 1.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5),
@@ -177,6 +174,8 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       .setSeed(1)
       .fit(df)
     val predictionDf = model.transform(df)
+    checkNominalOnDF(predictionDf, "prediction", model.getK)
+
     assert(predictionDf.select("prediction").distinct().count() == 3)
     val predictionsMap = predictionDf.collect().map(row =>
       row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
@@ -191,7 +190,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("BisectingKMeans with Array input") {
-    def trainAndComputeCost(dataset: Dataset[_]): Double = {
+    def trainAndComputeCost(dataset: DataFrame): Double = {
       val model = new BisectingKMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
       model.computeCost(dataset)
     }

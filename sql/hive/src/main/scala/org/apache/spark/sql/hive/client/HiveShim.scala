@@ -28,8 +28,8 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{EnvironmentContext, Function => HiveFunction, FunctionType}
-import org.apache.hadoop.hive.metastore.api.{MetaException, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.metastore.IMetaStoreClient
+import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
@@ -153,12 +153,22 @@ private[client] sealed abstract class Shim {
       deleteData: Boolean,
       purge: Boolean): Unit
 
+  def getDatabaseOwnerName(db: Database): String
+
+  def setDatabaseOwnerName(db: Database, owner: String): Unit
+
+  def getDatabaseOwnerType(db: Database): String
+
+  def setDatabaseOwnerType(db: Database, ownerType: String): Unit
+
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
     require(Modifier.isStatic(method.getModifiers()),
       s"Method $name of class $klass is not static.")
     method
   }
+
+  def getMSC(hive: Hive): IMetaStoreClient
 
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
@@ -170,6 +180,17 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   protected lazy val holdDDLTime = JBoolean.FALSE
   // deletes the underlying data along with metadata
   protected lazy val deleteDataInDropIndex = JBoolean.TRUE
+
+  protected lazy val getMSCMethod = {
+    // Since getMSC() in Hive 0.12 is private, findMethod() could not work here
+    val msc = classOf[Hive].getDeclaredMethod("getMSC")
+    msc.setAccessible(true)
+    msc
+  }
+
+  override def getMSC(hive: Hive): IMetaStoreClient = {
+    getMSCMethod.invoke(hive).asInstanceOf[IMetaStoreClient]
+  }
 
   private lazy val startMethod =
     findStaticMethod(
@@ -442,6 +463,14 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = {
     Seq.empty[String]
   }
+
+  override def getDatabaseOwnerName(db: Database): String = ""
+
+  override def setDatabaseOwnerName(db: Database, owner: String): Unit = {}
+
+  override def getDatabaseOwnerType(db: Database): String = ""
+
+  override def setDatabaseOwnerType(db: Database, ownerType: String): Unit = {}
 }
 
 private[client] class Shim_v0_13 extends Shim_v0_12 {
@@ -478,6 +507,28 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       classOf[Driver],
       "getResults",
       classOf[JList[Object]])
+
+  private lazy val getDatabaseOwnerNameMethod =
+    findMethod(
+      classOf[Database],
+      "getOwnerName")
+
+  private lazy val setDatabaseOwnerNameMethod =
+    findMethod(
+      classOf[Database],
+      "setOwnerName",
+      classOf[String])
+
+  private lazy val getDatabaseOwnerTypeMethod =
+    findMethod(
+      classOf[Database],
+      "getOwnerType")
+
+  private lazy val setDatabaseOwnerTypeMethod =
+    findMethod(
+      classOf[Database],
+      "setOwnerType",
+      classOf[PrincipalType])
 
   override def setCurrentSessionState(state: SessionState): Unit =
     setCurrentSessionStateMethod.invoke(null, state)
@@ -652,7 +703,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
     }
 
-    object NonVarcharAttribute {
+    object SupportedAttribute {
       // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
       private val varcharKeys = table.getPartitionKeys.asScala
         .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
@@ -662,8 +713,10 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       def unapply(attr: Attribute): Option[String] = {
         if (varcharKeys.contains(attr.name)) {
           None
-        } else {
+        } else if (attr.dataType.isInstanceOf[IntegralType] || attr.dataType == StringType) {
           Some(attr.name)
+        } else {
+          None
         }
       }
     }
@@ -679,27 +732,27 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         expr match {
           case attr: Attribute => Some(attr)
           case Cast(child @ AtomicType(), dt: AtomicType, _)
-              if Cast.canSafeCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
+              if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
         }
       }
     }
 
     def convert(expr: Expression): Option[String] = expr match {
-      case In(ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiterals(values))
+      case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case InSet(ExtractAttribute(NonVarcharAttribute(name)), ExtractableValues(values))
+      case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
       case op @ SpecialBinaryComparison(
-          ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiteral(value)) =>
+          ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
         Some(s"$name ${op.symbol} $value")
 
       case op @ SpecialBinaryComparison(
-          ExtractableLiteral(value), ExtractAttribute(NonVarcharAttribute(name))) =>
+          ExtractableLiteral(value), ExtractAttribute(SupportedAttribute(name))) =>
         Some(s"$value ${op.symbol} $name")
 
       case And(expr1, expr2) if useAdvanced =>
@@ -795,6 +848,22 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
   }
 
+  override def getDatabaseOwnerName(db: Database): String = {
+    Option(getDatabaseOwnerNameMethod.invoke(db)).map(_.asInstanceOf[String]).getOrElse("")
+  }
+
+  override def setDatabaseOwnerName(db: Database, owner: String): Unit = {
+    setDatabaseOwnerNameMethod.invoke(db, owner)
+  }
+
+  override def getDatabaseOwnerType(db: Database): String = {
+    Option(getDatabaseOwnerTypeMethod.invoke(db))
+      .map(_.asInstanceOf[PrincipalType].name()).getOrElse("")
+  }
+
+  override def setDatabaseOwnerType(db: Database, ownerType: String): Unit = {
+    setDatabaseOwnerTypeMethod.invoke(db, PrincipalType.valueOf(ownerType))
+  }
 }
 
 private[client] class Shim_v0_14 extends Shim_v0_13 {
@@ -1181,7 +1250,7 @@ private[client] class Shim_v2_2 extends Shim_v2_1
 
 private[client] class Shim_v2_3 extends Shim_v2_1
 
-private[client] class Shim_v3_1 extends Shim_v2_3 {
+private[client] class Shim_v3_0 extends Shim_v2_3 {
   // Spark supports only non-ACID operations
   protected lazy val isAcidIUDoperation = JBoolean.FALSE
 
@@ -1305,3 +1374,5 @@ private[client] class Shim_v3_1 extends Shim_v2_3 {
       replace: JBoolean)
   }
 }
+
+private[client] class Shim_v3_1 extends Shim_v3_0

@@ -63,11 +63,14 @@ SHOW TABLES
 -- !query 7 schema
 struct<database:string,tableName:string,isTemporary:boolean>
 -- !query 7 output
+aggtest
 arraydata
 mapdata
+onek
 show_t1
 show_t2
 show_t3
+tenk1
 testdata
 
 
@@ -76,11 +79,14 @@ SHOW TABLES IN showdb
 -- !query 8 schema
 struct<database:string,tableName:string,isTemporary:boolean>
 -- !query 8 output
+aggtest
 arraydata
 mapdata
+onek
 show_t1
 show_t2
 show_t3
+tenk1
 testdata
 
 
@@ -118,7 +124,7 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query 12 schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 12 output
-show_t3	true	Table: show_t3
+	show_t3	true	Table: show_t3
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
@@ -134,7 +140,7 @@ Last Access [not included in comparison]
 Created By [not included in comparison]
 Type: MANAGED
 Provider: parquet
-Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1
+Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1
 Partition Provider: Catalog
 Partition Columns: [`c`, `d`]
 Schema: root
@@ -151,7 +157,7 @@ Last Access [not included in comparison]
 Created By [not included in comparison]
 Type: MANAGED
 Provider: parquet
-Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t2
+Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t2
 Schema: root
  |-- b: string (nullable = true)
  |-- d: integer (nullable = true)
@@ -177,7 +183,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1)
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 14 output
 showdb	show_t1	false	Partition Values: [c=Us, d=1]
-Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
+Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1/c=Us/d=1
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 

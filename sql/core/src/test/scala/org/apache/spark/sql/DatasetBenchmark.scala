@@ -55,7 +55,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.map(func)
         i += 1
       }
-      res.foreach(_ => Unit)
+      res.foreach(_ => ())
     }
 
     benchmark.addCase("DataFrame") { iter =>
@@ -65,7 +65,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.select($"l" + 1 as "l")
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset") { iter =>
@@ -75,7 +75,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.map(func)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark
@@ -96,7 +96,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.map(func)
         i += 1
       }
-      res.foreach(_ => Unit)
+      res.foreach(_ => ())
     }
 
     benchmark.addCase("DataFrame") { iter =>
@@ -106,7 +106,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.select($"l" + 1 as "l", $"s")
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset") { iter =>
@@ -116,7 +116,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.map(func)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark
@@ -139,7 +139,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter(func)
         i += 1
       }
-      res.foreach(_ => Unit)
+      res.foreach(_ => ())
     }
 
     benchmark.addCase("DataFrame") { iter =>
@@ -149,7 +149,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter($"l" % 2L === 0L)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset") { iter =>
@@ -159,7 +159,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter(func)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark
@@ -183,7 +183,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter(funcs(i))
         i += 1
       }
-      res.foreach(_ => Unit)
+      res.foreach(_ => ())
     }
 
     benchmark.addCase("DataFrame") { iter =>
@@ -193,7 +193,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter($"l" % (100L + i) === 0L)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset") { iter =>
@@ -203,7 +203,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter(funcs(i))
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark
@@ -235,15 +235,15 @@ object DatasetBenchmark extends SqlBasedBenchmark {
     }
 
     benchmark.addCase("DataFrame sum") { iter =>
-      df.select(sum($"l")).queryExecution.toRdd.foreach(_ => Unit)
+      df.select(sum($"l")).queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset sum using Aggregator") { iter =>
-      df.as[Data].select(typed.sumLong((d: Data) => d.l)).queryExecution.toRdd.foreach(_ => Unit)
+      df.as[Data].select(typed.sumLong((d: Data) => d.l)).queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset complex Aggregator") { iter =>
-      df.as[Data].select(ComplexAggregator.toColumn).queryExecution.toRdd.foreach(_ => Unit)
+      df.as[Data].select(ComplexAggregator.toColumn).queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark

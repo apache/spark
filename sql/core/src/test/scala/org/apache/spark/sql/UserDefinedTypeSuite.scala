@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql
 
+import java.util.Arrays
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 private[sql] case class MyLabeledPoint(label: Double, features: TestUDT.MyDenseVector) {
@@ -101,7 +103,7 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
 }
 
-class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest
+class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with ParquetTest
     with ExpressionEvalHelper {
   import testImplicits._
 
@@ -271,5 +273,18 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     val data = udt.serialize(vector)
     val ret = Cast(Literal(data, udt), StringType, None)
     checkEvaluation(ret, "(1.0, 3.0, 5.0, 7.0, 9.0)")
+  }
+
+  test("SPARK-28497 Can't up cast UserDefinedType to string") {
+    val udt = new TestUDT.MyDenseVectorUDT()
+    assert(!Cast.canUpCast(udt, StringType))
+  }
+
+  test("typeof user defined type") {
+    val schema = new StructType().add("a", new TestUDT.MyDenseVectorUDT())
+    val data = Arrays.asList(
+      RowFactory.create(new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))))
+    checkAnswer(spark.createDataFrame(data, schema).selectExpr("typeof(a)"),
+      Seq(Row("array<double>")))
   }
 }

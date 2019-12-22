@@ -56,11 +56,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkDecimal(Decimal(1000000000000000000L, 20, 2), "10000000000000000.00", 20, 2)
     checkDecimal(Decimal(Long.MaxValue), Long.MaxValue.toString, 20, 0)
     checkDecimal(Decimal(Long.MinValue), Long.MinValue.toString, 20, 0)
-    intercept[IllegalArgumentException](Decimal(170L, 2, 1))
-    intercept[IllegalArgumentException](Decimal(170L, 2, 0))
-    intercept[IllegalArgumentException](Decimal(BigDecimal("10.030"), 2, 1))
-    intercept[IllegalArgumentException](Decimal(BigDecimal("-9.95"), 2, 1))
-    intercept[IllegalArgumentException](Decimal(1e17.toLong, 17, 0))
+    intercept[ArithmeticException](Decimal(170L, 2, 1))
+    intercept[ArithmeticException](Decimal(170L, 2, 0))
+    intercept[ArithmeticException](Decimal(BigDecimal("10.030"), 2, 1))
+    intercept[ArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1))
+    intercept[ArithmeticException](Decimal(1e17.toLong, 17, 0))
   }
 
   test("creating decimals with negative scale") {
@@ -99,7 +99,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   // Accessor for the BigDecimal value of a Decimal, which will be null if it's using Longs
-  private val decimalVal = PrivateMethod[BigDecimal]('decimalVal)
+  private val decimalVal = PrivateMethod[BigDecimal](Symbol("decimalVal"))
 
   /** Check whether a decimal is represented compactly (passing whether we expect it to be) */
   private def checkCompact(d: Decimal, expected: Boolean): Unit = {

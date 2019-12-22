@@ -24,10 +24,12 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
@@ -45,6 +47,9 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
 
   test("Check the pod respects all configurations from the user.") {
+    val resourceID = ResourceID(SPARK_DRIVER_PREFIX, GPU)
+    val resources =
+      Map(("nvidia.com/gpu" -> TestResourceInformation(resourceID, "2", "nvidia.com")))
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
       .set(DRIVER_CORES, 2)
@@ -53,6 +58,10 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(DRIVER_MEMORY_OVERHEAD, 200L)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
+    resources.foreach { case (_, testRInfo) =>
+      sparkConf.set(testRInfo.rId.amountConf, testRInfo.count)
+      sparkConf.set(testRInfo.rId.vendorConf, testRInfo.vendor)
+    }
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
       labels = DRIVER_LABELS,
@@ -100,6 +109,9 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val limits = resourceRequirements.getLimits.asScala
     assert(limits("memory").getAmount === "456Mi")
     assert(limits("cpu").getAmount === "4")
+    resources.foreach { case (k8sName, testRInfo) =>
+      assert(limits(k8sName).getAmount === testRInfo.count)
+    }
 
     val driverPodMetadata = configuredPod.pod.getMetadata
     assert(driverPodMetadata.getName === "spark-driver-pod")
@@ -115,6 +127,38 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       "spark.kubernetes.submitInDriver" -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> MEMORY_OVERHEAD_FACTOR.defaultValue.get.toString)
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
+  }
+
+  test("Check driver pod respects kubernetes driver request cores") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+
+    val basePod = SparkPod.initialPod()
+    // if spark.driver.cores is not set default is 1
+    val requests1 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
+      .configurePod(basePod)
+      .container.getResources
+      .getRequests.asScala
+    assert(requests1("cpu").getAmount === "1")
+
+    // if spark.driver.cores is set it should be used
+    sparkConf.set(DRIVER_CORES, 10)
+    val requests2 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
+      .configurePod(basePod)
+      .container.getResources
+      .getRequests.asScala
+    assert(requests2("cpu").getAmount === "10")
+
+    // spark.kubernetes.driver.request.cores should be preferred over spark.driver.cores
+    Seq("0.1", "100m").foreach { value =>
+      sparkConf.set(KUBERNETES_DRIVER_REQUEST_CORES, value)
+      val requests3 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
+        .configurePod(basePod)
+        .container.getResources
+        .getRequests.asScala
+      assert(requests3("cpu").getAmount === value)
+    }
   }
 
   test("Check appropriate entrypoint rerouting for various bindings") {

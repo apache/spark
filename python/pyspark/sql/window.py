@@ -46,8 +46,6 @@ class Window(object):
          unboundedPreceding, unboundedFollowing) is used by default. When ordering is defined,
          a growing window frame (rangeFrame, unboundedPreceding, currentRow) is used by default.
 
-    .. note:: Experimental
-
     .. versionadded:: 1.4
     """
 
@@ -101,7 +99,7 @@ class Window(object):
         An offset indicates the number of rows above or below the current row, the frame for the
         current row starts or ends. For instance, given a row based sliding frame with a lower bound
         offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
-        index 4 to index 6.
+        index 4 to index 7.
 
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
@@ -204,8 +202,6 @@ class WindowSpec(object):
     and frame boundaries.
 
     Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
-
-    .. note:: Experimental
 
     .. versionadded:: 1.4
     """

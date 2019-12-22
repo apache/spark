@@ -172,7 +172,7 @@ test_that("structField type strings", {
   typeList <- c(primitiveTypes, complexTypes)
   typeStrings <- names(typeList)
 
-  for (i in seq_along(typeStrings)){
+  for (i in seq_along(typeStrings)) {
     typeString <- typeStrings[i]
     expected <- typeList[[i]]
     testField <- structField("_col", typeString)
@@ -203,7 +203,7 @@ test_that("structField type strings", {
   errorList <- c(primitiveErrors, complexErrors)
   typeStrings <- names(errorList)
 
-  for (i in seq_along(typeStrings)){
+  for (i in seq_along(typeStrings)) {
     typeString <- typeStrings[i]
     expected <- paste0("Unsupported type for SparkDataframe: ", errorList[[i]])
     expect_error(structField("_col", typeString), expected)
@@ -2352,10 +2352,20 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
 
   # inner join, not cartesian join
   expect_equal(count(where(join(df, df2), df$name == df2$name)), 3)
-  # cartesian join
-  expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
-               paste0(".*(org.apache.spark.sql.AnalysisException: Detected implicit cartesian",
-                      " product for INNER join between logical plans).*"))
+
+  conf <- callJMethod(sparkSession, "conf")
+  crossJoinEnabled <- callJMethod(conf, "get", "spark.sql.crossJoin.enabled")
+  callJMethod(conf, "set", "spark.sql.crossJoin.enabled", "false")
+  tryCatch({
+    # cartesian join
+    expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
+                 paste0(".*(org.apache.spark.sql.AnalysisException: Detected implicit cartesian",
+                        " product for INNER join between logical plans).*"))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.crossJoin.enabled", crossJoinEnabled)
+  })
 
   joined <- crossJoin(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
@@ -3226,6 +3236,13 @@ test_that("Histogram", {
   # Test when there are zero counts
   df <- as.DataFrame(data.frame(x = c(1, 2, 3, 4, 100)))
   expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
+})
+
+test_that("dapply() should show error message from R worker", {
+  df <- createDataFrame(list(list(n = 1)))
+  expect_error({
+    collect(dapply(df, function(x) stop("custom error message"), structType("a double")))
+  }, "custom error message")
 })
 
 test_that("dapply() and dapplyCollect() on a DataFrame", {

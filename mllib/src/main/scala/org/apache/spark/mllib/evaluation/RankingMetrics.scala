@@ -68,28 +68,58 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * If a query has an empty ground truth set, the average precision will be zero and a log
    * warning is generated.
    */
+  @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab) =>
       val labSet = lab.toSet
-
-      if (labSet.nonEmpty) {
-        var i = 0
-        var cnt = 0
-        var precSum = 0.0
-        val n = pred.length
-        while (i < n) {
-          if (labSet.contains(pred(i))) {
-            cnt += 1
-            precSum += cnt.toDouble / (i + 1)
-          }
-          i += 1
-        }
-        precSum / labSet.size
-      } else {
-        logWarning("Empty ground truth set, check input data")
-        0.0
-      }
+      val k = math.max(pred.length, labSet.size)
+      averagePrecision(pred, labSet, k)
     }.mean()
+  }
+
+  /**
+   * Returns the mean average precision (MAP) at ranking position k of all the queries.
+   * If a query has an empty ground truth set, the average precision will be zero and a log
+   * warning is generated.
+   * @param k the position to compute the truncated precision, must be positive
+   * @return the mean average precision at first k ranking positions
+   */
+  @Since("3.0.0")
+  def meanAveragePrecisionAt(k: Int): Double = {
+    require(k > 0, "ranking position k should be positive")
+    predictionAndLabels.map { case (pred, lab) =>
+      averagePrecision(pred, lab.toSet, k)
+    }.mean()
+  }
+
+  /**
+   * Computes the average precision at first k ranking positions of all the queries.
+   * If a query has an empty ground truth set, the value will be zero and a log
+   * warning is generated.
+   *
+   * @param pred predicted ranking
+   * @param lab ground truth
+   * @param k use the top k predicted ranking, must be positive
+   * @return average precision at first k ranking positions
+   */
+  private def averagePrecision(pred: Array[T], lab: Set[T], k: Int): Double = {
+    if (lab.nonEmpty) {
+      var i = 0
+      var cnt = 0
+      var precSum = 0.0
+      val n = math.min(k, pred.length)
+      while (i < n) {
+        if (lab.contains(pred(i))) {
+          cnt += 1
+          precSum += cnt.toDouble / (i + 1)
+        }
+        i += 1
+      }
+      precSum / math.min(lab.size, k)
+    } else {
+      logWarning("Empty ground truth set, check input data")
+      0.0
+    }
   }
 
   /**

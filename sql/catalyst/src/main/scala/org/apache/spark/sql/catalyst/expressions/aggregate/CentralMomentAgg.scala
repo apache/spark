@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -174,7 +175,8 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
       If(n === 1.0, Double.NaN, sqrt(m2 / (n - 1.0))))
   }
 
-  override def prettyName: String = "stddev_samp"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("stddev_samp")
 }
 
 // Compute the population variance of a column
@@ -215,7 +217,7 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
       If(n === 1.0, Double.NaN, m2 / (n - 1.0)))
   }
 
-  override def prettyName: String = "var_samp"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("var_samp")
 }
 
 @ExpressionDescription(
@@ -223,7 +225,7 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col);
-       1.1135657469022013
+       1.1135657469022011
       > SELECT _FUNC_(col) FROM VALUES (-1000), (-100), (10), (20) AS tab(col);
        -1.1135657469022011
   """,
@@ -245,9 +247,9 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col);
-       -0.7014368047529618
+       -0.7014368047529627
       > SELECT _FUNC_(col) FROM VALUES (1), (10), (100), (10), (1) as tab(col);
-       0.19432323191698986
+       0.19432323191699075
   """,
   since = "1.6.0")
 case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {

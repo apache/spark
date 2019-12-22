@@ -26,6 +26,7 @@ import scala.util.Try
 
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.SystemUtils
+import org.scalatest.Assertions._
 
 import org.apache.spark.util.Utils
 
@@ -141,12 +142,14 @@ private[spark] class Benchmark(
     val minIters = if (overrideNumIters != 0) overrideNumIters else minNumIters
     val minDuration = if (overrideNumIters != 0) 0 else minTime.toNanos
     val runTimes = ArrayBuffer[Long]()
+    var totalTime = 0L
     var i = 0
-    while (i < minIters || runTimes.sum < minDuration) {
+    while (i < minIters || totalTime < minDuration) {
       val timer = new Benchmark.Timer(i)
       f(timer)
       val runTime = timer.totalTime()
       runTimes += runTime
+      totalTime += runTime
 
       if (outputPerIteration) {
         // scalastyle:off

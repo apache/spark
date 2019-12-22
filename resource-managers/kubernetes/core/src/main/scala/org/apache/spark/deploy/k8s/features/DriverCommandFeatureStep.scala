@@ -24,9 +24,7 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
-import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.Utils
 
 /**
  * Creates the driver command for running the user app, and propagates needed configuration so
@@ -88,11 +86,17 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   }
 
   private def baseDriverContainer(pod: SparkPod, resource: String): ContainerBuilder = {
+    // re-write primary resource, app jar is also added to spark.jars by default in SparkSubmit
+    val resolvedResource = if (conf.mainAppResource.isInstanceOf[JavaMainAppResource]) {
+      KubernetesUtils.renameMainAppResource(resource, conf.sparkConf)
+    } else {
+      resource
+    }
     new ContainerBuilder(pod.container)
       .addToArgs("driver")
       .addToArgs("--properties-file", SPARK_CONF_PATH)
       .addToArgs("--class", conf.mainClass)
-      .addToArgs(resource)
+      .addToArgs(resolvedResource)
       .addToArgs(conf.appArgs: _*)
   }
 }

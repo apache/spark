@@ -25,7 +25,7 @@ import org.apache.spark.sql.Dataset
  * The purpose of this suite is to make sure that generic FlatSpec-based scala
  * tests work with a shared spark session
  */
-class GenericFlatSpecSuite extends FlatSpec with SharedSparkSession {
+class GenericFlatSpecSuite extends FlatSpec with SharedSparkSessionBase {
   import testImplicits._
 
   private def ds = Seq((1, 1), (2, 1), (3, 2), (4, 2), (5, 3), (6, 3), (7, 4), (8, 4)).toDS

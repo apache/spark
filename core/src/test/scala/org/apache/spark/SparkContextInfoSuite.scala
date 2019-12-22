@@ -17,7 +17,10 @@
 
 package org.apache.spark
 
+import scala.concurrent.duration._
+
 import org.scalatest.Assertions
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.storage.StorageLevel
 
@@ -58,10 +61,12 @@ class SparkContextInfoSuite extends SparkFunSuite with LocalSparkContext {
   test("getRDDStorageInfo only reports on RDDs that actually persist data") {
     sc = new SparkContext("local", "test")
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
-    assert(sc.getRDDStorageInfo.size === 0)
+    assert(sc.getRDDStorageInfo.length === 0)
     rdd.collect()
-    sc.listenerBus.waitUntilEmpty(10000)
-    assert(sc.getRDDStorageInfo.size === 1)
+    sc.listenerBus.waitUntilEmpty()
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      assert(sc.getRDDStorageInfo.length === 1)
+    }
     assert(sc.getRDDStorageInfo.head.isCached)
     assert(sc.getRDDStorageInfo.head.memSize > 0)
     assert(sc.getRDDStorageInfo.head.storageLevel === StorageLevel.MEMORY_ONLY)
@@ -77,7 +82,7 @@ class SparkContextInfoSuite extends SparkFunSuite with LocalSparkContext {
 package object testPackage extends Assertions {
   private val CALL_SITE_REGEX = "(.+) at (.+):([0-9]+)".r
 
-  def runCallSiteTest(sc: SparkContext) {
+  def runCallSiteTest(sc: SparkContext): Unit = {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val rddCreationSite = rdd.getCreationSite
     val curCallSite = sc.getCallSite().shortForm // note: 2 lines after definition of "rdd"

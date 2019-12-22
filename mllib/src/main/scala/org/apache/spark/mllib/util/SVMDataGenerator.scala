@@ -37,7 +37,7 @@ import org.apache.spark.rdd.RDD
 object SVMDataGenerator {
 
   @Since("0.8.0")
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       // scalastyle:off println
       println("Usage: SVMGenerator " +

@@ -23,7 +23,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
+import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -78,12 +79,13 @@ class CacheManager extends Logging {
       logWarning("Asked to cache already cached data.")
     } else {
       val sparkSession = query.sparkSession
+      val qe = sparkSession.sessionState.executePlan(planToCache)
       val inMemoryRelation = InMemoryRelation(
         sparkSession.sessionState.conf.useCompression,
         sparkSession.sessionState.conf.columnBatchSize, storageLevel,
-        sparkSession.sessionState.executePlan(planToCache).executedPlan,
+        qe.executedPlan,
         tableName,
-        planToCache)
+        optimizedPlan = qe.optimizedPlan)
       this.synchronized {
         if (lookupCachedData(planToCache).nonEmpty) {
           logWarning("Data has already been cached.")
@@ -183,10 +185,10 @@ class CacheManager extends Logging {
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      val plan = spark.sessionState.executePlan(cd.plan).executedPlan
+      val qe = spark.sessionState.executePlan(cd.plan)
       val newCache = InMemoryRelation(
-        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = plan),
-        logicalPlan = cd.plan)
+        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
+        optimizedPlan = qe.optimizedPlan)
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedData(recomputedPlan.plan).nonEmpty) {
@@ -212,17 +214,18 @@ class CacheManager extends Logging {
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: IgnoreCachedData => command
-      // Do not lookup the cache by hint node. Hint node is special, we should ignore it when
-      // canonicalizing plans, so that plans which are same except hint can hit the same cache.
-      // However, we also want to keep the hint info after cache lookup. Here we skip the hint
-      // node, so that the returned caching plan won't replace the hint node and drop the hint info
-      // from the original plan.
-      case hint: ResolvedHint => hint
 
       case currentFragment =>
-        lookupCachedData(currentFragment)
-          .map(_.cachedRepresentation.withOutput(currentFragment.output))
-          .getOrElse(currentFragment)
+        lookupCachedData(currentFragment).map { cached =>
+          // After cache lookup, we should still keep the hints from the input plan.
+          val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
+          val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
+          // The returned hint list is in top-down order, we should create the hint nodes from
+          // right to left.
+          hints.foldRight[LogicalPlan](cachedPlan) { case (hint, p) =>
+            ResolvedHint(p, hint)
+          }
+        }.getOrElse(currentFragment)
     }
 
     newPlan transformAllExpressions {

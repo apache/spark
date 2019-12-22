@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import java.net.{HttpURLConnection, URL}
+import java.net.URL
 import java.util.Locale
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
@@ -31,8 +31,8 @@ import org.openqa.selenium.{By, WebDriver}
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.selenium.WebBrowser
 import org.w3c.css.sac.CSSParseException
 
 import org.apache.spark._
@@ -233,7 +233,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
   test("spark.ui.killEnabled should properly control kill button display") {
     def hasKillLink: Boolean = find(className("kill-link")).isDefined
-    def runSlowJob(sc: SparkContext) {
+    def runSlowJob(sc: SparkContext): Unit = {
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
     }
 
@@ -316,10 +316,12 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
           val env = SparkEnv.get
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId
-          val mapId = 0
+          val mapId = 0L
+          val mapIndex = 0
           val reduceId = taskContext.partitionId()
           val message = "Simulated fetch failure"
-          throw new FetchFailedException(bmAddress, shuffleId, mapId, reduceId, message)
+          throw new FetchFailedException(
+            bmAddress, shuffleId, mapId, mapIndex, reduceId, message)
         } else {
           x
         }
@@ -750,6 +752,22 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         }
       } finally {
         f.cancel()
+      }
+    }
+  }
+
+  test("description for empty jobs") {
+    withSpark(newSparkContext()) { sc =>
+      sc.emptyRDD[Int].collect
+      val description = "This is my job"
+      sc.setJobDescription(description)
+      sc.emptyRDD[Int].collect
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs")
+        val descriptions = findAll(className("description-input")).toArray
+        descriptions(0).text should be (description)
+        descriptions(1).text should include ("collect")
       }
     }
   }

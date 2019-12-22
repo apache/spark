@@ -72,7 +72,7 @@ object ScalaReflection extends ScalaReflection {
   /**
    * Synchronize to prevent concurrent usage of `<:<` operator.
    * This operator is not thread safe in any current version of scala; i.e.
-   * (2.11.12, 2.12.8, 2.13.0-M5).
+   * (2.11.12, 2.12.10, 2.13.0-M5).
    *
    * See https://github.com/scala/bug/issues/10766
    */
@@ -142,6 +142,13 @@ object ScalaReflection extends ScalaReflection {
     case _ => false
   }
 
+  private def baseType(tpe: `Type`): `Type` = {
+    tpe.dealias match {
+      case annotatedType: AnnotatedType => annotatedType.underlying
+      case other => other
+    }
+  }
+
   /**
    * Returns an expression that can be used to deserialize a Spark SQL representation to an object
    * of type `T` with a compatible schema. The Spark SQL representation is located at ordinal 0 of
@@ -174,7 +181,7 @@ object ScalaReflection extends ScalaReflection {
       tpe: `Type`,
       path: Expression,
       walkedTypePath: WalkedTypePath): Expression = cleanUpReflectionObjects {
-    tpe.dealias match {
+    baseType(tpe) match {
       case t if !dataTypeFor(t).isInstanceOf[ObjectType] => path
 
       case t if isSubtype(t, localTypeOf[Option[_]]) =>
@@ -423,8 +430,7 @@ object ScalaReflection extends ScalaReflection {
           createSerializerForGenericArray(input, dt, nullable = schemaFor(elementType).nullable)
       }
     }
-
-    tpe.dealias match {
+    baseType(tpe) match {
       case _ if !inputObject.dataType.isInstanceOf[ObjectType] => inputObject
 
       case t if isSubtype(t, localTypeOf[Option[_]]) =>
@@ -625,7 +631,7 @@ object ScalaReflection extends ScalaReflection {
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = cleanUpReflectionObjects {
-    tpe.dealias match {
+    baseType(tpe) match {
       // this must be the first case, since all objects in scala are instances of Null, therefore
       // Null type would wrongly match the first of them, which is Option as of now
       case t if isSubtype(t, definitions.NullTpe) => Schema(NullType, nullable = true)
@@ -900,7 +906,18 @@ trait ScalaReflection extends Logging {
    * only defines a constructor via `apply` method.
    */
   private def getCompanionConstructor(tpe: Type): Symbol = {
-    tpe.typeSymbol.asClass.companion.asTerm.typeSignature.member(universe.TermName("apply"))
+    def throwUnsupportedOperation = {
+      throw new UnsupportedOperationException(s"Unable to find constructor for $tpe. " +
+        s"This could happen if $tpe is an interface, or a trait without companion object " +
+        "constructor.")
+    }
+    tpe.typeSymbol.asClass.companion match {
+      case NoSymbol => throwUnsupportedOperation
+      case sym => sym.asTerm.typeSignature.member(universe.TermName("apply")) match {
+        case NoSymbol => throwUnsupportedOperation
+        case constructorSym => constructorSym
+      }
+    }
   }
 
   protected def constructParams(tpe: Type): Seq[Symbol] = {

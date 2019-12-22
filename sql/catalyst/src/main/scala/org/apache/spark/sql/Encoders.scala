@@ -22,7 +22,6 @@ import java.lang.reflect.Modifier
 import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
@@ -30,13 +29,10 @@ import org.apache.spark.sql.catalyst.expressions.objects.{DecodeUsingSerializer,
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
  * Methods for creating an [[Encoder]].
  *
  * @since 1.6.0
  */
-@Experimental
-@Evolving
 object Encoders {
 
   /**

@@ -18,7 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.File
-import java.net.{InetAddress, URI}
+import java.net.URI
 import java.nio.file.Files
 
 import scala.collection.JavaConverters._
@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkUserAppException}
-import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.api.python.{Py4JServer, PythonUtils}
 import org.apache.spark.internal.config._
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -35,12 +35,11 @@ import org.apache.spark.util.{RedirectThread, Utils}
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */
 object PythonRunner {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
     val sparkConf = new SparkConf()
-    val secret = Utils.createSecret(sparkConf)
     val pythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
       .orElse(sparkConf.get(PYSPARK_PYTHON))
       .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
@@ -51,15 +50,8 @@ object PythonRunner {
     val formattedPythonFile = formatPath(pythonFile)
     val formattedPyFiles = resolvePyFiles(formatPaths(pyFiles))
 
-    // Launch a Py4J gateway server for the process to connect to; this will let it see our
-    // Java system properties and such
-    val localhost = InetAddress.getLoopbackAddress()
-    val gatewayServer = new py4j.GatewayServer.GatewayServerBuilder()
-      .authToken(secret)
-      .javaPort(0)
-      .javaAddress(localhost)
-      .callbackClient(py4j.GatewayServer.DEFAULT_PYTHON_PORT, localhost, secret)
-      .build()
+    val gatewayServer = new Py4JServer(sparkConf)
+
     val thread = new Thread(() => Utils.logUncaughtExceptions { gatewayServer.start() })
     thread.setName("py4j-gateway-init")
     thread.setDaemon(true)
@@ -86,11 +78,20 @@ object PythonRunner {
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string
     env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
-    env.put("PYSPARK_GATEWAY_SECRET", secret)
+    env.put("PYSPARK_GATEWAY_SECRET", gatewayServer.secret)
     // pass conf spark.pyspark.python to python process, the only way to pass info to
     // python process is through environment variable.
     sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
     sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
+    // if OMP_NUM_THREADS is not explicitly set, override it with the number of cores
+    if (sparkConf.getOption("spark.yarn.appMasterEnv.OMP_NUM_THREADS").isEmpty &&
+        sparkConf.getOption("spark.mesos.driverEnv.OMP_NUM_THREADS").isEmpty &&
+        sparkConf.getOption("spark.kubernetes.driverEnv.OMP_NUM_THREADS").isEmpty) {
+      // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to the driver
+      // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
+      // see https://github.com/numpy/numpy/issues/10455
+      sparkConf.getOption("spark.driver.cores").foreach(env.put("OMP_NUM_THREADS", _))
+    }
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
       val process = builder.start()

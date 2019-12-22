@@ -1179,7 +1179,7 @@ setMethod("collect",
           function(x, stringsAsFactors = FALSE) {
             connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
             useArrow <- FALSE
-            arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+            arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
             if (arrowEnabled) {
               useArrow <- tryCatch({
                 checkSchemaInArrow(schema(x))
@@ -1187,8 +1187,8 @@ setMethod("collect",
               }, error = function(e) {
                 warning(paste0("The conversion from Spark DataFrame to R DataFrame was attempted ",
                                "with Arrow optimization because ",
-                               "'spark.sql.execution.arrow.enabled' is set to true; however, ",
-                               "failed, attempting non-optimization. Reason: ",
+                               "'spark.sql.execution.arrow.sparkr.enabled' is set to true; ",
+                               "however, failed, attempting non-optimization. Reason: ",
                                e))
                 FALSE
               })
@@ -1203,7 +1203,8 @@ setMethod("collect",
               requireNamespace1 <- requireNamespace
               if (requireNamespace1("arrow", quietly = TRUE)) {
                 read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
-                as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
+                # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
+                useAsTibble <- exists("as_tibble", envir = asNamespace("arrow"))
 
                 portAuth <- callJMethod(x@sdf, "collectAsArrowToR")
                 port <- portAuth[[1]]
@@ -1213,7 +1214,12 @@ setMethod("collect",
                 output <- tryCatch({
                   doServerAuth(conn, authSecret)
                   arrowTable <- read_arrow(readRaw(conn))
-                  as.data.frame(as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
+                  if (useAsTibble) {
+                    as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
+                    as.data.frame(as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
+                  } else {
+                    as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
+                  }
                 }, finally = {
                   close(conn)
                 })
@@ -1476,7 +1482,7 @@ dapplyInternal <- function(x, func, schema) {
     schema <- structType(schema)
   }
 
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
   if (arrowEnabled) {
     if (inherits(schema, "structType")) {
       checkSchemaInArrow(schema)
@@ -2246,7 +2252,7 @@ setMethod("mutate",
 
             # The last column of the same name in the specific columns takes effect
             deDupCols <- list()
-            for (i in 1:length(cols)) {
+            for (i in seq_len(length(cols))) {
               deDupCols[[ns[[i]]]] <- alias(cols[[i]], ns[[i]])
             }
 
@@ -2410,7 +2416,7 @@ setMethod("arrange",
             # builds a list of columns of type Column
             # example: [[1]] Column Species ASC
             #          [[2]] Column Petal_Length DESC
-            jcols <- lapply(seq_len(length(decreasing)), function(i){
+            jcols <- lapply(seq_len(length(decreasing)), function(i) {
               if (decreasing[[i]]) {
                 desc(getColumn(x, by[[i]]))
               } else {
@@ -2743,7 +2749,7 @@ genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
     col <- getColumn(x, colName)
     if (colName %in% intersectedColNames) {
       newJoin <- paste(colName, suffix, sep = "")
-      if (newJoin %in% allColNames){
+      if (newJoin %in% allColNames) {
         stop("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
           "Please use different suffixes for the intersected columns.")
       }
@@ -3469,7 +3475,7 @@ setMethod("str",
             cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
 
             if (nrow(localDF) > 0) {
-              for (i in 1 : ncol(localDF)) {
+              for (i in seq_len(ncol(localDF))) {
                 # Get the first elements for each column
 
                 firstElements <- if (types[i] == "character") {

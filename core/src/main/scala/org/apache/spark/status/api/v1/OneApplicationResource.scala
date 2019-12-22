@@ -25,7 +25,6 @@ import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkContext}
-import org.apache.spark.ui.UIUtils
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
