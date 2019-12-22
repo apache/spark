@@ -212,8 +212,8 @@ class HeartbeatReceiverSuite
     assert(fakeClusterManager.getExecutorIdsToKill === Set(executorId1, executorId2))
     // [SPARK-27348] HeartbeatReceiver should remove lost executor from scheduler backend
     eventually(timeout(5.seconds)) {
-      assert(!fakeSchedulerBackend.executorDataMap.contains(executorId1))
-      assert(!fakeSchedulerBackend.executorDataMap.contains(executorId2))
+      assert(!fakeSchedulerBackend.getExecutorIds().contains(executorId1))
+      assert(!fakeSchedulerBackend.getExecutorIds().contains(executorId2))
     }
     fakeSchedulerBackend.stop()
   }
