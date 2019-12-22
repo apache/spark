@@ -33,11 +33,13 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
  * @param filters The filters pushed down to CSV datasource.
  * @param dataSchema The full schema with all fields in CSV files.
  * @param requiredSchema The schema with only fields requested by the upper layer.
+ * @param columnPruning true if CSV parser can read sub-set of columns otherwise false.
  */
 class CSVFilters(
     filters: Seq[sources.Filter],
     dataSchema: StructType,
-    requiredSchema: StructType) {
+    requiredSchema: StructType,
+    columnPruning: Boolean) {
   require(checkFilters(), "All filters must be applicable to the data schema.")
 
   /**
@@ -45,11 +47,15 @@ class CSVFilters(
    * It combines the required schema and the fields referenced by filters.
    */
   val readSchema: StructType = {
-    val refs = filters.flatMap(_.references).toSet
-    val readFields = dataSchema.filter { field =>
-      requiredSchema.contains(field) || refs.contains(field.name)
+    if (columnPruning) {
+      val refs = filters.flatMap(_.references).toSet
+      val readFields = dataSchema.filter { field =>
+        requiredSchema.contains(field) || refs.contains(field.name)
+      }
+      StructType(readFields)
+    } else {
+      dataSchema
     }
-    StructType(readFields)
   }
 
   /**

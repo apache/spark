@@ -59,19 +59,23 @@ class UnivocityParser(
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
-  private val csvFilters = new CSVFilters(filters, dataSchema, requiredSchema)
+  private val csvFilters = new CSVFilters(
+    filters,
+    dataSchema,
+    requiredSchema,
+    options.columnPruning)
 
-  // The "minimal" schema to be read from Univocity parser.
-  // It includes `requiredSchema` + the fields referenced by pushed down filters.
-  val readSchema = csvFilters.readSchema
+  // When column pruning is enabled, the parser only parses the required columns based on
+  // their positions in the data schema.
+  private[sql] val parsedSchema = if (options.columnPruning) csvFilters.readSchema else dataSchema
 
-  // Mapping of field indexes of `readSchema` to indexes of `requiredSchema`.
-  // It returns -1 if `requiredSchema` doesn't contain a field from `readSchema`.
-  private val readToRequiredIndex: Array[Int] = {
-    val arr = Array.fill(readSchema.length)(-1)
+  // Mapping of field indexes of `parsedSchema` to indexes of `requiredSchema`.
+  // It returns -1 if `requiredSchema` doesn't contain a field from `parsedSchema`.
+  private val parsedToRequiredIndex: Array[Int] = {
+    val arr = Array.fill(parsedSchema.length)(-1)
     for {
-      readIndex <- 0 until readSchema.length
-      reqIndex <- requiredSchema.getFieldIndex(readSchema(readIndex).name)
+      readIndex <- 0 until parsedSchema.length
+      reqIndex <- requiredSchema.getFieldIndex(parsedSchema(readIndex).name)
     } {
       arr(readIndex) = reqIndex
     }
@@ -80,11 +84,7 @@ class UnivocityParser(
 
   // This index is used to reorder parsed tokens
   private val tokenIndexArr =
-    readSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
-
-  // When column pruning is enabled, the parser only parses the required columns based on
-  // their positions in the data schema.
-  private val parsedSchema = if (options.columnPruning) readSchema else dataSchema
+    parsedSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
 
   val tokenizer = {
     val parserSetting = options.asParserSettings
@@ -99,7 +99,7 @@ class UnivocityParser(
 
   // The row is used as a temporary placeholder of parsed and converted values.
   // It is needed for applying the pushdown filters.
-  private val readRow = new GenericInternalRow(readSchema.length)
+  private val parsedRow = new GenericInternalRow(parsedSchema.length)
   // Pre-allocated Seq to avoid the overhead of the seq builder.
   private val requiredRow = Seq(new GenericInternalRow(requiredSchema.length))
   // Pre-allocated empty sequence returned when the parsed row cannot pass filters.
@@ -140,7 +140,7 @@ class UnivocityParser(
   //
   //   output row - ["A", 2]
   private val valueConverters: Array[ValueConverter] = {
-    readSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
+    parsedSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
   }
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
@@ -223,7 +223,7 @@ class UnivocityParser(
     }
   }
 
-  private val doParse = if (options.columnPruning && readSchema.isEmpty) {
+  private val doParse = if (options.columnPruning && parsedSchema.isEmpty) {
     // If `columnPruning` enabled and partition attributes scanned only,
     // `schema` gets empty.
     (_: String) => Seq(InternalRow.empty)
@@ -275,9 +275,9 @@ class UnivocityParser(
     } else {
       // When the length of the returned tokens is identical to the length of the parsed schema,
       // we just need to:
-      //  1. Convert the tokens that correspond to the read schema.
-      //  2. Apply the pushdown filters to `readRow`.
-      //  3. Convert `readRow` to `requiredRow` by stripping non-required fields.
+      //  1. Convert the tokens that correspond to the parsed schema.
+      //  2. Apply the pushdown filters to `parsedRow`.
+      //  3. Convert `parsedRow` to `requiredRow` by stripping non-required fields.
       var i = 0
       val requiredSingleRow = requiredRow.head
       while (i < requiredSchema.length) {
@@ -288,14 +288,14 @@ class UnivocityParser(
       var skipValueConversion = false
       var badRecordException: Option[Throwable] = None
       i = 0
-      while (!skipValueConversion && i < readSchema.length) {
+      while (!skipValueConversion && i < parsedSchema.length) {
         try {
           val convertedValue = valueConverters(i).apply(getToken(tokens, i))
-          readRow(i) = convertedValue
-          if (csvFilters.skipRow(readRow, i)) {
+          parsedRow(i) = convertedValue
+          if (csvFilters.skipRow(parsedRow, i)) {
             skipValueConversion = true
           } else {
-            val requiredIndex = readToRequiredIndex(i)
+            val requiredIndex = parsedToRequiredIndex(i)
             if (requiredIndex != -1) {
               requiredSingleRow(requiredIndex) = convertedValue
             }

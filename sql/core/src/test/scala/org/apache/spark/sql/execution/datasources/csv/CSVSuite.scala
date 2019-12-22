@@ -2206,25 +2206,31 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   }
 
   test("filters push down") {
-    withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withTempPath { path =>
-        val t = "2019-12-17 00:01:02"
-        Seq(
-          "c1,c2",
-          "1,2019-11-14 20:35:30",
-          s"2,$t").toDF("data")
-          .repartition(1)
-          .write.text(path.getAbsolutePath)
-        val readback = spark.read
-          .option("header", true)
-          .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
-          .schema("c1 integer, c2 timestamp")
-          .csv(path.getAbsolutePath)
-          .where($"c1" === 2)
-        // count() pushes empty schema. This checks handling of a filter
-        // which refers to not existed field.
-        assert(readback.count() === 1)
-        checkAnswer(readback, Row(2, Timestamp.valueOf(t)))
+    Seq(true, false).foreach { columnPruning =>
+      withSQLConf(
+        SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> columnPruning.toString) {
+
+        withTempPath { path =>
+          val t = "2019-12-17 00:01:02"
+          Seq(
+            "c0,c1,c2",
+            "abc,1,2019-11-14 20:35:30",
+            s"def,2,$t").toDF("data")
+            .repartition(1)
+            .write.text(path.getAbsolutePath)
+          val readback = spark.read
+            .option("header", true)
+            .option("timestampFormat", "uuuu-MM-dd HH:mm:ss")
+            .schema("c0 string, c1 integer, c2 timestamp")
+            .csv(path.getAbsolutePath)
+            .where($"c1" === 2)
+            .select($"c2")
+          // count() pushes empty schema. This checks handling of a filter
+          // which refers to not existed field.
+          assert(readback.count() === 1)
+          checkAnswer(readback, Row(Timestamp.valueOf(t)))
+        }
       }
     }
   }

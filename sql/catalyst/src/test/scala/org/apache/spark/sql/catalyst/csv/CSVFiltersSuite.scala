@@ -60,14 +60,23 @@ class CSVFiltersSuite extends SparkFunSuite {
     def check(
         dataSchema: String = "i INTEGER, d DOUBLE, s STRING",
         requiredSchema: String = "s STRING",
+        columnPruning: Boolean = true,
         filters: Seq[Filter],
         expected: String): Unit = {
-      val csvFilters = new CSVFilters(filters, getSchema(dataSchema), getSchema(requiredSchema))
+      val csvFilters = new CSVFilters(
+        filters,
+        getSchema(dataSchema),
+        getSchema(requiredSchema),
+        columnPruning)
       assert(csvFilters.readSchema === getSchema(expected))
     }
 
     check(filters = Seq(), expected = "s STRING")
     check(filters = Seq(sources.EqualTo("d", 3.14)), expected = "d DOUBLE, s STRING")
+    check(
+      filters = Seq(sources.EqualTo("d", 3.14)),
+      columnPruning = false,
+      expected = "i INTEGER, d DOUBLE, s STRING")
     check(
       filters = Seq(sources.And(sources.EqualTo("d", 3.14), sources.StringEndsWith("s", "a"))),
       expected = "d DOUBLE, s STRING")
@@ -94,8 +103,14 @@ class CSVFiltersSuite extends SparkFunSuite {
         row: InternalRow,
         pos: Int,
         skip: Boolean): Unit = {
-      val csvFilters = new CSVFilters(filters, getSchema(dataSchema), getSchema(requiredSchema))
-      assert(csvFilters.skipRow(row, pos) === skip)
+      Seq(true, false).foreach { columnPruning =>
+        val csvFilters = new CSVFilters(
+          filters,
+          getSchema(dataSchema),
+          getSchema(requiredSchema),
+          columnPruning)
+        assert(csvFilters.skipRow(row, pos) === skip)
+      }
     }
 
     check(filters = Seq(), row = InternalRow(3.14), pos = 0, skip = false)

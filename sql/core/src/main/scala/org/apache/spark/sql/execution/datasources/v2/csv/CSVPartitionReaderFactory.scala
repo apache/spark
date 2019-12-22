@@ -59,7 +59,7 @@ case class CSVPartitionReaderFactory(
       filters)
     val isStartOfFile = file.start == 0
     val headerChecker = new CSVHeaderChecker(
-      parser.readSchema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
+      parser.parsedSchema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
     val iter = CSVDataSource(parsedOptions).readFile(
       conf,
       file,
