@@ -2879,8 +2879,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       case agg: SortAggregateExec => agg.aggregateExpressions
     }
     assert(aggregateExpressions.isDefined)
-    assert(aggregateExpressions.get.size == 2)
-    checkAnswer(df, Row(1, 3, null) :: Row(2, 3, 3) :: Nil)
+    assert(aggregateExpressions.get.size == 1)
+    checkAnswer(df, Row(1, null) :: Row(2, 3) :: Nil)
   }
 
   test("Non-deterministic aggregate functions should not be deduplicated") {
