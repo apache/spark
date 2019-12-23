@@ -55,7 +55,9 @@ SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= to_timestamp("2003-01-01")) 
 
 -- Aggregate with filter, more than one aggregate function goes with distinct.
 select dept_id, count(distinct emp_name), count(distinct hiredate), sum(salary), sum(salary) filter (where id > 200) from emp group by dept_id;
+select dept_id, count(distinct emp_name), count(distinct hiredate), sum(salary), sum(salary) filter (where id + dept_id > 500) from emp group by dept_id;
 select dept_id, count(distinct emp_name), count(distinct hiredate), sum(salary) filter (where salary < 400.00D), sum(salary) filter (where id > 200) from emp group by dept_id;
+select dept_id, count(distinct emp_name), count(distinct hiredate), sum(salary) filter (where salary < 400.00D), sum(salary) filter (where id + dept_id > 500) from emp group by dept_id;
 -- [SPARK-30276] Support Filter expression allows simultaneous use of DISTINCT
 -- select dept_id, count(distinct emp_name) filter (where id > 200), count(distinct hiredate), sum(salary) from emp group by dept_id;
 -- select dept_id, count(distinct emp_name) filter (where id > 200), count(distinct hiredate) filter (where hiredate > date "2003-01-01"), sum(salary) from emp group by dept_id;
@@ -80,37 +82,8 @@ SELECT a + 1 + 1, COUNT(b) FILTER (WHERE b > 0) FROM testData GROUP BY a + 1;
 -- SELECT COUNT(DISTINCT b) FILTER (WHERE b > 0), COUNT(DISTINCT b, c) FILTER (WHERE b > 0 AND c > 2)
 -- FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY a;
 
--- Aliases in SELECT could be used in GROUP BY
-SELECT a AS k, COUNT(b) FILTER (WHERE b = 1 OR b = 2) FROM testData GROUP BY k;
-SELECT dept_id as k,
-       SUM(salary) FILTER (WHERE hiredate < date "2005-01-01" OR hiredate > date "2010-01-01")
-FROM emp GROUP BY k;
-SELECT dept_id as k,
-       SUM(salary) FILTER (WHERE hiredate < to_date("2005-01-01") OR hiredate > to_date("2010-01-01"))
-FROM emp GROUP BY k;
-SELECT dept_id as k,
-       SUM(salary) FILTER (WHERE hiredate < to_timestamp("2005-01-01") OR hiredate > to_timestamp("2010-01-01 00:00:00"))
-FROM emp GROUP BY k;
-SELECT a AS k, COUNT(b) FILTER (WHERE NOT b < 0) FROM testData GROUP BY k HAVING k > 1;
-SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= date "2005-01-01")
-FROM emp GROUP BY k HAVING k < 70;
-SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= to_date("2005-01-01"))
-FROM emp GROUP BY k HAVING k < 70;
-SELECT dept_id AS k, AVG(salary) FILTER (WHERE NOT hiredate <= to_timestamp("2005-01-01 00:00:00"))
-FROM emp GROUP BY k HAVING k < 70;
-
--- Aggregate functions cannot be used in GROUP BY
-SELECT COUNT(b) FILTER (WHERE a > 0) AS k FROM testData GROUP BY k;
-
 -- Check analysis exceptions
 SELECT a AS k, COUNT(b) FILTER (WHERE b > 0) FROM testData GROUP BY k;
-
--- Aggregate with filter, empty input and non-empty GroupBy expressions.
-SELECT a, COUNT(1) FILTER (WHERE b > 1) FROM testData WHERE false GROUP BY a;
-
--- Aggregate with filter, empty input and empty GroupBy expressions.
-SELECT COUNT(1) FILTER (WHERE b = 2) FROM testData WHERE false;
-SELECT 1 FROM (SELECT COUNT(1) FILTER (WHERE a >= 3 OR b <= 1) FROM testData WHERE false) t;
 
 -- Aggregate with filter contains exists subquery
 SELECT emp.dept_id,
@@ -118,11 +91,14 @@ SELECT emp.dept_id,
        avg(salary) FILTER (WHERE id > (SELECT 200))
 FROM emp
 GROUP BY dept_id;
+
 SELECT emp.dept_id,
        avg(salary),
        avg(salary) FILTER (WHERE emp.dept_id = (SELECT dept_id FROM dept LIMIT 1))
 FROM emp
 GROUP BY dept_id;
+
+-- [SPARK-30220] Support Filter expression uses IN/EXISTS predicate sub-queries
 SELECT emp.dept_id,
        avg(salary),
        avg(salary) FILTER (WHERE EXISTS (SELECT state
@@ -130,15 +106,15 @@ SELECT emp.dept_id,
                WHERE dept.dept_id = emp.dept_id))
 FROM emp
 GROUP BY dept_id;
+
 SELECT emp.dept_id, 
        Sum(salary),
-       Sum(salary) FILTER (WHERE  NOT EXISTS (SELECT state 
+       Sum(salary) FILTER (WHERE NOT EXISTS (SELECT state 
                    FROM dept 
                    WHERE dept.dept_id = emp.dept_id))
 FROM emp 
 GROUP BY dept_id; 
 
--- Aggregate with filter contains in subquery
 SELECT emp.dept_id, 
        avg(salary),
        avg(salary) FILTER (WHERE emp.dept_id IN (SELECT DISTINCT dept_id

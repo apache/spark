@@ -2836,10 +2836,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("Support filter clause for aggregate function with hash aggregate") {
-    Seq(("APPROX_COUNT_DISTINCT(a)", 3), ("COUNT(a)", 3), ("FIRST(a)", 1), ("LAST(a)", 3),
-      ("MAX(a)", 3), ("AVG(a)", 2.0), ("MIN(a)", 1), ("SUM(a)", 6), ("PERCENTILE(a, 1)", 3),
-      ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0), ("COLLECT_LIST(a)", Seq(1, 2, 3)),
-      ("COLLECT_SET(a)", Seq(1, 2, 3))).foreach { funcToResult =>
+    Seq(("COUNT(a)", 3), ("COLLECT_LIST(a)", Seq(1, 2, 3))).foreach { funcToResult =>
       val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
       val df = sql(query)
       val physical = df.queryExecution.sparkPlan
@@ -2858,59 +2855,32 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
 
   test("Support filter clause for aggregate function uses SortAggregateExec") {
     withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-      Seq(("PERCENTILE(a, 1)", 3),
-        ("PERCENTILE_APPROX(a, 0.5, 100)", 2.0),
-        ("COLLECT_LIST(a)", Seq(1, 2, 3)),
-        ("COLLECT_SET(a)", Seq(1, 2, 3))).foreach { funcToResult =>
-        val query = s"SELECT ${funcToResult._1} FILTER (WHERE b > 1) FROM testData2"
-        val df = sql(query)
-        val physical = df.queryExecution.sparkPlan
-        val aggregateExpressions = physical.collectFirst {
-          case agg: SortAggregateExec => agg.aggregateExpressions
-        }
-        assert(aggregateExpressions.isDefined)
-        assert(aggregateExpressions.get.size == 1)
-        aggregateExpressions.get.foreach { expr =>
-          assert(expr.filter.isDefined)
-        }
-        checkAnswer(df, Row(funcToResult._2) :: Nil)
+      val query = s"SELECT PERCENTILE(a, 1) FILTER (WHERE b > 1) FROM testData2"
+      val df = sql(query)
+      val physical = df.queryExecution.sparkPlan
+      val aggregateExpressions = physical.collectFirst {
+        case agg: SortAggregateExec => agg.aggregateExpressions
       }
+      assert(aggregateExpressions.isDefined)
+      assert(aggregateExpressions.get.size == 1)
+      aggregateExpressions.get.foreach { expr =>
+        assert(expr.filter.isDefined)
+      }
+      checkAnswer(df, Row(3) :: Nil)
     }
   }
 
-  test("Support filter clause for multiple aggregate function") {
-    val query =
-      """
-        | SELECT
-        | COUNT(a), COUNT(a) FILTER (WHERE b >= 2),
-        | SUM(a), SUM(a) FILTER (WHERE b < 2),
-        | MAX(a), MAX(a) FILTER (WHERE b > 0),
-        | MIN(a), MIN(a) FILTER (WHERE b = 1),
-        | AVG(a), AVG(a) FILTER (WHERE b IN (1, 2)) FROM testData2
-      """.stripMargin
+  test("Support filter clause for aggregate function with group") {
+    val query = s"SELECT b, MAX(a) FILTER (WHERE b = (select 2)) FROM testData2 GROUP BY b"
     val df = sql(query)
     val physical = df.queryExecution.sparkPlan
     val aggregateExpressions = physical.collectFirst {
       case agg: HashAggregateExec => agg.aggregateExpressions
+      case agg: SortAggregateExec => agg.aggregateExpressions
     }
     assert(aggregateExpressions.isDefined)
-    assert(aggregateExpressions.get.size == 10)
-    checkAnswer(df, Row(6, 3, 12, 6, 3, 3, 1, 1, 2, 2) :: Nil)
-  }
-
-  test("Support filter clause for aggregate function with group") {
-    Seq("b = 2", "b = (select 2)").foreach { predicate =>
-      val query = s"SELECT b, MAX(a), MAX(a) FILTER (WHERE $predicate) FROM testData2 GROUP BY b"
-      val df = sql(query)
-      val physical = df.queryExecution.sparkPlan
-      val aggregateExpressions = physical.collectFirst {
-        case agg: HashAggregateExec => agg.aggregateExpressions
-        case agg: SortAggregateExec => agg.aggregateExpressions
-      }
-      assert(aggregateExpressions.isDefined)
-      assert(aggregateExpressions.get.size == 2)
-      checkAnswer(df, Row(1, 3, null) :: Row(2, 3, 3) :: Nil)
-    }
+    assert(aggregateExpressions.get.size == 2)
+    checkAnswer(df, Row(1, 3, null) :: Row(2, 3, 3) :: Nil)
   }
 
   test("Non-deterministic aggregate functions should not be deduplicated") {

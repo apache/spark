@@ -238,6 +238,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
         val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrLookup.get)
+        // We changed the attributes in the [[Expand]] output using expressionAttributePair.
+        // So we need to replace the attributes in FILTER expression with new ones.
         val filterOpt = e.filter.map(_.transform {
           case a: Attribute => regularAggChildAttrLookup.getOrElse(a, a)
         })
