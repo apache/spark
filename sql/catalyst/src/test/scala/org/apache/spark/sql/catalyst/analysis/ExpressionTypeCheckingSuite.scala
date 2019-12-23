@@ -153,8 +153,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(Sum(Symbol("stringField")))
     assertSuccess(Average(Symbol("stringField")))
     assertSuccess(Min(Symbol("arrayField")))
-    assertSuccess(new BoolAnd("bool_and", Symbol("booleanField")))
-    assertSuccess(new BoolOr("bool_or", Symbol("booleanField")))
+    assertSuccess(new BoolAnd(Symbol("booleanField")))
+    assertSuccess(new BoolOr(Symbol("booleanField")))
 
     assertError(Min(Symbol("mapField")), "min does not support ordering on type")
     assertError(Max(Symbol("mapField")), "max does not support ordering on type")

@@ -100,14 +100,7 @@ select X'XuZ';
 -- Hive literal_double test.
 SELECT 3.14, -3.14, 3.14e8, 3.14e-8, -3.14e8, -3.14e-8, 3.14e+8, 3.14E8, 3.14E-8;
 
--- typed integer expression
-select integer '7';
-select integer'7';
-select integer '2147483648';
-
 -- awareness of the negative/positive sign before type
-select -integer '7';
-select +integer '7';
 select +date '1999-01-01';
 select +timestamp '1999-01-01';
 select +interval '1 day';

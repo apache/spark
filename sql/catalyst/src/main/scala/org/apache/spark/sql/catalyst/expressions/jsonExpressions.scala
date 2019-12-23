@@ -505,7 +505,7 @@ case class JsonTuple(children: Seq[Expression])
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
        {"a":1,"b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
-       {"time":2015-08-26 00:00:00.0}
+       {"time":2015-08-26 00:00:00}
   """,
   since = "2.2.0")
 // scalastyle:on line.size.limit

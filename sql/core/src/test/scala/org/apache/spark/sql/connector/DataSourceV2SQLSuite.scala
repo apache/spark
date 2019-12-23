@@ -1199,7 +1199,7 @@ class DataSourceV2SQLSuite
   }
 
   test("tableCreation: duplicate column names in the table definition") {
-    val errorMsg = "Found duplicate column(s) in the table definition of `t`"
+    val errorMsg = "Found duplicate column(s) in the table definition of t"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisError(
@@ -1223,7 +1223,7 @@ class DataSourceV2SQLSuite
   }
 
   test("tableCreation: duplicate nested column names in the table definition") {
-    val errorMsg = "Found duplicate column(s) in the table definition of `t`"
+    val errorMsg = "Found duplicate column(s) in the table definition of t"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisError(
@@ -1911,6 +1911,21 @@ class DataSourceV2SQLSuite
       val ident = Identifier.of(Array(), "tbl")
       sql("CREATE TABLE spark_catalog.tbl (col string) USING json")
       assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
+    }
+  }
+
+  test("SPARK-30094: current namespace is used during table resolution") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+
+    withTable("spark_catalog.t", "testcat.ns.t") {
+      sql("CREATE TABLE t USING parquet AS SELECT 1")
+      sql("CREATE TABLE testcat.ns.t USING parquet AS SELECT 2")
+
+      checkAnswer(sql("SELECT * FROM t"), Row(1))
+
+      sql("USE testcat.ns")
+      checkAnswer(sql("SELECT * FROM t"), Row(2))
     }
   }
 
