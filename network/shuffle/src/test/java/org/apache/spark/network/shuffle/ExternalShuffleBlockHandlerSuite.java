@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 
+import io.netty.channel.Channel;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -94,7 +95,8 @@ public class ExternalShuffleBlockHandlerSuite {
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Iterator<ManagedBuffer>> stream = (ArgumentCaptor<Iterator<ManagedBuffer>>)
         (ArgumentCaptor<?>) ArgumentCaptor.forClass(Iterator.class);
-    verify(streamManager, times(1)).registerStream(anyString(), stream.capture());
+    verify(streamManager, times(1)).registerStream(anyString(), stream.capture(),
+            (Channel)any());
     Iterator<ManagedBuffer> buffers = stream.getValue();
     assertEquals(block0Marker, buffers.next());
     assertEquals(block1Marker, buffers.next());
