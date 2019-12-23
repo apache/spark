@@ -383,7 +383,7 @@ IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few comman
 -- !query 33
 SELECT emp.dept_id, 
        Sum(salary),
-       Sum(salary) FILTER (WHERE  NOT EXISTS (SELECT state 
+       Sum(salary) FILTER (WHERE NOT EXISTS (SELECT state 
                    FROM dept 
                    WHERE dept.dept_id = emp.dept_id))
 FROM emp 
