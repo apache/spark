@@ -25,6 +25,7 @@ import org.apache.spark.ml.param.{IntParam, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.BoundedPriorityQueue
@@ -139,36 +140,55 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       val hashDistCol = hashDistUDF(col($(outputCol)))
       val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
 
+      val spark = dataset.sparkSession
+      import spark.implicits._
+
       if (numNearestNeighbors < 1000) {
-        val topKThreshold = modelDatasetWithDist
-          .select(distCol)
+        val r = Random.nextInt
+        val distColIdx = modelDatasetWithDist.schema.fieldNames.indexOf(distCol)
+        val rows = modelDatasetWithDist
           .rdd
-          .map(_.getDouble(0))
-          .treeAggregate(
-            new BoundedPriorityQueue[Double](numNearestNeighbors)(Ordering[Double].reverse))(
+          .map { row =>
+            val dist = row.getDouble(distColIdx)
+            (r, (dist, row))
+          }.aggregateByKey(new BoundedPriorityQueue[(Double, Row)](numNearestNeighbors)(
+            Ordering.by[(Double, Row), Double](_._1).reverse))(
             seqOp = (c, v) => c += v,
-            combOp = (c1, c2) => c1 ++= c2,
-            depth = 2
-          ).toSeq.max
-        modelDatasetWithDist.filter(hashDistCol <= topKThreshold)
+            combOp = (c1, c2) => c1 ++= c2
+          ).flatMap { case (_, c) => c.iterator.map(_._2) }
+        spark.createDataFrame(rows, modelDatasetWithDist.schema)
+
       } else {
-        val count = dataset.count()
+        val relativeError = 0.05
+        val (summaries, count) = modelDatasetWithDist
+          .select(distCol)
+          .as[Double]
+          .rdd
+          .treeAggregate(
+            (new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError), 0L))(
+            seqOp = (c, v) => (c._1.insert(v), c._2 + 1),
+            combOp = (c1, c2) => (c1._1.compress.merge(c2._1.compress), c1._2 + c2._2),
+            depth = 2
+          )
+
         // Compute threshold to get around k elements.
         // To guarantee to have enough neighbors in one pass, we need (p - err) * N >= M
         // so we pick quantile p = M / N + err
         // M: the number of nearest neighbors; N: the number of elements in dataset
-        val relativeError = 0.05
         val approxQuantile = numNearestNeighbors.toDouble / count + relativeError
 
         if (approxQuantile >= 1) {
           modelDatasetWithDist
         } else {
-          val hashThreshold = modelDatasetWithDist.stat
-            .approxQuantile(distCol, Array(approxQuantile), relativeError)
+          val hashThreshold = summaries.compress.query(approxQuantile).get
           // Filter the dataset where the hash value is less than the threshold.
-          modelDatasetWithDist.filter(hashDistCol <= hashThreshold(0))
+          modelDatasetWithDist.filter(hashDistCol <= hashThreshold)
         }
       }
+    }
+
+    if (!singleProbe) {
+      println(s"numNearestNeighbors=$numNearestNeighbors, modelSubset.size=${modelSubset.count}")
     }
 
     // Get the top k nearest neighbor by their distance to the key
