@@ -116,6 +116,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
       dataset: Dataset[_]): DecisionTreeClassificationModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
+
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses = getNumClasses(dataset)
 
@@ -126,8 +127,6 @@ class DecisionTreeClassifier @Since("1.4.0") (
     }
     validateNumClasses(numClasses)
     val instances = extractInstances(dataset, numClasses)
-    val weightSum = instances.map(_.weight).reduce(_ + _)
-    instr.logSumOfWeights(weightSum)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
@@ -136,7 +135,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
-
+    instr.logSumOfWeights(trees.head.weightSum)
     trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
 
@@ -200,6 +199,8 @@ class DecisionTreeClassificationModel private[ml] (
    */
   private[ml] def this(rootNode: Node, numFeatures: Int, numClasses: Int) =
     this(Identifiable.randomUID("dtc"), rootNode, numFeatures, numClasses)
+
+  var weightSum: Double = 0.0
 
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction

@@ -134,7 +134,8 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     trees.foreach(copyValues(_))
 
     val numFeatures = trees.head.numFeatures
-    instr.logNamedValue(Instrumentation.loggerTags.numFeatures, numFeatures)
+    instr.logNumFeatures(numFeatures)
+    instr.logSumOfWeights(trees.head.weightSum)
     new RandomForestRegressionModel(uid, trees, numFeatures)
   }
 

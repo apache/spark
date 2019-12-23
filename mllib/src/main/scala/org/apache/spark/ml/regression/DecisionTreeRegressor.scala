@@ -126,7 +126,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
-
+    instr.logSumOfWeights(trees.head.weightSum)
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
@@ -192,6 +192,8 @@ class DecisionTreeRegressionModel private[ml] (
    */
   private[ml] def this(rootNode: Node, numFeatures: Int) =
     this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
+
+  var weightSum: Double = 0.0
 
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction

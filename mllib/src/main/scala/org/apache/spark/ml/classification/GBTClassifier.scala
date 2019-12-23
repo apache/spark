@@ -200,12 +200,6 @@ class GBTClassifier @Since("1.4.0") (
       checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol)
     instr.logNumClasses(numClasses)
 
-    var weightSum = trainDataset.map(_.weight).reduce(_ + _)
-    if (validationDataset != null) {
-      weightSum += validationDataset.map(_.weight).reduce(_ + _)
-    }
-    instr.logSumOfWeights(weightSum)
-
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val (baseLearners, learnerWeights) = if (withValidation) {
@@ -217,7 +211,9 @@ class GBTClassifier @Since("1.4.0") (
     baseLearners.foreach(copyValues(_))
 
     val numFeatures = baseLearners.head.numFeatures
+    val sumofWeight = baseLearners.head.weightSum
     instr.logNumFeatures(numFeatures)
+    instr.logSumOfWeights(sumofWeight)
 
     new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
