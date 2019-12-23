@@ -214,6 +214,7 @@ class Analyzer(
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
+      AnnotateSemiStructuredColumns ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
       ResolveWindowOrder ::
@@ -2925,6 +2926,17 @@ class Analyzer(
 
         case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
       }
+    }
+  }
+
+  object AnnotateSemiStructuredColumns extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+      case a @ Alias(ss: SemiStructuredColumn, name) if a.explicitMetadata.isEmpty =>
+        val betterName = if (name == toPrettySQL(ss)) toPrettySQL(ss.child) else name
+        Alias(ss, betterName)(
+          exprId = a.exprId,
+          explicitMetadata = Some(ss.toMetadata),
+          qualifier = a.qualifier)
     }
   }
 }

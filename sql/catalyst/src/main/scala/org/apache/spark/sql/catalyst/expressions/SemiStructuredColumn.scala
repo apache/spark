@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 
 /**
  * Adds metadata to a column containing semi-structured data. This information can be passed down
  * to data sources for potential optimizations.
  */
-trait SemiStructuredColumn extends UnaryExpression with Unevaluable with ExpectsInputTypes {
+trait SemiStructuredColumn extends UnaryExpression with ExpectsInputTypes with RuntimeReplaceable {
 
   /** The format of the semi-structured column, e.g. json, xml, avro, csv. */
   def format: String
@@ -50,12 +49,6 @@ trait SemiStructuredColumn extends UnaryExpression with Unevaluable with Expects
 }
 
 object SemiStructuredColumn {
-
-  def unapply(expr: SemiStructuredColumn): Option[Attribute] = expr.child match {
-    case a: Attribute => Some(a.withMetadata(expr.toMetadata))
-    case _ => throw new AnalysisException(
-      s"${expr.prettyName()} needs to be called on a named column.")
-  }
 
   val FORMAT_KEY = "format"
   val FORMAT_OPTIONS_KEY = "options"

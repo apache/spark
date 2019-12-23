@@ -24,6 +24,7 @@ import java.util.Locale
 import collection.JavaConverters._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.expressions.SemiStructuredColumn
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -654,5 +655,54 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         .as[String].head.length
       assert(json_tuple_result === len)
     }
+  }
+
+  test("as_json - basic") {
+    val json = """{"a":1}"""
+    val df = Seq(json).toDF("raw")
+    def verifyField(schema: StructType, alias: Option[String] = None): Unit = {
+      val field = schema.head
+      assert(field.dataType === StringType)
+      assert(field.metadata.getString(SemiStructuredColumn.FORMAT_KEY) === "json")
+      assert(field.name === alias.getOrElse("raw"))
+    }
+
+    verifyField(df.select(as_json('raw)).schema)
+
+    withTempView("as_json_test") {
+      df.createOrReplaceTempView("as_json_test")
+
+      val df2 = sql("SELECT as_json(raw) FROM as_json_test")
+      verifyField(df2.schema)
+    }
+
+    verifyField(df.select(as_json('raw) as '_raw).schema, Some("_raw"))
+  }
+
+  test("as_json - with options") {
+    val json = """{"a":1}"""
+    val df = Seq(json).toDF("raw")
+    def verifyField(schema: StructType, option: (String, String)): Unit = {
+      val field = schema.head
+      assert(field.name === "raw")
+      assert(field.dataType === StringType)
+      assert(field.metadata.getString(SemiStructuredColumn.FORMAT_KEY) === "json")
+      val metadata = field.metadata.getMetadata(SemiStructuredColumn.FORMAT_OPTIONS_KEY)
+      assert(metadata.getString(option._1) === option._2)
+    }
+
+    val option = "dateFormat" -> "yyyy-MM-dd"
+    verifyField(df.select(as_json('raw, Map(option))).schema, option)
+
+    withTempView("as_json_test") {
+      df.createOrReplaceTempView("as_json_test")
+
+      val df2 = sql("SELECT as_json(raw, map('dateFormat', 'yyyy-MM-dd')) FROM as_json_test")
+      verifyField(df2.schema, option)
+    }
+  }
+
+  test("as_json - performs type checks") {
+
   }
 }

@@ -799,6 +799,9 @@ case class SchemaOfJson(
 case class AsJson(child: Expression, formatOptions: Map[String, String])
     extends SemiStructuredColumn {
 
+  // Constructor for SQL
+  def this(child: Expression) = this(child, Map.empty)
+
   override def dataType: DataType = StringType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
