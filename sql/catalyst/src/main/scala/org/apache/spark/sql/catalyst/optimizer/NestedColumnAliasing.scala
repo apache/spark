@@ -163,12 +163,23 @@ object NestedColumnAliasing {
  */
 object GeneratorNestedColumnAliasing {
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
-    case p @ Project(_, g: Generate) if SQLConf.get.nestedPruningOnExpressions &&
+    case Project(projectList, g: Generate) if SQLConf.get.nestedPruningOnExpressions &&
         canPruneGenerator(g.generator) =>
-      Some(p)
+      // On top on `Generate`, a `Project` that might have nested column accessors.
+      // We try to get alias maps for both project list and generator's children expressions.
+      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          val newChild = pruneGenerate(g, nestedFieldToAlias, attrToAliases)
+          Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
+      }
+
     case g: Generate if SQLConf.get.nestedPruningOnExpressions &&
         canPruneGenerator(g.generator) =>
-      Some(g)
+      NestedColumnAliasing.getAliasSubMap(g.generator.children).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          pruneGenerate(g, nestedFieldToAlias, attrToAliases)
+      }
+
     case _ => None
   }
 
@@ -185,24 +196,6 @@ object GeneratorNestedColumnAliasing {
     val newGenerate = g.copy(generator = newGenerator)
 
     NestedColumnAliasing.replaceChildrenWithAliases(newGenerate, attrToAliases)
-  }
-
-  // Prunes unnecessary nested columns from `Generate`.
-  def prune(plan: LogicalPlan): LogicalPlan = plan match {
-    case p @ Project(projectList, g: Generate) =>
-      // On top on `Generate`, a `Project` that might have nested column accessors.
-      // We try to get alias maps for both project list and generator's children expressions.
-      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
-        case (nestedFieldToAlias, attrToAliases) =>
-          val newChild = pruneGenerate(g, nestedFieldToAlias, attrToAliases)
-          Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
-      }.getOrElse(p)
-
-    case g: Generate =>
-      NestedColumnAliasing.getAliasSubMap(g.generator.children).map {
-        case (nestedFieldToAlias, attrToAliases) =>
-          pruneGenerate(g, nestedFieldToAlias, attrToAliases)
-      }.getOrElse(g)
   }
 
   /**
