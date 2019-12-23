@@ -320,8 +320,21 @@ private[parquet] class ParquetRowConverter(
       case t: StructType =>
         val wrappedUpdater = {
           if (updater.isInstanceOf[RowUpdater]) {
+            // `updater` is a RowUpdater, implying that the parent container is a struct.
+            // We do NOT need to perform defensive copying here because either:
+            //
+            //   1. The path from the schema root to this field consists only of nested
+            //      structs, so this converter will only be invoked once per record and
+            //      we don't need to copy because copying will be done in the final
+            //      UnsafeProjection, or
+            //   2. The path from the schema root to this field contains a map or array,
+            //      in which case we will perform a recursive defensive copy via the
+            //      `else` branch below.
             updater
           } else {
+            // `updater` is NOT a RowUpdater, implying that the parent container is not a struct.
+            // Therefore, the parent container must be a map or array. We need to copy the row
+            // because this converter might be invoked multiple times per Parquet input record.
             new ParentContainerUpdater {
               override def set(value: Any): Unit =
                 updater.set(value.asInstanceOf[InternalRow].copy())
