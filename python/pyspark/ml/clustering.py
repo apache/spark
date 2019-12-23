@@ -229,14 +229,14 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     ...         (Vectors.dense([0.75, 0.935]),),
     ...         (Vectors.dense([-0.83, -0.68]),),
     ...         (Vectors.dense([-0.91, -0.76]),)]
-    >>> df = spark.createDataFrame(sc.parallelize(data, 2), ["features"])
+    >>> df = spark.createDataFrame(data, ["features"])
     >>> gm = GaussianMixture(k=3, tol=0.0001, seed=10)
     >>> gm.getMaxIter()
     100
-    >>> gm.setMaxIter(25)
+    >>> gm.setMaxIter(10)
     GaussianMixture...
     >>> gm.getMaxIter()
-    25
+    10
     >>> model = gm.fit(df)
     >>> model.getAggregationDepth()
     2
@@ -247,7 +247,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> model.predict(df.head().features)
     2
     >>> model.predictProbability(df.head().features)
-    DenseVector([0.0, 0.0, 1.0])
+    DenseVector([0.0, 0.4736, 0.5264])
     >>> model.hasSummary
     True
     >>> summary = model.summary
@@ -256,7 +256,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> summary.clusterSizes
     [2, 2, 2]
     >>> summary.logLikelihood
-    65.029...
+    8.14636...
     >>> weights = model.weights
     >>> len(weights)
     3

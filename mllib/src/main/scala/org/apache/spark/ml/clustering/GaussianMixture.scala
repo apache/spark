@@ -440,15 +440,15 @@ class GaussianMixture @Since("2.0.0") (
       bcGaussians.destroy()
 
       if (iter == 0) {
-        val numSamples = sums.count
-        instr.logNumExamples(numSamples)
+        instr.logNumExamples(sums.count)
+        instr.logSumOfWeights(sums.weights.sum)
       }
 
       /*
          Create new distributions based on the partial assignments
          (often referred to as the "M" step in literature)
        */
-      val sumWeights = sums.weightSum
+      val sumWeights = sums.weights.sum
 
       if (shouldDistributeGaussians) {
         val numPartitions = math.min(numClusters, 1024)
@@ -656,7 +656,6 @@ private class ExpectationAggregator(
 
   private val k: Int = bcWeights.value.length
   private var totalCnt: Long = 0L
-  private var totalWeightSum: Double = 0.0
   private var newLogLikelihood: Double = 0.0
   private lazy val newWeights: Array[Double] = Array.ofDim[Double](k)
   private lazy val newMeans: Array[DenseVector] = Array.fill(k)(
@@ -672,8 +671,6 @@ private class ExpectationAggregator(
   }
 
   def count: Long = totalCnt
-
-  def weightSum: Double = totalWeightSum
 
   def logLikelihood: Double = newLogLikelihood
 
@@ -719,7 +716,6 @@ private class ExpectationAggregator(
     }
 
     totalCnt += 1
-    totalWeightSum += weight
     this
   }
 
@@ -734,7 +730,6 @@ private class ExpectationAggregator(
   def merge(other: ExpectationAggregator): this.type = {
     if (other.count != 0) {
       totalCnt += other.totalCnt
-      totalWeightSum += other.totalWeightSum
 
       val localThisNewWeights = this.newWeights
       val localOtherNewWeights = other.newWeights
