@@ -782,3 +782,26 @@ case class SchemaOfJson(
 
   override def prettyName: String = "schema_of_json"
 }
+
+/**
+ * A function that marks a StringType column with extra metadata indicating that it is a JSON
+ * object.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(json[, options]) - Marks the column as a JSON object. JSON strings indicating " +
+    "arrays of JSON objects are not allowed.",
+  examples = """
+    Examples:
+      > INSERT INTO my_table VALUES _FUNC_(raw);
+      > INSERT INTO TABLE my_table VALUES _FUNC_(raw, map('allowNumericLeadingZeros', 'true'));
+  """,
+  since = "3.0.0")
+case class AsJson(child: Expression, formatOptions: Map[String, String])
+    extends SemiStructuredColumn {
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  override val format: String = "json"
+}

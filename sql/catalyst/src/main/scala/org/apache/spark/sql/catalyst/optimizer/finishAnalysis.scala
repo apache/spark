@@ -46,6 +46,7 @@ import org.apache.spark.sql.types._
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case e: RuntimeReplaceable => e.child
+    case SemiStructuredColumn(c) => c
     case CountIf(predicate) => Count(new NullIf(predicate, Literal.FalseLiteral))
     case BoolOr(arg) => Max(arg)
     case BoolAnd(arg) => Min(arg)

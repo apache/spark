@@ -3871,6 +3871,28 @@ object functions {
     to_json(e, Map.empty[String, String])
 
   /**
+   * Marks a column as a field that contains JSON objects.
+   *
+   * @param e a column containing JSON objects
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def as_json(e: Column): Column = as_json(e, Map.empty)
+
+  /**
+   * Marks a column as a field that contains JSON objects.
+   * @param e a column containing JSON objects
+   * @param options Options that can be used to parse the JSON objects
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def as_json(e: Column, options: Map[String, String]): Column = withExpr {
+    AsJson(e.expr, options)
+  }
+
+  /**
    * Returns length of array or map.
    *
    * @group collection_funcs
