@@ -233,10 +233,10 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> gm = GaussianMixture(k=3, tol=0.0001, seed=10)
     >>> gm.getMaxIter()
     100
-    >>> gm.setMaxIter(5)
+    >>> gm.setMaxIter(25)
     GaussianMixture...
     >>> gm.getMaxIter()
-    5
+    25
     >>> model = gm.fit(df)
     >>> model.getAggregationDepth()
     2
@@ -247,16 +247,16 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> model.predict(df.head().features)
     2
     >>> model.predictProbability(df.head().features)
-    DenseVector([0.0, 0.4736, 0.5264])
+    DenseVector([0.0, 0.0, 1.0])
     >>> model.hasSummary
     True
     >>> summary = model.summary
     >>> summary.k
     3
     >>> summary.clusterSizes
-    [1, 2, 3]
+    [2, 2, 2]
     >>> summary.logLikelihood
-    6.125...
+    65.029...
     >>> weights = model.weights
     >>> len(weights)
     3
