@@ -188,7 +188,9 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
     }
 
     if (!singleProbe) {
-      println(s"numNearestNeighbors=$numNearestNeighbors, modelSubset.size=${modelSubset.count}")
+      val threshold = modelSubset.select(max(distCol)).first().getDouble(0)
+      println(s"numNearestNeighbors=$numNearestNeighbors, modelSubset.size=${modelSubset.count}," +
+        s" threshold=$threshold")
     }
 
     // Get the top k nearest neighbor by their distance to the key
