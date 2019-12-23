@@ -62,6 +62,14 @@ class RuleExecutorSuite extends SparkFunSuite {
     assert(ToFixedPoint.execute(Literal(10)) === Literal(0))
   }
 
+  test("to fixed point equals maxIterations") {
+    object ToFixedPoint extends RuleExecutor[Expression] {
+      val batches = Batch("fixedPoint", FixedPoint(10), DecrementLiterals) :: Nil
+    }
+    // 9 decrement iterations + 1 plan equal exit iteration = 10 iterations
+    assert(ToFixedPoint.execute(Literal(9)) === Literal(0))
+  }
+
   test("to maxIterations") {
     object ToFixedPoint extends RuleExecutor[Expression] {
       val batches = Batch("fixedPoint", FixedPoint(10), DecrementLiterals) :: Nil
