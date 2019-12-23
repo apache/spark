@@ -83,7 +83,7 @@ object EventLogTestHelper {
       dir: File,
       sparkConf: SparkConf,
       hadoopConf: Configuration,
-      eventsFiles: Seq[SparkListenerEvent]*): Seq[FileStatus] = {
+      eventsFiles: Seq[SparkListenerEvent]*): String = {
     val writer = new RollingEventLogFilesWriter(appId, None, dir.toURI, sparkConf, hadoopConf)
     writer.start()
 
@@ -95,7 +95,8 @@ object EventLogTestHelper {
     }
 
     writer.stop()
-    EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles
+
+    writer.logPath
   }
 
   def writeEventsToRollingWriter(

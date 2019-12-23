@@ -159,7 +159,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     new HistoryServerDiskManager(conf, path, listing, clock)
   }
 
-  private val fileCompactor = new EventLogFileCompactor(conf, hadoopConf, fs)
+  // Visible for testing.
+  private[history] val logToCompactor = new mutable.HashMap[String, EventLogFileCompactor]
 
   // Used to store the paths, which are being processed. This enable the replay log tasks execute
   // asynchronously and make sure that checkForLogs would not process a path repeatedly.
@@ -526,20 +527,26 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               reader.fileSizeForLastIndex > 0
           }
         }
-        .sortWith { case (entry1, entry2) =>
-          entry1.modificationTime > entry2.modificationTime
+        .sortWith { case (reader1, reader2) =>
+          reader1.modificationTime > reader2.modificationTime
         }
 
       if (updated.nonEmpty) {
         logDebug(s"New/updated attempts found: ${updated.size} ${updated.map(_.rootPath)}")
       }
 
-      updated.foreach { entry =>
-        processing(entry.rootPath)
+      updated.foreach { reader =>
+        processing(reader.rootPath)
         try {
           val task: Runnable = () => {
-            val updatedLastCompactionIndex = compact(entry)
-            mergeApplicationListing(entry, newLastScanTime, true, updatedLastCompactionIndex)
+            val (shouldRenewReader, updatedLastCompactionIndex) = compact(reader)
+            // we should renew reader if the list of event log files are changed in `compact`
+            val newReader = if (shouldRenewReader) {
+              EventLogFileReader(fs, reader.rootPath).get
+            } else {
+              reader
+            }
+            mergeApplicationListing(newReader, newLastScanTime, true, updatedLastCompactionIndex)
           }
           replayExecutor.submit(task)
         } catch {
@@ -566,6 +573,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         log.appId.foreach { appId =>
           cleanAppData(appId, log.attemptId, log.logPath)
           listing.delete(classOf[LogInfo], log.logPath)
+          cleanupCompactor(log.logPath)
         }
       }
 
@@ -576,26 +584,33 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /** exposed for testing */
-  private[history] def compact(reader: EventLogFileReader): Option[Long] = {
+  private[history] def compact(reader: EventLogFileReader): (Boolean, Option[Long]) = {
     reader.lastIndex match {
       case Some(lastIndex) =>
         try {
-          val info = listing.read(classOf[LogInfo], reader.rootPath.toString)
+          val rootPath = reader.rootPath.toString
+          val info = listing.read(classOf[LogInfo], rootPath)
           if (info.lastCompactionIndex.isEmpty || info.lastCompactionIndex.get < lastIndex) {
             // haven't tried compaction for this index, do compaction
-            val (_, lastCompactionIndex) = fileCompactor.compact(reader.listEventLogFiles)
-            listing.write(info.copy(lastCompactionIndex = lastCompactionIndex))
-            Some(lastIndex)
+            val compactor = logToCompactor.getOrElseUpdate(rootPath,
+              new EventLogFileCompactor(conf, hadoopConf, fs))
+            val (compactionResult, lastCompactionIndex) = compactor.compact(reader)
+            if (compactionResult == CompactionResult.SUCCESS) {
+              listing.write(info.copy(lastCompactionIndex = lastCompactionIndex))
+              (true, Some(lastIndex))
+            } else {
+              (false, Some(lastIndex))
+            }
           } else {
-            info.lastCompactionIndex
+            (false, info.lastCompactionIndex)
           }
         } catch {
           case _: NoSuchElementException =>
             // this should exist, but ignoring doesn't hurt much
-            None
+            (false, None)
         }
 
-      case None => None // This is not applied to single event log file.
+      case None => (false, None) // This is not applied to single event log file.
     }
   }
 
@@ -702,12 +717,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: InterruptedException =>
         throw e
       case e: AccessControlException =>
+        val rootPath = reader.rootPath
         // We don't have read permissions on the log file
-        logWarning(s"Unable to read log ${reader.rootPath}", e)
-        blacklist(reader.rootPath)
+        logWarning(s"Unable to read log ${rootPath}", e)
+        blacklist(rootPath)
         // SPARK-28157 We should remove this blacklisted entry from the KVStore
         // to handle permission-only changes with the same file sizes later.
-        listing.delete(classOf[LogInfo], reader.rootPath.toString)
+        listing.delete(classOf[LogInfo], rootPath.toString)
+        cleanupCompactor(rootPath.toString)
       case e: Exception =>
         logError("Exception while merging application listings", e)
     } finally {
@@ -864,6 +881,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
       deleteLog(fs, new Path(log.logPath))
       listing.delete(classOf[LogInfo], log.logPath)
+      cleanupCompactor(log.logPath)
     }
 
     log.appId.foreach { appId =>
@@ -911,6 +929,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
         deleteLog(fs, new Path(log.logPath))
         listing.delete(classOf[LogInfo], log.logPath)
+        cleanupCompactor(log.logPath)
       }
     }
 
@@ -953,6 +972,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logInfo(s"Deleting expired event log for ${attempt.logPath}")
       val logPath = new Path(logDir, attempt.logPath)
       listing.delete(classOf[LogInfo], logPath.toString())
+      cleanupCompactor(logPath.toString)
       cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
       if (deleteLog(fs, logPath)) {
         countDeleted += 1
@@ -1239,6 +1259,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
     deleted
+  }
+
+  private def cleanupCompactor(logPath: String): Unit = {
+    logToCompactor -= logPath
   }
 }
 

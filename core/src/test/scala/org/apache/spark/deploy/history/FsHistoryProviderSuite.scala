@@ -28,6 +28,7 @@ import scala.concurrent.duration._
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
@@ -39,7 +40,6 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{JobExecutionStatus, SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.EventLogTestHelper.convertEvent
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, EVENT_LOG_COMPACTION_SCORE_THRESHOLD, EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN}
 import org.apache.spark.internal.config.History._
@@ -1376,27 +1376,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
       val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
 
-      val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, conf, hadoopConf)
-      writer.start()
-
-      // 1, 2 will be compacted into one file, 3 is the dummy file to ensure max files to retain
-      writeEventsToRollingWriter(writer, Seq(
-        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
-        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = true)
-
-      writeEventsToRollingWriter(writer, Seq(SparkListenerUnpersistRDD(1),
-        SparkListenerJobEnd(1, 1, JobSucceeded)), rollFile = true)
-
-      writeEventsToRollingWriter(writer, Seq(
-        SparkListenerExecutorAdded(3, "exec1", new ExecutorInfo("host1", 1, Map.empty)),
-        SparkListenerJobStart(2, 4, Seq.empty),
-        SparkListenerJobEnd(2, 5, JobSucceeded)), rollFile = false)
-
-      writer.stop()
+      val logPath = constructEventLogsForCompactionTest(fs, "app", dir, conf, hadoopConf)
 
       val provider = new FsHistoryProvider(conf)
-      updateAndCheck(provider) { _ =>
-        val reader = EventLogFileReader(fs, new Path(writer.logPath)).get
+      updateAndCheck(provider) { listing =>
+        assert(listing.map(_.id).toSet === Set("app"))
+
+        val reader = EventLogFileReader(fs, new Path(logPath)).get
         val logFiles = reader.listEventLogFiles
         // compacted file + retained file
         assert(logFiles.size === 2)
@@ -1430,6 +1416,51 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
         assert(job2.status === JobExecutionStatus.SUCCEEDED)
       }
     }
+  }
+
+  test("The compactor instance will be reserved per app log") {
+    withTempDir { dir =>
+      val conf = createTestConf()
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN, 1)
+      conf.set(EVENT_LOG_COMPACTION_SCORE_THRESHOLD, 0.0d)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val app1LogPath = constructEventLogsForCompactionTest(fs, "app1", dir, conf, hadoopConf)
+      val app2LogPath = constructEventLogsForCompactionTest(fs, "app2", dir, conf, hadoopConf)
+      val app3LogPath = constructEventLogsForCompactionTest(fs, "app3", dir, conf, hadoopConf)
+
+      val provider = new FsHistoryProvider(conf)
+      updateAndCheck(provider) { listing =>
+        assert(listing.map(_.id).toSet === Set("app1", "app2", "app3"))
+
+        val compactorForApp1 = provider.logToCompactor(app1LogPath)
+        val compactorForApp2 = provider.logToCompactor(app2LogPath)
+        val compactorForApp3 = provider.logToCompactor(app3LogPath)
+        assert(compactorForApp1 ne compactorForApp2)
+        assert(compactorForApp2 ne compactorForApp3)
+        assert(compactorForApp1 ne compactorForApp3)
+      }
+    }
+  }
+
+  private def constructEventLogsForCompactionTest(
+      fs: FileSystem,
+      appId: String,
+      dir: File,
+      conf: SparkConf,
+      hadoopConf: Configuration): String = {
+    writeEventsToRollingWriter(fs, appId, dir, conf, hadoopConf,
+      // 1, 2 will be compacted into one file, 3 is the dummy file to ensure max files to retain
+      Seq(
+        SparkListenerApplicationStart(appId, Some(appId), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)),
+      Seq(SparkListenerUnpersistRDD(1), SparkListenerJobEnd(1, 1, JobSucceeded)),
+      Seq(
+        SparkListenerExecutorAdded(3, "exec1", new ExecutorInfo("host1", 1, Map.empty)),
+        SparkListenerJobStart(2, 4, Seq.empty),
+        SparkListenerJobEnd(2, 5, JobSucceeded)))
   }
 
   /**

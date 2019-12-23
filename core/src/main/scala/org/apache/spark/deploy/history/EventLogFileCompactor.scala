@@ -21,6 +21,7 @@ import java.io.IOException
 import java.net.URI
 import java.util.ServiceLoader
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
@@ -28,6 +29,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.EventFilter.FilterStatistic
+import org.apache.spark.deploy.history.EventFilterBuildersLoader.LowerIndexLoadRequested
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EVENT_LOG_COMPACTION_SCORE_THRESHOLD, EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN}
 import org.apache.spark.scheduler.ReplayListenerBus
@@ -46,10 +48,6 @@ import org.apache.spark.util.Utils
  * represents approximate rate of filtered-out events. Score is being calculated via applying
  * heuristic; task events tend to take most size in event log.
  *
- * This class assumes caller will provide the sorted list of files which are sorted by the index of
- * event log file, with "at most" one compact file placed first if it exists. Caller should keep in
- * mind that this class doesn't care about the semantic of ordering.
- *
  * When compacting the files, the range of compaction for given file list is determined as:
  * (first ~ the file where there're `maxFilesToRetain` files on the right side)
  *
@@ -59,22 +57,43 @@ class EventLogFileCompactor(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
     fs: FileSystem) extends Logging {
+  import EventFilterBuildersLoader._
+
   private val maxFilesToRetain: Int = sparkConf.get(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN)
   private val compactionThresholdScore: Double = sparkConf.get(EVENT_LOG_COMPACTION_SCORE_THRESHOLD)
 
-  def compact(eventLogFiles: Seq[FileStatus]): (CompactionResult.Value, Option[Long]) = {
-    assertPrecondition(eventLogFiles)
+  private var filterBuildersLoader = new EventFilterBuildersLoader(fs)
+  private var loadedLogPath: Path = _
 
+  def compact(reader: EventLogFileReader): (CompactionResult.Value, Option[Long]) = {
+    doCompact(reader)
+  }
+
+  @tailrec
+  private def doCompact(reader: EventLogFileReader): (CompactionResult.Value, Option[Long]) = {
+    if (loadedLogPath == null) {
+      loadedLogPath = reader.rootPath
+    } else {
+      require(loadedLogPath == null || reader.rootPath == loadedLogPath,
+        "An instance of compactor should deal with same path of event log.")
+    }
+
+    if (reader.lastIndex.isEmpty) {
+      return (CompactionResult.NOT_ENOUGH_FILES, None)
+    }
+
+    val eventLogFiles = reader.listEventLogFiles
     if (eventLogFiles.length < maxFilesToRetain) {
       return (CompactionResult.NOT_ENOUGH_FILES, None)
     }
 
     val filesToCompact = findFilesToCompact(eventLogFiles)
     if (filesToCompact.isEmpty) {
-      (CompactionResult.NOT_ENOUGH_FILES, None)
-    } else {
-      val builders = initializeBuilders(fs, filesToCompact.map(_.getPath))
+      return (CompactionResult.NOT_ENOUGH_FILES, None)
+    }
 
+    try {
+      val builders = filterBuildersLoader.loadNewFiles(filesToCompact)
       val filters = builders.map(_.createFilter())
       val minScore = filters.flatMap(_.statistic()).map(calculateScore).min
 
@@ -87,35 +106,12 @@ class EventLogFileCompactor(
         (CompactionResult.SUCCESS, Some(RollingEventLogFilesWriter.getEventLogFileIndex(
           filesToCompact.last.getPath.getName)))
       }
+    } catch {
+      case _: LowerIndexLoadRequested =>
+        // reset loader and load again
+        filterBuildersLoader = new EventFilterBuildersLoader(fs)
+        doCompact(reader)
     }
-  }
-
-  private def assertPrecondition(eventLogFiles: Seq[FileStatus]): Unit = {
-    val idxCompactedFiles = eventLogFiles.zipWithIndex.filter { case (file, _) =>
-      EventLogFileWriter.isCompacted(file.getPath)
-    }
-    require(idxCompactedFiles.size < 2 && idxCompactedFiles.headOption.forall(_._2 == 0),
-      "The number of compact files should be at most 1, and should be placed first if exists.")
-  }
-
-  /**
-   * Loads all available EventFilterBuilders in classloader via ServiceLoader, and initializes
-   * them via replaying events in given files.
-   */
-  private def initializeBuilders(fs: FileSystem, files: Seq[Path]): Seq[EventFilterBuilder] = {
-    val bus = new ReplayListenerBus()
-
-    val builders = ServiceLoader.load(classOf[EventFilterBuilder],
-      Utils.getContextOrSparkClassLoader).asScala.toSeq
-    builders.foreach(bus.addListener)
-
-    files.foreach { log =>
-      Utils.tryWithResource(EventLogFileReader.openEventLog(log, fs)) { in =>
-        bus.replay(in, log.getName)
-      }
-    }
-
-    builders
   }
 
   private def calculateScore(stats: FilterStatistic): Double = {
@@ -160,6 +156,68 @@ class EventLogFileCompactor(
 
 object CompactionResult extends Enumeration {
   val SUCCESS, NOT_ENOUGH_FILES, LOW_SCORE_FOR_COMPACTION = Value
+}
+
+class EventFilterBuildersLoader(fs: FileSystem) {
+  // the implementation of this bus is expected to be stateless
+  private val bus = new ReplayListenerBus()
+
+  /** Loads all available EventFilterBuilders in classloader via ServiceLoader */
+  private val filterBuilders: Seq[EventFilterBuilder] = ServiceLoader.load(
+    classOf[EventFilterBuilder], Utils.getContextOrSparkClassLoader).asScala.toSeq
+
+  filterBuilders.foreach(bus.addListener)
+
+  private var latestIndexLoaded: Long = -1L
+
+  /** only exposed for testing; simple metric to help testing */
+  private[history] var numFilesToLoad: Long = 0L
+
+  /**
+   * Initializes EventFilterBuilders via replaying events in given files. Loading files are done
+   * incrementally, via dropping indices which are already loaded and replaying remaining files.
+   * For example, If the last index of requested files is same as the last index being loaded,
+   * this will not replay any files.
+   *
+   * If the last index of requested files is smaller than the last index being loaded, it will
+   * throw [[LowerIndexLoadRequested]], which caller can decide whether ignoring it or
+   * invalidating loader and retrying.
+   */
+  def loadNewFiles(eventLogFiles: Seq[FileStatus]): Seq[EventFilterBuilder] = {
+    require(eventLogFiles.nonEmpty)
+
+    val idxToStatuses = eventLogFiles.map { status =>
+      val idx = RollingEventLogFilesWriter.getEventLogFileIndex(status.getPath.getName)
+      idx -> status
+    }
+
+    val newLatestIdx = idxToStatuses.last._1
+    if (newLatestIdx < latestIndexLoaded) {
+      throw new LowerIndexLoadRequested("Loader already loads higher index of event log than" +
+        " requested.")
+    }
+
+    val filesToLoad = idxToStatuses
+      .filter { case (idx, _) => idx > latestIndexLoaded }
+      .map { case (_, status) => status.getPath }
+
+    if (filesToLoad.nonEmpty) {
+      filesToLoad.foreach { log =>
+        Utils.tryWithResource(EventLogFileReader.openEventLog(log, fs)) { in =>
+          bus.replay(in, log.getName)
+        }
+        numFilesToLoad += 1
+      }
+
+      latestIndexLoaded = newLatestIdx
+    }
+
+    filterBuilders
+  }
+}
+
+object EventFilterBuildersLoader {
+  class LowerIndexLoadRequested(_msg: String) extends Exception(_msg)
 }
 
 /**
