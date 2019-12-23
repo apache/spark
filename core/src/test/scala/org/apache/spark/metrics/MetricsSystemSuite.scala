@@ -26,7 +26,8 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.master.MasterSource
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.Sink
-import org.apache.spark.metrics.source.{Source, StaticSources}
+import org.apache.spark.metrics.source.{LongAccumulatorSource, Source, StaticSources}
+import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
 class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester{
   var filePath: String = _
@@ -269,4 +270,32 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === source.sourceName)
   }
 
+  test("MetricsSystem with sources remove") {
+    val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
+    metricsSystem.start()
+    val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+    val registry = PrivateMethod[MetricRegistry]('registry)
+    val laFirst = new LongAccumulator
+    val laSecond = new LongAccumulator
+    val laSource = new LongAccumulatorSource {
+      def reg[T](accumulators: Map[String, AccumulatorV2[_, T]]): Unit = {
+        register(accumulators)
+      }
+    }
+    laSource.reg(Map("laF" -> laFirst, "laS" -> laSecond))
+    val originLen = metricsSystem.invokePrivate(sources()).length
+    metricsSystem.registerSource(laSource)
+    assert(metricsSystem.invokePrivate(sources()).length === originLen + 1)
+    assert(metricsSystem.invokePrivate(registry()).getNames.contains("AccumulatorSource.laF"))
+    assert(metricsSystem.invokePrivate(registry()).getNames.contains("AccumulatorSource.laS"))
+
+    val notRegisteredSource = new LongAccumulatorSource
+    metricsSystem.removeSource(notRegisteredSource)
+    assert(metricsSystem.invokePrivate(sources()).length === originLen + 1)
+
+    metricsSystem.removeSource(laSource)
+    assert(metricsSystem.invokePrivate(sources()).length === originLen)
+    assert(!metricsSystem.invokePrivate(registry()).getNames.contains("AccumulatorSource.laF"))
+    assert(!metricsSystem.invokePrivate(registry()).getNames.contains("AccumulatorSource.laS"))
+  }
 }

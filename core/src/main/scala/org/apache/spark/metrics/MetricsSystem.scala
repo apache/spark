@@ -20,6 +20,7 @@ package org.apache.spark.metrics
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.codahale.metrics.{Metric, MetricRegistry}
@@ -155,6 +156,12 @@ private[spark] class MetricsSystem private (
     } else { defaultName }
   }
 
+  private[spark] def getRegisteredNames(source: Source): mutable.Set[String] = {
+    val sourceNamePrefix = buildRegistryName(source)
+    val metricNames = source.metricRegistry.getMetrics.keySet()
+    metricNames.asScala.map(k => MetricRegistry.name(sourceNamePrefix, k))
+  }
+
   def getSourcesByName(sourceName: String): Seq[Source] =
     sources.filter(_.sourceName == sourceName)
 
@@ -169,9 +176,12 @@ private[spark] class MetricsSystem private (
   }
 
   def removeSource(source: Source): Unit = {
-    sources -= source
-    val regName = buildRegistryName(source)
-    registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
+    val index = sources.indexOf(source)
+    if (index != -1) {
+      sources.remove(index)
+      val regNames = getRegisteredNames(source)
+      regNames.foreach(k => registry.remove(k))
+    }
   }
 
   private def registerSources(): Unit = {
