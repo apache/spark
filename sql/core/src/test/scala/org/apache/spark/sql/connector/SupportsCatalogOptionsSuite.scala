@@ -28,7 +28,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsCatalogOptions, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -78,6 +78,14 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     val namespace = withCatalogOption.getOrElse("default")
     assert(table.name() === s"$namespace.t1", "Table identifier was wrong")
     assert(table.partitioning().length === partitionBy.length, "Partitioning did not match")
+    if (partitionBy.nonEmpty) {
+      table.partitioning.head match {
+        case IdentityTransform(FieldReference(field)) =>
+          assert(field === Seq(partitionBy.head), "Partitioning column did not match")
+        case otherTransform =>
+          fail(s"Unexpected partitioning ${otherTransform.describe()} received")
+      }
+    }
     assert(table.partitioning().map(_.references().head.fieldNames().head) === partitionBy,
       "Partitioning was incorrect")
     assert(table.schema() === df.schema.asNullable, "Schema did not match")

@@ -268,12 +268,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 supportsExtract, sessionState.catalogManager, dsOptions)
 
               catalog.loadTable(ident)
-            case tableProvider: TableProvider => tableProvider.getTable(dsOptions)
-            case _ =>
-              // Streaming also uses the data source V2 API. So it may be that the data source
-              // implements v2, but has no v2 implementation for batch writes. In that case, we fall
-              // back to saving as though it's a V1 source.
-              return saveToV1Source()
+            case tableProvider: TableProvider =>
+              val t = tableProvider.getTable(dsOptions)
+              if (t.supports(BATCH_WRITE)) {
+                t
+              } else {
+                // Streaming also uses the data source V2 API. So it may be that the data source
+                // implements v2, but has no v2 implementation for batch writes. In that case, we
+                // fall back to saving as though it's a V1 source.
+                return saveToV1Source()
+              }
           }
 
           val relation = DataSourceV2Relation.create(table, dsOptions)
@@ -291,7 +295,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             }
           }
 
-        case create =>
+        case createMode =>
           provider match {
             case supportsExtract: SupportsCatalogOptions =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
@@ -309,12 +313,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                   df.queryExecution.analyzed,
                   Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
                   extraOptions.toMap,
-                  ignoreIfExists = create == SaveMode.Ignore)
+                  ignoreIfExists = createMode == SaveMode.Ignore)
               }
             case tableProvider: TableProvider =>
               if (tableProvider.getTable(dsOptions).supports(BATCH_WRITE)) {
                 throw new AnalysisException(s"TableProvider implementation $source cannot be " +
-                    s"written with $create mode, please use Append or Overwrite " +
+                    s"written with $createMode mode, please use Append or Overwrite " +
                     "modes instead.")
               } else {
                 // Streaming also uses the data source V2 API. So it may be that the data source
