@@ -3889,7 +3889,7 @@ object functions {
    * @since 3.0.0
    */
   def as_json(e: Column, options: Map[String, String]): Column = withExpr {
-    AsJson(e.expr, options)
+    new AsJson(e.expr, options)
   }
 
   /**

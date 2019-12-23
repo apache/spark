@@ -796,15 +796,28 @@ case class SchemaOfJson(
       > INSERT INTO TABLE my_table VALUES _FUNC_(raw, map('allowNumericLeadingZeros', 'true'));
   """,
   since = "3.0.0")
-case class AsJson(child: Expression, formatOptions: Map[String, String])
-    extends SemiStructuredColumn {
+case class AsJson(json: Expression, formatOptions: Map[String, String], child: Expression)
+  extends SemiStructuredColumn {
 
   // Constructor for SQL
-  def this(child: Expression) = this(child, Map.empty)
+  def this(json: Expression) = this(json, Map.empty[String, String], json)
+
+  def this(json: Expression, formatOptions: Map[String, String]) = this(json, formatOptions, json)
+
+  def this(json: Expression, options: Expression) =
+    this(json, ExprUtils.convertToMapData(options), json)
 
   override def dataType: DataType = StringType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
+  override def withNewChildren(newChildren: Seq[Expression]): Expression = {
+    this.copy(json = newChildren.head, child = newChildren.head)
+  }
+
   override val format: String = "json"
+
+  override def prettyName: String = "as_json"
+  override def flatArguments: Iterator[Any] = Iterator(json, formatOptions)
+  override def sql: String = s"$prettyName(${json.sql}, $formatOptions)"
 }

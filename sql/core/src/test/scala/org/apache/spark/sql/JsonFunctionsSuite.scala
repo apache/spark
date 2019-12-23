@@ -703,6 +703,9 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("as_json - performs type checks") {
-
+    val e = intercept[AnalysisException] {
+      Seq(1L, 2L).toDF("raw").select(as_json('raw)).collect()
+    }
+    assert(e.getMessage.contains("requires string type"))
   }
 }
