@@ -116,7 +116,6 @@ class DecisionTreeClassifier @Since("1.4.0") (
       dataset: Dataset[_]): DecisionTreeClassificationModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses = getNumClasses(dataset)
 
