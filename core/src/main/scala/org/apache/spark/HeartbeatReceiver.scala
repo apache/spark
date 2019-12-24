@@ -201,8 +201,6 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       if (now - lastSeenMs > executorTimeoutMs) {
         logWarning(s"Removing executor $executorId with no recent heartbeats: " +
           s"${now - lastSeenMs} ms exceeds timeout $executorTimeoutMs ms")
-        scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
-          s"timed out after ${now - lastSeenMs} ms"))
         // Asynchronously kill the executor to avoid blocking the current thread
         killExecutorThread.submit(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
