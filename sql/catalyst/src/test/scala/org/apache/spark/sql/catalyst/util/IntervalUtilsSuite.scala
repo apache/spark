@@ -445,4 +445,24 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFail("5 30-12", DAY, SECOND, "must match day-time format")
     checkFail("5 1:12:20", HOUR, MICROSECOND, "Cannot support (interval")
   }
+
+  test("interval overflow check") {
+    intercept[ArithmeticException](negate(new CalendarInterval(Int.MinValue, 0, 0)))
+    intercept[ArithmeticException](negate(CalendarInterval.MIN_VALUE))
+
+    intercept[ArithmeticException](add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, 1)))
+    intercept[ArithmeticException](add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 1, 0)))
+    intercept[ArithmeticException](add(CalendarInterval.MAX_VALUE, new CalendarInterval(1, 0, 0)))
+
+    intercept[ArithmeticException](subtract(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(0, 0, -1)))
+    intercept[ArithmeticException](subtract(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(0, -1, 0)))
+    intercept[ArithmeticException](subtract(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(-1, 0, 0)))
+
+    intercept[ArithmeticException](multiply(CalendarInterval.MAX_VALUE, 2))
+
+    intercept[ArithmeticException](divide(CalendarInterval.MAX_VALUE, 0.5))
+  }
 }

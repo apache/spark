@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -118,6 +119,8 @@ abstract class IntervalNumOperation(
     operation: (CalendarInterval, Double) => CalendarInterval,
     operationName: String)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  private val checkOverflow = SQLConf.get.ansiEnabled
+
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -130,7 +133,9 @@ abstract class IntervalNumOperation(
     try {
       operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
     } catch {
-      case _: java.lang.ArithmeticException => null
+      case _: ArithmeticException if checkOverflow =>
+        throw new ArithmeticException(s"$sql caused interval overflow.")
+      case _: ArithmeticException => null
     }
   }
 
@@ -140,8 +145,12 @@ abstract class IntervalNumOperation(
       s"""
         try {
           ${ev.value} = $iu.$operationName($interval, $num);
-        } catch (java.lang.ArithmeticException e) {
-          ${ev.isNull} = true;
+        } catch (ArithmeticException e) {
+          if ($checkOverflow) {
+            throw new ArithmeticException("$prettyName($interval, $num) caused interval overflow.");
+          } else {
+            ${ev.isNull} = true;
+          }
         }
       """
     })

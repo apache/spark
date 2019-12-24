@@ -420,16 +420,19 @@ object IntervalUtils {
    * @return a new calendar interval instance with all it parameters negated from the origin one.
    */
   def negate(interval: CalendarInterval): CalendarInterval = {
-    new CalendarInterval(-interval.months, -interval.days, -interval.microseconds)
+    val months = Math.negateExact(interval.months)
+    val days = Math.negateExact(interval.days)
+    val microseconds = Math.negateExact(interval.microseconds)
+    new CalendarInterval(months, days, microseconds)
   }
 
   /**
    * Return a new calendar interval instance of the sum of two intervals.
    */
   def add(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
-    val months = left.months + right.months
-    val days = left.days + right.days
-    val microseconds = left.microseconds + right.microseconds
+    val months = Math.addExact(left.months, right.months)
+    val days = Math.addExact(left.days, right.days)
+    val microseconds = Math.addExact(left.microseconds, right.microseconds)
     new CalendarInterval(months, days, microseconds)
   }
 
@@ -437,9 +440,9 @@ object IntervalUtils {
    * Return a new calendar interval instance of the left intervals minus the right one.
    */
   def subtract(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
-    val months = left.months - right.months
-    val days = left.days - right.days
-    val microseconds = left.microseconds - right.microseconds
+    val months = Math.subtractExact(left.months, right.months)
+    val days = Math.subtractExact(left.days, right.days)
+    val microseconds = Math.subtractExact(left.microseconds, right.microseconds)
     new CalendarInterval(months, days, microseconds)
   }
 
@@ -448,7 +451,7 @@ object IntervalUtils {
   }
 
   def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (num == 0) throw new java.lang.ArithmeticException("divide by zero")
+    if (num == 0) throw new ArithmeticException("divide by zero")
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
