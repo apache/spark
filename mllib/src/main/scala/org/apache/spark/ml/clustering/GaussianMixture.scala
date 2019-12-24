@@ -522,8 +522,10 @@ class GaussianMixture @Since("2.0.0") (
     val weightSum = sampleWeights.sum
 
     val gaussians = Array.tabulate(numClusters) { i =>
-      val sampleSlice = samples.view(i * numSamples, (i + 1) * numSamples)
-      val weightSlice = sampleWeights.view(i * numSamples, (i + 1) * numSamples)
+      val start = i * numSamples
+      val end = start + numSamples
+      val sampleSlice = samples.view(start, end)
+      val weightSlice = sampleWeights.view(start, end)
       val localWeightSum = weightSlice.sum
       weights(i) = localWeightSum / weightSum
 
@@ -548,7 +550,8 @@ class GaussianMixture @Since("2.0.0") (
         val ss = new DenseVector(new Array[Double](numFeatures)).asBreeze
         var j = 0
         while (j < numSamples) {
-          ss += ((sampleSlice(j).asBreeze - mean.asBreeze) ^:^ 2.0) * weightSlice(j)
+          val v = sampleSlice(j).asBreeze - mean.asBreeze
+          ss += (v * v) * weightSlice(j)
           j += 1
         }
         val diagVec = Vectors.fromBreeze(ss)
