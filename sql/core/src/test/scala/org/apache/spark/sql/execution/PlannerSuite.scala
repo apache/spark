@@ -440,10 +440,6 @@ class PlannerSuite extends SharedSparkSession {
       "RoundRobinPartitioning should be changed to RangePartitioning")
 
     val query = testData.select('key, 'value).repartition(2).sort('key.asc)
-    assert(query.queryExecution.sparkPlan.collectLeaves().count{
-      case _: ShuffleExchangeExec => true
-      case _ => false
-    } == 1)
     assert(query.rdd.getNumPartitions == 2)
     assert(query.rdd.collectPartitions()(0).map(_.get(0)).toSeq == (1 to 50))
   }
@@ -467,10 +463,6 @@ class PlannerSuite extends SharedSparkSession {
       "HashPartitioning should be changed to RangePartitioning")
 
     val query = testData.select('key, 'value).repartition(5, 'key).sort('key.asc)
-    assert(query.queryExecution.sparkPlan.collectLeaves().count{
-      case _: ShuffleExchangeExec => true
-      case _ => false
-    } == 1)
     assert(query.rdd.getNumPartitions == 5)
     assert(query.rdd.collectPartitions()(0).map(_.get(0)).toSeq == (1 to 20))
   }
