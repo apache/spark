@@ -700,6 +700,8 @@ private[spark] object SparkConf extends Logging {
     KERBEROS_FILESYSTEMS_TO_ACCESS.key -> Seq(
       AlternateConfig("spark.yarn.access.namenodes", "2.2"),
       AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0")),
+    EVENT_LOG_ALLOW_EC.key -> Seq(
+      AlternateConfig("spark.eventLog.allowErasureCoding", "3.0")),
     "spark.kafka.consumer.cache.capacity" -> Seq(
       AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0"))
   )

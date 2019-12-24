@@ -131,7 +131,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ALLOW_EC =
-    ConfigBuilder("spark.eventLog.allowErasureCoding")
+    ConfigBuilder("spark.eventLog.allowErasureCoding.enabled")
       .booleanConf
       .createWithDefault(false)
 
