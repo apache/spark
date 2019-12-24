@@ -351,7 +351,7 @@ final class ShuffleBlockFetcherIterator(
             logDebug(s"Creating fetch request of $curRequestSize at $address "
               + s"with ${mergedBlock.size} blocks")
           } else {
-            // The last group might not exceed `maxBlocksInFlightPerAddress`. Put it back
+            // The last group does not exceed `maxBlocksInFlightPerAddress`. Put it back
             // to `curBlocks`.
             curBlocks = mergedBlock
           }
