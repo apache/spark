@@ -141,8 +141,9 @@ private[spark] class Executor(
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
-  private val urlClassLoader = createClassLoader()
-  private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+  private val parentClassLoader = Utils.getContextOrSparkClassLoader
+  private var urlClassLoader = createClassLoader()
+  private var replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
 
   // Set the classloader for serializer
   env.serializer.setDefaultClassLoader(replClassLoader)
@@ -384,6 +385,7 @@ private[spark] class Executor(
       val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
         threadMXBean.getCurrentThreadCpuTime
       } else 0L
+      checkAndUpdateUrlClassLoader(taskDescription.addedJars)
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
@@ -675,6 +677,47 @@ private[spark] class Executor(
   }
 
   /**
+   * this function checks and recreated the class loader. If it finds any jar defination is
+   * updated then it will recreate the class loader.
+   * @param newJars
+   */
+  private def checkAndUpdateUrlClassLoader(newJars: Map[String, Long]): Unit = synchronized {
+
+    // returns true only if the jar is present and timestamp is same
+    def isPresentinNewJars(jarName: String, oldTimeStamp: Long): Boolean = {
+      newJars.get(jarName) match {
+          // if found then timestamp should be same as oldTimeStamp
+        case Some(timestamp) if (oldTimeStamp == timestamp) => true
+        // if there is change in timestamp, then it means jar is modified
+        case _ => false
+      }
+    }
+
+    // currentJars also contains the userClassPath Jars.
+    val userClassPathJars = userClassPath.map {
+      url => url.getPath.split("/").last
+    }
+    var recreateClassLoader = false
+    currentJars.iterator.takeWhile(_ => !recreateClassLoader).foreach {
+      case (jarName, timestamp) if (!userClassPathJars.contains(jarName)) &&
+        !isPresentinNewJars(jarName, timestamp) => {
+        recreateClassLoader = true
+      }
+      case _ => // ignore
+    }
+    if (recreateClassLoader) {
+      urlClassLoader.close()
+      urlClassLoader = null
+      currentJars.clear()
+      urlClassLoader = createClassLoader()
+      replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+      // set the classLoader for serializer
+      env.serializer.setDefaultClassLoader(replClassLoader)
+      env.serializerManager.setDefaultClassLoader(replClassLoader)
+    }
+
+  }
+  /**
    * Supervises the killing / cancellation of a task by sending the interrupted flag, optionally
    * sending a Thread.interrupt(), and monitoring the task until it finishes.
    *
@@ -799,17 +842,15 @@ private[spark] class Executor(
       currentJars(url.getPath().split("/").last) = now
     }
 
-    val currentLoader = Utils.getContextOrSparkClassLoader
-
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
     val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }
     if (userClassPathFirst) {
-      new ChildFirstURLClassLoader(urls, currentLoader)
+      new ChildFirstURLClassLoader(urls, parentClassLoader)
     } else {
-      new MutableURLClassLoader(urls, currentLoader)
+      new MutableURLClassLoader(urls, parentClassLoader)
     }
   }
 
