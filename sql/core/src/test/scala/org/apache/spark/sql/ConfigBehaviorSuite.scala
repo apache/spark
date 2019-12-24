@@ -39,7 +39,6 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
     def computeChiSquareTest(): Double = {
       val n = 10000
       // Trigger a sort
-      // Range has range partitioning in its output now.
       val data = spark.range(0, n, 1, 10).sort($"id".desc)
         .selectExpr("SPARK_PARTITION_ID() pid", "id").as[(Int, Long)].collect()
 
