@@ -37,7 +37,10 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
   private val checkOverflow = SQLConf.get.ansiEnabled
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = dataType match {
+    case CalendarIntervalType if !checkOverflow => true
+    case _ => super.nullable
+  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -291,7 +294,7 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
   override def nullable: Boolean = dataType match {
     case CalendarIntervalType if !checkOverflow => true
-    case _ => false
+    case _ => super.nullable
   }
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
