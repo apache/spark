@@ -38,8 +38,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
   private val checkOverflow = SQLConf.get.ansiEnabled
 
   override def nullable: Boolean = dataType match {
-    case CalendarIntervalType if !checkOverflow => true
-    case _ => super.nullable
+    case CalendarIntervalType => true
+    case _ => child.nullable
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
@@ -97,11 +97,11 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
     case CalendarIntervalType =>
       try {
       IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
-    } catch {
-      case _: ArithmeticException if checkOverflow =>
-        throw new ArithmeticException(s"$sql caused interval overflow")
-      case _: ArithmeticException => null
-    }
+      } catch {
+        case _: ArithmeticException if checkOverflow =>
+          throw new ArithmeticException(s"$sql caused interval overflow")
+        case _: ArithmeticException => null
+      }
     case _ => numeric.negate(input)
   }
 
@@ -253,7 +253,7 @@ object BinaryArithmetic {
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def nullable: Boolean = dataType match {
-    case CalendarIntervalType if !checkOverflow => true
+    case CalendarIntervalType => true
     case _ => super.nullable
   }
 
@@ -293,7 +293,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def nullable: Boolean = dataType match {
-    case CalendarIntervalType if !checkOverflow => true
+    case CalendarIntervalType => true
     case _ => super.nullable
   }
 
