@@ -34,7 +34,7 @@ import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.serialization.StringSerializer
-import org.apache.kafka.common.utils.SystemTime
+import org.apache.kafka.common.utils.{Time => KTime}
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -106,7 +106,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
     zkClient = KafkaZkClient(s"$zkHost:$zkPort", isSecure = false, zkSessionTimeout,
-      zkConnectionTimeout, 1, new SystemTime())
+      zkConnectionTimeout, 1, KTime.SYSTEM)
     admClient = new AdminZkClient(zkClient)
     zkReady = true
   }
