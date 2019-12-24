@@ -336,8 +336,9 @@ private[parquet] class ParquetRowConverter(
             // Therefore, the parent container must be a map or array. We need to copy the row
             // because this converter might be invoked multiple times per Parquet input record.
             new ParentContainerUpdater {
-              override def set(value: Any): Unit =
-                updater.set(value.asInstanceOf[InternalRow].copy())
+              override def set(value: Any): Unit = {
+                updater.set(value.asInstanceOf[SpecificInternalRow].copy())
+              }
             }
           }
         }
