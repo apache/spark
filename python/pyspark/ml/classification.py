@@ -2378,7 +2378,7 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> fm = FMClassifier(factorSize=2)
+    >>> fm = FMClassifier(factorSize=2, seed=11)
     >>> model = fm.fit(df)
     >>> test0 = spark.createDataFrame([
     ...     (Vectors.dense(-1.0),),
@@ -2394,12 +2394,13 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     |[1.0]   |[5.491554426243495E-4,0.9994508445573757] |
     |[2.0]   |[2.005766663870645E-10,0.9999999997994233]|
     +--------+------------------------------------------+
+    ...
     >>> model.intercept
     -7.316665276826291
     >>> model.linear
     DenseVector([14.8232])
     >>> model.factors
-    DenseMatrix(1, 2, [0.0028, 0.0048], 1)
+    DenseMatrix(1, 2, [0.0163, -0.0051], 1)
 
     .. versionadded:: 3.0.0
     """
