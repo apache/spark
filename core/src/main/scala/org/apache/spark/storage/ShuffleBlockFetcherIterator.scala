@@ -338,17 +338,24 @@ final class ShuffleBlockFetcherIterator(
       curBlocks += FetchBlockInfo(blockId, size, mapIndex)
       curRequestSize += size
       // For batch fetch, the actual block in flight should count for merged block.
-      val readyForCollectingBlocks = !doBatchFetch &&
+      val exceedsMaxBlocksInFlightPerAddress = !doBatchFetch &&
         curBlocks.size >= maxBlocksInFlightPerAddress
-      if (curRequestSize >= targetRemoteRequestSize || readyForCollectingBlocks) {
+      if (curRequestSize >= targetRemoteRequestSize || exceedsMaxBlocksInFlightPerAddress) {
         // Add this FetchRequest
         val mergedBlocks = mergeContinuousShuffleBlockIdsIfNeeded(curBlocks)
-        mergedBlocks.grouped(maxBlocksInFlightPerAddress).foreach { mergedBlock =>
-          collectedRemoteRequests += new FetchRequest(address, mergedBlock)
-          logDebug(s"Creating fetch request of $curRequestSize at $address "
-            + s"with ${mergedBlock.size} blocks")
-        }
+          .grouped(maxBlocksInFlightPerAddress)
         curBlocks = new ArrayBuffer[FetchBlockInfo]
+        mergedBlocks.foreach { mergedBlock =>
+          if (mergedBlock.size == maxBlocksInFlightPerAddress) {
+            collectedRemoteRequests += new FetchRequest(address, mergedBlock)
+            logDebug(s"Creating fetch request of $curRequestSize at $address "
+              + s"with ${mergedBlock.size} blocks")
+          } else {
+            // The last group might not exceed `maxBlocksInFlightPerAddress`. Put it back
+            // to `curBlocks`.
+            curBlocks = mergedBlock
+          }
+        }
         curRequestSize = 0
       }
     }
