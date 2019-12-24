@@ -66,10 +66,10 @@ select dept_id, count(distinct emp_name), count(distinct hiredate), sum(salary) 
 -- select dept_id, count(distinct emp_name) filter (where id > 200), count(distinct emp_name), sum(salary) from emp group by dept_id;
 -- select dept_id, count(distinct emp_name) filter (where id > 200), count(distinct emp_name) filter (where hiredate > date "2003-01-01"), sum(salary) from emp group by dept_id;
 
--- Aggregate with filter and grouped by literals (hash aggregate).
+-- Aggregate with filter and grouped by literals (hash aggregate), here the input table is filtered using WHERE.
 SELECT 'foo', APPROX_COUNT_DISTINCT(a) FILTER (WHERE b >= 0) FROM testData WHERE a = 0 GROUP BY 1;
 
--- Aggregate with filter and grouped by literals (sort aggregate).
+-- Aggregate with filter and grouped by literals (sort aggregate), here the input table is filtered using WHERE.
 SELECT 'foo', MAX(STRUCT(a)) FILTER (WHERE b >= 1) FROM testData WHERE a = 0 GROUP BY 1;
 
 -- Aggregate with filter and complex GroupBy expressions.
