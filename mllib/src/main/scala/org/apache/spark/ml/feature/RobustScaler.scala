@@ -190,16 +190,35 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
       vectors: RDD[Vector],
       numFeatures: Int,
       relativeError: Double): RDD[(Int, QuantileSummaries)] = {
-    vectors.flatMap { vec =>
-      Iterator.range(0, numFeatures)
-        .map(i => (i, vec(i)))
-        .filterNot(_._2.isNaN)
-    }.aggregateByKeyWithinPartitions(
-      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))(
-      seqOp = (s, v) => s.insert(v),
-      combOp = (s1, s2) => s1.compress.merge(s2.compress)
-    ).mapValues { _.compress
-    }.treeReduceByKey { case (s1, s2) => s1.merge(s2) }
+    if (numFeatures <= 1000) {
+      vectors.mapPartitions { iter =>
+        if (iter.hasNext) {
+          val summaries = Array.fill(numFeatures)(
+            new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
+          while (iter.hasNext) {
+            val vec = iter.next
+            Iterator.range(0, numFeatures).foreach { i =>
+              val v = vec(i)
+              if (!v.isNaN) summaries(i) = summaries(i).insert(v)
+            }
+          }
+          Iterator.tabulate(numFeatures)(i => (i, summaries(i).compress))
+        } else Iterator.empty
+      }.reduceByKey { case (s1, s2) => s1.merge(s2) }
+    } else {
+      val scale = math.max(math.ceil(math.sqrt(vectors.getNumPartitions)).toInt, 2)
+      vectors.mapPartitionsWithIndex { case (pid, iter) =>
+        val p = pid % scale
+        iter.flatMap { vec =>
+          Iterator.tabulate(numFeatures)(i => ((p, i), vec(i))).filter(!_._2.isNaN)
+        }
+      }.aggregateByKey(
+        new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))(
+        seqOp = (s, v) => s.insert(v),
+        combOp = (s1, s2) => s1.compress.merge(s2.compress)
+      ).map { case ((_, i), s) => (i, s)
+      }.reduceByKey { case (s1, s2) => s1.compress.merge(s2.compress) }
+    }
   }
 
   override def load(path: String): RobustScaler = super.load(path)

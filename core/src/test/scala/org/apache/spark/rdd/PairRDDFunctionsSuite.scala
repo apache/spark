@@ -49,23 +49,6 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(valuesFor5.toList.sorted === List(1, 3))
   }
 
-  test("aggregateByKeyWithinPartitions") {
-    val maps = sc.parallelize(Seq(0, 1), 2).mapPartitionsWithIndex {
-      case (pid, _) => pid match {
-        case 0 => Seq((0, 0), (2, 1), (2, 2), (0, 1)).iterator
-        case 1 => Seq((0, 2), (1, 1), (2, 2), (0, 3)).iterator
-      }
-    }.aggregateByKeyWithinPartitions(0)(
-      seqOp = _ + _,
-      combOp = _ + _
-    ).mapPartitions { iter => Iterator.single(iter.toMap)
-    }.collect()
-
-    assert(maps.length === 2)
-    assert(maps(0) === Map(0 -> 1, 2 -> 3))
-    assert(maps(1) === Map(0 -> 5, 1 -> 1, 2 -> 2))
-  }
-
   test("groupByKey") {
     val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)))
     val groups = pairs.groupByKey().collect()
@@ -191,33 +174,17 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(sums.toSet === Set((1, 7), (2, 1)))
   }
 
-  test("treeReduceByKey") {
-    val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
-    val sums = pairs.treeReduceByKey(_ + _).collect()
-    assert(sums.toSet === Set((1, 7), (2, 1)))
-  }
-
   test("reduceByKey with collectAsMap") {
     val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
     val sums = pairs.reduceByKey(_ + _).collectAsMap()
-    assert(sums === Map(1 -> 7, 2 -> 1))
-  }
-
-  test("treeReduceByKey with collectAsMap") {
-    val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
-    val sums = pairs.treeReduceByKey(_ + _).collectAsMap()
-    assert(sums === Map(1 -> 7, 2 -> 1))
+    assert(sums.size === 2)
+    assert(sums(1) === 7)
+    assert(sums(2) === 1)
   }
 
   test("reduceByKey with many output partitions") {
     val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
     val sums = pairs.reduceByKey(_ + _, 10).collect()
-    assert(sums.toSet === Set((1, 7), (2, 1)))
-  }
-
-  test("treeReduceByKey with many output partitions") {
-    val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
-    val sums = pairs.treeReduceByKey(_ + _, 10, 2).collect()
     assert(sums.toSet === Set((1, 7), (2, 1)))
   }
 
@@ -240,42 +207,6 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     }
     visit(sums)
     assert(deps.size === 2) // ShuffledRDD, ParallelCollection.
-  }
-
-  test("treeReduceByKey with partitioner") {
-    val p = new Partitioner() {
-      def numPartitions = 2
-      def getPartition(key: Any) = key.asInstanceOf[Int]
-    }
-    val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 1), (0, 1))).partitionBy(p)
-    val sums = pairs.treeReduceByKey(_ + _)
-    assert(sums.collect().toSet === Set((1, 4), (0, 1)))
-    assert(sums.partitioner === Some(p))
-    // count the dependencies to make sure there is only 1 ShuffledRDD
-    val deps = new HashSet[RDD[_]]()
-    def visit(r: RDD[_]): Unit = {
-      for (dep <- r.dependencies) {
-        deps += dep.rdd
-        visit(dep.rdd)
-      }
-    }
-    visit(sums)
-    assert(deps.size === 2) // ShuffledRDD, ParallelCollection.
-  }
-
-  test("reduceByKeyWithinPartitions") {
-    val maps = sc.parallelize(Seq(0, 1), 2).mapPartitionsWithIndex {
-      case (pid, _) => pid match {
-        case 0 => Seq((0, 0), (2, 1), (2, 2), (0, 1)).iterator
-        case 1 => Seq((0, 2), (1, 1), (2, 2), (0, 3)).iterator
-      }
-    }.reduceByKeyWithinPartitions { _ + _
-    }.mapPartitions { iter => Iterator.single(iter.toMap)
-    }.collect()
-
-    assert(maps.length === 2)
-    assert(maps(0) === Map(0 -> 1, 2 -> 3))
-    assert(maps(1) === Map(0 -> 5, 1 -> 1, 2 -> 2))
   }
 
   test("countApproxDistinctByKey") {
