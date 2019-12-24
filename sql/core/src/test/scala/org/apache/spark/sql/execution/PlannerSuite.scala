@@ -421,7 +421,7 @@ class PlannerSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-30036: Romove unnecessary RoundRobinPartitioning " +
+  test("SPARK-30036: Remove unnecessary RoundRobinPartitioning " +
       "if SortExec is followed by RoundRobinPartitioning") {
     val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
     val partitioning = RoundRobinPartitioning(5)
@@ -444,7 +444,7 @@ class PlannerSuite extends SharedSparkSession {
     assert(query.rdd.collectPartitions()(0).map(_.get(0)).toSeq == (1 to 50))
   }
 
-  test("SPARK-30036: Romove unnecessary HashPartitioning " +
+  test("SPARK-30036: Remove unnecessary HashPartitioning " +
     "if SortExec is followed by HashPartitioning") {
     val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
     val partitioning = HashPartitioning(Literal(1) :: Nil, 5)
