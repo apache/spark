@@ -47,13 +47,15 @@ private[kafka010] class InternalKafkaConsumer(
 
   val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
-  private[kafka010] val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(
+  // Exposed for testing
+  private[consumer] val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(
     SparkEnv.get.conf, kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       .asInstanceOf[String])
 
   // Kafka consumer is not able to give back the params instantiated with so we need to store it.
   // It must be updated whenever a new consumer is created.
-  private[kafka010] var kafkaParamsWithSecurity: ju.Map[String, Object] = _
+  // Exposed for testing
+  private[consumer] var kafkaParamsWithSecurity: ju.Map[String, Object] = _
   private val consumer = createConsumer()
 
   /**
@@ -141,7 +143,7 @@ private[kafka010] class InternalKafkaConsumer(
  * @param _offsetAfterPoll the Kafka offset after calling `poll`. We will use this offset to
  *                           poll when `records` is drained.
  */
-private[kafka010] case class FetchedData(
+private[consumer] case class FetchedData(
     private var _records: ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]],
     private var _nextOffsetInFetchedData: Long,
     private var _offsetAfterPoll: Long) {
@@ -200,7 +202,7 @@ private[kafka010] case class FetchedData(
  * `isolation.level` is `read_committed`), and the caller should use `nextOffsetToFetch` to fetch
  * instead.
  */
-private[kafka010] case class FetchedRecord(
+private[consumer] case class FetchedRecord(
     var record: ConsumerRecord[Array[Byte], Array[Byte]],
     var nextOffsetToFetch: Long) {
 
@@ -227,7 +229,8 @@ private[kafka010] class KafkaDataConsumer(
     fetchedDataPool: FetchedDataPool) extends Logging {
   import KafkaDataConsumer._
 
-  @volatile private[kafka010] var _consumer: Option[InternalKafkaConsumer] = None
+  // Exposed for testing
+  @volatile private[consumer] var _consumer: Option[InternalKafkaConsumer] = None
   @volatile private var _fetchedData: Option[FetchedData] = None
 
   private val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
