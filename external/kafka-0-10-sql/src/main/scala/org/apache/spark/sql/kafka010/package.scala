@@ -32,6 +32,13 @@ package object kafka010 {   // scalastyle:ignore
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10m")
 
+  private[kafka010] val PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL =
+    ConfigBuilder("spark.kafka.producer.cache.evictorThreadRunInterval")
+      .doc("The interval of time between runs of the idle evictor thread for producer pool. " +
+        "When non-positive, no idle evictor thread will be run.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("1m")
+
   private[kafka010] val CONSUMER_CACHE_CAPACITY =
     ConfigBuilder("spark.kafka.consumer.cache.capacity")
       .doc("The maximum number of consumers cached. Please note it's a soft limit" +

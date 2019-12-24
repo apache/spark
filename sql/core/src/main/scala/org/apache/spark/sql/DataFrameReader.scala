@@ -98,9 +98,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -138,9 +135,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -157,9 +151,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
-   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
-   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -403,6 +394,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * empty array/struct during schema inference.</li>
    * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
    * For instance, this is used while parsing dates and timestamps.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -640,6 +636,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * For instance, this is used while parsing dates and timestamps.</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing. Maximum length is 1 character.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -666,7 +667,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
    * whether we should merge schemas collected from all Parquet part-files. This will override
    * `spark.sql.parquet.mergeSchema`.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
+   *
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -687,6 +694,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Loads ORC files and returns the result as a `DataFrame`.
+   *
+   * You can set the following ORC-specific option(s) for reading ORC files:
+   * <ul>
+   * <li>`mergeSchema` (default is the value specified in `spark.sql.orc.mergeSchema`): sets whether
+   * we should merge schemas collected from all ORC part-files. This will override
+   * `spark.sql.orc.mergeSchema`.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
+   * </ul>
    *
    * @param paths input paths
    * @since 2.0.0
@@ -736,6 +755,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * </li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @param paths input paths
@@ -771,13 +795,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   spark.read().textFile("/path/to/spark/README.md")
    * }}}
    *
-   * You can set the following textFile-specific option(s) for reading text files:
-   * <ul>
-   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
-   * that should be used for parsing.</li>
-   * </ul>
+   * You can set the text-specific options as specified in `DataFrameReader.text`.
    *
    * @param paths input path
    * @since 2.0.0

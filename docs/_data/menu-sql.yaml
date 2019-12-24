@@ -233,5 +233,5 @@
               url: sql-ref-functions-udf-scalar.html
             - text: Aggregate functions
               url: sql-ref-functions-udf-aggregate.html
-    - text: Arthmetic operations
+    - text: Arithmetic operations
       url: sql-ref-arithmetic-ops.html

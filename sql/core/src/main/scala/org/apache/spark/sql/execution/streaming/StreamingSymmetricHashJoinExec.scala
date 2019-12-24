@@ -110,7 +110,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  *
  * 3. When both window in join key and time range conditions are present, case 1 + 2.
  *    In this case, since window equality is a stricter condition than the time range, we can
- *    use the the State Key Watermark = event time watermark to discard state (similar to case 1).
+ *    use the State Key Watermark = event time watermark to discard state (similar to case 1).
  *
  * @param leftKeys  Expression to generate key rows for joining from left input
  * @param rightKeys Expression to generate key rows for joining from right input
