@@ -2855,8 +2855,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
 
   test("Support filter clause for aggregate function uses SortAggregateExec") {
     withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-      val query = s"SELECT PERCENTILE(a, 1) FILTER (WHERE b > 1) FROM testData2"
-      val df = sql(query)
+      val df = sql("SELECT PERCENTILE(a, 1) FILTER (WHERE b > 1) FROM testData2")
       val physical = df.queryExecution.sparkPlan
       val aggregateExpressions = physical.collectFirst {
         case agg: SortAggregateExec => agg.aggregateExpressions
@@ -2868,19 +2867,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       }
       checkAnswer(df, Row(3) :: Nil)
     }
-  }
-
-  test("Support filter clause for aggregate function with group") {
-    val query = s"SELECT b, MAX(a) FILTER (WHERE b = (select 2)) FROM testData2 GROUP BY b"
-    val df = sql(query)
-    val physical = df.queryExecution.sparkPlan
-    val aggregateExpressions = physical.collectFirst {
-      case agg: HashAggregateExec => agg.aggregateExpressions
-      case agg: SortAggregateExec => agg.aggregateExpressions
-    }
-    assert(aggregateExpressions.isDefined)
-    assert(aggregateExpressions.get.size == 1)
-    checkAnswer(df, Row(1, null) :: Row(2, 3) :: Nil)
   }
 
   test("Non-deterministic aggregate functions should not be deduplicated") {
