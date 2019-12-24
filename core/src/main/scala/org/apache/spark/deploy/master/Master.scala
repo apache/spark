@@ -75,8 +75,7 @@ private[deploy] class Master(
 
   private val endpointToApp = new HashMap[RpcEndpointRef, ApplicationInfo]
   private val addressToApp = new HashMap[RpcAddress, ApplicationInfo]
-  // Expose for testing
-  private[master] val completedApps = new ArrayBuffer[ApplicationInfo]
+  private val completedApps = new ArrayBuffer[ApplicationInfo]
   private var nextAppNumber = 0
 
   private val drivers = new HashSet[DriverInfo]

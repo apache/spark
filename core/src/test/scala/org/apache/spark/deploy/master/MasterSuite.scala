@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -546,6 +546,7 @@ class MasterSuite extends SparkFunSuite
     PrivateMethod[Array[Int]](Symbol("scheduleExecutorsOnWorkers"))
   private val _drivers = PrivateMethod[HashSet[DriverInfo]](Symbol("drivers"))
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
+  private val _completedApps = PrivateMethod[ArrayBuffer[ApplicationInfo]](Symbol("completedApps"))
 
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
@@ -686,7 +687,8 @@ class MasterSuite extends SparkFunSuite
         // we found the case where the test was too fast which all steps were done within
         // an interval - in this case, we have to check either app is available in master
         // or marked as completed. See SPARK-30348 for details.
-        assert(master.idToApp.contains(appId) || master.completedApps.exists(_.id == appId))
+        val completedApps = master.invokePrivate(_completedApps())
+        assert(master.idToApp.contains(appId) || completedApps.exists(_.id == appId))
       }
 
       eventually(timeout(10.seconds)) {
