@@ -117,12 +117,23 @@ private[sql] class HiveSessionCatalog(
     try {
       lookupFunction0(name, children)
     } catch {
-      case NonFatal(_) =>
+      case NonFatal(e) =>
         // SPARK-16228 ExternalCatalog may recognize `double`-type only.
+        var decimalCasted = false
         val newChildren = children.map { child =>
-          if (child.dataType.isInstanceOf[DecimalType]) Cast(child, DoubleType) else child
+          if (child.dataType.isInstanceOf[DecimalType]) {
+            if (!decimalCasted) decimalCasted = true
+            Cast(child, DoubleType)
+          } else {
+            child
+          }
         }
-        lookupFunction0(name, newChildren)
+        if (decimalCasted) {
+          // try again after casting `decimal`-type to `double`-type
+          lookupFunction0(name, newChildren)
+        } else {
+          throw e
+        }
     }
   }
 
