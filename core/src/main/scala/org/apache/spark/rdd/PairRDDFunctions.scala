@@ -101,6 +101,35 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
+   * functions within each partition. Turns an RDD[(K, V)] into a result of type RDD[(K, C)],
+   * for a "combined type" C
+   *
+   * Users provide three functions:
+   *
+   *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
+   *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
+   *  - `mergeCombiners`, to combine two C's into a single one.
+   *
+   * @note V and C can be different -- for example, one might group an RDD of type
+   * (Int, Int) into an RDD of type (Int, Seq[Int]).
+   */
+  def combineByKeyWithClassTagWithinPartitions[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C)(implicit ct: ClassTag[C]): RDD[(K, C)] = self.withScope {
+    require(mergeCombiners != null, "mergeCombiners must be defined")
+    val aggregator = new Aggregator[K, V, C](
+      self.context.clean(createCombiner),
+      self.context.clean(mergeValue),
+      self.context.clean(mergeCombiners))
+    self.mapPartitions(iter => {
+      val context = TaskContext.get()
+      new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
+    }, preservesPartitioning = true)
+  }
+
+  /**
+   * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. This method is here for backward compatibility. It does not provide combiner
    * classtag information to the shuffle.
    *
@@ -195,6 +224,31 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def aggregateByKey[U: ClassTag](zeroValue: U)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = self.withScope {
     aggregateByKey(zeroValue, defaultPartitioner(self))(seqOp, combOp)
+  }
+
+  /**
+   * Aggregate the values of each key within each partition, using given combine functions and a
+   * neutral "zero value". This function can return a different result type, U, than the type of
+   * the values in this RDD, V. Thus, we need one operation for merging a V into a U and one
+   * operation for merging two U's, as in scala.TraversableOnce. To avoid memory allocation, both
+   * of these functions are allowed to modify and return their first argument instead of creating
+   * a new U.
+   * This method is useful when we need to perform some extra operations before shuffle.
+   */
+  def aggregateByKeyWithinPartitions[U: ClassTag](zeroValue: U)(seqOp: (U, V) => U,
+      combOp: (U, U) => U): RDD[(K, U)] = self.withScope {
+    // Serialize the zero value to a byte array so that we can get a new clone of it on each key
+    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
+    val zeroArray = new Array[Byte](zeroBuffer.limit)
+    zeroBuffer.get(zeroArray)
+
+    lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
+    val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
+
+    // We will clean the combiner closure later in `combineByKey`
+    val cleanedSeqOp = self.context.clean(seqOp)
+    combineByKeyWithClassTagWithinPartitions[U]((v: V) => cleanedSeqOp(createZero(), v),
+      cleanedSeqOp, combOp)
   }
 
   /**
@@ -320,6 +374,93 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def reduceByKey(func: (V, V) => V): RDD[(K, V)] = self.withScope {
     reduceByKey(defaultPartitioner(self), func)
+  }
+
+  /**
+   * Merge the values for each key using an associative and commutative reduce function in a
+   * multi-level tree pattern. This will also perform the merging locally on each mapper before
+   * sending results to a reducer, similarly to a "combiner" in MapReduce.
+   *
+   * @param depth suggested depth of the tree
+   */
+  def treeReduceByKey(
+      func: (V, V) => V,
+      partitioner: Partitioner,
+      depth: Int): RDD[(K, V)] = self.withScope {
+    require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
+    val cleanF = self.context.clean(func)
+    val sourceNumParts = self.getNumPartitions
+    val destNumParts = partitioner.numPartitions
+    if (depth == 1 || sourceNumParts <= 1 || self.partitioner == Some(partitioner)) {
+      reduceByKey(partitioner, cleanF)
+    } else {
+      val scale = math.max(math.ceil(math.pow(sourceNumParts, 1.0 / depth)).toInt, 2)
+      if (sourceNumParts <= scale) {
+        // for example: sourceNumParts=2, depth=2, scale=2
+        reduceByKey(partitioner, cleanF)
+      } else {
+        val internalNumParts = math.max(sourceNumParts, destNumParts)
+
+        var partiallyReduced: RDD[((Int, K), V)] = self
+          .mapPartitionsWithIndex { case (pid, iter) =>
+            val i = pid / scale
+            iter.map { case (k, v) => ((i, k), v) }
+          }.reduceByKey(cleanF, internalNumParts)
+
+        var n = sourceNumParts / scale
+        while (n > scale) {
+          n /= scale
+          partiallyReduced = partiallyReduced
+            .map { case ((i, k), u) => ((i / scale, k), u) }
+            .reduceByKey(cleanF, internalNumParts)
+        }
+
+        // attach the partitioner finally
+        partiallyReduced.map { case ((_, k), u) => (k, u) }
+          .reduceByKey(partitioner, cleanF)
+      }
+    }
+  }
+
+  /**
+   * Merge the values for each key using an associative and commutative reduce function in a
+   * multi-level tree pattern. This will also perform the merging locally on each mapper before
+   * sending results to a reducer, similarly to a "combiner" in MapReduce.
+   */
+  def treeReduceByKey(
+      func: (V, V) => V,
+      numPartitions: Int,
+      depth: Int): RDD[(K, V)] = self.withScope {
+    treeReduceByKey(func, new HashPartitioner(numPartitions), depth)
+  }
+
+  /**
+   * Merge the values for each key using an associative and commutative reduce function in a
+   * multi-level tree pattern. This will also perform the merging locally on each mapper before
+   * sending results to a reducer, similarly to a "combiner" in MapReduce.
+   */
+  def treeReduceByKey(
+      func: (V, V) => V,
+      depth: Int): RDD[(K, V)] = self.withScope {
+    treeReduceByKey(func, defaultPartitioner(self), depth)
+  }
+
+  /**
+   * Merge the values for each key using an associative and commutative reduce function in a
+   * multi-level tree pattern. This will also perform the merging locally on each mapper before
+   * sending results to a reducer, similarly to a "combiner" in MapReduce.
+   */
+  def treeReduceByKey(
+      func: (V, V) => V): RDD[(K, V)] = self.withScope {
+    treeReduceByKey(func, defaultPartitioner(self), 2)
+  }
+
+  /**
+   * Merge the values for each key using an associative and commutative reduce function within each
+   * partition. This method is useful when we need to perform some extra operations before shuffle.
+   */
+  def reduceByKeyWithinPartitions(func: (V, V) => V): RDD[(K, V)] = self.withScope {
+    combineByKeyWithClassTagWithinPartitions[V]((v: V) => v, func, func)
   }
 
   /**
