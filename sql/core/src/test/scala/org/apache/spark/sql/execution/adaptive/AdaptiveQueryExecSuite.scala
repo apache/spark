@@ -40,13 +40,18 @@ class AdaptiveQueryExecSuite
   setupTestData()
 
   private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
-    var finalPlanExists = false
+    var finalPlanExistsOnce: Option[Boolean] = None
     val listener = new SparkListener {
       override def onOtherEvent(event: SparkListenerEvent): Unit = {
         event match {
           case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
-            if (sparkPlanInfo.simpleString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)")) {
-              finalPlanExists = true
+            if (sparkPlanInfo.simpleString.startsWith(
+              "AdaptiveSparkPlan(isFinalPlan=true)")) {
+              if (finalPlanExistsOnce.isDefined) {
+                finalPlanExistsOnce = Some(false)
+              } else {
+                finalPlanExistsOnce = Some(true)
+              }
             }
           case _ => // ignore other events
         }
@@ -66,7 +71,7 @@ class AdaptiveQueryExecSuite
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
 
     spark.sparkContext.listenerBus.waitUntilEmpty()
-    assert(finalPlanExists)
+    assert(finalPlanExistsOnce.contains(true))
     spark.sparkContext.removeSparkListener(listener)
 
     val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
