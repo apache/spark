@@ -67,8 +67,11 @@ private class AsyncEventQueue(
   /** A counter for dropped events. It will be reset every time we log it. */
   private val droppedEventsCounter = new AtomicLong(0L)
 
+  /** A counter to keep dropped events count last time it was logged */
+  private var lastDroppedEventsCounter: Long = 0L
+
   /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = 0L
+  @volatile private var lastReportTimestamp = new AtomicLong(0L)
 
   private val logDroppedEvent = new AtomicBoolean(false)
 
@@ -167,20 +170,29 @@ private class AsyncEventQueue(
     }
     logTrace(s"Dropping event $event")
 
-    val droppedCount = droppedEventsCounter.get
+    val droppedCount = droppedEventsCounter.get - lastDroppedEventsCounter
+    val lastReportTime = lastReportTimestamp.get
+    val curTime = System.currentTimeMillis()
     if (droppedCount > 0) {
       // Don't log too frequently
-      if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
-        // There may be multiple threads trying to decrease droppedEventsCounter.
-        // Use "compareAndSet" to make sure only one thread can win.
-        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
-        // then that thread will update it.
-        if (droppedEventsCounter.compareAndSet(droppedCount, 0)) {
-          val prevLastReportTimestamp = lastReportTimestamp
-          lastReportTimestamp = System.currentTimeMillis()
+      if (curTime - lastReportTime >= 60 * 1000) {
+        // There may be multiple threads trying to logging dropped events,
+        // Use 'compareAndSet' to make sure only one thread can win.
+        // After set the 'lastReportTimestamp', the next time we come here will
+        // be 60s later.
+        if (lastReportTimestamp.compareAndSet(lastReportTime, curTime)) {
+          val prevLastReportTimestamp = lastReportTimestamp.get
           val previous = new java.util.Date(prevLastReportTimestamp)
+          lastDroppedEventsCounter = droppedCount
           logWarning(s"Dropped $droppedCount events from $name since " +
             s"${if (prevLastReportTimestamp == 0) "the application started" else s"$previous"}.")
+          // Logging thread dump when events from appStatus was dropped
+          Utils.getThreadDumpForThread(dispatchThread.getId).foreach { thread =>
+            if (thread.threadName.contains(LiveListenerBus.APP_STATUS_QUEUE)) {
+              logWarning(s"Event dropped!!!Thread dump from dispatch thread " +
+                s"${dispatchThread.getName} :\n${thread.stackTrace}")
+            }
+          }
         }
       }
     }
