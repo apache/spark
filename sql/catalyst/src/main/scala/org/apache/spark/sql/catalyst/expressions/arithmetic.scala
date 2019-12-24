@@ -158,8 +158,6 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
   override def dataType: DataType = left.dataType
 
-  override def nullable: Boolean = true
-
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
   /** Name of the function for this expression on a [[Decimal]] type. */
@@ -251,6 +249,11 @@ object BinaryArithmetic {
   """)
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
+  override def nullable: Boolean = dataType match {
+    case CalendarIntervalType if !checkOverflow => true
+    case _ => super.nullable
+  }
+
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "+"
@@ -285,6 +288,11 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
        1
   """)
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
+
+  override def nullable: Boolean = dataType match {
+    case CalendarIntervalType if !checkOverflow => true
+    case _ => false
+  }
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
