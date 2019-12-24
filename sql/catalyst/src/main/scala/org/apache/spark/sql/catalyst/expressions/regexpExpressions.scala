@@ -167,7 +167,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          if ($lastRightStr != $rightStr) {
+          if (!$rightStr.equals($lastRightStr)) {
             $pattern = $patternClass.compile($escapeFunc($rightStr, '$newEscapeChar'));
             $lastRightStr = $rightStr;
           }
@@ -251,7 +251,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          if ($rightStr != $lastRightStr) {
+          if (!$rightStr.equals($lastRightStr)) {
             $pattern = $patternClass.compile($rightStr);
             $lastRightStr = $rightStr;
           }
