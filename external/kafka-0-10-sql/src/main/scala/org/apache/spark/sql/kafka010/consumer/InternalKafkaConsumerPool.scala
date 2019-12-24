@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.kafka010.consumer
 
 import java.{util => ju}
 import java.util.concurrent.ConcurrentHashMap
@@ -25,8 +25,9 @@ import org.apache.commons.pool2.impl.{DefaultEvictionPolicy, DefaultPooledObject
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.kafka010.InternalKafkaConsumerPool._
-import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
+import org.apache.spark.sql.kafka010._
+import org.apache.spark.sql.kafka010.consumer.InternalKafkaConsumerPool._
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.CacheKey
 
 /**
  * Provides object pool for [[InternalKafkaConsumer]] which is grouped by [[CacheKey]].
@@ -45,10 +46,9 @@ import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
  * not yet returned, hence provide thread-safety usage of non-thread-safe [[InternalKafkaConsumer]]
  * unless caller shares the object to multiple threads.
  */
-private[kafka010] class InternalKafkaConsumerPool(
+private[consumer] class InternalKafkaConsumerPool(
     objectFactory: ObjectFactory,
     poolConfig: PoolConfig) extends Logging {
-
   def this(conf: SparkConf) = {
     this(new ObjectFactory, new PoolConfig(conf))
   }
@@ -147,7 +147,7 @@ private[kafka010] class InternalKafkaConsumerPool(
   }
 }
 
-private[kafka010] object InternalKafkaConsumerPool {
+private[consumer] object InternalKafkaConsumerPool {
   object CustomSwallowedExceptionListener extends SwallowedExceptionListener with Logging {
     override def onSwallowException(e: Exception): Unit = {
       logError(s"Error closing Kafka consumer", e)
@@ -218,4 +218,3 @@ private[kafka010] object InternalKafkaConsumerPool {
     }
   }
 }
-
