@@ -303,7 +303,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                 (rName, rInfo.availableAddrs.toBuffer)
               }, executorData.resourceProfileId)
         }.toIndexedSeq
-        scheduler.resourceOffers(workOffers)
+        scheduler.resourceOffers(workOffers, true)
       }
       if (taskDescs.nonEmpty) {
         launchTasks(taskDescs)

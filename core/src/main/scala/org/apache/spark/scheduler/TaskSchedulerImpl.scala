@@ -36,7 +36,7 @@ import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -61,7 +61,8 @@ import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    isLocal: Boolean = false)
+    isLocal: Boolean = false,
+    clock: Clock = new SystemClock)
   extends TaskScheduler with Logging {
 
   import TaskSchedulerImpl._
@@ -125,7 +126,6 @@ private[spark] class TaskSchedulerImpl(
   protected val executorIdToHost = new HashMap[String, String]
 
   private val abortTimer = new Timer(true)
-  private val clock = new SystemClock
   // Exposed for testing
   val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
@@ -331,8 +331,11 @@ private[spark] class TaskSchedulerImpl(
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Buffer[String]]],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
-      addressesWithDescs: ArrayBuffer[(String, TaskDescription)]) : Boolean = {
+      addressesWithDescs: ArrayBuffer[(String, TaskDescription)]) :
+  (Boolean, Boolean, Option[TaskLocality]) = {
     var launchedTask = false
+    var hasDelayScheduleReject = false
+    var minLaunchedLocality: Option[TaskLocality] = None
     // nodes and executors that are blacklisted for the entire application have already been
     // filtered out by this point
     for (i <- 0 until shuffledOffers.size) {
@@ -348,11 +351,15 @@ private[spark] class TaskSchedulerImpl(
           try {
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
-            val taskDescOption = taskSet.resourceOffer(execId, host, maxLocality,
+            val (taskDescOption, reject) = taskSet.resourceOfferInternal(execId, host, maxLocality,
               taskResAssignments)
+            hasDelayScheduleReject |= reject
             for (task <- taskDescOption) {
               tasks(i) += task
               val tid = task.taskId
+              val locality = taskSet.taskInfos(task.taskId).taskLocality
+              minLaunchedLocality = minLaunchedLocality
+                .map(min => if (locality < min) locality else min).orElse(Some(locality))
               taskIdToTaskSetManager.put(tid, taskSet)
               taskIdToExecutorId(tid) = execId
               executorIdToRunningTaskIds(execId).add(tid)
@@ -379,12 +386,12 @@ private[spark] class TaskSchedulerImpl(
               logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
               // Do not offer resources for this task, but don't throw an error to allow other
               // task sets to be submitted.
-              return launchedTask
+              return (launchedTask, hasDelayScheduleReject, minLaunchedLocality)
           }
         }
       }
     }
-    launchedTask
+    (launchedTask, hasDelayScheduleReject, minLaunchedLocality)
   }
 
   /**
@@ -471,7 +478,9 @@ private[spark] class TaskSchedulerImpl(
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
    */
-  def resourceOffers(offers: IndexedSeq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
+  def resourceOffers(
+      offers: IndexedSeq[WorkerOffer],
+      isAllFreeResources: Boolean = false): Seq[Seq[TaskDescription]] = synchronized {
     // Mark each slave as alive and remember its hostname
     // Also track if new executor is added
     var newExecAvail = false
@@ -544,16 +553,34 @@ private[spark] class TaskSchedulerImpl(
           s"number of available slots is $numBarrierSlotsAvailable.")
       } else {
         var launchedAnyTask = false
+        var delaySchedulingRejectedAnyTask = false
+        var globalMinLocality: Option[TaskLocality] = None
         // Record all the executor IDs assigned barrier tasks on.
         val addressesWithDescs = ArrayBuffer[(String, TaskDescription)]()
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
-            launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
+            val (launched, hadDelayScheduleReject, minLocality) =
+              resourceOfferSingleTaskSet(taskSet,
               currentMaxLocality, shuffledOffers, availableCpus,
               availableResources, tasks, addressesWithDescs)
+            launchedTaskAtCurrentMaxLocality = launched
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
+            delaySchedulingRejectedAnyTask |= hadDelayScheduleReject
+            globalMinLocality =
+              if (minLocality.isEmpty) { globalMinLocality }
+              else if (globalMinLocality.isEmpty) {
+                minLocality
+              } else if (minLocality.get < globalMinLocality.get) {
+                minLocality
+              } else {
+                globalMinLocality
+              }
           } while (launchedTaskAtCurrentMaxLocality)
+        }
+
+        if (isAllFreeResources && !delaySchedulingRejectedAnyTask) {
+          taskSet.resetDelayScheduleTimer(globalMinLocality)
         }
 
         if (!launchedAnyTask) {

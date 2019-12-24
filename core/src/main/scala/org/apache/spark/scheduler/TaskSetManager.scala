@@ -386,6 +386,22 @@ private[spark] class TaskSetManager(
     None
   }
 
+  def resourceOffer(
+      execId: String,
+      host: String,
+      maxLocality: TaskLocality.TaskLocality,
+      availableResources: Map[String, Seq[String]] = Map.empty)
+  : Option[TaskDescription] = {
+    resourceOfferInternal(execId, host, maxLocality, availableResources)._1
+  }
+
+  def resetDelayScheduleTimer(minLocality: Option[TaskLocality.TaskLocality]): Unit = {
+    lastLaunchTime = clock.getTimeMillis()
+    for (locality <- minLocality) {
+      currentLocalityIndex = getLocalityIndex(locality)
+    }
+  }
+
   /**
    * Respond to an offer of a single executor from the scheduler by finding a task
    *
@@ -398,12 +414,12 @@ private[spark] class TaskSetManager(
    * @param maxLocality the maximum locality we want to schedule the tasks at
    */
   @throws[TaskNotSerializableException]
-  def resourceOffer(
+  def resourceOfferInternal(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
-    : Option[TaskDescription] =
+    : (Option[TaskDescription], Boolean) =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
       blacklist.isNodeBlacklistedForTaskSet(host) ||
@@ -422,7 +438,9 @@ private[spark] class TaskSetManager(
         }
       }
 
-      dequeueTask(execId, host, allowedLocality).map { case ((index, taskLocality, speculative)) =>
+      val taskDescription =
+        dequeueTask(execId, host, allowedLocality)
+          .map { case ((index, taskLocality, speculative)) =>
         // Found a task; do some bookkeeping and return a task description
         val task = tasks(index)
         val taskId = sched.newTaskId()
@@ -433,12 +451,6 @@ private[spark] class TaskSetManager(
           execId, host, taskLocality, speculative)
         taskInfos(taskId) = info
         taskAttempts(index) = info :: taskAttempts(index)
-        // Update our locality level for delay scheduling
-        // NO_PREF will not affect the variables related to delay scheduling
-        if (maxLocality != TaskLocality.NO_PREF) {
-          currentLocalityIndex = getLocalityIndex(taskLocality)
-          lastLaunchTime = curTime
-        }
         // Serialize and return the task
         val serializedTask: ByteBuffer = try {
           ser.serialize(task)
@@ -482,8 +494,10 @@ private[spark] class TaskSetManager(
           taskResourceAssignments,
           serializedTask)
       }
+      (taskDescription,
+        taskDescription.isEmpty && maxLocality == TaskLocality.ANY && pendingTasks.all.nonEmpty)
     } else {
-      None
+      (None, false)
     }
   }
 
