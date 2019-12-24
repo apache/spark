@@ -31,10 +31,11 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -94,7 +95,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
 
 // This class is used to indicate the memory stream data source. We don't actually use it, as
 // memory stream is for test only and we never look it up by name.
-object MemoryStreamTableProvider extends TableProvider {
+object MemoryStreamTableProvider extends SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new IllegalStateException("MemoryStreamTableProvider should not be used.")
   }

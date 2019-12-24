@@ -25,10 +25,11 @@ import scala.collection.mutable
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -173,7 +174,7 @@ private object InMemoryV1Provider {
 }
 
 class InMemoryV1Provider
-  extends TableProvider
+  extends SimpleTableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {

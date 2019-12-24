@@ -257,6 +257,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val options = sessionOptions ++ extraOptions
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
+      def getTable: Table = {
+        // For file source, it's expensive to infer schema/partition at each write. Here we pass
+        // the schema of input query and the user-specified partitioning to `getTable`. If the
+        // query schema is not compatible with the existing data, the write can still success but
+        // following reads would fail.
+        if (provider.isInstanceOf[FileDataSourceV2]) {
+          import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+          provider.getTable(df.schema, partitioningAsV2, dsOptions.asCaseSensitiveMap())
+        } else {
+          DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema = None)
+        }
+      }
+
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       val catalogManager = df.sparkSession.sessionState.catalogManager
       mode match {
@@ -268,8 +281,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 supportsExtract, catalogManager, dsOptions)
 
               (catalog.loadTable(ident), Some(catalog), Some(ident))
-            case tableProvider: TableProvider =>
-              val t = tableProvider.getTable(dsOptions)
+            case _: TableProvider =>
+              val t = getTable
               if (t.supports(BATCH_WRITE)) {
                 (t, None, None)
               } else {
@@ -314,8 +327,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                   extraOptions.toMap,
                   ignoreIfExists = createMode == SaveMode.Ignore)
               }
-            case tableProvider: TableProvider =>
-              if (tableProvider.getTable(dsOptions).supports(BATCH_WRITE)) {
+            case _: TableProvider =>
+              if (getTable.supports(BATCH_WRITE)) {
                 throw new AnalysisException(s"TableProvider implementation $source cannot be " +
                     s"written with $createMode mode, please use Append or Overwrite " +
                     "modes instead.")

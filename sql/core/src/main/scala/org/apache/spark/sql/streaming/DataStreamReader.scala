@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.StructType
@@ -173,15 +173,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case _ => None
     }
     ds match {
-      case provider: TableProvider =>
+      // file source v2 does not support streaming yet.
+      case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
         val dsOptions = new CaseInsensitiveStringMap(options.asJava)
-        val table = userSpecifiedSchema match {
-          case Some(schema) => provider.getTable(dsOptions, schema)
-          case _ => provider.getTable(dsOptions)
-        }
+        val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
           case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>

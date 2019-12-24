@@ -219,11 +219,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             dsOptions)
           (catalog.loadTable(ident), Some(catalog), Some(ident))
         case _ =>
+<<<<<<< HEAD
           // TODO: Non-catalog paths for DSV2 are currently not well defined.
           userSpecifiedSchema match {
             case Some(schema) => (provider.getTable(dsOptions, schema), None, None)
             case _ => (provider.getTable(dsOptions), None, None)
           }
+=======
+          DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
+>>>>>>> refine TableProvider
       }
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       table match {
