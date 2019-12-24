@@ -122,7 +122,9 @@ private[sql] class HiveSessionCatalog(
         var decimalCasted = false
         val newChildren = children.map { child =>
           if (child.dataType.isInstanceOf[DecimalType]) {
-            if (!decimalCasted) decimalCasted = true
+            if (!decimalCasted) {
+              decimalCasted = true
+            }
             Cast(child, DoubleType)
           } else {
             child
