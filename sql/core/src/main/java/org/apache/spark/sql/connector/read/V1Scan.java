@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read
+package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.annotation.{Experimental, Unstable}
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.annotation.Unstable;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.sources.BaseRelation;
+import org.apache.spark.sql.sources.TableScan;
 
 /**
  * A trait that should be implemented by V1 DataSources that would like to leverage the DataSource
@@ -30,15 +31,13 @@ import org.apache.spark.sql.sources.BaseRelation
  *
  * @since 3.0.0
  */
-@Experimental
 @Unstable
-trait V1Scan extends Scan {
+public interface V1Scan extends Scan {
 
   /**
-   * Creates an `BaseRelation` that can scan data from DataSource v1 to RDD[Row]. The returned
-   * relation must be a `TableScan` instance.
+   * Creates an `BaseRelation` with `TableScan` that can scan data from DataSource v1 to RDD[Row].
    *
    * @since 3.0.0
    */
-  def toV1TableScan(context: SQLContext): BaseRelation
+  <T extends BaseRelation & TableScan> T toV1TableScan(SQLContext context);
 }

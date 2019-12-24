@@ -164,30 +164,36 @@ class TableWithV1ReadFallback(override val name: String) extends Table with Supp
       requiredSchema: StructType,
       filters: Array[Filter]) extends V1Scan {
     override def readSchema(): StructType = requiredSchema
-    override def toV1TableScan(context: SQLContext): BaseRelation = {
-      new BaseRelation with TableScan {
-        override def sqlContext: SQLContext = context
-        override def schema: StructType = requiredSchema
-        override def buildScan(): RDD[Row] = {
-          val lowerBound = if (filters.isEmpty) {
-            0
-          } else {
-           filters.collect { case GreaterThan("i", v: Int) => v }.max
-          }
-          val data = Seq(Row(1, 10), Row(2, 20), Row(3, 30)).filter(_.getInt(0) > lowerBound)
-          val result = if (requiredSchema.length == 2) {
-            data
-          } else if (requiredSchema.map(_.name) == Seq("i")) {
-            data.map(row => Row(row.getInt(0)))
-          } else if (requiredSchema.map(_.name) == Seq("j")) {
-            data.map(row => Row(row.getInt(1)))
-          } else {
-            throw new UnsupportedOperationException
-          }
 
-          SparkSession.active.sparkContext.makeRDD(result)
-        }
-      }
+    override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
+      new V1TableScan(context, requiredSchema, filters).asInstanceOf[T]
     }
+  }
+}
+
+class V1TableScan(
+    context: SQLContext,
+    requiredSchema: StructType,
+    filters: Array[Filter]) extends BaseRelation with TableScan {
+  override def sqlContext: SQLContext = context
+  override def schema: StructType = requiredSchema
+  override def buildScan(): RDD[Row] = {
+    val lowerBound = if (filters.isEmpty) {
+      0
+    } else {
+      filters.collect { case GreaterThan("i", v: Int) => v }.max
+    }
+    val data = Seq(Row(1, 10), Row(2, 20), Row(3, 30)).filter(_.getInt(0) > lowerBound)
+    val result = if (requiredSchema.length == 2) {
+      data
+    } else if (requiredSchema.map(_.name) == Seq("i")) {
+      data.map(row => Row(row.getInt(0)))
+    } else if (requiredSchema.map(_.name) == Seq("j")) {
+      data.map(row => Row(row.getInt(1)))
+    } else {
+      throw new UnsupportedOperationException
+    }
+
+    SparkSession.active.sparkContext.makeRDD(result)
   }
 }

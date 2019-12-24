@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
-import org.apache.spark.sql.sources.TableScan
+import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
@@ -58,19 +58,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         relation @ DataSourceV2ScanRelation(_, v1Scan: V1Scan, output)) =>
       val pushedFilters = relation.getTagValue(V2ScanRelationPushDown.PUSHED_FILTERS_TAG)
         .getOrElse(Seq.empty)
-      val v1Relation = v1Scan.toV1TableScan(session.sqlContext)
+      val v1Relation = v1Scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != v1Scan.readSchema()) {
         throw new IllegalArgumentException(
           "The fallback v1 relation reports inconsistent schema:\n" +
             "Schema of v2 scan:     " + v1Scan.readSchema() + "\n" +
             "Schema of v1 relation: " + v1Relation.schema)
       }
-      val rdd = v1Relation match {
-        case s: TableScan => s.buildScan()
-        case _ =>
-          throw new IllegalArgumentException(
-            "`V1Scan.toV1Relation` must return a `TableScan` instance.")
-      }
+      val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
       val originalOutputNames = relation.table.schema().map(_.name)
       val requiredColumnsIndex = output.map(_.name).map(originalOutputNames.indexOf)
