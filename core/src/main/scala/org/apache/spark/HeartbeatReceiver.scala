@@ -207,8 +207,13 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             // Note: we want to get an executor back after expiring this one,
             // so do not simply call `sc.killExecutor` here (SPARK-8119)
             sc.killAndReplaceExecutor(executorId)
-            // In case of the executors which are not gracefully shut down, we should remove
-            // lost executors from CoarseGrainedSchedulerBackend manually here (SPARK-27348)
+            // SPARK-27348: in case of the executors which are not gracefully shut down,
+            // we should remove lost executors from CoarseGrainedSchedulerBackend manually
+            // here to guarantee two things:
+            // 1) call scheduler.executorLost() underlying to fail any tasks assigned to
+            //    those executors to avoid app hang
+            // 2) always remove executor information from CoarseGrainedSchedulerBackend for
+            //    a lost executor
             sc.schedulerBackend match {
               case backend: CoarseGrainedSchedulerBackend =>
                 backend.driverEndpoint.send(RemoveExecutor(executorId,
