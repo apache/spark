@@ -4231,10 +4231,16 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Obtains a [[UserDefinedFunction]] that wraps the given [[Aggregator]]
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator`
    * so that it may be used with untyped Data Frames.
    * {{{
    *   val agg = // Aggregator[IN, BUF, OUT]
+   *
+   *   // declare a UDF based on agg
+   *   val aggUDF = udaf(agg)
+   *   val aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
    *   spark.udf.register("myAggName", udaf(agg))
    * }}}
    *
@@ -4252,11 +4258,17 @@ object functions {
   }
 
   /**
-   * Obtains a [[UserDefinedFunction]] that wraps the given [[Aggregator]]
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator`
    * so that it may be used with untyped Data Frames.
    * {{{
    *   val agg = // Aggregator[IN, BUF, OUT]
    *   val enc = // Encoder[IN]
+   *
+   *   // declare a UDF based on agg
+   *   val aggUDF = udaf(agg, enc)
+   *   val aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
    *   spark.udf.register("myAggName", udaf(agg, enc))
    * }}}
    *
