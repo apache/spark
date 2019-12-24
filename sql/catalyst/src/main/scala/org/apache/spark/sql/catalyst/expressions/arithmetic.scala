@@ -37,11 +37,6 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
   private val checkOverflow = SQLConf.get.ansiEnabled
 
-  override def nullable: Boolean = dataType match {
-    case CalendarIntervalType => true
-    case _ => child.nullable
-  }
-
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   override def dataType: DataType = child.dataType
@@ -80,28 +75,19 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
       """})
     case _: CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      nullSafeCodeGen(ctx, ev, interval => s"""
-        try {
-          ${ev.value} = $iu.negate($interval);
-        } catch (ArithmeticException e) {
-          if ($checkOverflow) {
-            throw new ArithmeticException("-($interval) caused interval overflow.");
-          } else {
-            ${ev.isNull} = true;
-          }
+      defineCodeGen(ctx, ev,
+        interval => if (checkOverflow) {
+          s"$iu.negate($interval)"
+        } else {
+          s"$iu.safeNegate($interval)"
         }
-      """)
+      )
   }
 
   protected override def nullSafeEval(input: Any): Any = dataType match {
-    case CalendarIntervalType =>
-      try {
+    case CalendarIntervalType if checkOverflow =>
       IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
-      } catch {
-        case _: ArithmeticException if checkOverflow =>
-          throw new ArithmeticException(s"$sql caused interval overflow")
-        case _: ArithmeticException => null
-      }
+    case CalendarIntervalType => IntervalUtils.safeNegate(input.asInstanceOf[CalendarInterval])
     case _ => numeric.negate(input)
   }
 
@@ -182,19 +168,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      nullSafeCodeGen(ctx, ev, (eval1, eval2) =>
-        s"""
-           |try {
-           |  ${ev.value} = $iu.$calendarIntervalMethod($eval1, $eval2);
-           |} catch (ArithmeticException e) {
-           |  if ($checkOverflow) {
-           |     throw new ArithmeticException(
-           |       "$eval1 $calendarIntervalMethod $eval2 caused interval overflow.");
-           |  } else {
-           |    ${ev.isNull} = true;
-           |  }
-           |}
-           |""".stripMargin)
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
@@ -252,31 +226,23 @@ object BinaryArithmetic {
   """)
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def nullable: Boolean = dataType match {
-    case CalendarIntervalType => true
-    case _ => super.nullable
-  }
-
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "+"
 
   override def decimalMethod: String = "$plus"
 
-  override def calendarIntervalMethod: String = "add"
+  override def calendarIntervalMethod: String = if (checkOverflow) "add" else "safeAdd"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case CalendarIntervalType if checkOverflow =>
+      IntervalUtils.add(
+        input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
-      try {
-        IntervalUtils.add(
-          input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-      } catch {
-        case _: ArithmeticException if checkOverflow =>
-          throw new ArithmeticException(s"$sql causes interval overflow")
-        case _: ArithmeticException => null
-      }
+      IntervalUtils.safeAdd(
+        input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case _ => numeric.plus(input1, input2)
   }
 
@@ -292,31 +258,23 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   """)
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def nullable: Boolean = dataType match {
-    case CalendarIntervalType => true
-    case _ => super.nullable
-  }
-
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "-"
 
   override def decimalMethod: String = "$minus"
 
-  override def calendarIntervalMethod: String = "subtract"
+  override def calendarIntervalMethod: String = if (checkOverflow) "subtract" else "safeSubtract"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case CalendarIntervalType if checkOverflow =>
+      IntervalUtils.subtract(
+        input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
-      try {
-        IntervalUtils.subtract(
-          input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-      } catch {
-        case _: ArithmeticException if checkOverflow =>
-          throw new ArithmeticException(s"$sql caused interval overflow")
-        case _: ArithmeticException => null
-      }
+      IntervalUtils.safeSubtract(
+        input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case _ => numeric.minus(input1, input2)
   }
 

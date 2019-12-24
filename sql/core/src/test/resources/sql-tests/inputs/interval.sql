@@ -274,5 +274,5 @@ select interval '1 ' day;
 select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 select a - b from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 select b + interval '1 month' from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
-select a * 2 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);

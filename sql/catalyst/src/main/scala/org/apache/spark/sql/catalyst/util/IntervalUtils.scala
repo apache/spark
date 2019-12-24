@@ -401,6 +401,8 @@ object IntervalUtils {
   /**
    * Makes an interval from months, days and micros with the fractional part by
    * adding the month fraction to days and the days fraction to micros.
+   *
+   * @throws ArithmeticException if the result overflows any field value
    */
   private def fromDoubles(
       monthsWithFraction: Double,
@@ -414,10 +416,40 @@ object IntervalUtils {
   }
 
   /**
+   * Makes an interval from months, days and micros with the fractional part by
+   * adding the month fraction to days and the days fraction to micros.
+   */
+  private def safeFromDoubles(
+      monthsWithFraction: Double,
+      daysWithFraction: Double,
+      microsWithFraction: Double): CalendarInterval = {
+    val monthInLong = monthsWithFraction.toLong
+    val truncatedMonths = if (monthInLong > Int.MaxValue) {
+      Int.MaxValue
+    } else if (monthInLong < Int.MinValue) {
+      Int.MinValue
+    } else {
+      monthInLong.toInt
+    }
+    val days = daysWithFraction + DAYS_PER_MONTH * (monthsWithFraction - truncatedMonths)
+    val dayInLong = days.toLong
+    val truncatedDays = if (dayInLong > Int.MaxValue) {
+      Int.MaxValue
+    } else if (monthInLong < Int.MinValue) {
+      Int.MinValue
+    } else {
+      dayInLong.toInt
+    }
+    val micros = microsWithFraction + MICROS_PER_DAY * (days - truncatedDays)
+    new CalendarInterval(truncatedMonths, truncatedDays.toInt, micros.round)
+  }
+
+  /**
    * Unary minus, return the negated the calendar interval value.
    *
    * @param interval the interval to be negated
    * @return a new calendar interval instance with all it parameters negated from the origin one.
+   * @throws ArithmeticException if the result overflows any field value
    */
   def negate(interval: CalendarInterval): CalendarInterval = {
     val months = Math.negateExact(interval.months)
@@ -427,7 +459,20 @@ object IntervalUtils {
   }
 
   /**
+   * Unary minus, return the negated the calendar interval value.
+   *
+   * @param interval the interval to be negated
+   * @return a new calendar interval instance with all it parameters negated from the origin one.
+   */
+  def safeNegate(interval: CalendarInterval): CalendarInterval = {
+    new CalendarInterval(-interval.months, -interval.days, -interval.microseconds)
+  }
+
+  /**
    * Return a new calendar interval instance of the sum of two intervals.
+   *
+   * @throws ArithmeticException if the result overflows any field value
+   *
    */
   def add(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
     val months = Math.addExact(left.months, right.months)
@@ -437,7 +482,20 @@ object IntervalUtils {
   }
 
   /**
-   * Return a new calendar interval instance of the left intervals minus the right one.
+   * Return a new calendar interval instance of the sum of two intervals.
+   */
+  def safeAdd(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
+    val months = left.months + right.months
+    val days = left.days + right.days
+    val microseconds = left.microseconds + right.microseconds
+    new CalendarInterval(months, days, microseconds)
+  }
+
+  /**
+   * Return a new calendar interval instance of the left interval minus the right one.
+   *
+   * @throws ArithmeticException if the result overflows any field value
+   *
    */
   def subtract(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
     val months = Math.subtractExact(left.months, right.months)
@@ -446,13 +504,50 @@ object IntervalUtils {
     new CalendarInterval(months, days, microseconds)
   }
 
+  /**
+   * Return a new calendar interval instance of the left interval minus the right one.
+   */
+  def safeSubtract(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
+    val months = left.months - right.months
+    val days = left.days - right.days
+    val microseconds = left.microseconds - right.microseconds
+    new CalendarInterval(months, days, microseconds)
+  }
+
+  /**
+   * Return a new calendar interval instance of the left interval times a multiplier.
+   *
+   * @throws ArithmeticException if the result overflows any field value
+   */
   def multiply(interval: CalendarInterval, num: Double): CalendarInterval = {
     fromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
   }
 
+  /**
+   * Return a new calendar interval instance of the left interval times a multiplier.
+   */
+  def safeMultiply(interval: CalendarInterval, num: Double): CalendarInterval = {
+    safeFromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
+  }
+
+  /**
+   * Return a new calendar interval instance of the left interval divides by a dividend.
+   *
+   * @throws ArithmeticException if the result overflows any field value or divided by zero
+   */
   def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
     if (num == 0) throw new ArithmeticException("divide by zero")
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
+  }
+
+  /**
+   * Return a new calendar interval instance of the left interval divides by a dividend.
+   *
+   * @throws ArithmeticException if divided by zero
+   */
+  def safeDivide(interval: CalendarInterval, num: Double): CalendarInterval = {
+    if (num == 0) throw new ArithmeticException("divide by zero")
+    safeFromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
   // `toString` implementation in CalendarInterval is the multi-units format currently.

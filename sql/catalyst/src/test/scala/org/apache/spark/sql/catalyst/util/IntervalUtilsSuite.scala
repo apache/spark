@@ -240,63 +240,73 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("negate") {
     assert(negate(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
+    assert(safeNegate(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
   }
 
   test("subtract one interval by another") {
     val input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR)
     val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
-    assert(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR) === subtract(input1, input2))
     val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
     val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
-    assert(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR) === subtract(input3, input4))
+    Seq[(CalendarInterval, CalendarInterval) => CalendarInterval](subtract, safeSubtract)
+      .foreach { func =>
+        assert(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR) === func(input1, input2))
+        assert(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR) === func(input3, input4))
+      }
   }
 
   test("add two intervals") {
     val input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR)
     val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
-    assert(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR) === add(input1, input2))
-
     val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
     val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
-    assert(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR) === add(input3, input4))
+    Seq[(CalendarInterval, CalendarInterval) => CalendarInterval](add, safeAdd).foreach { func =>
+      assert(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR) === func(input1, input2))
+      assert(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR) === func(input3, input4))
+    }
   }
 
   test("multiply by num") {
-    var interval = new CalendarInterval(0, 0, 0)
-    assert(interval === multiply(interval, 0))
-    interval = new CalendarInterval(123, 456, 789)
-    assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === multiply(interval, 42))
-    interval = new CalendarInterval(-123, -456, -789)
-    assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === multiply(interval, 42))
-    assert(new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR) ===
-      multiply(new CalendarInterval(1, 5, 0), 1.5))
-    assert(new CalendarInterval(2, 14, 12 * MICROS_PER_HOUR) ===
-      multiply(new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR), 1.2))
+    Seq[(CalendarInterval, Double) => CalendarInterval](multiply, safeMultiply).foreach { func =>
+      var interval = new CalendarInterval(0, 0, 0)
+      assert(interval === func(interval, 0))
+      interval = new CalendarInterval(123, 456, 789)
+      assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === func(interval, 42))
+      interval = new CalendarInterval(-123, -456, -789)
+      assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === func(interval, 42))
+      assert(new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR) ===
+        func(new CalendarInterval(1, 5, 0), 1.5))
+      assert(new CalendarInterval(2, 14, 12 * MICROS_PER_HOUR) ===
+        func(new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR), 1.2))
+    }
+
+    assert(CalendarInterval.MAX_VALUE ===
+      safeMultiply(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE))
     try {
       multiply(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE)
       fail("Expected to throw an exception on months overflow")
     } catch {
-      case e: ArithmeticException =>
-        assert(e.getMessage.contains("overflow"))
+      case e: ArithmeticException => assert(e.getMessage.contains("overflow"))
     }
   }
 
   test("divide by num") {
-    var interval = new CalendarInterval(0, 0, 0)
-    assert(interval === divide(interval, 10))
-    interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
-    assert(new CalendarInterval(0, 16, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
-      divide(interval, 2))
-    assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === divide(interval, 0.5))
-    interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
-    assert(new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND) === divide(interval, 2))
-    assert(new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE) === divide(interval, 0.5))
-    try {
-      divide(new CalendarInterval(123, 456, 789), 0)
-      fail("Expected to throw an exception on divide by zero")
-    } catch {
-      case e: ArithmeticException =>
-        assert(e.getMessage.contains("divide by zero"))
+    Seq[(CalendarInterval, Double) => CalendarInterval](divide, safeDivide).foreach { func =>
+      var interval = new CalendarInterval(0, 0, 0)
+      assert(interval === func(interval, 10))
+      interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
+      assert(new CalendarInterval(0, 16, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
+        func(interval, 2))
+      assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === func(interval, 0.5))
+      interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
+      assert(new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND) === func(interval, 2))
+      assert(new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE) === func(interval, 0.5))
+      try {
+        func(new CalendarInterval(123, 456, 789), 0)
+        fail("Expected to throw an exception on divide by zero")
+      } catch {
+        case e: ArithmeticException => assert(e.getMessage.contains("divide by zero"))
+      }
     }
   }
 
@@ -448,11 +458,19 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("interval overflow check") {
     intercept[ArithmeticException](negate(new CalendarInterval(Int.MinValue, 0, 0)))
+    assert(safeNegate(new CalendarInterval(Int.MinValue, 0, 0)) ===
+      new CalendarInterval(Int.MinValue, 0, 0))
     intercept[ArithmeticException](negate(CalendarInterval.MIN_VALUE))
-
+    assert(safeNegate(CalendarInterval.MIN_VALUE) === CalendarInterval.MIN_VALUE)
     intercept[ArithmeticException](add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, 1)))
     intercept[ArithmeticException](add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 1, 0)))
     intercept[ArithmeticException](add(CalendarInterval.MAX_VALUE, new CalendarInterval(1, 0, 0)))
+    assert(safeAdd(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, 1)) ===
+      new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MinValue))
+    assert(safeAdd(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 1, 0)) ===
+      new CalendarInterval(Int.MaxValue, Int.MinValue, Long.MaxValue))
+    assert(safeAdd(CalendarInterval.MAX_VALUE, new CalendarInterval(1, 0, 0)) ===
+      new CalendarInterval(Int.MinValue, Int.MaxValue, Long.MaxValue))
 
     intercept[ArithmeticException](subtract(CalendarInterval.MAX_VALUE,
       new CalendarInterval(0, 0, -1)))
@@ -460,9 +478,16 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       new CalendarInterval(0, -1, 0)))
     intercept[ArithmeticException](subtract(CalendarInterval.MAX_VALUE,
       new CalendarInterval(-1, 0, 0)))
+    assert(safeSubtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, -1)) ===
+      new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MinValue))
+    assert(safeSubtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, -1, 0)) ===
+      new CalendarInterval(Int.MaxValue, Int.MinValue, Long.MaxValue))
+    assert(safeSubtract(CalendarInterval.MAX_VALUE, new CalendarInterval(-1, 0, 0)) ===
+      new CalendarInterval(Int.MinValue, Int.MaxValue, Long.MaxValue))
 
     intercept[ArithmeticException](multiply(CalendarInterval.MAX_VALUE, 2))
-
+    assert(safeMultiply(CalendarInterval.MAX_VALUE, 2) === CalendarInterval.MAX_VALUE)
     intercept[ArithmeticException](divide(CalendarInterval.MAX_VALUE, 0.5))
+    assert(safeDivide(CalendarInterval.MAX_VALUE, 0.5) === CalendarInterval.MAX_VALUE)
   }
 }

@@ -113,13 +113,14 @@ object ExtractIntervalPart {
   }
 }
 
-abstract class IntervalNumOperation(
-    interval: Expression,
-    num: Expression,
-    operation: (CalendarInterval, Double) => CalendarInterval,
-    operationName: String)
+abstract class IntervalNumOperation(interval: Expression, num: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
-  private val checkOverflow = SQLConf.get.ansiEnabled
+
+  protected val checkOverflow: Boolean = SQLConf.get.ansiEnabled
+
+  protected def operation(interval: CalendarInterval, num: Double): CalendarInterval
+
+  protected val operationName: String
 
   override def left: Expression = interval
   override def right: Expression = num
@@ -133,9 +134,7 @@ abstract class IntervalNumOperation(
     try {
       operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
     } catch {
-      case _: ArithmeticException if checkOverflow =>
-        throw new ArithmeticException(s"$sql caused interval overflow.")
-      case _: ArithmeticException => null
+      case _: ArithmeticException if (!checkOverflow) => null
     }
   }
 
@@ -147,7 +146,7 @@ abstract class IntervalNumOperation(
           ${ev.value} = $iu.$operationName($interval, $num);
         } catch (ArithmeticException e) {
           if ($checkOverflow) {
-            throw new ArithmeticException("$prettyName($interval, $num) caused interval overflow.");
+            throw e;
           } else {
             ${ev.isNull} = true;
           }
@@ -156,14 +155,28 @@ abstract class IntervalNumOperation(
     })
   }
 
-  override def prettyName: String = operationName + "_interval"
+  override def prettyName: String = operationName.stripPrefix("safe").toLowerCase() + "_interval"
 }
 
 case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, multiply, "multiply")
+  extends IntervalNumOperation(interval, num) {
+
+  override protected def operation(interval: CalendarInterval, num: Double): CalendarInterval = {
+    if (checkOverflow) multiply(interval, num) else safeMultiply(interval, num)
+  }
+
+  override protected val operationName: String = if (checkOverflow) "multiply" else "safeMultiply"
+}
 
 case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, divide, "divide")
+  extends IntervalNumOperation(interval, num) {
+
+  override protected def operation(interval: CalendarInterval, num: Double): CalendarInterval = {
+    if (checkOverflow) divide(interval, num) else safeDivide(interval, num)
+  }
+
+  override protected val operationName: String = if (checkOverflow) "divide" else "safeDivide"
+}
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
