@@ -118,10 +118,6 @@ abstract class IntervalNumOperation(interval: Expression, num: Expression)
 
   protected val checkOverflow: Boolean = SQLConf.get.ansiEnabled
 
-  protected def operation(interval: CalendarInterval, num: Double): CalendarInterval
-
-  protected val operationName: String
-
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -129,10 +125,20 @@ abstract class IntervalNumOperation(interval: Expression, num: Expression)
   override def dataType: DataType = CalendarIntervalType
 
   override def nullable: Boolean = true
+}
+
+case class MultiplyInterval(interval: Expression, num: Expression)
+  extends IntervalNumOperation(interval, num) {
+
+  override def prettyName: String = "multiply_interval"
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     try {
-      operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+      if (checkOverflow) {
+        multiply(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+      } else {
+        safeMultiply(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+      }
     } catch {
       case _: ArithmeticException if !checkOverflow => null
     }
@@ -141,6 +147,7 @@ abstract class IntervalNumOperation(interval: Expression, num: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (interval, num) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+      val operationName = if (checkOverflow) "multiply" else "safeMultiply"
       s"""
         try {
           ${ev.value} = $iu.$operationName($interval, $num);
@@ -154,31 +161,47 @@ abstract class IntervalNumOperation(interval: Expression, num: Expression)
       """
     })
   }
-
-  override def prettyName: String = operationName.stripPrefix("safe").toLowerCase() + "_interval"
 }
 
-case class MultiplyInterval(interval: Expression, num: Expression)
+case class DivideInterval(interval: Expression, num: Expression)
   extends IntervalNumOperation(interval, num) {
 
-  override protected def operation(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (checkOverflow) multiply(interval, num) else safeMultiply(interval, num)
+  override def prettyName: String = "divide_interval"
+
+  override def nullSafeEval(interval: Any, num: Any): Any = {
+    try {
+      if (num == 0) return null
+      if (checkOverflow) {
+        divide(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+      } else {
+        safeDivide(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+      }
+    } catch {
+      case _: ArithmeticException if !checkOverflow => null
+    }
   }
 
-  override protected val operationName: String = if (checkOverflow) "multiply" else "safeMultiply"
-}
-
-case class DivideInterval(
-     interval: Expression,
-     num: Expression,
-     override val checkOverflow: Boolean = SQLConf.get.ansiEnabled)
-  extends IntervalNumOperation(interval, num) {
-
-  override protected def operation(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (checkOverflow) divide(interval, num) else safeDivide(interval, num)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (interval, num) => {
+      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+      val operationName = if (checkOverflow) "divide" else "safeDivide"
+      s"""
+        try {
+          if ($num == 0) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = $iu.$operationName($interval, $num);
+          }
+        } catch (ArithmeticException e) {
+          if ($checkOverflow) {
+            throw e;
+          } else {
+            ${ev.isNull} = true;
+          }
+        }
+      """
+    })
   }
-
-  override protected val operationName: String = if (checkOverflow) "divide" else "safeDivide"
 }
 
 // scalastyle:off line.size.limit
