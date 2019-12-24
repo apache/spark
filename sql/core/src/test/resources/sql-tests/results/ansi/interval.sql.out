@@ -995,19 +995,17 @@ struct<i:int,sum(CAST(v AS INTERVAL)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETW
 -- !query 105
 select avg(cast(v as interval)) from VALUES (null) t(v)
 -- !query 105 schema
-struct<>
+struct<avg(CAST(v AS INTERVAL)):interval>
 -- !query 105 output
-java.lang.ArithmeticException
-divide by zero
+NULL
 
 
 -- !query 106
 select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where 1=0
 -- !query 106 schema
-struct<>
+struct<avg(CAST(v AS INTERVAL)):interval>
 -- !query 106 output
-java.lang.ArithmeticException
-divide by zero
+NULL
 
 
 -- !query 107
@@ -1049,10 +1047,11 @@ select
 from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
 group by i
 -- !query 111 schema
-struct<>
+struct<i:int,avg(CAST(v AS INTERVAL)):interval>
 -- !query 111 output
-java.lang.ArithmeticException
-divide by zero
+1	-1 days
+2	2 seconds
+3	NULL
 
 
 -- !query 112
@@ -1072,10 +1071,12 @@ SELECT
     avg(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 FROM VALUES (1,'1 seconds'), (1,'2 seconds'), (2,NULL), (2,NULL) t(i,v)
 -- !query 113 schema
-struct<>
+struct<i:int,avg(CAST(v AS INTERVAL)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):interval>
 -- !query 113 output
-java.lang.ArithmeticException
-divide by zero
+1	1.5 seconds
+1	2 seconds
+2	NULL
+2	NULL
 
 
 -- !query 114

@@ -134,7 +134,7 @@ abstract class IntervalNumOperation(interval: Expression, num: Expression)
     try {
       operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
     } catch {
-      case _: ArithmeticException if (!checkOverflow) => null
+      case _: ArithmeticException if !checkOverflow => null
     }
   }
 
@@ -168,7 +168,10 @@ case class MultiplyInterval(interval: Expression, num: Expression)
   override protected val operationName: String = if (checkOverflow) "multiply" else "safeMultiply"
 }
 
-case class DivideInterval(interval: Expression, num: Expression)
+case class DivideInterval(
+     interval: Expression,
+     num: Expression,
+     override val checkOverflow: Boolean = SQLConf.get.ansiEnabled)
   extends IntervalNumOperation(interval, num) {
 
   override protected def operation(interval: CalendarInterval, num: Double): CalendarInterval = {
