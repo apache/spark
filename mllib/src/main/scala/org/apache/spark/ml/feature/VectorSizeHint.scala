@@ -179,7 +179,8 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
 
   @Since("3.0.0")
   override def toString: String = {
-    s"VectorSizeHint: uid=$uid, size=${$(size)}, handleInvalid=${$(handleInvalid)}"
+    s"VectorSizeHint: uid=$uid, handleInvalid=${$(handleInvalid)}" +
+      get(size).map(i => s", size=$i").getOrElse("")
   }
 }
 
