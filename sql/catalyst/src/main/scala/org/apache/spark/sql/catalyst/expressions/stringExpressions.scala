@@ -1246,6 +1246,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
     _FUNC_(str, len[, pad]) - Returns `str`, right-padded with `pad` to a length of `len`.
       If `str` is longer than `len`, the return value is shortened to `len` characters.
       If `pad` is not specified, `str` will be padded to the right with space characters.
+      If `pad` is empty, the return value is NULL.
   """,
   examples = """
     Examples:
@@ -1255,6 +1256,8 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
        h
       > SELECT _FUNC_('hi', 5);
        hi
+       > SELECT _FUNC_('hi', 5, '');
+       NULL
   """,
   since = "1.5.0")
 case class StringRPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
@@ -1262,6 +1265,10 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
 
   def this(str: Expression, len: Expression) = {
     this(str, len, Literal(" "))
+  }
+
+  override def nullable: Boolean = super.nullable || {
+    pad.foldable && pad.eval().asInstanceOf[UTF8String].numBytes() == 0
   }
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil

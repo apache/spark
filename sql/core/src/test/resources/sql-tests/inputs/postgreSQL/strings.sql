@@ -629,6 +629,7 @@ SELECT rpad('hi', 5);
 SELECT rpad('hi', -5, 'xy');
 SELECT rpad('hello', 2);
 SELECT rpad('hi', 5, '');
+-- PostgreSQL return: hi:  because not implemented as per the rpad behaviours(In case of empty pad string, the return value is null)
 
 SELECT ltrim('zzzytrim', 'xyz');
 

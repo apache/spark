@@ -907,7 +907,7 @@ SELECT rpad('hi', 5, '')
 -- !query 110 schema
 struct<rpad(hi, 5, ):string>
 -- !query 110 output
-hi
+NULL
 
 
 -- !query 111

@@ -875,6 +875,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * For example:
    *   ('hi', 5, '??') =&gt; 'hi???'
    *   ('hi', 1, '??') =&gt; 'h'
+   *   ('hi', 1, '') =&gt; 'NULL'
    */
   public UTF8String rpad(int len, UTF8String pad) {
     int spaces = len - this.numChars(); // number of char need to pad
