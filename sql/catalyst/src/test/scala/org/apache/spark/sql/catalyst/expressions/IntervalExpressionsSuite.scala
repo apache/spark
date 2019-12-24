@@ -22,6 +22,7 @@ import scala.language.implicitConversions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.stringToInterval
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -197,10 +198,14 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("multiply") {
-    def check(interval: String, num: Double, expected: String): Unit = {
-      checkEvaluation(
-        MultiplyInterval(Literal(stringToInterval(interval)), Literal(num)),
-        if (expected == null) null else stringToInterval(expected))
+    def check(interval: String, num: Double, expected: String,
+        modes: Seq[String] = Seq("true", "false")): Unit = {
+      modes.foreach { v =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
+          checkEvaluation(MultiplyInterval(Literal(stringToInterval(interval)), Literal(num)),
+            if (expected == null) null else stringToInterval(expected))
+        }
+      }
     }
 
     check("0 seconds", 10, "0 seconds")
@@ -211,14 +216,22 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("-100 years -1 millisecond", 0.5, "-50 years -500 microseconds")
     check("2 months 4 seconds", -0.5, "-1 months -2 seconds")
     check("1 month 2 microseconds", 1.5, "1 months 15 days 3 microseconds")
-    check("2 months", Int.MaxValue, null)
+    check("2 months", Int.MaxValue, CalendarInterval.MAX_VALUE.toString, Seq("false"))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        MultiplyInterval(Literal(stringToInterval("2 months")), Literal(Int.MaxValue.toDouble)),
+        "integer overflow")
+    }
   }
 
   test("divide") {
     def check(interval: String, num: Double, expected: String): Unit = {
-      checkEvaluation(
-        DivideInterval(Literal(stringToInterval(interval)), Literal(num)),
-        if (expected == null) null else stringToInterval(expected))
+      Seq("true", "false").foreach { v =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
+          checkEvaluation(DivideInterval(Literal(stringToInterval(interval)), Literal(num)),
+            if (expected == null) null else stringToInterval(expected))
+        }
+      }
     }
 
     check("0 seconds", 10, "0 seconds")
