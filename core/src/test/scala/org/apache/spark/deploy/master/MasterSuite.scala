@@ -682,7 +682,11 @@ class MasterSuite extends SparkFunSuite
         // an app would be registered with Master once Driver set up
         assert(worker.apps.nonEmpty)
         appId = worker.apps.head._1
-        assert(master.idToApp.contains(appId))
+
+        // we found the case where the test was too fast which all steps were done within
+        // an interval - in this case, we have to check either app is available in master
+        // or marked as completed. See SPARK-30348 for details.
+        assert(master.idToApp.contains(appId) || master.completedApps.exists(_.id == appId))
       }
 
       eventually(timeout(10.seconds)) {
