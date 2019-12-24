@@ -264,6 +264,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             throw new AnalysisException("Cannot write data to TableProvider implementation " +
               "if partition columns are specified.")
           }
+          // TODO: pass catalog and table identifiers to V2Relation
           lazy val relation = DataSourceV2Relation.create(table, None, Seq.empty, dsOptions)
           mode match {
             case SaveMode.Append =>
@@ -356,14 +357,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val session = df.sparkSession
     val canUseV2 = lookupV2Provider().isDefined
 
-    val multipartIdentifier = session.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    multipartIdentifier match {
+    session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case NonSessionCatalogAndIdentifier(catalog, ident) =>
-        insertInto(catalog, multipartIdentifier.headOption, ident)
+        insertInto(catalog, ident)
 
       case SessionCatalogAndIdentifier(catalog, ident)
           if canUseV2 && ident.namespace().length <= 1 =>
-        insertInto(catalog, Some(CatalogManager.SESSION_CATALOG_NAME), ident)
+        insertInto(catalog, ident)
 
       case AsTableIdentifier(tableIdentifier) =>
         insertInto(tableIdentifier)
@@ -373,17 +373,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def insertInto(
-      catalog: CatalogPlugin,
-      catalogIdentifier: Option[String],
-      ident: Identifier): Unit = {
+  private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
+    import df.sparkSession.sessionState.analyzer.catalogManager
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val table = catalog.asTableCatalog.loadTable(ident) match {
       case _: V1Table =>
         return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
-        DataSourceV2Relation.create(t, catalogIdentifier, Seq(ident))
+        DataSourceV2Relation.create(t, catalogManager.catalogIdentifier(catalog), Seq(ident))
     }
 
     val command = mode match {
@@ -489,14 +487,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val session = df.sparkSession
     val canUseV2 = lookupV2Provider().isDefined
 
-    val multipartIdentifier = session.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    multipartIdentifier match {
+    session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case NonSessionCatalogAndIdentifier(catalog, ident) =>
-        saveAsTable(catalog.asTableCatalog, multipartIdentifier.headOption, ident)
+        saveAsTable(catalog.asTableCatalog, ident)
 
       case SessionCatalogAndIdentifier(catalog, ident)
           if canUseV2 && ident.namespace().length <= 1 =>
-        saveAsTable(catalog.asTableCatalog, Some(CatalogManager.SESSION_CATALOG_NAME), ident)
+        saveAsTable(catalog.asTableCatalog, ident)
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)
@@ -508,10 +505,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
 
-  private def saveAsTable(
-      catalog: TableCatalog,
-      catalogIdentifier: Option[String],
-      ident: Identifier): Unit = {
+  private def saveAsTable(catalog: TableCatalog, ident: Identifier): Unit = {
+    import df.sparkSession.sessionState.analyzer.catalogManager
+
     val partitioning = partitioningColumns.map { colNames =>
       colNames.map(name => IdentityTransform(FieldReference(name)))
     }.getOrElse(Seq.empty[Transform])
@@ -535,7 +531,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case (SaveMode.Append, Some(table)) =>
         AppendData.byName(
-          DataSourceV2Relation.create(table, catalogIdentifier, Seq(ident)),
+          DataSourceV2Relation.create(
+            table,
+            catalogManager.catalogIdentifier(catalog),
+            Seq(ident)),
           df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>

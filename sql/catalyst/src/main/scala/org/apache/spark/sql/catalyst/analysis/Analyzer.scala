@@ -759,22 +759,26 @@ class Analyzer(
           .getOrElse(i)
 
       case desc @ DescribeTable(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.originalNameParts.headOption, u.tableName)
-            .map(rel => desc.copy(table = rel))
-            .getOrElse(desc)
+        CatalogV2Util
+          .loadRelation(u.catalog, catalogManager.catalogIdentifier(u.catalog), u.tableName)
+          .map(rel => desc.copy(table = rel))
+          .getOrElse(desc)
 
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.originalNameParts.headOption, u.tableName)
-            .map(rel => alter.copy(table = rel))
-            .getOrElse(alter)
+        CatalogV2Util
+          .loadRelation(u.catalog, catalogManager.catalogIdentifier(u.catalog), u.tableName)
+          .map(rel => alter.copy(table = rel))
+          .getOrElse(alter)
 
       case show @ ShowTableProperties(u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.originalNameParts.headOption, u.tableName)
+        CatalogV2Util
+          .loadRelation(u.catalog, catalogManager.catalogIdentifier(u.catalog), u.tableName)
           .map(rel => show.copy(table = rel))
           .getOrElse(show)
 
       case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.originalNameParts.headOption, u.tableName)
+        CatalogV2Util
+          .loadRelation(u.catalog, catalogManager.catalogIdentifier(u.catalog), u.tableName)
           .getOrElse(u)
     }
 
@@ -786,7 +790,10 @@ class Analyzer(
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
             case Some(table) =>
-              Some(DataSourceV2Relation.create(table, identifier.headOption, Seq(ident)))
+              Some(DataSourceV2Relation.create(
+                table,
+                catalogManager.catalogIdentifier(catalog),
+                Seq(ident)))
             case None => None
           }
         case _ => None
@@ -890,7 +897,7 @@ class Analyzer(
         case Some(table) =>
           Some(DataSourceV2Relation.create(
             table,
-            Some(CatalogManager.SESSION_CATALOG_NAME),
+            catalogManager.catalogIdentifier(catalog),
             Seq(newIdent)))
         case None => None
       }

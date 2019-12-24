@@ -44,13 +44,25 @@ class CatalogManager(
   import CatalogManager.SESSION_CATALOG_NAME
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
+  // Map from catalog back to it's original name for easy name loop up, we don't use the
+  // CatalogPlugin's name as it might be different from the catalog name depending on
+  // implementation.
+  private val catalogIdentifiers = mutable.HashMap.empty[CatalogPlugin, String]
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
       v2SessionCatalog
     } else {
-      catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
+      catalogs.getOrElseUpdate(name, {
+        val catalog = Catalogs.load(name, conf)
+        catalogIdentifiers(catalog) = name
+        catalog
+      })
     }
+  }
+
+  def catalogIdentifier(catalog: CatalogPlugin): Option[String] = synchronized {
+    catalogIdentifiers.get(catalog)
   }
 
   private def loadV2SessionCatalog(): CatalogPlugin = {
@@ -74,7 +86,11 @@ class CatalogManager(
   private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
-        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
+        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, {
+          val catalog = loadV2SessionCatalog()
+          catalogIdentifiers(catalog) = SESSION_CATALOG_NAME
+          catalog
+        })
       } catch {
         case NonFatal(_) =>
           logError(
