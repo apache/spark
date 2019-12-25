@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 import java.util.Date
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
@@ -97,14 +97,28 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   }
 }
 
-class MockExecutorLaunchFailWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf)
-  extends MockWorker(master, conf) {
+class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkConf)
+  extends MockWorker(master.self, conf) {
+
+  val launchExecutorReceived = new CountDownLatch(1)
   var failedCnt = 0
   override def receive: PartialFunction[Any, Unit] = {
     case LaunchExecutor(_, appId, execId, _, _, _, _) =>
+      if (failedCnt == 0) {
+        launchExecutorReceived.countDown()
+      }
+      verifyMasterState(appId)
       failedCnt += 1
-      master.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
+      master.self.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
+
     case otherMsg => super.receive(otherMsg)
+  }
+
+  private def verifyMasterState(appId: String): Unit = {
+    // The app would be registered with Master once Driver set up.
+    // We verify the state of Master here to avoid timing issue, as it guarantees the verification
+    // will run before Master changes the status of app to fail.
+    assert(master.idToApp.contains(appId))
   }
 }
 
@@ -546,7 +560,6 @@ class MasterSuite extends SparkFunSuite
     PrivateMethod[Array[Int]](Symbol("scheduleExecutorsOnWorkers"))
   private val _drivers = PrivateMethod[HashSet[DriverInfo]](Symbol("drivers"))
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
-  private val _completedApps = PrivateMethod[ArrayBuffer[ApplicationInfo]](Symbol("completedApps"))
 
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
@@ -663,7 +676,7 @@ class MasterSuite extends SparkFunSuite
     val master = makeAliveMaster()
     var worker: MockExecutorLaunchFailWorker = null
     try {
-      worker = new MockExecutorLaunchFailWorker(master.self)
+      worker = new MockExecutorLaunchFailWorker(master)
       worker.rpcEnv.setupEndpoint("worker", worker)
       val workerRegMsg = RegisterWorker(
         worker.id,
@@ -678,19 +691,11 @@ class MasterSuite extends SparkFunSuite
       val driver = DeployTestUtils.createDriverDesc()
       // mimic DriverClient to send RequestSubmitDriver to master
       master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
-      var appId: String = null
-      eventually(timeout(10.seconds)) {
-        // an app would be registered with Master once Driver set up
-        assert(worker.apps.nonEmpty)
-        appId = worker.apps.head._1
 
-        // we found the case where the test was too fast which all steps were done within
-        // an interval - in this case, we have to check either app is available in master
-        // or marked as completed. See SPARK-30348 for details.
-        val completedApps = master.invokePrivate(_completedApps())
-        assert(master.idToApp.contains(appId) || completedApps.exists(_.id == appId))
-      }
+      // LaunchExecutor message should have been received in worker side
+      assert(worker.launchExecutorReceived.await(10, TimeUnit.SECONDS))
 
+      val appId: String = worker.apps.head._1
       eventually(timeout(10.seconds)) {
         // Master would continually launch executors until reach MAX_EXECUTOR_RETRIES
         assert(worker.failedCnt == master.conf.get(MAX_EXECUTOR_RETRIES))
