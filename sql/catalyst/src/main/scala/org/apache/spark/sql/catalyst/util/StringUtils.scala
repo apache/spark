@@ -54,7 +54,8 @@ object StringUtils extends Logging {
             case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
             case _ => fail(pattern, s"the escape character is not allowed to precede '$c'")
           }
-        case c if c == escapeChar => fail(pattern, "it is not allowed to end with the escape character")
+        case c if c == escapeChar =>
+          fail(pattern, "it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
         case c => out ++= Pattern.quote(Character.toString(c))
@@ -99,10 +100,11 @@ object StringUtils extends Logging {
               out ++= s"\\$c"
             case _ => fail(pattern, s"the escape character is not allowed to precede '$c'")
           }
-        case c if c == escapeChar => fail(pattern, "it is not allowed to end with the escape character")
+        case c if c == escapeChar =>
+          fail(pattern, "it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
-        // If '\' is not the escape character, need convert to literal. 
+        // If '\' is not the escape character, need convert to literal.
         case '\\' => out ++= Pattern.quote(Character.toString('\\'))
         // '.', '^' and '$' is not a meta character for SIMILAR TO.
         case '.' => out ++= Pattern.quote(Character.toString('.'))
