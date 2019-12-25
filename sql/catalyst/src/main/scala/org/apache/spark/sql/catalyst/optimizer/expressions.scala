@@ -384,22 +384,40 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 /**
  * Simplifies binary comparisons with semantically-equal expressions:
  * 1) Replace '<=>' with 'true' literal.
- * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
- * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
+ * 2) Replace '=', '<=', and '>=' with 'true' literal
+ *    if both operands are non-nullable or in constraints.
+ * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable or in constraints.
  */
-object SimplifyBinaryComparison extends Rule[LogicalPlan] with PredicateHelper {
+object SimplifyBinaryComparison
+  extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
+
+  private def canSimplifyWithConstraints(
+      plan: LogicalPlan, left: Expression, right: Expression): Boolean = {
+    def canSimplify(left: Expression, right: Expression): Boolean = {
+      !left.nullable && !right.nullable && left.semanticEquals(right)
+    }
+
+    if (SQLConf.get.constraintPropagationEnabled) {
+      canSimplify(left, right) || plan.constraints.exists {
+        case IsNotNull(e) => e.semanticEquals(left) && e.semanticEquals(right)
+        case _ => false
+      }
+    } else {
+      canSimplify(left, right)
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
+    case l: LogicalPlan => l transformExpressionsUp {
       // True with equality
       case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
-      case a EqualTo b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
-      case a GreaterThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) =>
-        TrueLiteral
-      case a LessThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
+      case a EqualTo b if canSimplifyWithConstraints(l, a, b) => TrueLiteral
+      case a GreaterThanOrEqual b if canSimplifyWithConstraints(l, a, b) => TrueLiteral
+      case a LessThanOrEqual b if canSimplifyWithConstraints(l, a, b) => TrueLiteral
 
       // False with inequality
-      case a GreaterThan b if !a.nullable && !b.nullable && a.semanticEquals(b) => FalseLiteral
-      case a LessThan b if !a.nullable && !b.nullable && a.semanticEquals(b) => FalseLiteral
+      case a GreaterThan b if canSimplifyWithConstraints(l, a, b) => FalseLiteral
+      case a LessThan b if canSimplifyWithConstraints(l, a, b) => FalseLiteral
     }
   }
 }

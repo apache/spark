@@ -70,6 +70,8 @@ class ExpressionSet protected(
 
   override def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
 
+  override def exists(f: Expression => Boolean): Boolean = baseSet.exists(f)
+
   override def +(elem: Expression): ExpressionSet = {
     val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
     newSet.add(elem)
