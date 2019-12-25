@@ -101,6 +101,7 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
   extends MockWorker(master.self, conf) {
 
   val launchExecutorReceived = new CountDownLatch(1)
+  val appIdsToLaunchExecutor = new mutable.HashSet[String]
   var failedCnt = 0
   override def receive: PartialFunction[Any, Unit] = {
     case LaunchExecutor(_, appId, execId, _, _, _, _) =>
@@ -108,6 +109,7 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
         launchExecutorReceived.countDown()
       }
       verifyMasterState(appId)
+      appIdsToLaunchExecutor += appId
       failedCnt += 1
       master.self.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
 
@@ -695,12 +697,12 @@ class MasterSuite extends SparkFunSuite
       // LaunchExecutor message should have been received in worker side
       assert(worker.launchExecutorReceived.await(10, TimeUnit.SECONDS))
 
-      val appId: String = worker.apps.head._1
       eventually(timeout(10.seconds)) {
+        val appIds = worker.appIdsToLaunchExecutor
         // Master would continually launch executors until reach MAX_EXECUTOR_RETRIES
         assert(worker.failedCnt == master.conf.get(MAX_EXECUTOR_RETRIES))
         // Master would remove the app if no executor could be launched for it
-        assert(!master.idToApp.contains(appId))
+        assert(master.idToApp.keySet.intersect(appIds).isEmpty)
       }
     } finally {
       if (worker != null) {
