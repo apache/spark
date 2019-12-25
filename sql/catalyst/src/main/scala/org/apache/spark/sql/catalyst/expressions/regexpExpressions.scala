@@ -177,7 +177,8 @@ case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
-  override def getEscapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
+  override def getEscapeFunc: String =
+    StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
 
 }
 
@@ -303,11 +304,12 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   since = "1.0.0")
 // scalastyle:on line.contains.tab
 case class SimilarTo(left: Expression, right: Expression, escapeChar: Char = '\\')
-  extends escapeRegexExpression(escapeChar) {
+  extends EscapeRegexExpression(escapeChar) {
 
   override def escape(v: String): String = StringUtils.escapeSimilarRegex(v, escapeChar)
 
-  override def getEscapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeSimilarRegex"
+  override def getEscapeFunc: String =
+    StringUtils.getClass.getName.stripSuffix("$") + ".escapeSimilarRegex"
 
 }
 
