@@ -130,6 +130,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(catalogManager),
+      GetCurrentCatalog(catalogManager),
       RewriteDistinctAggregates,
       ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -220,6 +221,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions.ruleName ::
       ComputeCurrentTime.ruleName ::
       GetCurrentDatabase(catalogManager).ruleName ::
+      GetCurrentCatalog(catalogManager).ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::

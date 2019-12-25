@@ -88,3 +88,14 @@ case class GetCurrentDatabase(catalogManager: CatalogManager) extends Rule[Logic
     }
   }
 }
+
+/** Replaces the expression of [[CurrentCatalog]] with the current catalog name. */
+case class GetCurrentCatalog(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val currentCatalog = catalogManager.currentCatalog.name()
+
+    plan transformAllExpressions {
+      case CurrentCatalog() => Literal.create(currentCatalog, StringType)
+    }
+  }
+}
