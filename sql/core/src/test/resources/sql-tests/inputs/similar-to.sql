@@ -71,3 +71,7 @@ SELECT '5i20' SIMILAR TO '(\\d)+' AS `false`;
 SELECT '5220' SIMILAR TO '(\\D)+' AS `false`;
 
 SELECT '@i(L' SIMILAR TO '(\\D)+' AS `true`;
+
+SELECT '@i(L' SIMILAR TO null;
+
+SELECT 'ab_7' SIMILAR TO null ESCAPE '\\';
