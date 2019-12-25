@@ -67,11 +67,11 @@ private class AsyncEventQueue(
   /** A counter for dropped events. It will be reset every time we log it. */
   private val droppedEventsCounter = new AtomicLong(0L)
 
-  /** A counter to keep dropped events count last time it was logged */
+  /** A counter to keep number of dropped events last time it was logged */
   private var lastDroppedEventsCounter: Long = 0L
 
   /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = new AtomicLong(0L)
+  @volatile private val lastReportTimestamp = new AtomicLong(0L)
 
   private val logDroppedEvent = new AtomicBoolean(false)
 
@@ -175,7 +175,7 @@ private class AsyncEventQueue(
     val curTime = System.currentTimeMillis()
     if (droppedCount > 0) {
       // Don't log too frequently
-      if (curTime - lastReportTime >= 60 * 1000) {
+      if (curTime - lastReportTime >= LOGGING_INTERVAL) {
         // There may be multiple threads trying to logging dropped events,
         // Use 'compareAndSet' to make sure only one thread can win.
         // After set the 'lastReportTimestamp', the next time we come here will
@@ -224,5 +224,7 @@ private class AsyncEventQueue(
 private object AsyncEventQueue {
 
   val POISON_PILL = new SparkListenerEvent() { }
+
+  val LOGGING_INTERVAL = 60 * 1000
 
 }
