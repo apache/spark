@@ -2932,6 +2932,7 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
     Centering and scaling happen independently on each feature by computing the relevant
     statistics on the samples in the training set. Median and quantile range are then
     stored to be used on later data using the transform method.
+    Note that NaN values are ignored in the computation of medians and ranges.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> data = [(0, Vectors.dense([0.0, 0.0]),),
