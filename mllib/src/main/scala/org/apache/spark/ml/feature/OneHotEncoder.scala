@@ -282,7 +282,7 @@ class OneHotEncoderModel private[ml] (
       if (idx < size) {
         Vectors.sparse(size, Array(idx.toInt), Array(1.0))
       } else {
-        Vectors.sparse(size, Array.empty[Int], Array.empty[Double])
+        Vectors.sparse(size, Array.emptyIntArray, Array.emptyDoubleArray)
       }
     }
   }

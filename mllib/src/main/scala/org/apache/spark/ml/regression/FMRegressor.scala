@@ -632,8 +632,8 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
         val gardSize = data.indices.length * factorSize +
           (if (fitLinear) data.indices.length else 0) +
           (if (fitIntercept) 1 else 0)
-        val gradIndex = Array.fill(gardSize)(0)
-        val gradValue = Array.fill(gardSize)(0.0)
+        val gradIndex = Array.ofDim[Int](gardSize)
+        val gradValue = Array.ofDim[Double](gardSize)
         var gradI = 0
         val vWeightsSize = numFeatures * factorSize
 
@@ -658,7 +658,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 
         OldVectors.sparse(weights.size, gradIndex, gradValue)
       case data: OldLinalg.DenseVector =>
-        val gradient = Array.fill(weights.size)(0.0)
+        val gradient = Array.ofDim[Double](weights.size)
         val vWeightsSize = numFeatures * factorSize
 
         if (fitIntercept) gradient(weights.size - 1) += 1.0

@@ -800,7 +800,7 @@ private[spark] object RandomForest extends Logging with Serializable {
           }
           // Find best split.
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { case splitIdx =>
+            Range(0, numSplits).map { splitIdx =>
               val leftChildStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
               val rightChildStats =
@@ -835,7 +835,7 @@ private[spark] object RandomForest extends Logging with Serializable {
            *
            * centroidForCategories is a list: (category, centroid)
            */
-          val centroidForCategories = Range(0, numCategories).map { case featureValue =>
+          val centroidForCategories = Range(0, numCategories).map { featureValue =>
             val categoryStats =
               binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
             val centroid = if (categoryStats.count != 0) {

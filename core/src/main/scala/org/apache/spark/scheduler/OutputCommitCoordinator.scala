@@ -56,7 +56,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   private case class TaskIdentifier(stageAttempt: Int, taskAttempt: Int)
 
   private case class StageState(numPartitions: Int) {
-    val authorizedCommitters = Array.fill[TaskIdentifier](numPartitions)(null)
+    val authorizedCommitters = Array.ofDim[TaskIdentifier](numPartitions)
     val failures = mutable.Map[Int, mutable.Set[TaskIdentifier]]()
   }
 
