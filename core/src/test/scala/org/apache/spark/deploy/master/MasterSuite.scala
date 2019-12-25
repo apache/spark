@@ -97,30 +97,41 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   }
 }
 
+// This class is designed to handle the lifecycle of only one application.
 class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkConf)
-  extends MockWorker(master.self, conf) {
+  extends MockWorker(master.self, conf) with Eventually {
 
+  val appRegistered = new CountDownLatch(1)
   val launchExecutorReceived = new CountDownLatch(1)
   val appIdsToLaunchExecutor = new mutable.HashSet[String]
   var failedCnt = 0
+
   override def receive: PartialFunction[Any, Unit] = {
+    case LaunchDriver(driverId, desc, resources_) =>
+      drivers += driverId
+      driverResources(driverId) = resources_.map(r => (r._1, r._2.addresses.toSet))
+      master.self.send(RegisterApplication(appDesc, newDriver(driverId)))
+
+      // Below code doesn't make driver stuck, as newDriver opens another rpc endpoint for
+      // handling driver related messages. It guarantees registering application is done
+      // before handling LaunchExecutor message.
+      eventually(timeout(10.seconds)) {
+        // an app would be registered with Master once Driver set up
+        assert(apps.nonEmpty)
+        assert(master.idToApp.keySet.intersect(apps.keySet) == apps.keySet)
+      }
+
+      appRegistered.countDown()
     case LaunchExecutor(_, appId, execId, _, _, _, _) =>
       if (failedCnt == 0) {
         launchExecutorReceived.countDown()
       }
-      verifyMasterState(appId)
+      assert(master.idToApp.contains(appId))
       appIdsToLaunchExecutor += appId
       failedCnt += 1
       master.self.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
 
     case otherMsg => super.receive(otherMsg)
-  }
-
-  private def verifyMasterState(appId: String): Unit = {
-    // The app would be registered with Master once Driver set up.
-    // We verify the state of Master here to avoid timing issue, as it guarantees the verification
-    // will run before Master changes the status of app to fail.
-    assert(master.idToApp.contains(appId))
   }
 }
 
@@ -693,6 +704,9 @@ class MasterSuite extends SparkFunSuite
       val driver = DeployTestUtils.createDriverDesc()
       // mimic DriverClient to send RequestSubmitDriver to master
       master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
+
+      // A new application should be registered
+      assert(worker.appRegistered.await(10, TimeUnit.SECONDS))
 
       // LaunchExecutor message should have been received in worker side
       assert(worker.launchExecutorReceived.await(10, TimeUnit.SECONDS))
