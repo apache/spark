@@ -127,8 +127,7 @@ sealed trait Vector extends Serializable {
    *          the vector with type `Int`, and the second parameter is the corresponding value
    *          with type `Double`.
    */
-  @Since("3.0.0")
-  def foreach(f: (Int, Double) => Unit): Unit =
+  private[spark] def foreach(f: (Int, Double) => Unit): Unit =
     iterator.foreach { case (i, v) => f(i, v) }
 
   /**
@@ -149,8 +148,7 @@ sealed trait Vector extends Serializable {
    *          the vector with type `Int`, and the second parameter is the corresponding value
    *          with type `Double`.
    */
-  @Since("3.0.0")
-  def foreachNonZero(f: (Int, Double) => Unit): Unit =
+  private[spark] def foreachNonZero(f: (Int, Double) => Unit): Unit =
     nonZeroIterator.foreach { case (i, v) => f(i, v) }
 
   /**
@@ -239,21 +237,18 @@ sealed trait Vector extends Serializable {
   /**
    * Returns an iterator over all the elements of this vector.
    */
-  @Since("3.0.0")
-  def iterator: Iterator[(Int, Double)] =
+  private[spark] def iterator: Iterator[(Int, Double)] =
     Iterator.tabulate(size)(i => (i, apply(i)))
 
   /**
    * Returns an iterator over all the active elements of this vector.
    */
-  @Since("3.0.0")
-  def activeIterator: Iterator[(Int, Double)]
+  private[spark] def activeIterator: Iterator[(Int, Double)]
 
   /**
    * Returns an iterator over all the non-zero elements of this vector.
    */
-  @Since("3.0.0")
-  def nonZeroIterator: Iterator[(Int, Double)] =
+  private[spark] def nonZeroIterator: Iterator[(Int, Double)] =
     activeIterator.filter(_._2 != 0)
 }
 
@@ -764,14 +759,13 @@ class DenseVector @Since("1.0.0") (
     new newlinalg.DenseVector(values)
   }
 
-  @Since("3.0.0")
-  override def iterator: Iterator[(Int, Double)] = {
+  private[spark] override def iterator: Iterator[(Int, Double)] = {
     val localValues = values
     Iterator.tabulate(size)(i => (i, localValues(i)))
   }
 
-  @Since("3.0.0")
-  override def activeIterator: Iterator[(Int, Double)] = iterator
+  private[spark] override def activeIterator: Iterator[(Int, Double)] =
+    iterator
 }
 
 @Since("1.3.0")
@@ -981,8 +975,7 @@ class SparseVector @Since("1.0.0") (
     new newlinalg.SparseVector(size, indices, values)
   }
 
-  @Since("3.0.0")
-  override def iterator: Iterator[(Int, Double)] = {
+  private[spark] override def iterator: Iterator[(Int, Double)] = {
     val localSize = size
     val localNumActives = numActives
     val localIndices = indices
@@ -1007,8 +1000,7 @@ class SparseVector @Since("1.0.0") (
     }
   }
 
-  @Since("3.0.0")
-  override def activeIterator: Iterator[(Int, Double)] = {
+  private[spark] override def activeIterator: Iterator[(Int, Double)] = {
     val localIndices = indices
     val localValues = values
     Iterator.tabulate(numActives)(j => (localIndices(j), localValues(j)))
