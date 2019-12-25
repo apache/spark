@@ -65,6 +65,67 @@ abstract class StringRegexExpression extends BinaryExpression
   override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
+abstract class EscapeRegexExpression(escapeChar: Char) extends StringRegexExpression {
+
+  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+
+  override def toString: String = escapeChar match {
+    case '\\' => s"$left LIKE $right"
+    case c => s"$left LIKE $right ESCAPE '$c'"
+  }
+
+  protected def getEscapeFunc: String
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val patternClass = classOf[Pattern].getName
+    val escapeFunc = getEscapeFunc
+
+    if (right.foldable) {
+      val rVal = right.eval()
+      if (rVal != null) {
+        val regexStr =
+          StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
+        val pattern = ctx.addMutableState(patternClass, "patternLike",
+          v => s"""$v = $patternClass.compile("$regexStr");""")
+
+        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
+        val eval = left.genCode(ctx)
+        ev.copy(code = code"""
+          ${eval.code}
+          boolean ${ev.isNull} = ${eval.isNull};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
+          }
+        """)
+      } else {
+        ev.copy(code = code"""
+          boolean ${ev.isNull} = true;
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        """)
+      }
+    } else {
+      val pattern = ctx.freshName("pattern")
+      val rightStr = ctx.freshName("rightStr")
+      // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
+      // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
+      // '\"' will cause exception 'Line break in literal not allowed'.
+      val newEscapeChar = if (escapeChar == '\"' || escapeChar == '\\') {
+        s"""\\\\\\$escapeChar"""
+      } else {
+        escapeChar
+      }
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+          String $rightStr = $eval2.toString();
+          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, '$newEscapeChar'));
+          ${ev.value} = $pattern.matcher($eval1.toString()).matches();
+        """
+      })
+    }
+  }
+}
+
 // scalastyle:off line.contains.tab
 /**
  * Simple RegEx pattern matching function
@@ -112,65 +173,12 @@ abstract class StringRegexExpression extends BinaryExpression
   since = "1.0.0")
 // scalastyle:on line.contains.tab
 case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
-  extends StringRegexExpression {
+  extends EscapeRegexExpression(escapeChar) {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
-  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+  override def getEscapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
 
-  override def toString: String = escapeChar match {
-    case '\\' => s"$left LIKE $right"
-    case c => s"$left LIKE $right ESCAPE '$c'"
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val patternClass = classOf[Pattern].getName
-    val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
-
-    if (right.foldable) {
-      val rVal = right.eval()
-      if (rVal != null) {
-        val regexStr =
-          StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-        val pattern = ctx.addMutableState(patternClass, "patternLike",
-          v => s"""$v = $patternClass.compile("$regexStr");""")
-
-        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
-        val eval = left.genCode(ctx)
-        ev.copy(code = code"""
-          ${eval.code}
-          boolean ${ev.isNull} = ${eval.isNull};
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
-          }
-        """)
-      } else {
-        ev.copy(code = code"""
-          boolean ${ev.isNull} = true;
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        """)
-      }
-    } else {
-      val pattern = ctx.freshName("pattern")
-      val rightStr = ctx.freshName("rightStr")
-      // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
-      // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
-      // '\"' will cause exception 'Line break in literal not allowed'.
-      val newEscapeChar = if (escapeChar == '\"' || escapeChar == '\\') {
-        s"""\\\\\\$escapeChar"""
-      } else {
-        escapeChar
-      }
-      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        s"""
-          String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, '$newEscapeChar'));
-          ${ev.value} = $pattern.matcher($eval1.toString()).matches();
-        """
-      })
-    }
-  }
 }
 
 // scalastyle:off line.contains.tab
@@ -250,6 +258,57 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       })
     }
   }
+}
+
+// scalastyle:off line.contains.tab
+@ExpressionDescription(
+  usage = "str _FUNC_ regexp[ ESCAPE escape] - Returns true if `str` matches `regexp` with " +
+    "`escape`, null if any arguments are null, false otherwise.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * regexp - a string expression. The regex string should be a Java regular expression.
+          Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
+          parser. For example, to match "\abc", a regular expression for `regexp` can be
+          "^\\abc$".
+          There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
+          fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+      * escape - an character added since Spark 3.0. The default escape character is the '\'.
+          If an escape character precedes a special symbol or another escape character, the
+          following character is matched literally. It is invalid to escape any other character.
+  """,
+  examples = """
+    Examples:
+      > SELECT 'abc' SIMILAR TO '%(b|d)%';
+      true
+      > SELECT 'abc' SIMILAR TO '(b|c)%';
+      false
+      > SELECT '|bd' SIMILAR TO '\\|(b|d)*' ESCAPE '\\';
+      true
+      > SELECT '|bd' SIMILAR TO '\\|(b|d)*' ESCAPE '#';
+      false
+      > SELECT '|bd' SIMILAR TO '#|(b|d)*' ESCAPE '#';
+      true
+  """,
+  note = """
+    [[SimilarTo]] is similar to [[RLike]], but with the following differences:
+    1. The SIMILAR TO operator returns true only if its pattern matches the entire string,
+      unlike [[Rlike]] behavior, where the pattern can match any portion of the string.
+    2. The regex string allow uses _ and % as wildcard characters denoting any single character and
+      any string, respectively (these are comparable to . and .* in POSIX regular expressions).
+    3. The regex string allow uses escape character like [[Like]] behavior.
+    4. The period (.) is not a metacharacter for [[SimilarTo]].
+  """,
+  since = "1.0.0")
+// scalastyle:on line.contains.tab
+case class SimilarTo(left: Expression, right: Expression, escapeChar: Char = '\\')
+  extends escapeRegexExpression(escapeChar) {
+
+  override def escape(v: String): String = StringUtils.escapeSimilarRegex(v, escapeChar)
+
+  override def getEscapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeSimilarRegex"
+
 }
 
 /**
