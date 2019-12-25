@@ -254,19 +254,21 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
 /**
  * [[SimilarTo]] is similar to [[RLike]], but with the following differences:
- * 1. The regex string allow uses _ and % as wildcard characters denoting any single character and
+ * 1. The SIMILAR TO operator returns true only if its pattern matches the entire string,
+ *    unlike [[Rlike]] behavior, where the pattern can match any portion of the string.
+ * 2. The regex string allow uses _ and % as wildcard characters denoting any single character and
  *    any string, respectively (these are comparable to . and .* in POSIX regular expressions).
- * 2. The regex string allow uses escape character references [[Like]].
- * 3. The period (.) is not a metacharacter for [[SimilarTo]].
+ * 3. The regex string allow uses escape character like [[Like]] behavior.
+ * 4. The period (.) is not a metacharacter for [[SimilarTo]].
  */
 object SimilarTo {
   def apply(left: Expression, right: Expression, escapeChar: Char = '\\'): StringRegexExpression = {
     new RLike(left, right) {
-      override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
+      override def escape(v: String): String = StringUtils.escapeSimilarRegex(v, escapeChar)
+      override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
     }
   }
 }
-
 
 /**
  * Splits str around matches of the given regex.
