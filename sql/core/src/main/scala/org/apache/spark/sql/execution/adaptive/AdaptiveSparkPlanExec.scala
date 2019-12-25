@@ -209,8 +209,8 @@ case class AdaptiveSparkPlanExec(
 
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
-      executionId.foreach(onUpdatePlan)
       isFinalPlan = true
+      executionId.foreach(onUpdatePlan)
       logDebug(s"Final plan: $currentPhysicalPlan")
     }
     currentPhysicalPlan
