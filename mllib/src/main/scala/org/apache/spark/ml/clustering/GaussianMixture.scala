@@ -382,8 +382,10 @@ class GaussianMixture @Since("2.0.0") (
     val spark = dataset.sparkSession
     import spark.implicits._
 
-    val sc = spark.sparkContext
-    val numClusters = $(k)
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    require(numFeatures < GaussianMixture.MAX_NUM_FEATURES, s"GaussianMixture cannot handle more " +
+      s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
+      s" matrix is quadratic in the number of features.")
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
 
@@ -401,12 +403,8 @@ class GaussianMixture @Since("2.0.0") (
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    // Extract the number of features.
-    val numFeatures = MetadataUtils.getNumFeatures(dataset.schema($(featuresCol)))
-      .getOrElse(instances.first()._1.size)
-    require(numFeatures < GaussianMixture.MAX_NUM_FEATURES, s"GaussianMixture cannot handle more " +
-      s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
-      s" matrix is quadratic in the number of features.")
+    val sc = spark.sparkContext
+    val numClusters = $(k)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
