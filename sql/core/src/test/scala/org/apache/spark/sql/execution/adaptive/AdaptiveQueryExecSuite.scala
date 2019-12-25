@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution.adaptive
 import java.io.File
 import java.net.URI
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -39,6 +40,21 @@ class AdaptiveQueryExecSuite
   setupTestData()
 
   private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
+    var finalPlanCnt = 0
+    val listener = new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
+            if (sparkPlanInfo.simpleString.startsWith(
+              "AdaptiveSparkPlan(isFinalPlan=true)")) {
+              finalPlanCnt += 1
+            }
+          case _ => // ignore other events
+        }
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+
     val dfAdaptive = sql(query)
     val planBefore = dfAdaptive.queryExecution.executedPlan
     assert(planBefore.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=false)"))
@@ -49,6 +65,11 @@ class AdaptiveQueryExecSuite
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
+
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    assert(finalPlanCnt == 1)
+    spark.sparkContext.removeSparkListener(listener)
+
     val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
     val exchanges = adaptivePlan.collect {
       case e: Exchange => e
