@@ -28,7 +28,6 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -110,29 +109,20 @@ class QuantileTransform(override val uid: String)
     transformSchema(dataset.schema, logging = true)
 
     val n = $(numQuantiles)
-    val localRelativeError = $(relativeError)
-
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(inputCol))
     val vectors = dataset.select($(inputCol)).rdd.map {
-      case Row(vec: Vector) => vec
+      case Row(vec: Vector) =>
+        require(vec.size == numFeatures,
+          s"Number of dimensions must be $numFeatures but got ${vec.size}")
+        vec
     }
-    val numFeatures = vectors.first().size
 
-    val quantiles = vectors.mapPartitions { iter =>
-      if (iter.hasNext) {
-        iter.flatMap { vec =>
-          Iterator.range(0, numFeatures).map(i => (i, vec(i))).filter(!_._2.isNaN)
-             // add NaN for each feature as the indication of the end of partition
-        } ++ Iterator.range(0, numFeatures).map((_, Double.NaN))
-      } else Iterator.empty
-    }.aggregateByKey(
-      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, localRelativeError))(
-      // compress the QuantileSummaries at the end of partition
-      seqOp = (s, v) => if (v.isNaN) s.compress else s.insert(v),
-      combOp = (s1, s2) => s1.merge(s2)
-    ).mapValues { s =>
-      val q = Array.tabulate(n)(i => s.query(i.toDouble / (n - 1)).get)
-      Vectors.dense(q)
-    }.collect().sortBy(_._1).map(_._2)
+    val quantiles = RobustScaler
+      .computeSummaries(vectors, numFeatures, $(relativeError))
+      .mapValues { s =>
+        val q = Array.tabulate(n)(i => s.query(i.toDouble / (n - 1)).get)
+        Vectors.dense(q)
+      }.collect().sortBy(_._1).map(_._2)
     require(quantiles.length == numFeatures,
       "QuantileSummaries on some dimensions are missing")
 
@@ -140,8 +130,9 @@ class QuantileTransform(override val uid: String)
       .setParent(this))
   }
 
-  override def copy(extra: ParamMap): QuantileTransform =
+  override def copy(extra: ParamMap): QuantileTransform = {
     defaultCopy(extra)
+  }
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
@@ -176,16 +167,15 @@ class QuantileTransformModel private[ml] (
     override val uid: String,
     val quantiles: Array[Vector])
   extends Model[QuantileTransformModel] with QuantileTransformParams with MLWritable {
-  require(quantiles.forall(_.size == quantiles.head.size))
 
   import QuantileTransform._
   import QuantileTransformModel._
 
-  val numFeatures: Int = quantiles.length
+  def numFeatures: Int = quantiles.length
 
   // Quantiles of references.
-  lazy val references: Vector = {
-    val n = $(numQuantiles)
+  def references: Vector = {
+    val n = quantiles.head.size
     Vectors.dense(Array.tabulate(n)(_.toDouble / (n - 1)))
   }
 
@@ -211,9 +201,13 @@ class QuantileTransformModel private[ml] (
       case Uniform => getUniformTransformFunc
       case Gaussian => getGaussianTransformFunc
     }
+    // transformed result of zero vector
+    val result0 = Array.tabulate(numFeatures)(i => func(i, 0.0))
     val transformer = udf { vec: Vector =>
       require(vec.size == numFeatures)
-      Vectors.dense(Array.tabulate(numFeatures)(i => func(i, vec(i))))
+      val result = result0.clone()
+      vec.foreachActive { case (i, v) => if (v != 0) result(i) = func(i, v) }
+      Vectors.dense(result)
     }
     dataset.withColumn($(outputCol), transformer(col($(inputCol))),
       outputSchema($(outputCol)).metadata)
@@ -260,7 +254,7 @@ class QuantileTransformModel private[ml] (
 
   override def toString: String = {
     s"QuantileTransformModel: uid=$uid, distribution=${$(distribution)}, " +
-      s"numQuantiles=${$(numQuantiles)}, numFeatures=$numFeatures"
+      s"numQuantiles=${quantiles.head.size}, numFeatures=$numFeatures"
   }
 }
 
@@ -311,4 +305,5 @@ object QuantileTransformModel extends MLReadable[QuantileTransformModel] {
   override def read: MLReader[QuantileTransformModel] = new QuantileTransformModelReader
 
   override def load(path: String): QuantileTransformModel = super.load(path)
+
 }
