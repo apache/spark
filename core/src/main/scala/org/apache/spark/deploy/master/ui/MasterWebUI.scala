@@ -34,7 +34,12 @@ class MasterWebUI(
   extends WebUI(master.securityMgr, master.securityMgr.getSSLOptions("standalone"),
     requestedPort, master.conf, name = "MasterUI") with Logging {
 
-  val masterEndpointRef = master.self
+  val masterEndpointRef = {
+    while (master.self == null) {
+      Thread.sleep(10)
+    }
+    master.self
+  }
   val killEnabled = master.conf.get(UI_KILL_ENABLED)
 
   initialize()

@@ -33,7 +33,12 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
-  private val workerEndpoint = parent.worker.self
+  private val workerEndpoint = {
+    while (parent.worker.self == null) {
+      Thread.sleep(10)
+    }
+    parent.worker.self
+  }
 
   override def renderJson(request: HttpServletRequest): JValue = {
     val workerState = workerEndpoint.askSync[WorkerStateResponse](RequestWorkerState)
