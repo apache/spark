@@ -526,9 +526,9 @@ object NullPropagation extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
         Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
-      case e @ AggregateExpression(Count(exprs), _, _, _) if exprs.forall(isNullLiteral) =>
+      case e @ AggregateExpression(Count(exprs), _, _, _, _) if exprs.forall(isNullLiteral) =>
         Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
-      case ae @ AggregateExpression(Count(exprs), _, false, _) if !exprs.exists(_.nullable) =>
+      case ae @ AggregateExpression(Count(exprs), _, false, _, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))
 
