@@ -171,6 +171,8 @@ abstract class EscapeRegexExpression(escapeChar: Char) extends StringRegexExpres
   """,
   note = """
     Use RLIKE to match with standard regular expressions.
+    Use SIMILAR TO, in addition to completing the functions of RLIKE, you can also use _ and
+      % as wildcards and escape character.
   """,
   since = "1.0.0")
 // scalastyle:on line.contains.tab
@@ -213,6 +215,8 @@ case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
   """,
   note = """
     Use LIKE to match with simple string pattern.
+    Use SIMILAR TO, in addition to completing the functions of RLIKE, you can also use _ and
+      % as wildcards and escape character.
   """,
   since = "1.0.0")
 // scalastyle:on line.contains.tab
@@ -302,6 +306,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
          any string, respectively (these are comparable to . and .* in POSIX regular expressions).
       3. The regex string allow uses escape character like [[Like]] behavior.
       4. '.', '^' and '$' is not a meta character for [[SimilarTo]].
+    Use LIKE to match with simple string pattern.
+    Use RLIKE to match with standard regular expressions.
   """,
   since = "3.0.0")
 // scalastyle:on line.contains.tab
