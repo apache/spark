@@ -424,7 +424,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   override def dataType: DataType = MapType(StringType, StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (Seq(pairDelim, keyValueDelim).exists(! _.foldable)) {
+    if (Seq(pairDelim, keyValueDelim).exists(!_.foldable)) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName's delimiters must be foldable.")
     } else {
       super.checkInputDataTypes()
@@ -454,17 +454,22 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
+    val keyValues = ctx.freshName("kvs")
+    val idx = ctx.freshName("i")
+
     nullSafeCodeGen(ctx, ev, (text, pd, kvd) =>
       s"""
-         |UTF8String[] kvs = $text.split($pd, -1);
-         |for (int i = 0; i < kvs.length; i++) {
-         |  UTF8String[] kv = kvs[i].split($kvd, 2);
+         |int $idx = 0;
+         |UTF8String[] $keyValues = $text.split($pd, -1);
+         |while ($idx < $keyValues.length) {
+         |  UTF8String[] kv = $keyValues[$idx].split($kvd, 2);
          |  UTF8String key = kv[0];
          |  UTF8String value = null;
          |  if (kv.length == 2) {
          |    value = kv[1];
          |  }
          |  $builderTerm.put(key, value);
+         |  $idx++;
          |}
          |${ev.value} = $builderTerm.build();
          |""".stripMargin
