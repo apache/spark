@@ -622,14 +622,15 @@ SELECT lpad('hi', 5, 'xy');
 SELECT lpad('hi', 5);
 SELECT lpad('hi', -5, 'xy');
 SELECT lpad('hello', 2);
+-- PostgreSQL return: hi:  because not implemented as per the lpad behaviours(In case of empty pad string, the return value is null)
 SELECT lpad('hi', 5, '');
 
 SELECT rpad('hi', 5, 'xy');
 SELECT rpad('hi', 5);
 SELECT rpad('hi', -5, 'xy');
 SELECT rpad('hello', 2);
-SELECT rpad('hi', 5, '');
 -- PostgreSQL return: hi:  because not implemented as per the rpad behaviours(In case of empty pad string, the return value is null)
+SELECT rpad('hi', 5, '');
 
 SELECT ltrim('zzzytrim', 'xyz');
 

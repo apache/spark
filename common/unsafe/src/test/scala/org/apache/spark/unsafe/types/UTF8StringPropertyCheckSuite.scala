@@ -168,8 +168,8 @@ class UTF8StringPropertyCheckSuite extends FunSuite with ScalaCheckDrivenPropert
       if (length <= origin.length) {
         origin.substring(0, length)
       } else {
-        if (pad.length == 0 && isLPad) return origin
-        if(pad.length == 0) return null
+        if (pad.length == 0) return null
+
         val toPad = length - origin.length
         val partPad = if (toPad % pad.length == 0) "" else pad.substring(0, toPad % pad.length)
         if (isLPad) {

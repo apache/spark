@@ -262,7 +262,7 @@ license: |
   
   - Since Spark 3.0, the function `percentile_approx` and its alias `approx_percentile` only accept integral value with range in `[1, 2147483647]` as its 3rd argument `accuracy`, fractional and string types are disallowed, e.g. `percentile_approx(10.0, 0.2, 1.8D)` will cause `AnalysisException`. In Spark version 2.4 and earlier, if `accuracy` is fractional or string value, it will be coerced to an int value, `percentile_approx(10.0, 0.2, 1.8D)` is operated as `percentile_approx(10.0, 0.2, 1)` which results in `10.0`.
 
-  - Since Spark 3.0, the `rpad` function returns `NULL` for the `empty pad` input. In Spark version 2.4 and earlier, this function gives `origin string` for the same input.
+  - Since Spark 3.0, the `rpad` and `lpad` function returns `NULL` for the `empty pad` input. In Spark version 2.4 and earlier, this functions gives `origin string` for the same input.
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was

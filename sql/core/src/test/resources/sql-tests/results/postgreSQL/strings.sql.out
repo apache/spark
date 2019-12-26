@@ -867,7 +867,7 @@ SELECT lpad('hi', 5, '')
 -- !query 105 schema
 struct<lpad(hi, 5, ):string>
 -- !query 105 output
-hi
+NULL
 
 
 -- !query 106
