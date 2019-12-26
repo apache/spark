@@ -113,9 +113,9 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
       master.self.send(RegisterApplication(appDesc, newDriver(driverId)))
 
       // Below code doesn't make driver stuck, as newDriver opens another rpc endpoint for
-      // handling driver related messages. It guarantees registering application is done
-      // before handling LaunchExecutor message.
-      eventually(timeout(10.seconds)) {
+      // handling driver related messages. To simplify logic, we will block handling
+      // LaunchExecutor message until we validate registering app succeeds.
+      eventually(timeout(5.seconds)) {
         // an app would be registered with Master once Driver set up
         assert(apps.nonEmpty)
         assert(master.idToApp.keySet.intersect(apps.keySet) == apps.keySet)
@@ -123,6 +123,8 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
 
       appRegistered.countDown()
     case LaunchExecutor(_, appId, execId, _, _, _, _) =>
+      assert(appRegistered.await(10, TimeUnit.SECONDS))
+
       if (failedCnt == 0) {
         launchExecutorReceived.countDown()
       }
@@ -704,9 +706,6 @@ class MasterSuite extends SparkFunSuite
       val driver = DeployTestUtils.createDriverDesc()
       // mimic DriverClient to send RequestSubmitDriver to master
       master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
-
-      // A new application should be registered
-      assert(worker.appRegistered.await(10, TimeUnit.SECONDS))
 
       // LaunchExecutor message should have been received in worker side
       assert(worker.launchExecutorReceived.await(10, TimeUnit.SECONDS))
