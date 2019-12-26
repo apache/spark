@@ -173,7 +173,7 @@ object GeneratorNestedColumnAliasing {
           Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
       }
 
-    case g: Generate if SQLConf.get.nestedPruningOnExpressions &&
+    case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
         canPruneGenerator(g.generator) =>
       NestedColumnAliasing.getAliasSubMap(g.generator.children).map {
         case (nestedFieldToAlias, attrToAliases) =>
