@@ -94,7 +94,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         BooleanSimplification,
         SimplifyConditionals,
         RemoveDispensableExpressions,
-        SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
         PruneFilters,
         SimplifyCasts,
@@ -115,6 +114,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Infer Filters", Once,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
+        Seq(SimplifyBinaryComparison) ++
         rulesWithoutInferFiltersFromConstraints: _*) :: Nil
     }
 
