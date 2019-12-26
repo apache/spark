@@ -21,18 +21,22 @@ import java.util.{Properties, Random}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.FileAlreadyExistsException
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.Assertions._
+import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ManualClock}
@@ -179,7 +183,12 @@ class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
   override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
 }
 
-class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logging {
+class TaskSetManagerSuite
+  extends SparkFunSuite
+  with LocalSparkContext
+  with PrivateMethodTester
+  with Eventually
+  with Logging {
   import TaskLocality.{ANY, PROCESS_LOCAL, NO_PREF, NODE_LOCAL, RACK_LOCAL}
 
   private val conf = new SparkConf
@@ -1893,5 +1902,61 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       Seq.empty[AccumulableInfo])
     manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
     assert(sched.taskSetsFailed.contains(taskSet.id))
+  }
+
+  test("SPARK-30359: Don't clear executorsPendingToRemove in CoarseGrainedSchedulerBackend.reset")
+  {
+    val conf = new SparkConf()
+      // use local-cluster mode in order to get CoarseGrainedSchedulerBackend
+      .setMaster("local-cluster[2, 1, 2048]")
+      // allow to set up at most two executors
+      .set("spark.cores.max", "2")
+      .setAppName("CoarseGrainedSchedulerBackend.reset")
+    sc = new SparkContext(conf)
+    val sched = sc.taskScheduler
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+    val Seq(exec0, exec1) = backend.getExecutorIds()
+
+    val taskSet = FakeTask.createTaskSet(2)
+    val stageId = taskSet.stageId
+    val stageAttemptId = taskSet.stageAttemptId
+    sched.submitTasks(taskSet)
+    val taskSetManagers = PrivateMethod[mutable.HashMap[Int, mutable.HashMap[Int, TaskSetManager]]](
+      Symbol("taskSetsByStageIdAndAttempt"))
+    // get the TaskSetManager
+    val manager = sched.invokePrivate(taskSetManagers()).get(stageId).get(stageAttemptId)
+
+    val task0 = manager.resourceOffer(exec0, "localhost", TaskLocality.NO_PREF)
+    val task1 = manager.resourceOffer(exec1, "localhost", TaskLocality.NO_PREF)
+    assert(task0.isDefined && task1.isDefined)
+    val (taskId0, index0) = (task0.get.taskId, task0.get.index)
+    val (taskId1, index1) = (task1.get.taskId, task1.get.index)
+    // set up two running tasks
+    assert(manager.taskInfos(taskId0).running)
+    assert(manager.taskInfos(taskId0).executorId === exec0)
+    assert(manager.taskInfos(taskId1).running)
+    assert(manager.taskInfos(taskId1).executorId === exec1)
+
+    val numFailures = PrivateMethod[Array[Int]](Symbol("numFailures"))
+    // no task failures yet
+    assert(manager.invokePrivate(numFailures())(index0) === 0)
+    assert(manager.invokePrivate(numFailures())(index1) === 0)
+
+    // task0 on exec0 should not count failures
+    backend.executorsPendingToRemove(exec0) = true
+    // task1 on exec1 should count failures
+    backend.executorsPendingToRemove(exec1) = false
+
+    backend.reset()
+
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      // executorsPendingToRemove should still be empty after reset()
+      assert(backend.executorsPendingToRemove.isEmpty)
+      assert(manager.invokePrivate(numFailures())(index0) === 0)
+      assert(manager.invokePrivate(numFailures())(index1) === 1)
+    }
+    sc.stop()
   }
 }
