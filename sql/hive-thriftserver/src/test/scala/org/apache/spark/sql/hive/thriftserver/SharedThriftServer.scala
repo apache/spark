@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 
-trait SharedThriftServer extends QueryTest with SharedSparkSession {
+trait SharedThriftServer extends SharedSparkSession {
 
   private var hiveServer2: HiveThriftServer2 = _
 
@@ -79,6 +79,8 @@ trait SharedThriftServer extends QueryTest with SharedSparkSession {
     sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, port.toString)
     hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
 
+    // Wait for thrift server to be ready to serve the query, via executing simple query
+    // till the query succeeds. See SPARK-30345 for more details.
     eventually(timeout(30.seconds), interval(1.seconds)) {
       withJdbcStatement { _.execute("SELECT 1") }
     }
