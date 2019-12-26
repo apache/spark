@@ -134,6 +134,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("explain output of physical plan should contain proper codegen stage ID") {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     checkKeywordsExist(sql(
       """
         |EXPLAIN SELECT t1.id AS a, t2.id AS b FROM

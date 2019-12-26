@@ -26,6 +26,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
@@ -33,7 +34,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
-class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
+class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   /**
@@ -91,6 +93,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("Aggregate metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     // Assume the execution plan is
     // ... -> HashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
     // -> HashAggregate(nodeId = 0)
@@ -136,6 +140,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("Aggregate metrics: track avg probe") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     // The executed plan looks like:
     // HashAggregate(keys=[a#61], functions=[count(1)], output=[a#61, count#71L])
     // +- Exchange hashpartitioning(a#61, 5)
@@ -180,6 +186,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("ObjectHashAggregate metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     // Assume the execution plan is
     // ... -> ObjectHashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
     // -> ObjectHashAggregate(nodeId = 0)
@@ -208,6 +216,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("Sort metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     // Assume the execution plan with node id is
     // Sort(nodeId = 0)
     //   Exchange(nodeId = 1)
@@ -231,6 +241,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("SortMergeJoin metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
@@ -254,6 +266,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("SortMergeJoin(outer) metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     // Because SortMergeJoin may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
@@ -280,6 +294,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("BroadcastHashJoin metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key", "value")
     // Assume the execution plan is
@@ -292,6 +308,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("ShuffledHashJoin metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2",
         SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
@@ -321,6 +339,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("BroadcastHashJoin(outer) metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
     val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
     // Assume the execution plan is
@@ -339,6 +359,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("BroadcastNestedLoopJoin metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
@@ -357,6 +379,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("BroadcastLeftSemiJoinHash metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
@@ -385,6 +409,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   test("SortMergeJoin(left-anti) metrics") {
+    // When enable AQE, the number of jobs is changed. So disable AQE here.
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     val anti = testData2.filter("a > 2")
     withTempView("antiData") {
       anti.createOrReplaceTempView("antiData")
@@ -502,7 +528,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   }
 
   private def collectNodeWithinWholeStage[T <: SparkPlan : ClassTag](plan: SparkPlan): Seq[T] = {
-    val stages = plan.collect {
+    val stages = collect(plan) {
       case w: WholeStageCodegenExec => w
     }
     assert(stages.length == 1, "The query plan should have one and only one whole-stage.")

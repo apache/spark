@@ -39,11 +39,31 @@ case class InsertAdaptiveSparkPlan(
 
   private val conf = adaptiveExecutionContext.session.sessionState.conf
 
+  private def whiteList = Seq(
+    "BroadcastHashJoin",
+    "BroadcastNestedLoopJoin",
+    "CoGroup",
+    "GlobalLimit",
+    "HashAggregate",
+    "ObjectHashAggregate",
+    "ShuffledHashJoin",
+    "SortAggregate",
+    "Sort",
+    "SortMergeJoin"
+  )
+
+  def whetherContainShuffle(plan: SparkPlan): Boolean = {
+    plan.collect {
+      case p: SparkPlan if (whiteList.contains(p.nodeName)) => p
+    }.nonEmpty
+  }
+
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
-    case _ if conf.adaptiveExecutionEnabled && supportAdaptive(plan) =>
+    case _ if conf.adaptiveExecutionEnabled && supportAdaptive(plan)
+      && whetherContainShuffle(plan) =>
       try {
         // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse. Fall
         // back to non-adaptive mode if adaptive execution is supported in any of the sub-queries.

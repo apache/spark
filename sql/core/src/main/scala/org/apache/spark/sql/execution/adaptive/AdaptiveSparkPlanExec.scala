@@ -176,7 +176,8 @@ case class AdaptiveSparkPlanExec(
             stage.resultOption = Some(res)
           case StageFailure(stage, ex) =>
             errors.append(
-              new SparkException(s"Failed to materialize query stage: ${stage.treeString}", ex))
+              new SparkException(s"Failed to materialize query stage: ${stage.treeString}." +
+                s" and the cause is ${ex.getMessage}", ex))
         }
 
         // In case of errors, we cancel all running stages and throw exception.
@@ -506,7 +507,8 @@ case class AdaptiveSparkPlanExec(
       }
     } finally {
       val ex = new SparkException(
-        "Adaptive execution failed due to stage materialization failures.", errors.head)
+        "Adaptive execution failed due to stage materialization failures." +
+          s" and the cause is ${errors.head.getMessage}", errors.head)
       errors.tail.foreach(ex.addSuppressed)
       cancelErrors.foreach(ex.addSuppressed)
       throw ex
