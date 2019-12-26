@@ -20,14 +20,10 @@ package org.apache.spark.sql.execution.command
 import java.io.File
 
 import org.apache.spark.{SparkException, SparkFiles}
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
-class RunnableCommandSuite extends SQLTestUtils {
-
-  override protected def spark: SparkSession =
-    SparkSession.builder().master("local").appName("test_session").getOrCreate()
+class RunnableCommandSuite extends SQLTestUtils with SharedSparkSession {
 
   test("Add Directory when ADD_DIRECTORY_USING_RECURSIVE not set to true") {
     withTempDir { dir =>
@@ -35,17 +31,15 @@ class RunnableCommandSuite extends SQLTestUtils {
           spark.sql(s"ADD FILE $dir")
         }.getMessage
       assert(msg.contains("is a directory and recursive is not turned on"))
-
     }
   }
 
   test("Add Directory when ADD_DIRECTORY_USING_RECURSIVE set to true") {
     withTempDir { testDir =>
-      val testFile1 = File.createTempFile("testFile", "1", testDir)
+      val testFile = File.createTempFile("testFile", "1", testDir)
       withSQLConf(SQLConf.ADD_DIRECTORY_USING_RECURSIVE.key -> "true") {
         spark.sql(s"ADD FILE $testDir")
-        val sep = File.separator
-        assert(new File(SparkFiles.get(testDir.getName + sep + testFile1.getName)).exists())
+        assert(new File(SparkFiles.get(s"${testDir.getName}/${testFile.getName}")).exists())
       }
     }
   }
