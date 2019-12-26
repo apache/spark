@@ -103,7 +103,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
     val envInfo = ui.store.environmentInfo()
     new v1.ApplicationEnvironmentInfo(
       envInfo.runtime,
-      Utils.redact(ui.conf, envInfo.classpathEntries),
+      Utils.redact(ui.conf, envInfo.sparkProperties),
       Utils.redact(ui.conf, envInfo.hadoopProperties),
       Utils.redact(ui.conf, envInfo.systemProperties),
       Utils.redact(ui.conf, envInfo.classpathEntries))
