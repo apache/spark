@@ -21,8 +21,8 @@ import java.io.IOException
 import java.net.URI
 import java.util.ServiceLoader
 
-import scala.annotation.tailrec
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -66,11 +66,6 @@ class EventLogFileCompactor(
   private var loadedLogPath: Path = _
 
   def compact(reader: EventLogFileReader): (CompactionResult.Value, Option[Long]) = {
-    doCompact(reader)
-  }
-
-  @tailrec
-  private def doCompact(reader: EventLogFileReader): (CompactionResult.Value, Option[Long]) = {
     if (loadedLogPath == null) {
       loadedLogPath = reader.rootPath
     } else {
@@ -92,25 +87,34 @@ class EventLogFileCompactor(
       return (CompactionResult.NOT_ENOUGH_FILES, None)
     }
 
-    try {
-      val builders = filterBuildersLoader.loadNewFiles(filesToCompact)
-      val filters = builders.map(_.createFilter())
-      val minScore = filters.flatMap(_.statistic()).map(calculateScore).min
+    val builders = loadFilesToFilterBuilder(filesToCompact)
+    val filters = builders.map(_.createFilter())
+    val minScore = filters.flatMap(_.statistic()).map(calculateScore).min
 
-      if (minScore < compactionThresholdScore) {
-        (CompactionResult.LOW_SCORE_FOR_COMPACTION, None)
-      } else {
-        val rewriter = new FilteredEventLogFileRewriter(sparkConf, hadoopConf, fs, filters)
-        rewriter.rewrite(filesToCompact)
-        cleanupCompactedFiles(filesToCompact)
-        (CompactionResult.SUCCESS, Some(RollingEventLogFilesWriter.getEventLogFileIndex(
-          filesToCompact.last.getPath.getName)))
-      }
+    if (minScore < compactionThresholdScore) {
+      (CompactionResult.LOW_SCORE_FOR_COMPACTION, None)
+    } else {
+      val rewriter = new FilteredEventLogFileRewriter(sparkConf, hadoopConf, fs, filters)
+      rewriter.rewrite(filesToCompact)
+      cleanupCompactedFiles(filesToCompact)
+      (CompactionResult.SUCCESS, Some(RollingEventLogFilesWriter.getEventLogFileIndex(
+        filesToCompact.last.getPath.getName)))
+    }
+  }
+
+  private def loadFilesToFilterBuilder(files: Seq[FileStatus]): Seq[EventFilterBuilder] = {
+    try {
+      filterBuildersLoader.loadNewFiles(files)
     } catch {
       case _: LowerIndexLoadRequested =>
         // reset loader and load again
         filterBuildersLoader = new EventFilterBuildersLoader(fs)
-        doCompact(reader)
+        loadFilesToFilterBuilder(files)
+
+      case NonFatal(e) =>
+        // reset loader before throwing exception, as filter builders aren't properly loaded
+        filterBuildersLoader = new EventFilterBuildersLoader(fs)
+        throw e
     }
   }
 

@@ -218,15 +218,23 @@ class RollingEventLogFilesFileReader(
   private lazy val appStatusFile = files.find(isAppStatusFile).get
 
   private lazy val eventLogFiles: Seq[FileStatus] = {
-    val eventLogFiles = files.filter(isEventLogFile).sortBy { status =>
+    val idxToEventLogFiles = files.map { status =>
       val filePath = status.getPath
-      var idx = getEventLogFileIndex(filePath.getName).toDouble
-      // trick to place compacted file later than normal file if index is same.
-      if (EventLogFileWriter.isCompacted(filePath)) {
-        idx += 0.1
+      if (isEventLogFile(filePath.getName)) {
+        getEventLogFileIndex(filePath.getName) -> status
+      } else {
+        -1L -> status
       }
-      idx
-    }
+    }.filter { case (idx, _) => idx >= 0 }
+
+    val eventLogFiles = idxToEventLogFiles.sortBy { case (idx, status) =>
+      // trick to place compacted file later than normal file if index is same.
+      if (EventLogFileWriter.isCompacted(status.getPath)) {
+        idx + 0.1
+      } else {
+        idx
+      }
+    }.map(_._2)
 
     val filesToRead = dropBeforeLastCompactFile(eventLogFiles)
     val indices = filesToRead.map { file => getEventLogFileIndex(file.getPath.getName) }
