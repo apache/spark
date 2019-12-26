@@ -65,9 +65,9 @@ abstract class StringRegexExpression extends BinaryExpression
   override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
-abstract class EscapeRegexExpression(escapeChar: Char) extends StringRegexExpression {
+abstract class EscapeRegexExpression extends StringRegexExpression {
 
-  def this() = this('\\')
+  protected def escapeChar: Char
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
@@ -177,7 +177,7 @@ abstract class EscapeRegexExpression(escapeChar: Char) extends StringRegexExpres
   since = "1.0.0")
 // scalastyle:on line.contains.tab
 case class Like(left: Expression, right: Expression, escapeChar: Char = '\\')
-  extends EscapeRegexExpression(escapeChar) {
+  extends EscapeRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
@@ -313,7 +313,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   since = "3.0.0")
 // scalastyle:on line.contains.tab
 case class SimilarTo(left: Expression, right: Expression, escapeChar: Char = '\\')
-  extends EscapeRegexExpression(escapeChar) {
+  extends EscapeRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeSimilarRegex(v, escapeChar)
 
