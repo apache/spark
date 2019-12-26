@@ -169,6 +169,8 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model = rf.fit(df)
 
     testPredictionModelSinglePrediction(model, df)
+    testClassificationModelSingleRawPrediction(model, df)
+    testProbClassificationModelSingleProbPrediction(model, df)
   }
 
   test("Fitting without numClasses in metadata") {
