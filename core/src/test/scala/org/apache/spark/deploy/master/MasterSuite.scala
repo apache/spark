@@ -108,8 +108,6 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
 
   override def receive: PartialFunction[Any, Unit] = {
     case LaunchDriver(driverId, desc, resources_) =>
-      drivers += driverId
-      driverResources(driverId) = resources_.map(r => (r._1, r._2.addresses.toSet))
       master.self.send(RegisterApplication(appDesc, newDriver(driverId)))
 
       // Below code doesn't make driver stuck, as newDriver opens another rpc endpoint for
