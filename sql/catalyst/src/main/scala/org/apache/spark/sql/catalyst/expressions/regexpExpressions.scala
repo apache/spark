@@ -301,7 +301,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       2. The regex string allow uses _ and % as wildcard characters denoting any single character and
          any string, respectively (these are comparable to . and .* in POSIX regular expressions).
       3. The regex string allow uses escape character like [[Like]] behavior.
-      4. The period (.) is not a metacharacter for [[SimilarTo]].
+      4. '.', '^' and '$' is not a meta character for [[SimilarTo]].
   """,
   since = "3.0.0")
 // scalastyle:on line.contains.tab
