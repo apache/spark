@@ -67,6 +67,8 @@ abstract class StringRegexExpression extends BinaryExpression
 
 abstract class EscapeRegexExpression(escapeChar: Char) extends StringRegexExpression {
 
+  def this() = this('\\')
+
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
   override def toString: String = escapeChar match {
