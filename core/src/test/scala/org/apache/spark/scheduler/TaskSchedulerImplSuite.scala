@@ -196,10 +196,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
-  test("SPARK-18886 Delay scheduling should not delay some executors indefinitely " +
-    "if one task is scheduled before delay timeout") {
-    val LOCALITY_WAIT_MS = 3000
-    val clock = new ManualClock
+  def setupTaskScheduler(clock: ManualClock): TaskSchedulerImpl = {
     val conf = new SparkConf()
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     val taskScheduler = new TaskSchedulerImpl(sc,
@@ -220,7 +217,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
       override def executorAdded(execId: String, host: String): Unit = {}
     }
-    val valueSer = SparkEnv.get.serializer.newInstance()
     taskScheduler.initialize(new FakeSchedulerBackend)
     val taskSet = FakeTask.createTaskSet(8, 1, 1,
       Seq(TaskLocation("host1", "exec1")),
@@ -234,110 +230,155 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     )
     taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
     taskScheduler.submitTasks(taskSet)
+    taskScheduler
+  }
 
-    // First offer host2, exec2: no task should be chosen due to bad data locality
-    assert(taskScheduler.resourceOffers(
-      IndexedSeq(WorkerOffer("exec2", "host2", 1)),
-      isAllFreeResources = true)
+  test("SPARK-18886 -  partial offers (isAllFreeResources = false) reset timer before " +
+    "any resources have been rejected") {
+    val clock = new ManualClock()
+    val taskScheduler = setupTaskScheduler(clock)
+    val advanceAmount = 2000
+
+    // by default, new partial resource (isAllFreeResources = false) offers reset timer
+    // if the resource is accepted
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // would advance to NODE_LOCAL locality if timer wasn't reset above
+    // Verifying this node local task is not accepted
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)))
       .flatten.isEmpty)
+  }
 
-    // Offer exec 1 (local) and exec 2 (no local), only exec 1 should be utilized
-    val taskDescriptions0 = taskScheduler
-      .resourceOffers(
-        IndexedSeq(WorkerOffer("exec1", "host1", 1), WorkerOffer("exec2", "host2", 1)),
-        isAllFreeResources = true)
-      .flatten
-    assert(taskDescriptions0.length === 1)
-    val task0 = taskDescriptions0.head
-    assert(task0.index === 0)
-    val result0 = new DirectTaskResult[Int](valueSer.serialize(0), Seq(), Array())
-    taskScheduler.statusUpdate(task0.taskId, TaskState.FINISHED, valueSer.serialize(result0))
+  test("SPARK-18886 -  delay scheduling timer is reset when it accepts all resources offered when" +
+    "isAllFreeResources = true") {
+    val clock = new ManualClock()
+    val taskScheduler = setupTaskScheduler(clock)
+    val advanceAmount = 2000
 
-    // clock advances, increasing data locality level to ANY
-    clock.advance(LOCALITY_WAIT_MS * 2)
-    val taskDescriptions1 = taskScheduler
-      .resourceOffers(
-        IndexedSeq(WorkerOffer("exec1", "host1", 1), WorkerOffer("exec2", "host2", 1)),
-        isAllFreeResources = true)
-      .flatten
-    assert(taskDescriptions1.length === 2)
-    // Local resource is utilized again
-    val task1 = taskDescriptions1.head
-    assert(task1.index === 1)
-    // Even though we launched a local task, we still utilize non-local exec2
-    // This is the behavior change to fix SPARK-18886. Also tested below in this same test
-    // This is because we have not utilized our 2 possible slots (exec1 + exec2) within
-    // the locality wait period. Timer should be reset, but not locality level of ANY.
-    val task2 = taskDescriptions1(1)
-    assert(task2.index === 2)
-
-    // Finish data local task on exec 1 (still 1 task running on exec 2)
-    val result1 = new DirectTaskResult[Int](valueSer.serialize(1), Seq(), Array())
-    taskScheduler.statusUpdate(task1.taskId, TaskState.FINISHED, valueSer.serialize(result1))
-
-    // Local resource will again be utilized. Data locality is reset to PROCESS_LOCAL
-    val taskDescriptions3 = taskScheduler
+    // timer is reset when tsm accepts all free resources offered to it
+    clock.advance(advanceAmount)
+    assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = true)
-      .flatten
-    assert(taskDescriptions3.length === 1)
-    val task3 = taskDescriptions3.head
-    assert(task3.index === 3)
-    // Complete task 2 and  task 3, no more tasks running
-    val result2 = new DirectTaskResult[Int](valueSer.serialize(2), Seq(), Array())
-    taskScheduler.statusUpdate(task2.taskId, TaskState.FINISHED, valueSer.serialize(result2))
-    val result3 = new DirectTaskResult[Int](valueSer.serialize(3), Seq(), Array())
-    taskScheduler.statusUpdate(task3.taskId, TaskState.FINISHED, valueSer.serialize(result3))
+      .flatten.length === 1)
 
-    // Non-local resource will not be utilized, since data locality was reset,
-    // and locality wait has not expired
-    assert(taskScheduler.resourceOffers(
-      IndexedSeq(WorkerOffer("exec2", "host2", 1)),
-      isAllFreeResources = true)
-      .flatten.isEmpty)
-
-    // Offer a total of 2 slots on exec 3, non are taken since non-local
-    assert(taskScheduler.resourceOffers(
-      IndexedSeq(WorkerOffer("exec3", "host3", 2)),
-      isAllFreeResources = true)
-      .flatten.isEmpty)
-
-    taskScheduler.executorLost("exec1", LossReasonPending)
-    taskScheduler.executorLost("exec2", LossReasonPending)
-
-    // clock advances, increasing data locality level to ANY
-    clock.advance(LOCALITY_WAIT_MS * 2)
-
-    // All resources, non-local and local, are accepted.
-    // Locality timer is reset and locality level is set to PROCESS_LOCAL
-    val taskDescriptions4 = taskScheduler
+    // would advance to NODE_LOCAL locality if timer wasn't reset above
+    // Verifying this node local task is not accepted
+    clock.advance(advanceAmount)
+    assert(taskScheduler
       .resourceOffers(
-        IndexedSeq(WorkerOffer("exec1", "host1", 1), WorkerOffer("exec3", "host3", 2)),
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)))
+      .flatten.isEmpty)
+  }
+
+  test("SPARK-18886 - partial resource offers (isAllFreeResources = false) reset " +
+    "time if last full resource offer (isAllResources = true) was accepted as well as any " +
+    "following partial resource offers") {
+    val clock = new ManualClock()
+    val taskScheduler = setupTaskScheduler(clock)
+    val advanceAmount = 2000
+
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = true)
-      .flatten
-    assert(taskDescriptions4.length === 3)
-    val task4 = taskDescriptions4.head
-    assert(task4.index === 4)
-    val task5 = taskDescriptions4(1)
-    assert(task5.index === 5)
-    val task6 = taskDescriptions4(2)
-    assert(task6.index === 6)
+      .flatten.length === 1)
 
-    // Finish data local task. Only 2 running tasks now
-    val result5 = new DirectTaskResult[Int](valueSer.serialize(5), Seq(), Array())
-    taskScheduler.statusUpdate(task5.taskId, TaskState.FINISHED, valueSer.serialize(result5))
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
 
-    // Non-local resource (exec3) will not be utilized, since data locality was reset,
-    // and locality wait has not expired
-    val taskDescriptions5 = taskScheduler.resourceOffers(
-      IndexedSeq(WorkerOffer("exec1", "host1", 1), WorkerOffer("exec3", "host3", 1)),
-      isAllFreeResources = true)
-      .flatten
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
 
-    assert(taskDescriptions5.length === 1)
-    val tasks7 = taskDescriptions5.head
-    assert(tasks7.index === 7)
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)))
+      .flatten.isEmpty)
+  }
+
+
+  // This tests two cases
+  // 1. partial resource offer doesn't reset timer after full resource offer had rejected resources
+  // 2. partial resource offer doesn't reset timer after partial resource offer
+  //    had rejected resources
+  test("SPARK-18886 - partial resource offers (isAllFreeResources = false) do not reset " +
+    "time if any offer was rejected since last full offer was fully accepted") {
+    val clock = new ManualClock()
+    val taskScheduler = setupTaskScheduler(clock)
+    val advanceAmount = 2000
+
+    // case 1 from test description above
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = true)
+      .flatten.isEmpty)
+
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // Even though we launched a local task above, we still utilize non-local exec2
+    // This is the behavior change to fix SPARK-18886.
+    // Locality level is NODE_LOCAL after this clock advance
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)))
+      .flatten.length === 1)
+
+
+    // case 2 from test description above
+    // Reset timer and locality level to PROCESS_LOCAL
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = true)
+      .flatten.length === 1)
+
+    // partial resource has rejected offer
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.isEmpty)
+
+    // This does not reset timer since last partial resource offer was rejected
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // Locality level is NODE_LOCAL after this clock advance
+    clock.advance(advanceAmount)
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)))
+      .flatten.length === 1)
   }
 
   test("Scheduler does not crash when tasks are not serializable") {
@@ -827,9 +868,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val tsm = stageToMockTaskSetManager(0)
 
     // submit an offer with one executor
-    var taskAttempts = taskScheduler.resourceOffers(
-      IndexedSeq(WorkerOffer("executor0", "host0", 1)),
-      isAllFreeResources = true).flatten
+    var taskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
 
     // Fail the running task
     val failedTask = taskAttempts.head
@@ -1045,12 +1086,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
 
     // Here is the main check of this test -- we have the same offers again, and we schedule it
-    // successfully.  Because the scheduler first tries to schedule with locality in mind, at first
-    // it won't schedule anything on executor1.  But despite that, we don't abort the job.  Then the
-    // scheduler tries for ANY locality, and successfully schedules tasks on executor1.
+    // successfully.  Because the scheduler tries to schedule with locality in mind, at first
+    // it won't schedule anything on executor1.  But despite that, we don't abort the job.
     val secondTaskAttempts = taskScheduler.resourceOffers(offers).flatten
-    assert(secondTaskAttempts.size == 2)
-    secondTaskAttempts.foreach { taskAttempt => assert("executor1" === taskAttempt.executorId) }
+    assert(secondTaskAttempts.isEmpty)
     assert(!failedTaskSet)
   }
 
@@ -1062,9 +1101,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       (0 until 2).map { _ => Seq(TaskLocation("host0", "executor2")) }: _*
     ))
 
-    val taskDescs = taskScheduler.resourceOffers(
-      IndexedSeq(WorkerOffer("executor0", "host0", 1), WorkerOffer("executor1", "host1", 1)),
-      isAllFreeResources = true).flatten
+    val taskDescs = taskScheduler.resourceOffers(IndexedSeq(
+      new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1)
+    )).flatten
     // only schedule one task because of locality
     assert(taskDescs.size === 1)
 

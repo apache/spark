@@ -98,6 +98,11 @@ private[spark] class TaskSchedulerImpl(
   // on this class.  Protected by `this`
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
+  // keyed by task set stage id
+  // value is true if there have been no resources rejected due to delay scheduling
+  // since the last "full" resource offer
+  private val noDelayScheduleRejects = new mutable.HashMap[Int, Boolean]()
+
   // Protected by `this`
   private[scheduler] val taskIdToTaskSetManager = new ConcurrentHashMap[Long, TaskSetManager]
   // Protected by `this`
@@ -319,6 +324,7 @@ private[spark] class TaskSchedulerImpl(
         taskSetsByStageIdAndAttempt -= manager.taskSet.stageId
       }
     }
+    noDelayScheduleRejects -= manager.taskSet.stageId
     manager.parent.removeSchedulable(manager)
     logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
       s" ${manager.parent.name}")
@@ -473,6 +479,19 @@ private[spark] class TaskSchedulerImpl(
     }.sum
   }
 
+  def minTaskLocality(l1: Option[TaskLocality], l2: Option[TaskLocality]) :
+  Option[TaskLocality] = {
+    if (l1.isEmpty) {
+      l2
+    } else if (l2.isEmpty) {
+      l1
+    } else if (l1.get < l2.get) {
+      l1
+    } else {
+      l2
+    }
+  }
+
   /**
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
@@ -553,34 +572,30 @@ private[spark] class TaskSchedulerImpl(
           s"number of available slots is $numBarrierSlotsAvailable.")
       } else {
         var launchedAnyTask = false
-        var delaySchedulingRejectedAnyTask = false
+        var hadAnyDelaySchedulingReject = false
         var globalMinLocality: Option[TaskLocality] = None
         // Record all the executor IDs assigned barrier tasks on.
         val addressesWithDescs = ArrayBuffer[(String, TaskDescription)]()
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
-            val (launched, hadDelayScheduleReject, minLocality) =
-              resourceOfferSingleTaskSet(taskSet,
-              currentMaxLocality, shuffledOffers, availableCpus,
+            val (launched, hadDelayScheduleReject, minLocality) = resourceOfferSingleTaskSet(
+              taskSet, currentMaxLocality, shuffledOffers, availableCpus,
               availableResources, tasks, addressesWithDescs)
             launchedTaskAtCurrentMaxLocality = launched
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
-            delaySchedulingRejectedAnyTask |= hadDelayScheduleReject
-            globalMinLocality =
-              if (minLocality.isEmpty) { globalMinLocality }
-              else if (globalMinLocality.isEmpty) {
-                minLocality
-              } else if (minLocality.get < globalMinLocality.get) {
-                minLocality
-              } else {
-                globalMinLocality
-              }
+            hadAnyDelaySchedulingReject |= hadDelayScheduleReject
+            globalMinLocality = minTaskLocality(globalMinLocality, minLocality)
           } while (launchedTaskAtCurrentMaxLocality)
         }
 
-        if (isAllFreeResources && !delaySchedulingRejectedAnyTask) {
-          taskSet.resetDelayScheduleTimer(globalMinLocality)
+        if (!hadAnyDelaySchedulingReject) {
+          if (isAllFreeResources || noDelayScheduleRejects.getOrElse(taskSet.stageId, true)) {
+            taskSet.resetDelayScheduleTimer(globalMinLocality)
+            noDelayScheduleRejects.update(taskSet.stageId, true)
+          }
+        } else {
+          noDelayScheduleRejects.update(taskSet.stageId, false)
         }
 
         if (!launchedAnyTask) {

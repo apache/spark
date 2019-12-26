@@ -395,7 +395,8 @@ private[spark] class TaskSetManager(
     resourceOfferInternal(execId, host, maxLocality, availableResources)._1
   }
 
-  def resetDelayScheduleTimer(minLocality: Option[TaskLocality.TaskLocality]): Unit = {
+  private[scheduler] def resetDelayScheduleTimer(
+      minLocality: Option[TaskLocality.TaskLocality]): Unit = {
     lastLaunchTime = clock.getTimeMillis()
     for (locality <- minLocality) {
       currentLocalityIndex = getLocalityIndex(locality)
