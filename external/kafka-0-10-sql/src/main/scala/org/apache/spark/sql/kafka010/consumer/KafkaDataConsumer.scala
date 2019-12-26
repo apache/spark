@@ -132,8 +132,6 @@ private[kafka010] class InternalKafkaConsumer(
   }
 }
 
-// TODO: consider changing this to normal class, as having mutable variables in
-//   case class sounds weird.
 /**
  * The internal object to store the fetched data from Kafka consumer and the next offset to poll.
  *
@@ -194,8 +192,6 @@ private[consumer] case class FetchedData(
   def offsetAfterPoll: Long = _offsetAfterPoll
 }
 
-// TODO: consider changing this to normal class, as having mutable variables in
-//   case class sounds weird.
 /**
  * The internal object returned by the `fetchRecord` method. If `record` is empty, it means it is
  * invisible (either a transaction message, or an aborted message when the consumer's
