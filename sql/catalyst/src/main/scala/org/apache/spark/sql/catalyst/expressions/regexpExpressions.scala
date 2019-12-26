@@ -273,37 +273,37 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       * regexp - a string expression. The regex string should be a Java regular expression.
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
+          "\\abc".
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "\abc".
       * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
   """,
   examples = """
     Examples:
-      > SELECT 'abc' SIMILAR TO '%(b|d)%';
+      > SET spark.sql.parser.escapedStringLiterals=true;
+      spark.sql.parser.escapedStringLiterals	true
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
       true
-      > SELECT 'abc' SIMILAR TO '(b|c)%';
-      false
-      > SELECT '|bd' SIMILAR TO '\\|(b|d)*' ESCAPE '\\';
+      > SET spark.sql.parser.escapedStringLiterals=false;
+      spark.sql.parser.escapedStringLiterals	false
+      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\\%SystemDrive\\%\\\\Users%';
       true
-      > SELECT '|bd' SIMILAR TO '\\|(b|d)*' ESCAPE '#';
-      false
-      > SELECT '|bd' SIMILAR TO '#|(b|d)*' ESCAPE '#';
+      > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/';
       true
   """,
   note = """
     [[SimilarTo]] is similar to [[RLike]], but with the following differences:
-    1. The SIMILAR TO operator returns true only if its pattern matches the entire string,
-      unlike [[Rlike]] behavior, where the pattern can match any portion of the string.
-    2. The regex string allow uses _ and % as wildcard characters denoting any single character and
-      any string, respectively (these are comparable to . and .* in POSIX regular expressions).
-    3. The regex string allow uses escape character like [[Like]] behavior.
-    4. The period (.) is not a metacharacter for [[SimilarTo]].
+      1. The SIMILAR TO operator returns true only if its pattern matches the entire string,
+         unlike [[Rlike]] behavior, where the pattern can match any portion of the string.
+      2. The regex string allow uses _ and % as wildcard characters denoting any single character and
+         any string, respectively (these are comparable to . and .* in POSIX regular expressions).
+      3. The regex string allow uses escape character like [[Like]] behavior.
+      4. The period (.) is not a metacharacter for [[SimilarTo]].
   """,
-  since = "1.0.0")
+  since = "3.0.0")
 // scalastyle:on line.contains.tab
 case class SimilarTo(left: Expression, right: Expression, escapeChar: Char = '\\')
   extends EscapeRegexExpression(escapeChar) {
