@@ -661,11 +661,12 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first().getSeq[Float](1)
         } { (ex, act, df, enc) =>
+          // After enable AQE, the order of result may be different. Here sortby the result.
           val expected = ex.transform(df).selectExpr("prediction")
-            .first().getFloat(0)
+            .sort("prediction").first().getFloat(0)
           testTransformerByGlobalCheckFunc(df, act, "prediction") {
             case rows: Seq[Row] =>
-              expected ~== rows.head.getFloat(0) absTol 1e-6
+              expected ~== rows.sortBy(_.getFloat(0)).head.getFloat(0) absTol 1e-6
           }(enc)
         }
     }
