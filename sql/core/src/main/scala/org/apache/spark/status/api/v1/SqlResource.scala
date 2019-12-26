@@ -18,37 +18,44 @@
 package org.apache.spark.status.api.v1
 
 import java.util.Date
-import javax.ws.rs.{GET, Path, PathParam, Produces}
+import javax.ws.rs.{DefaultValue, GET, Path, PathParam, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.sql.execution.ui.{SQLAppStatusStore, SQLExecutionUIData}
+import org.apache.spark.sql.execution.ui.{SQLAppStatusStore, SQLExecutionUIData, SQLPlanMetric}
 import org.apache.spark.ui.UIUtils
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class SqlResource extends BaseAppResource {
 
   @GET
-  def sqlList(): Seq[ExecutionData] = {
+  def sqlList(@QueryParam("details") @DefaultValue("false") details: Boolean):
+   Seq[ExecutionData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      sqlStore.executionsList().map(prepareExecutionData)
+      sqlStore.executionsList().map(prepareExecutionData(_, details))
     }
   }
 
   @GET
   @Path("{executionId:\\d+}")
-  def sql(@PathParam("executionId") execId: Long): ExecutionData = {
+  def sql(@PathParam("executionId") execId: Long,
+          @QueryParam("details") @DefaultValue("false") details: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData)
+        .map(prepareExecutionData(_, details))
         .getOrElse(throw new NotFoundException("unknown id: " + execId))
     }
   }
 
-  def prepareExecutionData(exec: SQLExecutionUIData): ExecutionData = {
+  def printableMetrics(metrics: Seq[SQLPlanMetric],
+                        metricValues: Map[Long, String]): Seq[(String, String)] = {
+    metrics.map(metric => (metric.name, metricValues.get(metric.accumulatorId).getOrElse("")))
+  }
+
+  def prepareExecutionData(exec: SQLExecutionUIData, details: Boolean): ExecutionData = {
     var running = Seq[Int]()
     var completed = Seq[Int]()
     var failed = Seq[Int]()
@@ -73,8 +80,11 @@ private[v1] class SqlResource extends BaseAppResource {
 
     val duration = UIUtils.formatDuration(
       exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime)
+    val planDetails = if (details) exec.physicalPlanDescription else ""
+    val metrics = if (details) printableMetrics(exec.metrics, exec.metricValues) else Seq.empty
     new ExecutionData(exec.executionId,
-      status, exec.description, UIUtils.formatDate(exec.submissionTime),
+      status, exec.description, planDetails, metrics,
+      UIUtils.formatDate(exec.submissionTime),
       duration, running, completed, failed)
   }
 }

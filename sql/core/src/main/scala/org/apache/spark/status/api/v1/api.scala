@@ -20,6 +20,8 @@ class ExecutionData (
     val id : Long,
     val status: String,
     val description: String,
+    val planDescription: String,
+    val metrics: Seq[(String, String)],
     val submissionTime: String,
     val duration: String,
     val runningJobIds: Seq[Int],
