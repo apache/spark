@@ -29,6 +29,7 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util._
 
@@ -218,6 +219,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
               case backend: CoarseGrainedSchedulerBackend =>
                 backend.driverEndpoint.send(RemoveExecutor(executorId,
                   SlaveLost(s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
+              case _: LocalSchedulerBackend =>
+                  // LocalSchedulerBackend is used locally and only has one single executor
               case _ =>
             }
           }
