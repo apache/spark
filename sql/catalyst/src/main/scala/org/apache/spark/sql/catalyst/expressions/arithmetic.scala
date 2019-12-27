@@ -77,17 +77,17 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev,
         interval => if (checkOverflow) {
-          s"$iu.negate($interval)"
+          s"$iu.negateExact($interval)"
         } else {
-          s"$iu.safeNegate($interval)"
+          s"$iu.negate($interval)"
         }
       )
   }
 
   protected override def nullSafeEval(input: Any): Any = dataType match {
     case CalendarIntervalType if checkOverflow =>
-      IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
-    case CalendarIntervalType => IntervalUtils.safeNegate(input.asInstanceOf[CalendarInterval])
+      IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
+    case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
     case _ => numeric.negate(input)
   }
 
@@ -232,16 +232,16 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def decimalMethod: String = "$plus"
 
-  override def calendarIntervalMethod: String = if (checkOverflow) "add" else "safeAdd"
+  override def calendarIntervalMethod: String = if (checkOverflow) "addExact" else "add"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
     case CalendarIntervalType if checkOverflow =>
-      IntervalUtils.add(
+      IntervalUtils.addExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
-      IntervalUtils.safeAdd(
+      IntervalUtils.add(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case _ => numeric.plus(input1, input2)
   }
@@ -264,16 +264,16 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
   override def decimalMethod: String = "$minus"
 
-  override def calendarIntervalMethod: String = if (checkOverflow) "subtract" else "safeSubtract"
+  override def calendarIntervalMethod: String = if (checkOverflow) "subtractExact" else "subtract"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
     case CalendarIntervalType if checkOverflow =>
-      IntervalUtils.subtract(
+      IntervalUtils.subtractExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
-      IntervalUtils.safeSubtract(
+      IntervalUtils.subtract(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case _ => numeric.minus(input1, input2)
   }

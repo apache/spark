@@ -138,7 +138,7 @@ object IntervalUtils {
     assert(input.length == input.trim.length)
     input match {
       case yearMonthPattern("-", yearStr, monthStr) =>
-        negate(toInterval(yearStr, monthStr))
+        negateExact(toInterval(yearStr, monthStr))
       case yearMonthPattern(_, yearStr, monthStr) =>
         toInterval(yearStr, monthStr)
       case _ =>
@@ -451,7 +451,7 @@ object IntervalUtils {
    * @return a new calendar interval instance with all it parameters negated from the origin one.
    * @throws ArithmeticException if the result overflows any field value
    */
-  def negate(interval: CalendarInterval): CalendarInterval = {
+  def negateExact(interval: CalendarInterval): CalendarInterval = {
     val months = Math.negateExact(interval.months)
     val days = Math.negateExact(interval.days)
     val microseconds = Math.negateExact(interval.microseconds)
@@ -464,7 +464,7 @@ object IntervalUtils {
    * @param interval the interval to be negated
    * @return a new calendar interval instance with all it parameters negated from the origin one.
    */
-  def safeNegate(interval: CalendarInterval): CalendarInterval = {
+  def negate(interval: CalendarInterval): CalendarInterval = {
     new CalendarInterval(-interval.months, -interval.days, -interval.microseconds)
   }
 
@@ -474,7 +474,7 @@ object IntervalUtils {
    * @throws ArithmeticException if the result overflows any field value
    *
    */
-  def add(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
+  def addExact(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
     val months = Math.addExact(left.months, right.months)
     val days = Math.addExact(left.days, right.days)
     val microseconds = Math.addExact(left.microseconds, right.microseconds)
@@ -484,7 +484,7 @@ object IntervalUtils {
   /**
    * Return a new calendar interval instance of the sum of two intervals.
    */
-  def safeAdd(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
+  def add(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
     val months = left.months + right.months
     val days = left.days + right.days
     val microseconds = left.microseconds + right.microseconds
@@ -497,7 +497,7 @@ object IntervalUtils {
    * @throws ArithmeticException if the result overflows any field value
    *
    */
-  def subtract(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
+  def subtractExact(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
     val months = Math.subtractExact(left.months, right.months)
     val days = Math.subtractExact(left.days, right.days)
     val microseconds = Math.subtractExact(left.microseconds, right.microseconds)
@@ -507,7 +507,7 @@ object IntervalUtils {
   /**
    * Return a new calendar interval instance of the left interval minus the right one.
    */
-  def safeSubtract(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
+  def subtract(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
     val months = left.months - right.months
     val days = left.days - right.days
     val microseconds = left.microseconds - right.microseconds
@@ -519,14 +519,14 @@ object IntervalUtils {
    *
    * @throws ArithmeticException if the result overflows any field value
    */
-  def multiply(interval: CalendarInterval, num: Double): CalendarInterval = {
+  def multiplyExact(interval: CalendarInterval, num: Double): CalendarInterval = {
     fromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
   }
 
   /**
    * Return a new calendar interval instance of the left interval times a multiplier.
    */
-  def safeMultiply(interval: CalendarInterval, num: Double): CalendarInterval = {
+  def multiply(interval: CalendarInterval, num: Double): CalendarInterval = {
     safeFromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
   }
 
@@ -535,7 +535,7 @@ object IntervalUtils {
    *
    * @throws ArithmeticException if the result overflows any field value or divided by zero
    */
-  def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
+  def divideExact(interval: CalendarInterval, num: Double): CalendarInterval = {
     if (num == 0) throw new ArithmeticException("divide by zero")
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
@@ -545,7 +545,7 @@ object IntervalUtils {
    *
    * @throws ArithmeticException if divided by zero
    */
-  def safeDivide(interval: CalendarInterval, num: Double): CalendarInterval = {
+  def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
     if (num == 0) throw new ArithmeticException("divide by zero")
     safeFromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }

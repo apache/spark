@@ -239,8 +239,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("negate") {
+    assert(negateExact(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
     assert(negate(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
-    assert(safeNegate(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
   }
 
   test("subtract one interval by another") {
@@ -248,7 +248,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
     val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
     val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
-    Seq[(CalendarInterval, CalendarInterval) => CalendarInterval](subtract, safeSubtract)
+    Seq[(CalendarInterval, CalendarInterval) => CalendarInterval](subtractExact, subtract)
       .foreach { func =>
         assert(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR) === func(input1, input2))
         assert(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR) === func(input3, input4))
@@ -260,14 +260,14 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
     val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
     val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
-    Seq[(CalendarInterval, CalendarInterval) => CalendarInterval](add, safeAdd).foreach { func =>
+    Seq[(CalendarInterval, CalendarInterval) => CalendarInterval](addExact, add).foreach { func =>
       assert(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR) === func(input1, input2))
       assert(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR) === func(input3, input4))
     }
   }
 
   test("multiply by num") {
-    Seq[(CalendarInterval, Double) => CalendarInterval](multiply, safeMultiply).foreach { func =>
+    Seq[(CalendarInterval, Double) => CalendarInterval](multiplyExact, multiply).foreach { func =>
       var interval = new CalendarInterval(0, 0, 0)
       assert(interval === func(interval, 0))
       interval = new CalendarInterval(123, 456, 789)
@@ -281,9 +281,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
 
     assert(CalendarInterval.MAX_VALUE ===
-      safeMultiply(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE))
+      multiply(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE))
     try {
-      multiply(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE)
+      multiplyExact(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE)
       fail("Expected to throw an exception on months overflow")
     } catch {
       case e: ArithmeticException => assert(e.getMessage.contains("overflow"))
@@ -291,7 +291,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("divide by num") {
-    Seq[(CalendarInterval, Double) => CalendarInterval](divide, safeDivide).foreach { func =>
+    Seq[(CalendarInterval, Double) => CalendarInterval](divideExact, divide).foreach { func =>
       var interval = new CalendarInterval(0, 0, 0)
       assert(interval === func(interval, 10))
       interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
@@ -457,37 +457,40 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("interval overflow check") {
-    intercept[ArithmeticException](negate(new CalendarInterval(Int.MinValue, 0, 0)))
-    assert(safeNegate(new CalendarInterval(Int.MinValue, 0, 0)) ===
+    intercept[ArithmeticException](negateExact(new CalendarInterval(Int.MinValue, 0, 0)))
+    assert(negate(new CalendarInterval(Int.MinValue, 0, 0)) ===
       new CalendarInterval(Int.MinValue, 0, 0))
-    intercept[ArithmeticException](negate(CalendarInterval.MIN_VALUE))
-    assert(safeNegate(CalendarInterval.MIN_VALUE) === CalendarInterval.MIN_VALUE)
-    intercept[ArithmeticException](add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, 1)))
-    intercept[ArithmeticException](add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 1, 0)))
-    intercept[ArithmeticException](add(CalendarInterval.MAX_VALUE, new CalendarInterval(1, 0, 0)))
-    assert(safeAdd(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, 1)) ===
+    intercept[ArithmeticException](negateExact(CalendarInterval.MIN_VALUE))
+    assert(negate(CalendarInterval.MIN_VALUE) === CalendarInterval.MIN_VALUE)
+    intercept[ArithmeticException](addExact(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(0, 0, 1)))
+    intercept[ArithmeticException](addExact(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(0, 1, 0)))
+    intercept[ArithmeticException](addExact(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(1, 0, 0)))
+    assert(add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, 1)) ===
       new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MinValue))
-    assert(safeAdd(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 1, 0)) ===
+    assert(add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 1, 0)) ===
       new CalendarInterval(Int.MaxValue, Int.MinValue, Long.MaxValue))
-    assert(safeAdd(CalendarInterval.MAX_VALUE, new CalendarInterval(1, 0, 0)) ===
+    assert(add(CalendarInterval.MAX_VALUE, new CalendarInterval(1, 0, 0)) ===
       new CalendarInterval(Int.MinValue, Int.MaxValue, Long.MaxValue))
 
-    intercept[ArithmeticException](subtract(CalendarInterval.MAX_VALUE,
+    intercept[ArithmeticException](subtractExact(CalendarInterval.MAX_VALUE,
       new CalendarInterval(0, 0, -1)))
-    intercept[ArithmeticException](subtract(CalendarInterval.MAX_VALUE,
+    intercept[ArithmeticException](subtractExact(CalendarInterval.MAX_VALUE,
       new CalendarInterval(0, -1, 0)))
-    intercept[ArithmeticException](subtract(CalendarInterval.MAX_VALUE,
+    intercept[ArithmeticException](subtractExact(CalendarInterval.MAX_VALUE,
       new CalendarInterval(-1, 0, 0)))
-    assert(safeSubtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, -1)) ===
+    assert(subtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, -1)) ===
       new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MinValue))
-    assert(safeSubtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, -1, 0)) ===
+    assert(subtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, -1, 0)) ===
       new CalendarInterval(Int.MaxValue, Int.MinValue, Long.MaxValue))
-    assert(safeSubtract(CalendarInterval.MAX_VALUE, new CalendarInterval(-1, 0, 0)) ===
+    assert(subtract(CalendarInterval.MAX_VALUE, new CalendarInterval(-1, 0, 0)) ===
       new CalendarInterval(Int.MinValue, Int.MaxValue, Long.MaxValue))
 
-    intercept[ArithmeticException](multiply(CalendarInterval.MAX_VALUE, 2))
-    assert(safeMultiply(CalendarInterval.MAX_VALUE, 2) === CalendarInterval.MAX_VALUE)
-    intercept[ArithmeticException](divide(CalendarInterval.MAX_VALUE, 0.5))
-    assert(safeDivide(CalendarInterval.MAX_VALUE, 0.5) === CalendarInterval.MAX_VALUE)
+    intercept[ArithmeticException](multiplyExact(CalendarInterval.MAX_VALUE, 2))
+    assert(multiply(CalendarInterval.MAX_VALUE, 2) === CalendarInterval.MAX_VALUE)
+    intercept[ArithmeticException](divideExact(CalendarInterval.MAX_VALUE, 0.5))
+    assert(divide(CalendarInterval.MAX_VALUE, 0.5) === CalendarInterval.MAX_VALUE)
   }
 }

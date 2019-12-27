@@ -135,9 +135,9 @@ case class MultiplyInterval(interval: Expression, num: Expression)
   override def nullSafeEval(interval: Any, num: Any): Any = {
     try {
       if (checkOverflow) {
-        multiply(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+        multiplyExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
       } else {
-        safeMultiply(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+        multiply(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
       }
     } catch {
       case _: ArithmeticException if !checkOverflow => null
@@ -147,7 +147,7 @@ case class MultiplyInterval(interval: Expression, num: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (interval, num) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      val operationName = if (checkOverflow) "multiply" else "safeMultiply"
+      val operationName = if (checkOverflow) "multiplyExact" else "multiply"
       s"""
         try {
           ${ev.value} = $iu.$operationName($interval, $num);
@@ -172,9 +172,9 @@ case class DivideInterval(interval: Expression, num: Expression)
     try {
       if (num == 0) return null
       if (checkOverflow) {
-        divide(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+        divideExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
       } else {
-        safeDivide(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+        divide(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
       }
     } catch {
       case _: ArithmeticException if !checkOverflow => null
@@ -184,7 +184,7 @@ case class DivideInterval(interval: Expression, num: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (interval, num) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      val operationName = if (checkOverflow) "divide" else "safeDivide"
+      val operationName = if (checkOverflow) "divideExact" else "divide"
       s"""
         try {
           if ($num == 0) {
