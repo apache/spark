@@ -216,6 +216,8 @@
                   url: sql-ref-syntax-aux-resource-mgmt-list-file.html
                 - text: LIST JAR
                   url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
+                - text: REFRESH
+                  url: sql-ref-syntax-aux-resource-mgmt-refresh.md
     - text: Functions
       url: sql-ref-functions.html
       subitems:
