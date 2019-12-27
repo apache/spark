@@ -766,7 +766,7 @@ class Analyzer(
           .getOrElse(u)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
-        CatalogV2Util.loadRelation(catalog, ident)
+        CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
@@ -883,7 +883,7 @@ class Analyzer(
       case u @ UnresolvedTable(SessionCatalogAndIdentifier(catalog, ident)) =>
         val newIdent: Identifier = withNewNamespace(ident)
         assert(newIdent.namespace.length == 1)
-        CatalogV2Util.loadRelation(catalog, newIdent)
+        CatalogV2Util.loadTable(catalog, newIdent)
           .map(ResolvedTable(catalog.asTableCatalog, newIdent, _))
           .getOrElse(u)
     }

@@ -256,11 +256,7 @@ private[sql] object CatalogV2Util {
     }
 
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
-    loadTable(catalog, ident) match {
-      case Some(v1Table: V1Table) => Some(DataSourceV1Relation.create(v1Table))
-      case Some(v2Table) => Some(DataSourceV2Relation.create(v2Table))
-      case None => None
-    }
+    loadTable(catalog, ident).map(DataSourceV2Relation.create)
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
