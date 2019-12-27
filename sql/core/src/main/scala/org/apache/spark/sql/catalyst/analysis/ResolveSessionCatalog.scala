@@ -55,13 +55,18 @@ class ResolveSessionCatalog(
           AlterTableAddColumnsCommand(tbl.asTableIdentifier, cols.map(convertToStructField))
       }.getOrElse {
         val changes = cols.map { col =>
-          TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
+          TableChange.addColumn(
+            col.name.toArray,
+            col.dataType,
+            true,
+            col.comment.orNull,
+            col.position.orNull)
         }
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
     case AlterTableAlterColumnStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), colName, dataType, comment) =>
+         nameParts @ SessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
           if (colName.length > 1) {
@@ -71,6 +76,10 @@ class ResolveSessionCatalog(
           if (dataType.isEmpty) {
             throw new AnalysisException(
               "ALTER COLUMN with v1 tables must specify new data type.")
+          }
+          if (pos.isDefined) {
+            throw new AnalysisException("" +
+              "ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.")
           }
           val builder = new MetadataBuilder
           // Add comment to metadata
@@ -87,13 +96,21 @@ class ResolveSessionCatalog(
             builder.build())
           AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName(0), newColumn)
       }.getOrElse {
+        val colNameArray = colName.toArray
         val typeChange = dataType.map { newDataType =>
-          TableChange.updateColumnType(colName.toArray, newDataType, true)
+          TableChange.updateColumnType(colNameArray, newDataType, true)
         }
         val commentChange = comment.map { newComment =>
-          TableChange.updateColumnComment(colName.toArray, newComment)
+          TableChange.updateColumnComment(colNameArray, newComment)
         }
-        createAlterTable(nameParts, catalog, tbl, typeChange.toSeq ++ commentChange)
+        val positionChange = pos.map { newPosition =>
+          TableChange.updateColumnPosition(colNameArray, newPosition)
+        }
+        createAlterTable(
+          nameParts,
+          catalog,
+          tbl,
+          typeChange.toSeq ++ commentChange ++ positionChange)
       }
 
     case AlterTableRenameColumnStatement(
@@ -566,7 +583,7 @@ class ResolveSessionCatalog(
 
   object SessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
+      case SessionCatalogAndIdentifier(catalog, ident) =>
         Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }

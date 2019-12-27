@@ -102,34 +102,6 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       }
     }
   }
-
-  test("temporary table identifier") {
-    Seq(
-      ("tbl", TableIdentifier("tbl")),
-      ("db.tbl", TableIdentifier("tbl", Some("db"))),
-      ("`db.tbl`", TableIdentifier("db.tbl")),
-      ("parquet.`file:/tmp/db.tbl`", TableIdentifier("file:/tmp/db.tbl", Some("parquet"))),
-      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
-          TableIdentifier("s3://buck/tmp/abc.json", Some("org.apache.spark.sql.json")))).foreach {
-        case (sqlIdent: String, expectedTableIdent: TableIdentifier) =>
-          // when there is no catalog and the namespace has one part, the rule should match
-          inside(parseMultipartIdentifier(sqlIdent)) {
-            case AsTemporaryViewIdentifier(ident) =>
-              ident shouldEqual expectedTableIdent
-          }
-    }
-
-    Seq("prod.func", "prod.db.tbl", "test.db.tbl", "ns1.ns2.tbl", "test.ns1.ns2.ns3.tbl")
-        .foreach { sqlIdent =>
-          inside(parseMultipartIdentifier(sqlIdent)) {
-            case AsTemporaryViewIdentifier(_) =>
-              fail("AsTemporaryViewIdentifier should not match when " +
-                  "the catalog is set or the namespace has multiple parts")
-            case _ =>
-              // expected
-          }
-    }
-  }
 }
 
 class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog with Inside {
@@ -144,10 +116,11 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
       catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
     })
     when(manager.currentCatalog).thenReturn(catalogs("prod"))
+    when(manager.currentNamespace).thenReturn(Array.empty[String])
     manager
   }
 
-  test("catalog object identifier") {
+  test("catalog and identifier") {
     Seq(
       ("tbl", catalogs("prod"), Seq.empty, "tbl"),
       ("db.tbl", catalogs("prod"), Seq("db"), "tbl"),
@@ -185,33 +158,5 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
         case _ =>
       }
     }
-  }
-
-  test("temporary table identifier") {
-    Seq(
-      ("tbl", TableIdentifier("tbl")),
-      ("db.tbl", TableIdentifier("tbl", Some("db"))),
-      ("`db.tbl`", TableIdentifier("db.tbl")),
-      ("parquet.`file:/tmp/db.tbl`", TableIdentifier("file:/tmp/db.tbl", Some("parquet"))),
-      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
-          TableIdentifier("s3://buck/tmp/abc.json", Some("org.apache.spark.sql.json")))).foreach {
-      case (sqlIdent: String, expectedTableIdent: TableIdentifier) =>
-        // when there is no catalog and the namespace has one part, the rule should match
-        inside(parseMultipartIdentifier(sqlIdent)) {
-          case AsTemporaryViewIdentifier(ident) =>
-            ident shouldEqual expectedTableIdent
-        }
-    }
-
-    Seq("prod.func", "prod.db.tbl", "test.db.tbl", "ns1.ns2.tbl", "test.ns1.ns2.ns3.tbl")
-        .foreach { sqlIdent =>
-          inside(parseMultipartIdentifier(sqlIdent)) {
-            case AsTemporaryViewIdentifier(_) =>
-              fail("AsTemporaryViewIdentifier should not match when " +
-                  "the catalog is set or the namespace has multiple parts")
-            case _ =>
-            // expected
-          }
-        }
   }
 }

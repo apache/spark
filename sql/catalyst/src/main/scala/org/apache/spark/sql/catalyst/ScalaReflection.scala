@@ -127,7 +127,7 @@ object ScalaReflection extends ScalaReflection {
       case other =>
         // There is probably a better way to do this, but I couldn't find it...
         val elementType = dataTypeFor(other).asInstanceOf[ObjectType].cls
-        java.lang.reflect.Array.newInstance(elementType, 1).getClass
+        java.lang.reflect.Array.newInstance(elementType, 0).getClass
 
     }
     ObjectType(cls)

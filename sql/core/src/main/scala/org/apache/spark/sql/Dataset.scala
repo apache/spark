@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
-import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -451,12 +450,14 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset where each record has been mapped on to the specified type. The
    * method used to map columns depend on the type of `U`:
-   *  - When `U` is a class, fields for the class will be mapped to columns of the same name
-   *    (case sensitivity is determined by `spark.sql.caseSensitive`).
-   *  - When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
-   *    be assigned to `_1`).
-   *  - When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
-   *    `DataFrame` will be used.
+   * <ul>
+   *   <li>When `U` is a class, fields for the class will be mapped to columns of the same name
+   *   (case sensitivity is determined by `spark.sql.caseSensitive`).</li>
+   *   <li>When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
+   *   be assigned to `_1`).</li>
+   *   <li>When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
+   *   `DataFrame` will be used.</li>
+   * </ul>
    *
    * If the schema of the Dataset does not match the desired `U` type, you can use `select`
    * along with `alias` or `as` to rearrange or rename as required.
@@ -522,66 +523,45 @@ class Dataset[T] private[sql](
   def printSchema(level: Int): Unit = println(schema.treeString(level))
   // scalastyle:on println
 
-  private def toExplainString(mode: ExplainMode): String = {
+  /**
+   * Prints the plans (logical and physical) with a format specified by a given explain mode.
+   *
+   * @param mode specifies the expected output format of plans.
+   *             <ul>
+   *               <li>`simple` Print only a physical plan.</li>
+   *               <li>`extended`: Print both logical and physical plans.</li>
+   *               <li>`codegen`: Print a physical plan and generated codes if they are
+   *                 available.</li>
+   *               <li>`cost`: Print a logical plan and statistics if they are available.</li>
+   *               <li>`formatted`: Split explain output into two sections: a physical plan outline
+   *                 and node details.</li>
+   *             </ul>
+   * @group basic
+   * @since 3.0.0
+   */
+  def explain(mode: String): Unit = {
     // Because temporary views are resolved during analysis when we create a Dataset, and
     // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
     // `ExplainCommand` here will probably output different query plans, compared to the results
     // of evaluation of the Dataset. So just output QueryExecution's query plans here.
-    val qe = ExplainCommandUtil.explainedQueryExecution(sparkSession, logicalPlan, queryExecution)
 
-    mode match {
-      case ExplainMode.Simple =>
-        qe.simpleString
-      case ExplainMode.Extended =>
-        qe.toString
-      case ExplainMode.Codegen =>
-        try {
-          org.apache.spark.sql.execution.debug.codegenString(queryExecution.executedPlan)
-        } catch {
-          case e: AnalysisException => e.toString
-        }
-      case ExplainMode.Cost =>
-        qe.stringWithStats
-      case ExplainMode.Formatted =>
-        qe.simpleString(formatted = true)
-    }
-  }
-
-  // This method intends to be called from PySpark DataFrame
-  private[sql] def toExplainString(mode: String): String = {
-    mode.toLowerCase(Locale.ROOT) match {
-      case "simple" => toExplainString(ExplainMode.Simple)
-      case "extended" => toExplainString(ExplainMode.Extended)
-      case "codegen" => toExplainString(ExplainMode.Codegen)
-      case "cost" => toExplainString(ExplainMode.Cost)
-      case "formatted" => toExplainString(ExplainMode.Formatted)
-      case _ => throw new IllegalArgumentException(s"Unknown explain mode: $mode. Accepted " +
-        "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
-    }
-  }
-
-  /**
-   * Prints the plans (logical and physical) with a format specified by a given explain mode.
-   *
-   * @group basic
-   * @since 3.0.0
-   */
-  def explain(mode: ExplainMode): Unit = {
     // scalastyle:off println
-    println(toExplainString(mode))
+    println(queryExecution.explainString(ExplainMode.fromString(mode)))
     // scalastyle:on println
   }
 
   /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
    *
+   * @param extended default `false`. If `false`, prints only the physical plan.
+   *
    * @group basic
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = if (extended) {
-    explain(ExplainMode.Extended)
+    explain(ExtendedMode.name)
   } else {
-    explain(ExplainMode.Simple)
+    explain(SimpleMode.name)
   }
 
   /**
@@ -590,7 +570,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def explain(): Unit = explain(ExplainMode.Simple)
+  def explain(): Unit = explain(SimpleMode.name)
 
   /**
    * Returns all column names and their data types as an array.
@@ -740,11 +720,12 @@ class Dataset[T] private[sql](
    * before which we assume no more late data is going to arrive.
    *
    * Spark will use this watermark for several purposes:
-   *  - To know when a given time window aggregation can be finalized and thus can be emitted when
-   *    using output modes that do not allow updates.
-   *  - To minimize the amount of state that we need to keep for on-going aggregations,
-   *    `mapGroupsWithState` and `dropDuplicates` operators.
-   *
+   * <ul>
+   *   <li>To know when a given time window aggregation can be finalized and thus can be emitted
+   *   when using output modes that do not allow updates.</li>
+   *   <li>To minimize the amount of state that we need to keep for on-going aggregations,
+   *    `mapGroupsWithState` and `dropDuplicates` operators.</li>
+   * </ul>
    *  The current watermark is computed by looking at the `MAX(eventTime)` seen across
    *  all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
    *  of coordinating this value across partitions, the actual watermark used is only guaranteed
@@ -1890,12 +1871,14 @@ class Dataset[T] private[sql](
  /**
   * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
   * that returns the same result as the input, with the following guarantees:
-  * - It will compute the defined aggregates (metrics) on all the data that is flowing through the
-  *   Dataset at that point.
-  * - It will report the value of the defined aggregate columns as soon as we reach a completion
+  * <ul>
+  *   <li>It will compute the defined aggregates (metrics) on all the data that is flowing through
+  *   the Dataset at that point.</li>
+  *   <li>It will report the value of the defined aggregate columns as soon as we reach a completion
   *   point. A completion point is either the end of a query (batch mode) or the end of a streaming
   *   epoch. The value of the aggregates only reflects the data processed since the previous
-  *   completion point.
+  *   completion point.</li>
+  * </ul>
   * Please note that continuous execution is currently not supported.
   *
   * The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
@@ -2533,13 +2516,14 @@ class Dataset[T] private[sql](
 
   /**
    * Computes specified statistics for numeric and string columns. Available statistics are:
-   *
-   * - count
-   * - mean
-   * - stddev
-   * - min
-   * - max
-   * - arbitrary approximate percentiles specified as a percentage (eg, 75%)
+   * <ul>
+   *   <li>count</li>
+   *   <li>mean</li>
+   *   <li>stddev</li>
+   *   <li>min</li>
+   *   <li>max</li>
+   *   <li>arbitrary approximate percentiles specified as a percentage (e.g. 75%)</li>
+   * </ul>
    *
    * If no statistics are given, this function computes count, mean, stddev, min,
    * approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
