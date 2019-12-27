@@ -49,7 +49,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Preserve nullable exprs when constraintPropagation is false") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-      for (e <- Seq('a === 'a, 'a <= 'a, 'a >= 'a, 'a < 'a, 'a > 'a)) {
+      val a = Symbol("a")
+      for (e <- Seq(a === a, a <= a, a >= a, a < a, a > a)) {
         val plan = nullableRelation.where(e).analyze
         val actual = Optimize.execute(plan)
         val correctAnswer = plan
@@ -129,7 +130,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
   }
 
   test("Simplify null and nonnull with filter constraints") {
-    Seq('a === 'a, 'a <= 'a, 'a >= 'a, 'a < 'a, 'a > 'a).foreach { condition =>
+    val a = Symbol("a")
+    Seq(a === a, a <= a, a >= a, a < a, a > a).foreach { condition =>
       val plan = nonNullableRelation.where(condition).analyze
       val actual = Optimize.execute(plan)
       val correctAnswer = nonNullableRelation.analyze
@@ -137,14 +139,14 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     }
 
     // infer filter constraints will add IsNotNull
-    Seq('a === 'a, 'a <= 'a, 'a >= 'a).foreach { condition =>
+    Seq(a === a, a <= a, a >= a).foreach { condition =>
       val plan = nullableRelation.where(condition).analyze
       val actual = Optimize.execute(plan)
       val correctAnswer = nullableRelation.where('a.isNotNull).analyze
       comparePlans(actual, correctAnswer)
     }
 
-    Seq('a < 'a, 'a > 'a).foreach { condition =>
+    Seq(a < a, a > a).foreach { condition =>
       val plan = nullableRelation.where(condition).analyze
       val actual = Optimize.execute(plan)
       val correctAnswer = nullableRelation.analyze
@@ -154,16 +156,17 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Simplify nullable without constraints propagation") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-      Seq(And('a === 'a, 'a.isNotNull),
-        And('a <= 'a, 'a.isNotNull),
-        And('a >= 'a, 'a.isNotNull)).foreach { condition =>
+      val a = Symbol("a")
+      Seq(And(a === a, a.isNotNull),
+        And(a <= a, a.isNotNull),
+        And(a >= a, a.isNotNull)).foreach { condition =>
         val plan = nullableRelation.where(condition).analyze
         val actual = Optimize.execute(plan)
         val correctAnswer = nullableRelation.where('a.isNotNull).analyze
         comparePlans(actual, correctAnswer)
       }
 
-      Seq(And('a < 'a, 'a.isNotNull), And('a > 'a, 'a.isNotNull))
+      Seq(And(a < a, a.isNotNull), And(a > a, a.isNotNull))
         .foreach { condition =>
         val plan = nullableRelation.where(condition).analyze
         val actual = Optimize.execute(plan)
