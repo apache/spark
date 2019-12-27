@@ -235,7 +235,6 @@ class Analyzer(
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints(conf)),
-    Batch("Ansi Standard", Once, ANSISQLStandard.ANSIStandardCastRules: _*),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
