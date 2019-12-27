@@ -2147,7 +2147,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     MultilayerPerceptronClassificationModel...
     >>> model.getMaxIter()
     100
-    >>> model.getLayers()
+    >>> model.layers
     [2, 2, 2]
     >>> model.weights.size
     12
@@ -2172,7 +2172,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model_path = temp_path + "/mlp_model"
     >>> model.save(model_path)
     >>> model2 = MultilayerPerceptronClassificationModel.load(model_path)
-    >>> model.getLayers() == model2.getLayers()
+    >>> model.layers == model2.layers
     True
     >>> model.weights == model2.weights
     True
@@ -2180,7 +2180,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model3 = mlp2.fit(df)
     >>> model3.weights != model2.weights
     True
-    >>> model3.getLayers() == model.getLayers()
+    >>> model3.layers == model.layers
     True
 
     .. versionadded:: 1.6.0
@@ -2284,6 +2284,18 @@ class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationMod
 
     .. versionadded:: 1.6.0
     """
+
+    @property
+    @since("1.6.0")
+    def layers(self):
+        """
+        array of layer sizes including input and output layers.
+
+        ..note:: Deprecated in 3.0.0. It will be removed in future versions.
+        """
+        warnings.warn("Deprecated in 3.0.0. It will be removed in future versions.",
+                      DeprecationWarning)
+        return self._call_java("javaLayers")
 
     @property
     @since("2.0.0")

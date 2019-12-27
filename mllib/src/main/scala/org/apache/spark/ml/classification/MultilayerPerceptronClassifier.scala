@@ -291,6 +291,13 @@ class MultilayerPerceptronClassificationModel private[ml] (
     .model(weights)
 
   /**
+   * Returns layers in a Java List.
+   */
+  private[ml] def javaLayers: java.util.List[Int] = {
+    $(layers).toList.asJava
+  }
+
+  /**
    * Predict label for the given features.
    * This internal method is used to implement `transform()` and output [[predictionCol]].
    */
