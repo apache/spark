@@ -219,8 +219,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
               case backend: CoarseGrainedSchedulerBackend =>
                 backend.driverEndpoint.send(RemoveExecutor(executorId,
                   SlaveLost(s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
+
+              // LocalSchedulerBackend is used locally and only has one single executor
               case _: LocalSchedulerBackend =>
-                  // LocalSchedulerBackend is used locally and only has one single executor
+
               case other => throw new UnsupportedOperationException(
                 s"Unknown scheduler backend: ${other.getClass}")
             }
