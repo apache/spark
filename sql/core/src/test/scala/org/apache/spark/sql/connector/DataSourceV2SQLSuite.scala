@@ -1975,15 +1975,15 @@ class DataSourceV2SQLSuite
       checkTableComment("testcat.ns1.ns2.t", null)
       checkTableComment("testcat.ns1.ns2.t", "NULL")
     }
-
     intercept[AnalysisException](sql(s"COMMENT ON TABLE abc.xyz IS NULL"))
-    // V2 non-session catalog is used.
+
+
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
     spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
     withTempView("v") {
       sql("create global temp view v as select 1")
       val e = intercept[AnalysisException](sql(s"COMMENT ON TABLE global_temp.v IS NULL"))
-      assert(e.getMessage.contains("views"))
+      assert(e.getMessage.contains("global_temp.v is a temp view not table."))
     }
   }
 

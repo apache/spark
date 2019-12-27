@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.{catalog, _}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
@@ -743,7 +743,10 @@ class Analyzer(
           .map(view => i.copy(table = view))
           .getOrElse(i)
       case u @ UnresolvedTable(ident) =>
-        lookupTempView(ident).getOrElse(u)
+        lookupTempView(ident).foreach { _ =>
+          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
+        }
+        u
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] =
@@ -883,9 +886,12 @@ class Analyzer(
       case u @ UnresolvedTable(SessionCatalogAndIdentifier(catalog, ident)) =>
         val newIdent: Identifier = withNewNamespace(ident)
         assert(newIdent.namespace.length == 1)
-        CatalogV2Util.loadTable(catalog, newIdent)
-          .map(ResolvedTable(catalog.asTableCatalog, newIdent, _))
-          .getOrElse(u)
+        CatalogV2Util.loadTable(catalog, newIdent) match {
+          case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+            u.failAnalysis(s"$newIdent is a temp view not table.")
+          case Some(table) => ResolvedTable(catalog.asTableCatalog, newIdent, table)
+          case None => u
+        }
     }
 
     // Look up a relation from the given session catalog with the following logic:
