@@ -455,16 +455,13 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
     val keyValues = ctx.freshName("kvs")
-    val idx = ctx.freshName("i")
 
     nullSafeCodeGen(ctx, ev, (text, pd, kvd) =>
       s"""
-         |int $idx = 0;
          |UTF8String[] $keyValues = $text.split($pd, -1);
-         |while ($idx < $keyValues.length) {
-         |  UTF8String[] kv = $keyValues[$idx].split($kvd, 2);
-         |  $builderTerm.put(kv[0], (kv.length == 2) ? kv[1] : null);
-         |  $idx++;
+         |for(UTF8String kvEntry: $keyValues) {
+         |  UTF8String[] kv = kvEntry.split($kvd, 2);
+         |  $builderTerm.put(kv[0], kv.length == 2 ? kv[1] : null);
          |}
          |${ev.value} = $builderTerm.build();
          |""".stripMargin
