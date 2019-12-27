@@ -1944,12 +1944,12 @@ class DataSourceV2SQLSuite
     checkNamespaceComment("testcat.ns1", "minor revision")
     checkNamespaceComment("testcat.ns1", null)
     checkNamespaceComment("testcat.ns1", "NULL")
-    intercept[AnalysisException](sql(s"COMMENT ON NAMESPACE abc.xyz IS NULL"))
+    intercept[AnalysisException](sql(s"COMMENT ON NAMESPACE testcat.abc IS NULL"))
   }
 
   private def checkNamespaceComment(namespace: String, comment: String): Unit = {
-    sql(s"COMMENT ON NAMESPACE $namespace IS" +
-      s" ${if (comment != null) "'" + comment + "'" else "NULL"}")
+    sql(s"COMMENT ON NAMESPACE $namespace IS " +
+      Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC NAMESPACE extended $namespace").toDF("k", "v")
       .where("k='Description'")
@@ -1976,20 +1976,19 @@ class DataSourceV2SQLSuite
       checkTableComment("testcat.ns1.ns2.t", "NULL")
     }
 
-    intercept[AnalysisException](sql(s"COMMENT ON TABLE abc.xyz IS NULL"))
+    intercept[AnalysisException](sql(s"COMMENT ON TABLE testcat.abc IS NULL"))
     // V2 non-session catalog is used.
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
     spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
     withTempView("v") {
       sql("create global temp view v as select 1")
       val e = intercept[AnalysisException](sql(s"COMMENT ON TABLE global_temp.v IS NULL"))
-      assert(e.getMessage.contains("views"))
+      assert(e.getMessage.contains("COMMENT ON TABLE does not support views."))
     }
   }
 
   private def checkTableComment(tableName: String, comment: String): Unit = {
-    sql(s"COMMENT ON TABLE $tableName IS" +
-      s" ${if (comment != null) "'" + comment + "'" else "NULL"}")
+    sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
       .where("k='Comment'")
