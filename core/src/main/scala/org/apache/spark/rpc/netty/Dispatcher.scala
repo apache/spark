@@ -67,7 +67,6 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
         endpointRefs.remove(endpoint)
         throw e
     }
-
   }
 
   /**
