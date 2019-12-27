@@ -25,7 +25,6 @@ import scala.concurrent.Promise
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
