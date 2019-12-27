@@ -113,93 +113,65 @@ object ExtractIntervalPart {
   }
 }
 
-abstract class IntervalNumOperation(interval: Expression, num: Expression)
+abstract class IntervalNumOperation(interval: Expression, num: Expression, operationName: String)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
 
   protected val checkOverflow: Boolean = SQLConf.get.ansiEnabled
+
+  protected val operation: String =
+    IntervalUtils.getClass.getName.stripSuffix("$") + "." + {
+      if (checkOverflow) operationName + "Exact" else operationName
+    }
 
   override def left: Expression = interval
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DoubleType)
+
   override def dataType: DataType = CalendarIntervalType
 
   override def nullable: Boolean = true
+
+  override def prettyName: String = operationName + "_interval"
 }
 
 case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num) {
-
-  override def prettyName: String = "multiply_interval"
+  extends IntervalNumOperation(interval, num, "multiply") {
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    try {
-      if (checkOverflow) {
-        multiplyExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-      } else {
-        multiply(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-      }
-    } catch {
-      case _: ArithmeticException if !checkOverflow => null
+    if (checkOverflow) {
+      multiplyExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+    } else {
+      multiply(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (interval, num) => {
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      val operationName = if (checkOverflow) "multiplyExact" else "multiply"
-      s"""
-        try {
-          ${ev.value} = $iu.$operationName($interval, $num);
-        } catch (ArithmeticException e) {
-          if ($checkOverflow) {
-            throw e;
-          } else {
-            ${ev.isNull} = true;
-          }
-        }
-      """
-    })
+    defineCodeGen(ctx, ev, (interval, num) => s"$operation($interval, $num)")
   }
 }
 
 case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num) {
-
-  override def prettyName: String = "divide_interval"
+  extends IntervalNumOperation(interval, num, "divide") {
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    try {
-      if (num == 0) return null
-      if (checkOverflow) {
-        divideExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-      } else {
-        divide(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-      }
-    } catch {
-      case _: ArithmeticException if !checkOverflow => null
+    if (num == 0) return null
+    if (checkOverflow) {
+      divideExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+    } else {
+      divide(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (interval, num) => {
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      val operationName = if (checkOverflow) "divideExact" else "divide"
       s"""
-        try {
-          if ($num == 0) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = $iu.$operationName($interval, $num);
-          }
-        } catch (ArithmeticException e) {
-          if ($checkOverflow) {
-            throw e;
-          } else {
-            ${ev.isNull} = true;
-          }
-        }
-      """
+         |if ($num == 0) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${ev.value} = $operation($interval, $num);
+         |}
+         |""".stripMargin
     })
   }
 }
