@@ -199,6 +199,7 @@
     and ./python/setup.py too.
     -->
     <arrow.version>0.15.1</arrow.version>
+    <guava.version>14.0.1</guava.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
 
@@ -411,7 +412,7 @@
       <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
-        <version>14.0.1</version>
+        <version>${guava.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
@@ -2940,6 +2941,7 @@
       <properties>
         <hadoop.version>3.2.1</hadoop.version>
         <curator.version>2.13.0</curator.version>
+        <guava.version>27.0-jre</guava.version>
       </properties>
     </profile>
 
