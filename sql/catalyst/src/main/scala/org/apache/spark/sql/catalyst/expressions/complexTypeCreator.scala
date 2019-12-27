@@ -456,15 +456,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
     val keyValues = ctx.freshName("kvs")
     val idx = ctx.freshName("i")
-    val kv = ctx.freshName("kv")
 
     nullSafeCodeGen(ctx, ev, (text, pd, kvd) =>
       s"""
          |int $idx = 0;
          |UTF8String[] $keyValues = $text.split($pd, -1);
          |while ($idx < $keyValues.length) {
-         |  UTF8String[] $kv = $keyValues[$idx].split($kvd, 2);
-         |  $builderTerm.put($kv[0], ($kv.length == 2) ? $kv[1] : null);
+         |  UTF8String[] kv = $keyValues[$idx].split($kvd, 2);
+         |  $builderTerm.put(kv[0], (kv.length == 2) ? kv[1] : null);
          |  $idx++;
          |}
          |${ev.value} = $builderTerm.build();
