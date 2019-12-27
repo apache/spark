@@ -248,7 +248,7 @@ private[ml] object FactorizationMachines {
     (0 until factors.numCols).foreach { f =>
       var sumSquare = 0.0
       var sum = 0.0
-      features.foreachActive { case (index, value) =>
+      features.foreachNonZero { case (index, value) =>
         val vx = factors(index, f) * value
         sumSquare += vx * vx
         sum += vx
@@ -603,14 +603,14 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 
     if (fitIntercept) rawPrediction += weights(weights.size - 1)
     if (fitLinear) {
-      data.foreachActive { case (index, value) =>
+      data.foreachNonZero { case (index, value) =>
         rawPrediction += weights(vWeightsSize + index) * value
       }
     }
     (0 until factorSize).foreach { f =>
       var sumSquare = 0.0
       var sum = 0.0
-      data.foreachActive { case (index, value) =>
+      data.foreachNonZero { case (index, value) =>
         val vx = weights(index * factorSize + f) * value
         sumSquare += vx * vx
         sum += vx
@@ -639,7 +639,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
         var gradI = 0
         val vWeightsSize = numFeatures * factorSize
 
-        data.foreachActive { case (index, value) =>
+        data.foreachNonZero { case (index, value) =>
           (0 until factorSize).foreach { f =>
             gradIndex(gradI) = index * factorSize + f
             gradValue(gradI) = value * sumVX(f) - weights(index * factorSize + f) * value * value
@@ -647,7 +647,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
           }
         }
         if (fitLinear) {
-          data.foreachActive { case (index, value) =>
+          data.foreachNonZero { case (index, value) =>
             gradIndex(gradI) = vWeightsSize + index
             gradValue(gradI) = value
             gradI += 1
@@ -665,12 +665,12 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 
         if (fitIntercept) gradient(weights.size - 1) += 1.0
         if (fitLinear) {
-          data.foreachActive { case (index, value) =>
+          data.foreachNonZero { case (index, value) =>
             gradient(vWeightsSize + index) += value
           }
         }
         (0 until factorSize).foreach { f =>
-          data.foreachActive { case (index, value) =>
+          data.foreachNonZero { case (index, value) =>
             gradient(index * factorSize + f) +=
               value * sumVX(f) - weights(index * factorSize + f) * value * value
           }

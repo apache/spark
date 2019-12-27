@@ -280,7 +280,7 @@ private[ml] class FeatureEncoder(numFeatures: Array[Int]) extends Serializable {
     case vec: Vector =>
       assert(numFeatures.length == vec.size,
         s"Vector column size was ${vec.size}, expected ${numFeatures.length}")
-      vec.foreachActive { (i, v) =>
+      vec.foreachNonZero { (i, v) =>
         val numOutputCols = numFeatures(i)
         if (numOutputCols > 1) {
           assert(
