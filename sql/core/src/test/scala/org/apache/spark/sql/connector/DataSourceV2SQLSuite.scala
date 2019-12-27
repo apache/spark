@@ -1944,12 +1944,12 @@ class DataSourceV2SQLSuite
     checkNamespaceComment("testcat.ns1", "minor revision")
     checkNamespaceComment("testcat.ns1", null)
     checkNamespaceComment("testcat.ns1", "NULL")
-    intercept[AnalysisException](sql(s"COMMENT ON NAMESPACE abc.xyz IS NULL"))
+    intercept[AnalysisException](sql(s"COMMENT ON NAMESPACE testcat.abc IS NULL"))
   }
 
   private def checkNamespaceComment(namespace: String, comment: String): Unit = {
-    sql(s"COMMENT ON NAMESPACE $namespace IS" +
-      s" ${if (comment != null) "'" + comment + "'" else "NULL"}")
+    sql(s"COMMENT ON NAMESPACE $namespace IS " +
+      Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC NAMESPACE extended $namespace").toDF("k", "v")
       .where("k='Description'")
@@ -1975,8 +1975,7 @@ class DataSourceV2SQLSuite
       checkTableComment("testcat.ns1.ns2.t", null)
       checkTableComment("testcat.ns1.ns2.t", "NULL")
     }
-    intercept[AnalysisException](sql(s"COMMENT ON TABLE abc.xyz IS NULL"))
-
+    intercept[AnalysisException](sql(s"COMMENT ON TABLE testcat.abc IS NULL"))
 
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
     spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
@@ -1988,8 +1987,7 @@ class DataSourceV2SQLSuite
   }
 
   private def checkTableComment(tableName: String, comment: String): Unit = {
-    sql(s"COMMENT ON TABLE $tableName IS" +
-      s" ${if (comment != null) "'" + comment + "'" else "NULL"}")
+    sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")
     assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
       .where("k='Comment'")
