@@ -36,6 +36,12 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_INTERNAL_MASTER =
+    ConfigBuilder("spark.kubernetes.internal.master")
+      .doc("The internal master address to be used for driver to request executors.")
+      .stringConf
+      .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")

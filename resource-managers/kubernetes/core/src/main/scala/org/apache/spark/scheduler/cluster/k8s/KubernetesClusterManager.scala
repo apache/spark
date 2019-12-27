@@ -51,7 +51,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         "If the application is deployed using spark-submit in cluster mode, the driver pod name " +
           "must be provided.")
       (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
-        KUBERNETES_MASTER_INTERNAL_URL,
+        sc.conf.get(KUBERNETES_INTERNAL_MASTER),
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
     } else {
