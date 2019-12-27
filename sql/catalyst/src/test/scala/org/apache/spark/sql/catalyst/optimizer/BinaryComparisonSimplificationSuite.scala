@@ -151,4 +151,25 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
       comparePlans(actual, correctAnswer)
     }
   }
+
+  test("Simplify nullable without constraints propagation") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      Seq(And('a === 'a, 'a.isNotNull),
+        And('a <= 'a, 'a.isNotNull),
+        And('a >= 'a, 'a.isNotNull)).foreach { condition =>
+        val plan = nullableRelation.where(condition).analyze
+        val actual = Optimize.execute(plan)
+        val correctAnswer = nullableRelation.where('a.isNotNull).analyze
+        comparePlans(actual, correctAnswer)
+      }
+
+      Seq(And('a < 'a, 'a.isNotNull), And('a > 'a, 'a.isNotNull))
+        .foreach { condition =>
+        val plan = nullableRelation.where(condition).analyze
+        val actual = Optimize.execute(plan)
+        val correctAnswer = nullableRelation.analyze
+        comparePlans(actual, correctAnswer)
+      }
+    }
+  }
 }

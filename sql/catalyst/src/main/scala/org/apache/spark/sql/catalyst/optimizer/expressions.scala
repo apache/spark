@@ -393,26 +393,23 @@ object SimplifyBinaryComparison
 
   private def canSimplifyComparison(
       plan: LogicalPlan, left: Expression, right: Expression): Boolean = {
-    def canSimplify(left: Expression, right: Expression): Boolean = {
-      !left.nullable && !right.nullable && left.semanticEquals(right)
-    }
-
-    if (canSimplify(left, right)) {
+    if (!left.nullable && !right.nullable && left.semanticEquals(right)) {
       return true
     }
 
-    if (SQLConf.get.constraintPropagationEnabled) {
-      plan match {
-        case f @ Filter(_, _) =>
-          f.constraints.exists {
-            case IsNotNull(e) => e.semanticEquals(left) && e.semanticEquals(right)
-            case _ => false
-          }
+    plan match {
+      case f @ Filter(_, _) if SQLConf.get.constraintPropagationEnabled =>
+        f.constraints.exists {
+          case IsNotNull(e) => e.semanticEquals(left) && e.semanticEquals(right)
+          case _ => false
+        }
 
-        case _ => false
-      }
-    } else {
-      false
+      case Filter(fc, _) =>
+        splitConjunctivePredicates(fc).exists { condition =>
+          condition.semanticEquals(IsNotNull(left)) && condition.semanticEquals(IsNotNull(right))
+        }
+
+      case _ => false
     }
   }
 
