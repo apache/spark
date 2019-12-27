@@ -385,8 +385,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * Simplifies binary comparisons with semantically-equal expressions:
  * 1) Replace '<=>' with 'true' literal.
  * 2) Replace '=', '<=', and '>=' with 'true' literal
- *    if both operands are non-nullable or in constraints.
- * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable or in constraints.
+ *    if both operands are non-nullable or exist IsNotNull.
+ * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable or exist IsNotNull.
  */
 object SimplifyBinaryComparison
   extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
@@ -398,12 +398,6 @@ object SimplifyBinaryComparison
     }
 
     plan match {
-      case f @ Filter(_, _) if SQLConf.get.constraintPropagationEnabled =>
-        f.constraints.exists {
-          case IsNotNull(e) => e.semanticEquals(left) && e.semanticEquals(right)
-          case _ => false
-        }
-
       case Filter(fc, _) =>
         splitConjunctivePredicates(fc).exists { condition =>
           condition.semanticEquals(IsNotNull(left)) && condition.semanticEquals(IsNotNull(right))
