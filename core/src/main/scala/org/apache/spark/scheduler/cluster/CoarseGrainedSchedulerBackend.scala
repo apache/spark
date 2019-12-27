@@ -506,7 +506,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executors.foreach { eid =>
       removeExecutor(eid, SlaveLost("Stale executor after cluster manager re-registered."))
     }
-    synchronized { executorsPendingToRemove.clear() }
   }
 
   override def reviveOffers(): Unit = {
