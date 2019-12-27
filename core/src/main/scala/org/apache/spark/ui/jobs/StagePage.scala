@@ -848,7 +848,7 @@ private[ui] class TaskPagedTable(
         </div>
       </td>
       <td>{UIUtils.formatDate(task.launchTime)}</td>
-      <td>{formatDuration(task.taskMetrics.map(_.executorRunTime))}</td>
+      <td>{formatDuration(task.duration)}</td>
       <td class={TaskDetailsClassNames.SCHEDULER_DELAY}>
         {UIUtils.formatDuration(AppStatusUtils.schedulerDelay(task))}
       </td>
