@@ -84,13 +84,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     withParquetDataFrame(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 
-  testStandardAndLegacyModes("array of struct") {
-    val data = (1 to 4).map(i => (i, Seq(Tuple1(i), Tuple1(i + 1))))
-    val expected = (1 to 4).map(i => Row(i, Seq(Row(i), Row(i + 1))))
-    withParquetDataFrame(data)(r => checkAnswer(r, expected))
-  }
-
-
   test("basic data types (without binary)") {
     val data = (1 to 4).map { i =>
       (i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
@@ -211,6 +204,23 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  testStandardAndLegacyModes("array of struct") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Seq(
+          Tuple1(s"1st_val_$i"),
+          Tuple1(s"2nd_val_$i")
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map(struct => Row(struct.productIterator.toSeq: _*)))
+      })
+    }
+  }
+
   testStandardAndLegacyModes("nested struct with array of array as field") {
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
     withParquetDataFrame(data) { df =>
@@ -222,8 +232,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   testStandardAndLegacyModes("nested map with struct as value type") {
-    val data = (1 to 4).map(i => Tuple1(Map(i -> ((i, s"val_$i")))))
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Map(
+          s"kA_$i" -> ((i, s"vA_$i")),
+          s"kB_$i" -> ((i, s"vB_$i"))
+        )
+      )
+    }
     withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })
