@@ -159,13 +159,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             result
         }
         iteration += 1
-        if (curPlan.fastEquals(lastPlan)) {
-          logTrace(
-            s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
-          continue = false
-        }
-
-        if (continue && iteration > batch.strategy.maxIterations) {
+        if (iteration > batch.strategy.maxIterations) {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
             val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}"
@@ -180,6 +174,12 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             Utils.isTesting && !blacklistedOnceBatches.contains(batch.name)) {
             checkBatchIdempotence(batch, curPlan)
           }
+          continue = false
+        }
+
+        if (curPlan.fastEquals(lastPlan)) {
+          logTrace(
+            s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
           continue = false
         }
         lastPlan = curPlan
