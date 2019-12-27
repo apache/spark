@@ -70,6 +70,17 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
 
+  private var threadContextClassLoader: ClassLoader = _
+
+  override protected def beforeEach(): Unit = {
+    threadContextClassLoader = Thread.currentThread().getContextClassLoader
+  }
+
+  override protected def afterEach(): Unit = {
+    Thread.currentThread().setContextClassLoader(threadContextClassLoader)
+  }
+
+
   test("query global temp view") {
     val df = Seq(1).toDF("i1")
     df.createGlobalTempView("tbl1")
@@ -2489,6 +2500,45 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
               |""".stripMargin),
           Row(1, "1990-11-11"))
       }
+    }
+  }
+
+  test("SPARK-26560 Spark should be able to run Hive UDF using jar regardless of " +
+    "current thread context classloader") {
+    withUserDefinedFunction("udtf_count3" -> false) {
+      val oldClassLoader = Thread.currentThread().getContextClassLoader
+
+      // This jar file should not be placed to the classpath; GenericUDTFCount3 is slightly
+      // modified version of GenericUDTFCount2 in hive/contrib, which emits the count for
+      // three times.
+      val jarPath = "src/test/TestUDTF-dynamicload.jar"
+      val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+
+      sql(
+        s"""
+           |CREATE FUNCTION udtf_count3
+           |AS 'org.apache.hadoop.hive.contrib.udtf.example.GenericUDTFCount3'
+           |USING JAR '$jarURL'
+      """.stripMargin)
+
+      assert(Thread.currentThread().getContextClassLoader eq oldClassLoader)
+
+      // JAR will be loaded at first usage, and it will change the current thread's
+      // context classloader to jar classloader in sharedState.
+      // See SessionState.addJar for details.
+      checkAnswer(
+        sql("SELECT udtf_count3(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+        Row(3) :: Row(3) :: Row(3) :: Nil)
+
+      assert(Thread.currentThread().getContextClassLoader ne oldClassLoader)
+      assert(Thread.currentThread().getContextClassLoader eq
+        spark.sqlContext.sharedState.jarClassLoader)
+
+      // Roll back to the original classloader and run query again.
+      Thread.currentThread().setContextClassLoader(oldClassLoader)
+      checkAnswer(
+        sql("SELECT udtf_count3(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+        Row(3) :: Row(3) :: Row(3) :: Nil)
     }
   }
 }
