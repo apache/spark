@@ -211,18 +211,18 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             // SPARK-27348: in case of the executors which are not gracefully shut down,
             // we should remove lost executors from CoarseGrainedSchedulerBackend manually
             // here to guarantee two things:
-            // 1) call scheduler.executorLost() underlying to fail any tasks assigned to
+            // 1) explicitly remove executor information from CoarseGrainedSchedulerBackend for
+            //    a lost executor instead of waiting for disconnect message
+            // 2) call scheduler.executorLost() underlying to fail any tasks assigned to
             //    those executors to avoid app hang
-            // 2) always remove executor information from CoarseGrainedSchedulerBackend for
-            //    a lost executor
             sc.schedulerBackend match {
               case backend: CoarseGrainedSchedulerBackend =>
                 backend.driverEndpoint.send(RemoveExecutor(executorId,
                   SlaveLost(s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
               case _: LocalSchedulerBackend =>
                   // LocalSchedulerBackend is used locally and only has one single executor
-              case _ => throw new UnsupportedOperationException(
-                s"Unknown scheduler backend: ${sc.schedulerBackend.getClass}")
+              case other => throw new UnsupportedOperationException(
+                s"Unknown scheduler backend: ${other.getClass}")
             }
           }
         })
