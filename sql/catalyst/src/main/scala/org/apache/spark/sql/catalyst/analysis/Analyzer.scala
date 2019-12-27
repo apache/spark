@@ -168,23 +168,6 @@ class Analyzer(
 
   private def executeSameContext(plan: LogicalPlan): LogicalPlan = super.execute(plan)
 
-  // The namespace used for lookup is decided by the following precedence:
-  // 1. Use the existing namespace if it is defined.
-  // 2. Use defaultDatabase fom AnalysisContext, if it is defined. In this case, no temporary
-  //    objects can be used, and the default database is only used to look up a view.
-  // 3. Use the current namespace of the session catalog.
-  private def withNewNamespace(ident: Identifier): Identifier = {
-    if (ident.namespace.nonEmpty) {
-      ident
-    } else {
-      val defaultNamespace = AnalysisContext.get.defaultDatabase match {
-        case Some(db) => Array(db)
-        case None => Array(v1SessionCatalog.getCurrentDatabase)
-      }
-      Identifier.of(defaultNamespace, ident.name)
-    }
-  }
-
   def resolver: Resolver = conf.resolver
 
   protected val fixedPoint = FixedPoint(maxIterations)
@@ -214,8 +197,7 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
-      ResolveCatalogAndNamespace(catalogManager) ::
-      ResolveCatalogAndTable(catalogManager) ::
+      ResolveNamespace(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::
@@ -740,27 +722,11 @@ class Analyzer(
     }
   }
 
-  case class ResolveCatalogAndNamespace(catalogManager: CatalogManager)
+  case class ResolveNamespace(catalogManager: CatalogManager)
     extends Rule[LogicalPlan] with LookupCatalog {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
         ResolvedNamespace(catalog.asNamespaceCatalog, ns)
-    }
-  }
-
-  case class ResolveCatalogAndTable(catalogManager: CatalogManager)
-    extends Rule[LogicalPlan] with LookupCatalog {
-    def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan) resolveOperators {
-      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
-        CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
-          .getOrElse(u)
-      case u @ UnresolvedTable(SessionCatalogAndIdentifier(catalog, ident)) =>
-        val newIdent: Identifier = withNewNamespace(ident)
-        assert(newIdent.namespace.length == 1)
-        CatalogV2Util.loadTable(catalog, newIdent)
-          .map(ResolvedTable(catalog.asTableCatalog, newIdent, _))
-          .getOrElse(u)
     }
   }
 
@@ -797,6 +763,11 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
+          .getOrElse(u)
+
+      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+        CatalogV2Util.loadTable(catalog, ident)
+          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
@@ -908,6 +879,13 @@ class Analyzer(
         }
 
       case u: UnresolvedRelation => resolveRelation(u)
+
+      case u @ UnresolvedTable(SessionCatalogAndIdentifier(catalog, ident)) =>
+        val newIdent: Identifier = withNewNamespace(ident)
+        assert(newIdent.namespace.length == 1)
+        CatalogV2Util.loadTable(catalog, newIdent)
+          .map(ResolvedTable(catalog.asTableCatalog, newIdent, _))
+          .getOrElse(u)
     }
 
     // Look up a relation from the given session catalog with the following logic:
@@ -934,6 +912,23 @@ class Analyzer(
         case Some(table) =>
           Some(DataSourceV2Relation.create(table))
         case None => None
+      }
+    }
+
+    // The namespace used for lookup is decided by the following precedence:
+    // 1. Use the existing namespace if it is defined.
+    // 2. Use defaultDatabase fom AnalysisContext, if it is defined. In this case, no temporary
+    //    objects can be used, and the default database is only used to look up a view.
+    // 3. Use the current namespace of the session catalog.
+    private def withNewNamespace(ident: Identifier): Identifier = {
+      if (ident.namespace.nonEmpty) {
+        ident
+      } else {
+        val defaultNamespace = AnalysisContext.get.defaultDatabase match {
+          case Some(db) => Array(db)
+          case None => Array(v1SessionCatalog.getCurrentDatabase)
+        }
+        Identifier.of(defaultNamespace, ident.name)
       }
     }
   }
