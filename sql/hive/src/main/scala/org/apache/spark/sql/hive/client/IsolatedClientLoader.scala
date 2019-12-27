@@ -192,7 +192,6 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("org.apache.spark.") ||
     (sharesHadoopClasses && isHadoopClass) ||
     name.startsWith("scala.") ||
-    (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
     name.startsWith("java.") ||
     name.startsWith("javax.sql.") ||
     sharedPrefixes.exists(name.startsWith)
