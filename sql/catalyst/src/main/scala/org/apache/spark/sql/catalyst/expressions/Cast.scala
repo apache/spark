@@ -23,7 +23,6 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -1178,7 +1177,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) =>
           code"""
             try {
-              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString()));
+              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString().trim()));
               ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
             } catch (java.lang.NumberFormatException e) {
               if ($ansiEnabled) {
@@ -1424,7 +1423,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             }
           }
           $wrapper = null;
-          """
+        """
     case BooleanType =>
       (c, evPrim, evNull) => code"$evPrim = $c ? (byte) 1 : (byte) 0;"
     case DateType =>
@@ -1612,7 +1611,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           } catch (java.lang.NumberFormatException e) {
             final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
             if (d == null) {
-              throw new AnalysisException("invalid input syntax for type numeric: $c");
+              throw new IllegalArgumentException("invalid input syntax for type numeric: $c");
             } else {
               $evPrim = d.doubleValue();
             }
