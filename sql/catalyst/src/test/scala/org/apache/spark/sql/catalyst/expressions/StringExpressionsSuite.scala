@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolderSparkSubmitSuite.{assert, intercept}
 import org.apache.spark.sql.types._
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -720,6 +721,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringRPad(s1, s2, s3), null, row5)
     checkEvaluation(StringRPad(Literal("hi"), Literal(5)), "hi   ")
     checkEvaluation(StringRPad(Literal("hi"), Literal(1)), "h")
+
+    assert(intercept[AnalysisException] {
+      checkEvaluation(StringRPad(Literal("hi"), Literal("invalidLength")), "Exception")
+    }.getMessage.contains("Invalid argument, TypeCheckFailure(argument 2 " +
+      "requires int type, however, ''invalidLength'' is of string type.);"))
+
+    assert(intercept[AnalysisException] {
+      checkEvaluation(StringLPad(Literal("hi"), Literal("invalidLength")), "Exception")
+    }.getMessage.contains("Invalid argument, TypeCheckFailure(argument 2 " +
+      "requires int type, however, ''invalidLength'' is of string type.);"))
   }
 
   test("REPEAT") {

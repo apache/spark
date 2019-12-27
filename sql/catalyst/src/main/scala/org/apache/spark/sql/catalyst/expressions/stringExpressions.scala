@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -1227,6 +1228,19 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isFailure) {
+      try {
+        if (len != null && len.toString.toInt.isValidInt) inputTypeCheck
+      } catch {
+        case _: NumberFormatException =>
+          throw new AnalysisException(s"Invalid argument, $inputTypeCheck")
+      }
+    }
+    inputTypeCheck
+  }
+
   override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
     str.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
@@ -1267,6 +1281,19 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isFailure) {
+      try {
+        if (len != null && len.toString.toInt.isValidInt) inputTypeCheck
+      } catch {
+        case _: NumberFormatException =>
+          throw new AnalysisException(s"Invalid argument, $inputTypeCheck")
+      }
+    }
+    inputTypeCheck
+  }
 
   override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
     str.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
