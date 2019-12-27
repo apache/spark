@@ -22,8 +22,10 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Promise
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
@@ -52,13 +54,20 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     // active when registering, and endpointRef must be put into endpointRefs before onStart is
     // called. Refer the doc of `RpcEndpoint.self`, as well as `NettyRpcEnv.endpointRef`.
     endpointRefs.put(endpoint, endpointRef)
-    endpoint match {
-      case e: IsolatedRpcEndpoint =>
-        new DedicatedMessageLoop(name, e, this)
-      case _ =>
-        sharedLoop.register(name, endpoint)
-        sharedLoop
+    try {
+      endpoint match {
+        case e: IsolatedRpcEndpoint =>
+          new DedicatedMessageLoop(name, e, this)
+        case _ =>
+          sharedLoop.register(name, endpoint)
+          sharedLoop
+      }
+    } catch {
+      case NonFatal(e) =>
+        endpointRefs.remove(endpoint)
+        throw e
     }
+
   }
 
   /**
