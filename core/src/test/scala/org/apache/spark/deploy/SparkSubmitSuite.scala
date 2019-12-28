@@ -1506,6 +1506,7 @@ object UserClasspathFirstTest {
   }
 }
 
+// SPARK-30132: delegation rather than inheritance to work around Scala 2.13 compiler issue
 class TestFileSystem extends FileSystem {
 
   private val delegateFS = new LocalFileSystem()
@@ -1520,6 +1521,8 @@ class TestFileSystem extends FileSystem {
     status.setPath(new Path(path))
     status
   }
+
+  override def initialize(name: URI, conf: Configuration): Unit = delegateFS.initialize(name, conf)
 
   override def getUri: URI = delegateFS.getUri
 

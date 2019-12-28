@@ -24,6 +24,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, FSDataOutputStream,
   LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -65,6 +66,7 @@ object DebugFilesystem extends Logging {
  * to check that connections are not leaked.
  */
 // TODO(ekl) we should consider always interposing this to expose num open conns as a metric
+// SPARK-30132: delegation rather than inheritance to work around Scala 2.13 compiler issue
 class DebugFilesystem extends FileSystem {
 
   private val delegateFS = new LocalFileSystem()
@@ -127,6 +129,8 @@ class DebugFilesystem extends FileSystem {
       override def hashCode(): Int = wrapped.hashCode()
     }
   }
+
+  override def initialize(name: URI, conf: Configuration): Unit = delegateFS.initialize(name, conf)
 
   override def create(f: Path, permission: FsPermission, overwrite: Boolean, bufferSize: Int,
       replication: Short, blockSize: Long, progress: Progressable): FSDataOutputStream =
