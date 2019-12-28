@@ -1904,7 +1904,8 @@ class TaskSetManagerSuite
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 
-  test("SPARK-30359: don't clean executorsPendingToRemove at the beginning of 'reset'") {
+  test("SPARK-30359: don't clean executorsPendingToRemove " +
+    "at the beginning of CoarseGrainedSchedulerBackend.reset") {
     val conf = new SparkConf()
       // use local-cluster mode in order to get CoarseGrainedSchedulerBackend
       .setMaster("local-cluster[2, 1, 2048]")
@@ -1951,11 +1952,10 @@ class TaskSetManagerSuite
     backend.reset()
 
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
-      // executorsPendingToRemove should still be empty after reset()
+      // executorsPendingToRemove should eventually be empty after reset()
       assert(backend.executorsPendingToRemove.isEmpty)
       assert(manager.invokePrivate(numFailures())(index0) === 0)
       assert(manager.invokePrivate(numFailures())(index1) === 1)
     }
-    sc.stop()
   }
 }
