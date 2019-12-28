@@ -1104,7 +1104,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.getLocal(hadoopConfiguration)
+    // Same implementation as FileSystem.getLocal without the cast
+    FileSystem.get(URI.create("file:///"), hadoopConfiguration)
 
     // A Hadoop configuration can be about 10 KiB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableConfiguration(hadoopConfiguration))
