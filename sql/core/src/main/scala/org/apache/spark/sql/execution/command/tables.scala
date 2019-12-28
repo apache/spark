@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.net.{URI, URISyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
+import scala.util.{Failure, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
@@ -500,16 +500,34 @@ case class TruncateTableCommand(
         try {
           val fs = path.getFileSystem(hadoopConf)
           val fileStatus = fs.getFileStatus(path)
-          val permission = fileStatus.getPermission()
-          // Not all fs support acl APIs.
+          // Not all fs impl. support these APIs.
+          val optPermission = Try(fileStatus.getPermission())
           val optAcls = Try(fs.getAclStatus(path).getEntries)
 
           fs.delete(path, true)
 
           // We should keep original permission/acl of the path.
+          // For owner/group, only super-user can set it, for example on HDFS. Because
+          // current user can delete the path, we assume the user/group is correct or not an issue.
           fs.mkdirs(path)
-          fs.setPermission(path, permission)
-          optAcls.foreach(acls => fs.setAcl(path, acls))
+          optPermission.foreach { permission =>
+            Try(fs.setPermission(path, permission)) match {
+              case Failure(e) if e.isInstanceOf[UnsupportedOperationException] =>
+                log.warn(s"Can not set original permission $permission back to " +
+                  s"the created path: $path. Exception: ${e.getMessage}")
+              case Failure(e) => throw e
+              case _ =>
+            }
+          }
+          optAcls.foreach { acls =>
+            Try(fs.setAcl(path, acls)) match {
+              case Failure(e) if e.isInstanceOf[UnsupportedOperationException] =>
+                log.warn(s"Can not set original ACL $acls back to " +
+                  s"the created path: $path. Exception: ${e.getMessage}")
+              case Failure(e) => throw e
+              case _ =>
+            }
+          }
         } catch {
           case NonFatal(e) =>
             throw new AnalysisException(
