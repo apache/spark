@@ -34,7 +34,9 @@ object ParquetUtils {
 
     val mergeRespectSummaries = sparkSession.sessionState.conf.isParquetSchemaRespectSummaries
 
-    val filesByType = splitFiles(files)
+    val filesByType = splitFiles(files,
+      shouldMergeSchemas && !mergeRespectSummaries,
+      shouldMergeSchemas && mergeRespectSummaries)
 
     // Sees which file(s) we need to touch in order to figure out the schema.
     //
@@ -112,15 +114,26 @@ object ParquetUtils {
       metadata: Seq[FileStatus],
       commonMetadata: Seq[FileStatus])
 
-  private def splitFiles(allFiles: Seq[FileStatus]): FileTypes = {
-    val leaves = allFiles.toArray.sortBy(_.getPath.toString)
+  private def splitFiles(
+      allFiles: Seq[FileStatus],
+      needSortAllFiles: Boolean,
+      needSortMetadataFiles: Boolean): FileTypes = {
+    val (metadataFiles, dataFiles) = if (needSortAllFiles) {
+      val sortedFiles = allFiles.toArray.sortBy(_.getPath.toString)
+      sortedFiles.partition(f => isSummaryFile(f.getPath))
+    } else if (needSortMetadataFiles) {
+      val (metaFiles, dataFiles) = allFiles.toArray.partition(f => isSummaryFile(f.getPath))
+      (metaFiles.sortBy(_.getPath.toString), dataFiles)
+    } else {
+      allFiles.toArray.partition(f => isSummaryFile(f.getPath))
+    }
 
     FileTypes(
-      data = leaves.filterNot(f => isSummaryFile(f.getPath)),
+      data = dataFiles,
       metadata =
-        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE),
+        metadataFiles.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE),
       commonMetadata =
-        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE))
+        metadataFiles.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE))
   }
 
   private def isSummaryFile(file: Path): Boolean = {
