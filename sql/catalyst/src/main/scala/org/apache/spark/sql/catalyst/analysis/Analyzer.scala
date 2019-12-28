@@ -91,10 +91,14 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                        current catalog database.
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
+ * @param relationToLogicalPlanMaps The UnresolvedRelation to LogicalPlan mapping, this can ensure
+ *                                  that the table is resolved only once if a table is used
+ *                                  multiple times in a query.
  */
 case class AnalysisContext(
     defaultDatabase: Option[String] = None,
-    nestedViewDepth: Int = 0)
+    nestedViewDepth: Int = 0,
+    relationToLogicalPlanMaps: mutable.Map[UnresolvedRelation, LogicalPlan] = mutable.Map.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -795,6 +799,7 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
+    private val relationToLogicalPlanMaps = AnalysisContext.get.relationToLogicalPlanMaps
 
     // If an unresolved relation is given, it is looked up from the session catalog and either v1
     // or v2 relation is returned. Otherwise, we look up the table from catalog
@@ -847,32 +852,26 @@ class Analyzer(
       case _ => plan
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      var logicalPlans = Map.empty[UnresolvedRelation, LogicalPlan]
-      ResolveTempViews(plan).resolveOperatorsUp {
-        case i@InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
-          val relation = table match {
-            case u@UnresolvedRelation(SessionCatalogAndIdentifier(catalog, ident)) =>
-              lookupRelation(catalog, ident, recurse = false).getOrElse(u)
-            case other => other
-          }
+    def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
+      case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
+        val relation = table match {
+          case u @ UnresolvedRelation(SessionCatalogAndIdentifier(catalog, ident)) =>
+            lookupRelation(catalog, ident, recurse = false).getOrElse(u)
+          case other => other
+        }
 
-          EliminateSubqueryAliases(relation) match {
-            case v: View =>
-              table.failAnalysis(
-                s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
-            case other => i.copy(table = other)
-          }
+        EliminateSubqueryAliases(relation) match {
+          case v: View =>
+            table.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+          case other => i.copy(table = other)
+        }
 
-        case u: UnresolvedRelation =>
-          if (logicalPlans.contains(u)) {
-            logicalPlans(u)
-          } else {
-            val relation = resolveRelation(u)
-            logicalPlans += (u -> relation)
-            relation
-          }
-      }
+      case u: UnresolvedRelation =>
+        relationToLogicalPlanMaps.getOrElse(u, {
+          val relation = resolveRelation(u)
+          relationToLogicalPlanMaps.update(u, relation)
+          relation
+        })
     }
 
     // Look up a relation from the given session catalog with the following logic:
