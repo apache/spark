@@ -175,10 +175,15 @@ private class LiveTask(
   }
 
   override protected def doUpdate(): Any = {
-    val duration = if (info.finished) {
-      info.duration
+    var duration: Long = 0
+    var executorRunTime: Long = 0
+
+    if (info.finished) {
+      duration = info.duration
+      executorRunTime = metrics.executorRunTime
     } else {
-      info.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis()))
+      duration = info.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis()))
+      executorRunTime = duration
     }
 
     new TaskDataWrapper(
@@ -198,7 +203,7 @@ private class LiveTask(
 
       metrics.executorDeserializeTime,
       metrics.executorDeserializeCpuTime,
-      metrics.executorRunTime,
+      executorRunTime,
       metrics.executorCpuTime,
       metrics.resultSize,
       metrics.jvmGcTime,
