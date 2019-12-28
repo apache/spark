@@ -2790,7 +2790,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
     ShowTableStatement(
-      Option(ctx.namespace).map(visitMultipartIdentifier),
+      Option(ctx.ns).map(visitMultipartIdentifier),
       string(ctx.pattern),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
@@ -3149,7 +3149,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
     val table = visitMultipartIdentifier(ctx.table)
-    val namespace = Option(ctx.namespace).map(visitMultipartIdentifier)
+    val namespace = Option(ctx.ns).map(visitMultipartIdentifier)
     ShowColumnsStatement(table, namespace)
   }
 
