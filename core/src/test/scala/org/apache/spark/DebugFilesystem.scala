@@ -66,9 +66,9 @@ object DebugFilesystem extends Logging {
  */
 // TODO(ekl) we should consider always interposing this to expose num open conns as a metric
 class DebugFilesystem extends FileSystem {
-  
+
   private val delegateFS = new LocalFileSystem()
-  
+
   override def getUri: URI = delegateFS.getUri
 
   override def open(f: Path, bufferSize: Int): FSDataInputStream = {

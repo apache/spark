@@ -1507,7 +1507,7 @@ object UserClasspathFirstTest {
 }
 
 class TestFileSystem extends FileSystem {
-  
+
   private val delegateFS = new LocalFileSystem()
 
   private def local(path: Path): Path = {
@@ -1520,7 +1520,7 @@ class TestFileSystem extends FileSystem {
     status.setPath(new Path(path))
     status
   }
-  
+
   override def getUri: URI = delegateFS.getUri
 
   override def open(f: Path, bufferSize: Int): FSDataInputStream = delegateFS.open(local(f))
