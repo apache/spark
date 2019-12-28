@@ -17,11 +17,14 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+import datetime
 import logging
 import socket
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+import flask
+import flask_login
 from flask import Flask
 from flask_appbuilder import SQLA, AppBuilder
 from flask_caching import Cache
@@ -228,6 +231,15 @@ def create_app(config=None, session=None, testing=False, app_name="Airflow"):
                 })
 
             return globals
+
+        @app.before_request
+        def before_request():
+            _force_log_out_after = conf.getint('webserver', 'FORCE_LOG_OUT_AFTER', fallback=0)
+            if _force_log_out_after > 0:
+                flask.session.permanent = True
+                app.permanent_session_lifetime = datetime.timedelta(minutes=_force_log_out_after)
+                flask.session.modified = True
+                flask.g.user = flask_login.current_user
 
         @app.teardown_appcontext
         def shutdown_session(exception=None):  # pylint: disable=unused-variable
