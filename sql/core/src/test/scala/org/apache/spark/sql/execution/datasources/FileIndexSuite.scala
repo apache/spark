@@ -396,14 +396,16 @@ class FileIndexSuite extends SharedSparkSession {
 
   test("SPARK-20280 - FileStatusCache with a partition with very many files") {
     /* fake the size, otherwise we need to allocate 2GB of data to trigger this bug */
-    class MyFileStatus extends FileStatus with KnownSizeEstimation {
+    class MyFileStatus extends KnownSizeEstimation {
       override def estimatedSize: Long = 1000 * 1000 * 1000
     }
     /* files * MyFileStatus.estimatedSize should overflow to negative integer
      * so, make it between 2bn and 4bn
      */
     val files = (1 to 3).map { i =>
-      new MyFileStatus()
+      // Hack: inheriting FileStatus fails in 2.13 (conflicting compareTo); not
+      // actually necessary for this test that it's a real FileStatus even, so pretend:
+      new MyFileStatus().asInstanceOf[FileStatus]
     }
     val fileStatusCache = FileStatusCache.getOrCreate(spark)
     fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)

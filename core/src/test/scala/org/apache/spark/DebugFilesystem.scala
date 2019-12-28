@@ -19,11 +19,15 @@ package org.apache.spark
 
 import java.io.{FileDescriptor, InputStream}
 import java.lang
+import java.net.URI
 import java.nio.ByteBuffer
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, FSDataOutputStream,
+  LocalFileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.util.Progressable
 
 import org.apache.spark.internal.Logging
 
@@ -61,12 +65,15 @@ object DebugFilesystem extends Logging {
  * to check that connections are not leaked.
  */
 // TODO(ekl) we should consider always interposing this to expose num open conns as a metric
-class DebugFilesystem extends LocalFileSystem {
-  import DebugFilesystem._
+class DebugFilesystem extends FileSystem {
+  
+  private val delegateFS = new LocalFileSystem()
+  
+  override def getUri: URI = delegateFS.getUri
 
   override def open(f: Path, bufferSize: Int): FSDataInputStream = {
-    val wrapped: FSDataInputStream = super.open(f, bufferSize)
-    addOpenStream(wrapped)
+    val wrapped: FSDataInputStream = delegateFS.open(f, bufferSize)
+    DebugFilesystem.addOpenStream(wrapped)
     new FSDataInputStream(wrapped.getWrappedStream) {
       override def setDropBehind(dropBehind: lang.Boolean): Unit = wrapped.setDropBehind(dropBehind)
 
@@ -105,7 +112,7 @@ class DebugFilesystem extends LocalFileSystem {
         try {
           wrapped.close()
         } finally {
-          removeOpenStream(wrapped)
+          DebugFilesystem.removeOpenStream(wrapped)
         }
       }
 
@@ -120,4 +127,26 @@ class DebugFilesystem extends LocalFileSystem {
       override def hashCode(): Int = wrapped.hashCode()
     }
   }
+
+  override def create(f: Path, permission: FsPermission, overwrite: Boolean, bufferSize: Int,
+      replication: Short, blockSize: Long, progress: Progressable): FSDataOutputStream =
+    delegateFS.create(f, permission, overwrite, bufferSize, replication, blockSize, progress)
+
+  override def append(f: Path, bufferSize: Int, progress: Progressable): FSDataOutputStream =
+    delegateFS.append(f, bufferSize, progress)
+
+  override def rename(src: Path, dst: Path): Boolean = delegateFS.rename(src, dst)
+
+  override def delete(f: Path, recursive: Boolean): Boolean = delegateFS.delete(f, recursive)
+
+  override def listStatus(f: Path): Array[FileStatus] = delegateFS.listStatus(f)
+
+  override def setWorkingDirectory(new_dir: Path): Unit = delegateFS.setWorkingDirectory(new_dir)
+
+  override def getWorkingDirectory: Path = delegateFS.getWorkingDirectory
+
+  override def mkdirs(f: Path, permission: FsPermission): Boolean =
+    delegateFS.mkdirs(f, permission)
+
+  override def getFileStatus(f: Path): FileStatus = delegateFS.getFileLinkStatus(f)
 }

@@ -28,7 +28,10 @@ import scala.io.Source
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, FSDataOutputStream,
+  LocalFileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.util.Progressable
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
@@ -1503,7 +1506,10 @@ object UserClasspathFirstTest {
   }
 }
 
-class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
+class TestFileSystem extends FileSystem {
+  
+  private val delegateFS = new LocalFileSystem()
+
   private def local(path: Path): Path = {
     // Ignore the scheme for testing.
     new Path(path.toUri.getPath)
@@ -1514,23 +1520,44 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
     status.setPath(new Path(path))
     status
   }
+  
+  override def getUri: URI = delegateFS.getUri
 
-  override def isFile(path: Path): Boolean = super.isFile(local(path))
+  override def open(f: Path, bufferSize: Int): FSDataInputStream = delegateFS.open(local(f))
+
+  override def create(f: Path, permission: FsPermission, overwrite: Boolean, bufferSize: Int,
+      replication: Short, blockSize: Long, progress: Progressable): FSDataOutputStream =
+    delegateFS.create(f, permission, overwrite, bufferSize, replication, blockSize, progress)
+
+  override def append(f: Path, bufferSize: Int, progress: Progressable): FSDataOutputStream =
+    delegateFS.append(f, bufferSize, progress)
+
+  override def rename(src: Path, dst: Path): Boolean = delegateFS.rename(src, dst)
+
+  override def delete(f: Path, recursive: Boolean): Boolean = delegateFS.delete(f, recursive)
+
+  override def listStatus(f: Path): Array[FileStatus] =
+    delegateFS.listStatus(local(f)).map(toRemote)
+
+  override def setWorkingDirectory(new_dir: Path): Unit = delegateFS.setWorkingDirectory(new_dir)
+
+  override def getWorkingDirectory: Path = delegateFS.getWorkingDirectory
+
+  override def mkdirs(f: Path, permission: FsPermission): Boolean =
+    delegateFS.mkdirs(f, permission)
+
+  override def getFileStatus(f: Path): FileStatus = delegateFS.getFileStatus(f)
+
+  override def isFile(path: Path): Boolean = delegateFS.isFile(local(path))
 
   override def globStatus(pathPattern: Path): Array[FileStatus] = {
     val newPath = new Path(pathPattern.toUri.getPath)
-    super.globStatus(newPath).map(toRemote)
-  }
-
-  override def listStatus(path: Path): Array[FileStatus] = {
-    super.listStatus(local(path)).map(toRemote)
+    delegateFS.globStatus(newPath).map(toRemote)
   }
 
   override def copyToLocalFile(src: Path, dst: Path): Unit = {
-    super.copyToLocalFile(local(src), dst)
+    delegateFS.copyToLocalFile(local(src), dst)
   }
-
-  override def open(path: Path): FSDataInputStream = super.open(local(path))
 }
 
 class TestSparkApplication extends SparkApplication with Matchers {
