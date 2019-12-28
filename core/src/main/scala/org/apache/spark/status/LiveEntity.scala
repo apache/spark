@@ -20,6 +20,7 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConverters._
 import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
 
@@ -625,10 +626,19 @@ private class SchedulerPool(name: String) extends LiveEntity {
 
 }
 
-private object LiveEntityHelpers {
+private[spark] object LiveEntityHelpers {
 
   private val stringInterner = Interners.newWeakInterner[String]()
 
+  private def accuValuetoString(value: Any): String = value match {
+    case list: java.util.List[_] =>
+      if (list.size() > 5) {
+        "[" + list.asScala.take(5).mkString(", ") + "...]"
+      } else {
+        list.toString
+      }
+    case _ => value.toString
+  }
 
   def newAccumulatorInfos(accums: Iterable[AccumulableInfo]): Seq[v1.AccumulableInfo] = {
     accums
@@ -642,7 +652,7 @@ private object LiveEntityHelpers {
           acc.id,
           acc.name.map(weakIntern).orNull,
           acc.update.map(_.toString()),
-          acc.value.map(_.toString()).orNull)
+          acc.value.map(accuValuetoString).orNull)
       }
       .toSeq
   }
