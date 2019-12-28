@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.scheduler.SparkListenerEvent
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 
 /**
  * Event emitted by the external catalog when it is modified. Events are either fired before or
@@ -202,3 +203,62 @@ case class RenameFunctionEvent(
     name: String,
     newName: String)
   extends FunctionEvent
+
+trait PartitionEvent extends DatabaseEvent {
+  /**
+   * Name of the table that was touched.
+   */
+  val name: String
+}
+
+
+/**
+ * Event fired before a partition is created.
+ */
+case class CreatePartitionPreEvent(database: String, name: String,
+                                   parts: Seq[CatalogTablePartition]) extends PartitionEvent
+
+/**
+ * Event fired after a partition has been created.
+ */
+case class CreatePartitionEvent(database: String, name: String,
+                                parts: Seq[CatalogTablePartition]) extends PartitionEvent
+
+/**
+ * Event fired before a partition is dropped.
+ */
+case class DropPartitionPreEvent(database: String, name: String,
+                                 partSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+
+/**
+ * Event fired after a partition has been dropped.
+ */
+case class DropPartitionEvent(database: String, name: String,
+                              partSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+
+/**
+ * Event fired before a function is renamed.
+ */
+case class RenamePartitionPreEvent(database: String, name: String,
+                                   specs: Seq[TablePartitionSpec],
+                                   newSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+
+/**
+ * Event fired after a function has been renamed.
+ */
+case class RenamePartitionEvent(database: String, name: String,
+                                specs: Seq[TablePartitionSpec],
+                                newSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+
+/**
+ * Event fired before a function is altered.
+ */
+case class AlterPartitionPreEvent(database: String, name: String,
+                                  parts: Seq[CatalogTablePartition]) extends PartitionEvent
+
+/**
+ * Event fired after a function has been altered.
+ */
+case class AlterPartitionEvent(database: String, name: String,
+                                parts: Seq[CatalogTablePartition]) extends PartitionEvent
+
