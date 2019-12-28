@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.features
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
-import org.apache.spark.deploy.k8s.Config.{KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME
 import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
 
 private[spark] class ExecutorKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf)
