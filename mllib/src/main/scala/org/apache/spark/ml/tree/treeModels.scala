@@ -56,8 +56,6 @@ private[spark] trait DecisionTreeModel {
     rootNode.subtreeDepth
   }
 
-  var weightSum: Double
-
   /** Summary of the model */
   override def toString: String = {
     // Implementing classes should generally override this method to be more descriptive.

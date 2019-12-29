@@ -261,32 +261,23 @@ private[spark] object RandomForest extends Logging with Serializable {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            val model = new DecisionTreeClassificationModel(uid, rootNode.toNode(prune),
-              numFeatures, strategy.getNumClasses)
-            model.weightSum = metadata.weightedNumExamples
-            model
+            new DecisionTreeClassificationModel(uid, rootNode.toNode(prune), numFeatures,
+              strategy.getNumClasses)
           }
         } else {
           topNodes.map { rootNode =>
-            val model = new DecisionTreeRegressionModel(uid, rootNode.toNode(prune), numFeatures)
-            model.weightSum = metadata.weightedNumExamples
-            model
+            new DecisionTreeRegressionModel(uid, rootNode.toNode(prune), numFeatures)
           }
         }
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            val model = new DecisionTreeClassificationModel(rootNode.toNode(prune), numFeatures,
+            new DecisionTreeClassificationModel(rootNode.toNode(prune), numFeatures,
               strategy.getNumClasses)
-            model.weightSum = metadata.weightedNumExamples
-            model
           }
         } else {
-          topNodes.map { rootNode =>
-            val model = new DecisionTreeRegressionModel(rootNode.toNode(prune), numFeatures)
-            model.weightSum = metadata.weightedNumExamples
-            model
-          }
+          topNodes.map(rootNode =>
+            new DecisionTreeRegressionModel(rootNode.toNode(prune), numFeatures))
         }
     }
   }

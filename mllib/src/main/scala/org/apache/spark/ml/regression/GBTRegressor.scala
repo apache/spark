@@ -194,9 +194,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     baseLearners.foreach(copyValues(_))
 
     val numFeatures = baseLearners.head.numFeatures
-    val sumofWeight = baseLearners.head.weightSum
     instr.logNumFeatures(numFeatures)
-    instr.logSumOfWeights(sumofWeight)
 
     new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
   }

@@ -204,16 +204,15 @@ class GBTClassifier @Since("1.4.0") (
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy))
+        $(seed), $(featureSubsetStrategy), Some(instr))
     } else {
-      GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy))
+      GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy),
+        Some(instr))
     }
     baseLearners.foreach(copyValues(_))
 
     val numFeatures = baseLearners.head.numFeatures
-    val sumofWeight = baseLearners.head.weightSum
     instr.logNumFeatures(numFeatures)
-    instr.logSumOfWeights(sumofWeight)
 
     new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }

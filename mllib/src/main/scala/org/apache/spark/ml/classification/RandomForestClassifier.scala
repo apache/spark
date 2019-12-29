@@ -149,7 +149,6 @@ class RandomForestClassifier @Since("1.4.0") (
     val numFeatures = trees.head.numFeatures
     instr.logNumClasses(numClasses)
     instr.logNumFeatures(numFeatures)
-    instr.logSumOfWeights(trees.head.weightSum)
     new RandomForestClassificationModel(uid, trees, numFeatures, numClasses)
   }
 
