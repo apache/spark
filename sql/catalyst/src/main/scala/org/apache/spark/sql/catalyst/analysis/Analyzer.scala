@@ -799,7 +799,6 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    private val relationToLogicalPlanMaps = AnalysisContext.get.relationToLogicalPlanMaps
 
     // If an unresolved relation is given, it is looked up from the session catalog and either v1
     // or v2 relation is returned. Otherwise, we look up the table from catalog
@@ -867,6 +866,7 @@ class Analyzer(
         }
 
       case u: UnresolvedRelation =>
+        val relationToLogicalPlanMaps = AnalysisContext.get.relationToLogicalPlanMaps
         relationToLogicalPlanMaps.getOrElse(u, {
           val relation = resolveRelation(u)
           relationToLogicalPlanMaps.update(u, relation)
