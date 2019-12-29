@@ -141,10 +141,12 @@ private[spark] object RandomForest extends Logging with Serializable {
         instrumentation.logNumFeatures(metadata.numFeatures)
         instrumentation.logNumClasses(metadata.numClasses)
         instrumentation.logNumExamples(metadata.numExamples)
+        instrumentation.logSumOfWeights(metadata.weightedNumExamples)
       case None =>
         logInfo("numFeatures: " + metadata.numFeatures)
         logInfo("numClasses: " + metadata.numClasses)
         logInfo("numExamples: " + metadata.numExamples)
+        logInfo("weightedNumExamples: " + metadata.weightedNumExamples)
     }
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
