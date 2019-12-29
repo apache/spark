@@ -134,6 +134,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+
     trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
 
