@@ -958,7 +958,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       metadata: DecisionTreeMetadata,
       continuousFeatures: IndexedSeq[Int]): Array[Array[Split]] = {
 
-    val continuousSplits: scala.collection.Map[Int, Array[Split]] = {
+    val continuousSplits = if (continuousFeatures.nonEmpty) {
       // reduce the parallelism for split computations when there are less
       // continuous features than input partitions. this prevents tasks from
       // being spun up that will definitely do no work.
@@ -985,7 +985,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
         (idx, splits)
       }.collectAsMap()
-    }
+    } else Map.empty[Int, Array[Split]]
 
     val numFeatures = metadata.numFeatures
     val splits: Array[Array[Split]] = Array.tabulate(numFeatures) {
