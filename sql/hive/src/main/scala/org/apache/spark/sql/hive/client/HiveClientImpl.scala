@@ -177,9 +177,14 @@ private[hive] class HiveClientImpl(
     // has hive-site.xml. So, HiveConf will use that to override its default values.
     // 2: we set all spark confs to this hiveConf.
     // 3: we set all entries in config to this hiveConf.
+
+    // not to loose command line overwritten properties
+    // make a copy overridden props so that it can be reinserted finally
+    val overriddenHiveProps = HiveConf.getConfSystemProperties.asScala
     val confMap = (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue) ++
       sparkConf.getAll.toMap ++ extraConfig).toMap
     confMap.foreach { case (k, v) => hiveConf.set(k, v) }
+    overriddenHiveProps.foreach { case (k, v) => hiveConf.set(k, v) }
     SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
       logDebug(
         s"""
