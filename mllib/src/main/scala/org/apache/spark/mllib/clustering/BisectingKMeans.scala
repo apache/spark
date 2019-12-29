@@ -333,6 +333,7 @@ private object BisectingKMeans extends Serializable {
 
     /** Adds a point. */
     def add(v: VectorWithNorm): this.type = {
+      n += 1L
       weightSum += v.weight
       // TODO: use a numerically stable approach to estimate cost
       sumSq += v.norm * v.norm  * v.weight

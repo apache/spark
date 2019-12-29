@@ -223,7 +223,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       (Vectors.dense(1.0, 1.0), 2.0), (Vectors.dense(10.0, 10.0), 2.0),
       (Vectors.dense(1.0, 0.5), 2.0), (Vectors.dense(10.0, 4.4), 2.0),
       (Vectors.dense(-1.0, 1.0), 2.0), (Vectors.dense(-100.0, 90.0), 2.0))))
-      .toDF("features", "weightCol")
+        .toDF("features", "weightCol")
 
     val model2 = new BisectingKMeans()
       .setK(3)

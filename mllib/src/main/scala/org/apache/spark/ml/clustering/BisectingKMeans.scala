@@ -27,7 +27,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
-BisectingKMeansModel => MLlibBisectingKMeansModel}
+  BisectingKMeansModel => MLlibBisectingKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
@@ -296,7 +296,7 @@ class BisectingKMeans @Since("2.0.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, featuresCol, predictionCol, k, maxIter, seed,
-      minDivisibleClusterSize, distanceMeasure)
+      minDivisibleClusterSize, distanceMeasure, weightCol)
 
     val bkm = new MLlibBisectingKMeans()
       .setK($(k))
