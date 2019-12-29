@@ -30,13 +30,14 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class JoinSuite extends QueryTest with SharedSparkSession {
+class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private def attachCleanupResourceChecker(plan: SparkPlan): Unit = {
@@ -842,7 +843,7 @@ class JoinSuite extends QueryTest with SharedSparkSession {
         case j: SortMergeJoinExec => j
       }
       val executed = df.queryExecution.executedPlan
-      val executedJoins = executed.collect {
+      val executedJoins = collect(executed) {
         case j: SortMergeJoinExec => j
       }
       // This only applies to the above tested queries, in which a child SortMergeJoin always

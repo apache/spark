@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoStateme
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataFrameCallbackSuite extends QueryTest with SharedSparkSession {
@@ -89,38 +90,41 @@ class DataFrameCallbackSuite extends QueryTest with SharedSparkSession {
   }
 
   test("get numRows metrics by callback") {
-    val metrics = ArrayBuffer.empty[Long]
-    val listener = new QueryExecutionListener {
-      // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val metrics = ArrayBuffer.empty[Long]
+      val listener = new QueryExecutionListener {
+        // Only test successful case here, so no need to implement `onFailure`
+        override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
 
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-        val metric = qe.executedPlan match {
-          case w: WholeStageCodegenExec => w.child.longMetric("numOutputRows")
-          case other => other.longMetric("numOutputRows")
+        override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+          val metric = qe.executedPlan match {
+            case w: WholeStageCodegenExec => w.child.longMetric("numOutputRows")
+            case other => other.longMetric("numOutputRows")
+          }
+          metrics += metric.value
         }
-        metrics += metric.value
       }
+      spark.listenerManager.register(listener)
+
+      val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
+
+      df.collect()
+      // Wait for the first `collect` to be caught by our listener.
+      // Otherwise the next `collect` will
+      // reset the plan metrics.
+      sparkContext.listenerBus.waitUntilEmpty()
+      df.collect()
+
+      Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metrics.length == 3)
+      assert(metrics(0) === 1)
+      assert(metrics(1) === 1)
+      assert(metrics(2) === 2)
+
+      spark.listenerManager.unregister(listener)
     }
-    spark.listenerManager.register(listener)
-
-    val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
-
-    df.collect()
-    // Wait for the first `collect` to be caught by our listener. Otherwise the next `collect` will
-    // reset the plan metrics.
-    sparkContext.listenerBus.waitUntilEmpty()
-    df.collect()
-
-    Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
-
-    sparkContext.listenerBus.waitUntilEmpty()
-    assert(metrics.length == 3)
-    assert(metrics(0) === 1)
-    assert(metrics(1) === 1)
-    assert(metrics(2) === 2)
-
-    spark.listenerManager.unregister(listener)
   }
 
   // TODO: Currently some LongSQLMetric use -1 as initial value, so if the accumulator is never

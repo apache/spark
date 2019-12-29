@@ -32,6 +32,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
+
   test("range/filter should be combined") {
     val df = spark.range(10).filter("id = 1").selectExpr("id + 1")
     val plan = df.queryExecution.executedPlan

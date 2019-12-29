@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -51,7 +52,9 @@ object TestForTypeAlias {
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
 }
 
-class DatasetSuite extends QueryTest with SharedSparkSession {
+class DatasetSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
@@ -211,7 +214,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   }
 
   test("as map of case class - reorder fields by name") {
-    val df = spark.range(3).select(map(lit(1), struct($"id".cast("int").as("b"), lit("a").as("a"))))
+    val df = spark.range(3).select(functions.map(lit(1), struct($"id".cast("int").as("b"), lit("a").as("a"))))
     val ds = df.as[Map[Int, ClassData]]
     assert(ds.collect() === Array(
       Map(1 -> ClassData("a", 0)),
@@ -1880,7 +1883,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     checkDataset(df3, DoubleData(1, "onetwo"))
 
     // Assert that no extra shuffle introduced by cogroup.
-    val exchanges = df3.queryExecution.executedPlan.collect {
+    val exchanges = collect(df3.queryExecution.executedPlan) {
       case h: ShuffleExchangeExec => h
     }
     assert(exchanges.size == 2)

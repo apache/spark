@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.ElementTrackingStore
@@ -620,9 +621,11 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   }
 
   test("SPARK-29894 test Codegen Stage Id in SparkPlanInfo") {
-    val df = createTestDataFrame.select(count("*"))
-    val sparkPlanInfo = SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)
-    assert(sparkPlanInfo.nodeName === "WholeStageCodegen (2)")
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = createTestDataFrame.select(count("*"))
+      val sparkPlanInfo = SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)
+      assert(sparkPlanInfo.nodeName === "WholeStageCodegen (2)")
+    }
   }
 }
 

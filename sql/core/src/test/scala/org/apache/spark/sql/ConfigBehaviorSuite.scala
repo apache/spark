@@ -51,7 +51,9 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
         dist)
     }
 
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString) {
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // The default chi-sq value should be low
       assert(computeChiSquareTest() < 10)
 

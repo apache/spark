@@ -227,7 +227,8 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
   test("explain formatted - check presence of subquery in case of DPP") {
     withTable("df1", "df2") {
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         withTable("df1", "df2") {
           spark.range(1000).select(col("id"), col("id").as("k"))
             .write
@@ -273,42 +274,44 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Support ExplainMode in Dataset.explain") {
-    val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")
-    val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
-    val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")
+      val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
+      val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
 
-    val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
-    assert(simpleExplainOutput.startsWith("== Physical Plan =="))
-    Seq("== Parsed Logical Plan ==",
+      val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
+      assert(simpleExplainOutput.startsWith("== Physical Plan =="))
+      Seq("== Parsed Logical Plan ==",
         "== Analyzed Logical Plan ==",
         "== Optimized Logical Plan ==").foreach { planType =>
-      assert(!simpleExplainOutput.contains(planType))
+        assert(!simpleExplainOutput.contains(planType))
+      }
+      checkKeywordsExistsInExplain(
+        testDf,
+        ExtendedMode,
+        "== Parsed Logical Plan ==" ::
+          "== Analyzed Logical Plan ==" ::
+          "== Optimized Logical Plan ==" ::
+          "== Physical Plan ==" ::
+          Nil: _*)
+      checkKeywordsExistsInExplain(
+        testDf,
+        CostMode,
+        "Statistics(sizeInBytes=" ::
+          Nil: _*)
+      checkKeywordsExistsInExplain(
+        testDf,
+        CodegenMode,
+        "WholeStageCodegen subtrees" ::
+          "Generated code:" ::
+          Nil: _*)
+      checkKeywordsExistsInExplain(
+        testDf,
+        FormattedMode,
+        "* LocalTableScan (1)" ::
+          "(1) LocalTableScan [codegen id :" ::
+          Nil: _*)
     }
-    checkKeywordsExistsInExplain(
-      testDf,
-      ExtendedMode,
-      "== Parsed Logical Plan ==" ::
-        "== Analyzed Logical Plan ==" ::
-        "== Optimized Logical Plan ==" ::
-        "== Physical Plan ==" ::
-        Nil: _*)
-    checkKeywordsExistsInExplain(
-      testDf,
-      CostMode,
-      "Statistics(sizeInBytes=" ::
-        Nil: _*)
-    checkKeywordsExistsInExplain(
-      testDf,
-      CodegenMode,
-      "WholeStageCodegen subtrees" ::
-        "Generated code:" ::
-        Nil: _*)
-    checkKeywordsExistsInExplain(
-      testDf,
-      FormattedMode,
-      "* LocalTableScan (1)" ::
-        "(1) LocalTableScan [codegen id :" ::
-        Nil: _*)
   }
 
   test("Dataset.toExplainString has mode as string") {

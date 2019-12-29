@@ -25,7 +25,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -39,22 +42,24 @@ case class InsertAdaptiveSparkPlan(
 
   private val conf = adaptiveExecutionContext.session.sessionState.conf
 
-  private def whiteList = Seq(
-    "BroadcastHashJoin",
-    "BroadcastNestedLoopJoin",
-    "CoGroup",
-    "GlobalLimit",
-    "HashAggregate",
-    "ObjectHashAggregate",
-    "ShuffledHashJoin",
-    "SortAggregate",
-    "Sort",
-    "SortMergeJoin"
-  )
+  private def needShuffle(plan: SparkPlan): Boolean = plan match {
+    case _: BroadcastHashJoinExec => true
+    case _: BroadcastNestedLoopJoinExec => true
+    case _: CoGroupExec => true
+    case _: GlobalLimitExec => true
+    case _: HashAggregateExec => true
+    case _: ObjectHashAggregateExec => true
+    case _: ShuffledHashJoinExec => true
+    case _: SortAggregateExec => true
+    case _: SortExec => true
+    case _: SortMergeJoinExec => true
+    case _: ShuffleExchangeExec => true
+    case _ => false
+  }
 
   def whetherContainShuffle(plan: SparkPlan): Boolean = {
     plan.collect {
-      case p: SparkPlan if (whiteList.contains(p.nodeName)) => p
+      case p: SparkPlan if (needShuffle(p)) => p
     }.nonEmpty
   }
 
