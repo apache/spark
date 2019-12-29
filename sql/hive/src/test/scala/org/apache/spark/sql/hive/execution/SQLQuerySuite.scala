@@ -2504,7 +2504,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         // This jar file should not be placed to the classpath; GenericUDTFCount3 is slightly
         // modified version of GenericUDTFCount2 in hive/contrib, which emits the count for
         // three times.
-        val jarPath = "src/test/noclasspath/TestUDTF.jar"
+        val jarPath = "src/test/noclasspath/TestUDTF-spark-26560.jar"
         val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
         sql(
