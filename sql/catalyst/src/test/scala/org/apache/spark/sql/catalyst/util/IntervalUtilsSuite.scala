@@ -300,31 +300,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("justify days") {
-    checkFromStringWithFunc("1 month 35 day", 2, 5, 0, justifyDays)
-    checkFromStringWithFunc("-1 month 35 day", 0, 5, 0, justifyDays)
-    checkFromStringWithFunc("1 month -35 day", 0, -5, 0, justifyDays)
-    checkFromStringWithFunc("-1 month -35 day", -2, -5, 0, justifyDays)
-    checkFromStringWithFunc("-1 month 2 day", 0, -28, 0, justifyDays)
-  }
-
-  test("justify hours") {
-    checkFromStringWithFunc("29 day 25 hour", 0, 30, 1 * MICROS_PER_HOUR, justifyHours)
-    checkFromStringWithFunc("29 day -25 hour", 0, 27, 23 * MICROS_PER_HOUR, justifyHours)
-    checkFromStringWithFunc("-29 day 25 hour", 0, -27, -23 * MICROS_PER_HOUR, justifyHours)
-    checkFromStringWithFunc("-29 day -25 hour", 0, -30, -1 * MICROS_PER_HOUR, justifyHours)
-  }
-
-  test("justify interval") {
-    checkFromStringWithFunc("1 month 29 day 25 hour", 2, 0, 1 * MICROS_PER_HOUR, justifyInterval)
-    checkFromStringWithFunc("-1 month 29 day -25 hour", 0, -2, -1 * MICROS_PER_HOUR,
-      justifyInterval)
-    checkFromStringWithFunc("1 month -29 day -25 hour", 0, 0, -1 * MICROS_PER_HOUR, justifyInterval)
-    checkFromStringWithFunc("-1 month -29 day -25 hour", -2, 0, -1 * MICROS_PER_HOUR,
-      justifyInterval)
-    intercept[ArithmeticException](justifyInterval(new CalendarInterval(2, 0, Long.MaxValue)))
-  }
-
   test("to ansi sql standard string") {
     val i1 = new CalendarInterval(0, 0, 0)
     assert(IntervalUtils.toSqlStandardString(i1) === "0")
