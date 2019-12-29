@@ -112,8 +112,10 @@ class DataFrameSuite extends QueryTest
   test("Star Expansion - CreateStruct and CreateArray") {
     val structDf = testData2.select("a", "b").as("record")
     // CreateStruct and CreateArray in aggregateExpressions
-    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).sort("a").first() == Row(1, Row(1, 1)))
-    assert(structDf.groupBy($"a").agg(min(array($"record.*"))).sort("a").first() == Row(1, Seq(1, 1)))
+    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).
+      sort("a").first() == Row(1, Row(1, 1)))
+    assert(structDf.groupBy($"a").agg(min(array($"record.*"))).
+      sort("a").first() == Row(1, Seq(1, 1)))
 
     // CreateStruct and CreateArray in project list (unresolved alias)
     assert(structDf.select(struct($"record.*")).first() == Row(Row(1, 1)))
@@ -1697,16 +1699,19 @@ class DataFrameSuite extends QueryTest
       val plan = join.queryExecution.executedPlan
       checkAnswer(join, df)
       assert(
-        collect(join.queryExecution.executedPlan) { case e: ShuffleExchangeExec => true }.size === 1)
+        collect(join.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => true }.size === 1)
       assert(
         collect(join.queryExecution.executedPlan) { case e: ReusedExchangeExec => true }.size === 1)
       val broadcasted = broadcast(join)
       val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
       checkAnswer(join2, df)
       assert(
-        collect(join2.queryExecution.executedPlan) { case e: ShuffleExchangeExec => true }.size == 1)
+        collect(join2.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => true }.size == 1)
       assert(
-        collect(join2.queryExecution.executedPlan) { case e: BroadcastExchangeExec => true }.size === 1)
+        collect(join2.queryExecution.executedPlan) {
+          case e: BroadcastExchangeExec => true }.size === 1)
       assert(
         collect(join2.queryExecution.executedPlan) { case e: ReusedExchangeExec => true }.size == 4)
     }
