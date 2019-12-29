@@ -1522,6 +1522,8 @@ class TestFileSystem extends FileSystem {
     status
   }
 
+  override def setConf(conf: Configuration): Unit = delegateFS.setConf(conf)
+
   override def initialize(name: URI, conf: Configuration): Unit = delegateFS.initialize(name, conf)
 
   override def getUri: URI = delegateFS.getUri

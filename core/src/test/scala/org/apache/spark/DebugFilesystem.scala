@@ -130,6 +130,8 @@ class DebugFilesystem extends FileSystem {
     }
   }
 
+  override def setConf(conf: Configuration): Unit = delegateFS.setConf(conf)
+
   override def initialize(name: URI, conf: Configuration): Unit = delegateFS.initialize(name, conf)
 
   override def create(f: Path, permission: FsPermission, overwrite: Boolean, bufferSize: Int,
