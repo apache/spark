@@ -1072,7 +1072,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.getLocal(conf)
+    // Same implementation as FileSystem.getLocal without the cast
+    FileSystem.get(URI.create("file:///"), hadoopConfiguration)
 
     // Add necessary security credentials to the JobConf before broadcasting it.
     SparkHadoopUtil.get.addCredentials(conf)
@@ -1224,7 +1225,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.getLocal(hadoopConfiguration)
+    // Same implementation as FileSystem.getLocal without the cast
+    FileSystem.get(URI.create("file:///"), hadoopConfiguration)
 
     // The call to NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
@@ -1263,7 +1265,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.getLocal(conf)
+    // Same implementation as FileSystem.getLocal without the cast
+    FileSystem.get(URI.create("file:///"), hadoopConfiguration)
 
     // Add necessary security credentials to the JobConf. Required to access secure HDFS.
     val jconf = new JobConf(conf)
