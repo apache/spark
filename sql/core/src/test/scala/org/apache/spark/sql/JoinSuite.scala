@@ -1027,12 +1027,12 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val right = Seq((1, 2), (3, 4)).toDF("c", "d")
     val df = left.join(right, pythonTestUDF(left("a")) === pythonTestUDF(right.col("c")))
 
-    val joinNode = df.queryExecution.executedPlan.find(_.isInstanceOf[BroadcastHashJoinExec])
+    val joinNode = find(df.queryExecution.executedPlan)(_.isInstanceOf[BroadcastHashJoinExec])
     assert(joinNode.isDefined)
 
     // There are two PythonUDFs which use attribute from left and right of join, individually.
     // So two PythonUDFs should be evaluated before the join operator, at left and right side.
-    val pythonEvals = joinNode.get.collect {
+    val pythonEvals = collect(joinNode.get) {
       case p: BatchEvalPythonExec => p
     }
     assert(pythonEvals.size == 2)
@@ -1056,7 +1056,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     assert(filterInAnalysis.isDefined)
 
     // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
-    val filterExec = df.queryExecution.executedPlan.find(_.isInstanceOf[FilterExec])
+    val filterExec = find(df.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
     assert(filterExec.isEmpty)
 
     checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
