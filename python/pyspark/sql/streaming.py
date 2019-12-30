@@ -341,9 +341,6 @@ class DataStreamReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
-            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
-                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
-                It does not change the behavior of partition discovery.
 
         .. note:: Evolving.
 
@@ -360,9 +357,6 @@ class DataStreamReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
-            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
-                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
-                It does not change the behavior of partition discovery.
 
         .. note:: Evolving.
 
@@ -411,7 +405,8 @@ class DataStreamReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None,
-             dropFieldIfAllNull=None, encoding=None, recursiveFileLookup=None):
+             dropFieldIfAllNull=None, encoding=None, pathGlobFilter=None,
+             recursiveFileLookup=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -487,6 +482,9 @@ class DataStreamReader(OptionUtils):
                          the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
                          the encoding of input JSON will be detected automatically
                          when the multiLine option is set to ``true``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -507,21 +505,24 @@ class DataStreamReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
             dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            recursiveFileLookup=recursiveFileLookup)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
             raise TypeError("path can be only a single string")
 
     @since(2.3)
-    def orc(self, path, mergeSchema=None, recursiveFileLookup=None):
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
         """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
 
         .. note:: Evolving.
 
         :param mergeSchema: sets whether we should merge schemas collected from all
-            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
-            The default value is specified in ``spark.sql.orc.mergeSchema``.
+                            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
+                            The default value is specified in ``spark.sql.orc.mergeSchema``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
             disables `partition discovery`_.
 
@@ -531,22 +532,27 @@ class DataStreamReader(OptionUtils):
         >>> orc_sdf.schema == sdf_schema
         True
         """
-        self._set_opts(mergeSchema=mergeSchema, recursiveFileLookup=recursiveFileLookup)
+        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
+                       recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.orc(path))
         else:
             raise TypeError("path can be only a single string")
 
     @since(2.0)
-    def parquet(self, path, mergeSchema=None, recursiveFileLookup=None):
+    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
         """
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
         .. note:: Evolving.
 
         :param mergeSchema: sets whether we should merge schemas collected from all
-            Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``.
-            The default value is specified in ``spark.sql.parquet.mergeSchema``.
+                            Parquet part-files. This will override
+                            ``spark.sql.parquet.mergeSchema``. The default value is specified in
+                            ``spark.sql.parquet.mergeSchema``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -556,7 +562,8 @@ class DataStreamReader(OptionUtils):
         >>> parquet_sdf.schema == sdf_schema
         True
         """
-        self._set_opts(mergeSchema=mergeSchema, recursiveFileLookup=recursiveFileLookup)
+        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
+                       recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.parquet(path))
         else:
@@ -564,7 +571,8 @@ class DataStreamReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def text(self, path, wholetext=False, lineSep=None, recursiveFileLookup=None):
+    def text(self, path, wholetext=False, lineSep=None, pathGlobFilter=None,
+             recursiveFileLookup=None):
         """
         Loads a text file stream and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -579,6 +587,9 @@ class DataStreamReader(OptionUtils):
         :param wholetext: if true, read each file from input path(s) as a single row.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -589,7 +600,8 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(
-            wholetext=wholetext, lineSep=lineSep, recursiveFileLookup=recursiveFileLookup)
+            wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.text(path))
         else:
@@ -603,7 +615,7 @@ class DataStreamReader(OptionUtils):
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
-            recursiveFileLookup=None):
+            pathGlobFilter=None, recursiveFileLookup=None):
         r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -706,6 +718,9 @@ class DataStreamReader(OptionUtils):
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
                         Maximum length is 1 character.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -726,7 +741,7 @@ class DataStreamReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
             emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            recursiveFileLookup=recursiveFileLookup)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:

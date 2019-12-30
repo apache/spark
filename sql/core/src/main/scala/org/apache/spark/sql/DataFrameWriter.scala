@@ -339,7 +339,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
+    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
@@ -357,11 +357,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val canUseV2 = lookupV2Provider().isDefined
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
-      case CatalogObjectIdentifier(catalog, ident) if !isSessionCatalog(catalog) =>
+      case NonSessionCatalogAndIdentifier(catalog, ident) =>
         insertInto(catalog, ident)
 
-      case CatalogObjectIdentifier(catalog, ident)
-          if isSessionCatalog(catalog) && canUseV2 && ident.namespace().length <= 1 =>
+      case SessionCatalogAndIdentifier(catalog, ident)
+          if canUseV2 && ident.namespace().length <= 1 =>
         insertInto(catalog, ident)
 
       case AsTableIdentifier(tableIdentifier) =>
@@ -479,19 +479,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
+    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     val session = df.sparkSession
     val canUseV2 = lookupV2Provider().isDefined
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
-      case CatalogObjectIdentifier(catalog, ident) if !isSessionCatalog(catalog) =>
+      case NonSessionCatalogAndIdentifier(catalog, ident) =>
         saveAsTable(catalog.asTableCatalog, ident)
 
-      case CatalogObjectIdentifier(catalog, ident)
-        if isSessionCatalog(catalog) && canUseV2 && ident.namespace().length <= 1 =>
+      case SessionCatalogAndIdentifier(catalog, ident)
+          if canUseV2 && ident.namespace().length <= 1 =>
         saveAsTable(catalog.asTableCatalog, ident)
 
       case AsTableIdentifier(tableIdentifier) =>

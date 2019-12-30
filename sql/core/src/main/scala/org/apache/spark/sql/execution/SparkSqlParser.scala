@@ -136,10 +136,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     } else {
       ExplainCommand(
         logicalPlan = statement,
-        extended = ctx.EXTENDED != null,
-        codegen = ctx.CODEGEN != null,
-        cost = ctx.COST != null,
-        formatted = ctx.FORMATTED != null)
+        mode = {
+          if (ctx.EXTENDED != null) ExtendedMode
+          else if (ctx.CODEGEN != null) CodegenMode
+          else if (ctx.COST != null) CostMode
+          else if (ctx.FORMATTED != null) FormattedMode
+          else SimpleMode
+        })
     }
   }
 
@@ -221,22 +224,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a plan for a DESCRIBE FUNCTION command.
-   */
-  override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
-    import ctx._
-    val functionName =
-      if (describeFuncName.STRING() != null) {
-        FunctionIdentifier(string(describeFuncName.STRING()), database = None)
-      } else if (describeFuncName.qualifiedName() != null) {
-        visitFunctionName(describeFuncName.qualifiedName)
-      } else {
-        FunctionIdentifier(describeFuncName.getText, database = None)
-      }
-    DescribeFunctionCommand(functionName, EXTENDED != null)
-  }
-
-  /**
    * Create a [[CreateFunctionCommand]] command.
    *
    * For example:
@@ -266,23 +253,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       ctx.TEMPORARY != null,
       ctx.EXISTS != null,
       ctx.REPLACE != null)
-  }
-
-  /**
-   * Create a [[DropFunctionCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   DROP [TEMPORARY] FUNCTION [IF EXISTS] function;
-   * }}}
-   */
-  override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val functionIdentifier = visitFunctionName(ctx.multipartIdentifier)
-    DropFunctionCommand(
-      functionIdentifier.database,
-      functionIdentifier.funcName,
-      ctx.EXISTS != null,
-      ctx.TEMPORARY != null)
   }
 
   /**
@@ -324,9 +294,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *   ADD (FILE[S] <filepath ...> | JAR[S] <jarpath ...>)
    *   LIST (FILE[S] [filepath ...] | JAR[S] [jarpath ...])
    * }}}
+   *
+   * Note that filepath/jarpath can be given as follows;
+   *  - /path/to/fileOrJar
+   *  - "/path/to/fileOrJar"
+   *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val mayebePaths = remainder(ctx.identifier).trim
+    val mayebePaths = if (ctx.STRING != null) string(ctx.STRING) else remainder(ctx.identifier).trim
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {

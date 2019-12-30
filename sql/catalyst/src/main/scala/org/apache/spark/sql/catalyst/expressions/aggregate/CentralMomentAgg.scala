@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -174,7 +175,8 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
       If(n === 1.0, Double.NaN, sqrt(m2 / (n - 1.0))))
   }
 
-  override def prettyName: String = "stddev_samp"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("stddev_samp")
 }
 
 // Compute the population variance of a column
@@ -215,7 +217,7 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
       If(n === 1.0, Double.NaN, m2 / (n - 1.0)))
   }
 
-  override def prettyName: String = "var_samp"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("var_samp")
 }
 
 @ExpressionDescription(

@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.util.Instrumentation
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -232,7 +232,7 @@ class KMeans private (
     val zippedData = data.zip(norms).map { case ((v, w), norm) =>
       (new VectorWithNorm(v, norm), w)
     }
-    zippedData.persist()
+    zippedData.persist(StorageLevel.MEMORY_AND_DISK)
     val model = runAlgorithmWithWeight(zippedData, instr)
     zippedData.unpersist()
 
@@ -258,7 +258,6 @@ class KMeans private (
     val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
     val dataVectorWithNorm = data.map(d => d._1)
-    val weights = data.map(d => d._2)
 
     val centers = initialModel match {
       case Some(kMeansCenters) =>
@@ -284,7 +283,6 @@ class KMeans private (
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
       val costAccum = sc.doubleAccumulator
-      val countAccum = sc.longAccumulator
       val bcCenters = sc.broadcast(centers)
 
       // Find the new centers
@@ -302,20 +300,19 @@ class KMeans private (
         pointsAndWeights.foreach { case (point, weight) =>
           val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
           costAccum.add(cost * weight)
-          countAccum.add(1)
           distanceMeasureInstance.updateClusterSum(point, sums(bestCenter), weight)
           clusterWeightSum(bestCenter) += weight
         }
 
         clusterWeightSum.indices.filter(clusterWeightSum(_) > 0)
           .map(j => (j, (sums(j), clusterWeightSum(j)))).iterator
-      }.reduceByKey { case ((sum1, clusterWeightSum1), (sum2, clusterWeightSum2)) =>
-        axpy(1.0, sum2, sum1)
-        (sum1, clusterWeightSum1 + clusterWeightSum2)
+      }.reduceByKey { (sumweight1, sumweight2) =>
+        axpy(1.0, sumweight2._1, sumweight1._1)
+        (sumweight1._1, sumweight1._2 + sumweight2._2)
       }.collectAsMap()
 
       if (iteration == 0) {
-        instr.foreach(_.logNumExamples(countAccum.value))
+        instr.foreach(_.logNumExamples(costAccum.count))
         instr.foreach(_.logSumOfWeights(collected.values.map(_._2).sum))
       }
 

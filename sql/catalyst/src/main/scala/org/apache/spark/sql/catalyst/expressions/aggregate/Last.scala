@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -111,5 +111,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
 
   override lazy val evaluateExpression: AttributeReference = last
 
-  override def toString: String = s"last($child)${if (ignoreNulls) " ignore nulls"}"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("last")
+
+  override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 }

@@ -215,8 +215,8 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
         wc.changeValue(w, 1L, _ + 1L)
       }
       wc.map { case (word, count) => (word, (count, 1)) }
-    }.reduceByKey { case ((wc1, df1), (wc2, df2)) =>
-      (wc1 + wc2, df1 + df2)
+    }.reduceByKey { (wcdf1, wcdf2) =>
+      (wcdf1._1 + wcdf2._1, wcdf1._2 + wcdf2._2)
     }
 
     val filteringRequired = isSet(minDF) || isSet(maxDF)

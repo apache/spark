@@ -427,8 +427,7 @@ class ContinuousExecution(
     if (queryExecutionThread.isAlive) {
       // The query execution thread will clean itself up in the finally clause of runContinuous.
       // We just need to interrupt the long running job.
-      queryExecutionThread.interrupt()
-      queryExecutionThread.join()
+      interruptAndAwaitExecutionThreadTermination()
     }
     logInfo(s"Query $prettyIdString was stopped")
   }

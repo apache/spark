@@ -160,13 +160,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     assume(!Utils.isWindows)
 
     class TestFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
-      var mergeApplicationListingCall = 0
-      override protected def mergeApplicationListing(
+      var doMergeApplicationListingCall = 0
+      override private[history] def doMergeApplicationListing(
           reader: EventLogFileReader,
           lastSeen: Long,
           enableSkipToEnd: Boolean): Unit = {
-        super.mergeApplicationListing(reader, lastSeen, enableSkipToEnd)
-        mergeApplicationListingCall += 1
+        super.doMergeApplicationListing(reader, lastSeen, enableSkipToEnd)
+        doMergeApplicationListingCall += 1
       }
     }
     val provider = new TestFsHistoryProvider
@@ -187,7 +187,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       list.size should be (1)
     }
 
-    provider.mergeApplicationListingCall should be (1)
+    provider.doMergeApplicationListingCall should be (1)
   }
 
   test("history file is renamed from inprogress to completed") {
@@ -1319,6 +1319,35 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     val attemptInfoWithIndex = new AttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1),
       None, None, None, None)
     assertSerDe(serializer, attemptInfoWithIndex)
+  }
+
+  test("SPARK-29043: clean up specified event log") {
+    val clock = new ManualClock()
+    val conf = createTestConf().set(MAX_LOG_AGE_S, 0L).set(CLEANER_ENABLED, true)
+    val provider = new FsHistoryProvider(conf, clock)
+
+    // create an invalid application log file
+    val inValidLogFile = newLogFile("inValidLogFile", None, inProgress = true)
+    inValidLogFile.createNewFile()
+    writeFile(inValidLogFile, None,
+      SparkListenerApplicationStart(inValidLogFile.getName, None, 1L, "test", None))
+    inValidLogFile.setLastModified(clock.getTimeMillis())
+
+    // create a valid application log file
+    val validLogFile = newLogFile("validLogFile", None, inProgress = true)
+    validLogFile.createNewFile()
+    writeFile(validLogFile, None,
+      SparkListenerApplicationStart(validLogFile.getName, Some("local_123"), 1L, "test", None))
+    validLogFile.setLastModified(clock.getTimeMillis())
+
+    provider.checkForLogs()
+    // The invalid application log file would be cleaned by checkAndCleanLog().
+    assert(new File(testDir.toURI).listFiles().size === 1)
+
+    clock.advance(1)
+    // cleanLogs() would clean the valid application log file.
+    provider.cleanLogs()
+    assert(new File(testDir.toURI).listFiles().size === 0)
   }
 
   private def assertOptionAfterSerde(opt: Option[Long], expected: Option[Long]): Unit = {

@@ -41,7 +41,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
-  import df.sparkSession.sessionState.analyzer.CatalogObjectIdentifier
+  import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
 
   private val df: DataFrame = ds.toDF()
 
@@ -52,7 +52,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
   private val (catalog, identifier) = {
-    val CatalogObjectIdentifier(catalog, identifier) = tableName
+    val CatalogAndIdentifier(catalog, identifier) = tableName
     (catalog.asTableCatalog, identifier)
   }
 
