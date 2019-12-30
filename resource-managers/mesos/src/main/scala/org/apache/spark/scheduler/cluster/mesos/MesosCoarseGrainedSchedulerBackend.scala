@@ -597,7 +597,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private def satisfiesLocality(offerHostname: String): Boolean = {
     val hostToLocalTaskCount =
-      rpHostToLocalTaskCount.getOrElse(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Map.empty)
+      rpHostToLocalTaskCount.getOrElse(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+        Map.empty)
     if (!Utils.isDynamicAllocationEnabled(conf) || hostToLocalTaskCount.isEmpty) {
       return true
     }
@@ -764,7 +765,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
 
   override def doRequestTotalExecutors(
-      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int]): Future[Boolean] = Future.successful {
+      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int]
+  ): Future[Boolean] = Future.successful {
     // We don't truly know if we can fulfill the full amount of executors
     // since at coarse grain it depends on the amount of slaves available.
     val rp = sc.resourceProfileManager.defaultResourceProfile

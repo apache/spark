@@ -113,7 +113,8 @@ private[streaming] class ExecutorAllocationManager(
     val targetTotalExecutors =
       math.max(math.min(maxNumExecutors, allExecIds.size + numNewExecutors), minNumExecutors)
     // Just map the targetTotalExecutors to the default ResourceProfile
-    client.requestTotalExecutors(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0), Map.empty,
+    client.requestTotalExecutors(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+      Map.empty,
       Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> targetTotalExecutors))
     logInfo(s"Requested total $targetTotalExecutors executors")
   }
