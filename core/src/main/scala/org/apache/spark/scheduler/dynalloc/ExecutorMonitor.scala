@@ -422,9 +422,7 @@ private[spark] class ExecutorMonitor(
         execResourceProfileCount.put(resourceProfileId, newcount)
         logDebug(s"Executor added with ResourceProfile id: $resourceProfileId " +
           s"count is now $newcount")
-        val tracker = new Tracker()
-        tracker.resourceProfileId = resourceProfileId
-        tracker
+        new Tracker(resourceProfileId)
       })
     // if we had added executor before without knowing the resource profile id, fix it up
     if (execTracker.resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID &&
@@ -457,14 +455,12 @@ private[spark] class ExecutorMonitor(
     }
   }
 
-  private class Tracker {
+  private class Tracker(var resourceProfileId: Int) {
     @volatile var timeoutAt: Long = Long.MaxValue
 
     // Tracks whether this executor is thought to be timed out. It's used to detect when the list
     // of timed out executors needs to be updated due to the executor's state changing.
     @volatile var timedOut: Boolean = false
-
-    var resourceProfileId: Int = UNKNOWN_RESOURCE_PROFILE_ID
 
     var pendingRemoval: Boolean = false
     var hasActiveShuffle: Boolean = false
