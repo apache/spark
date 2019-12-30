@@ -187,18 +187,6 @@ class FMClassifier @Since("3.0.0") (
       dataset: Dataset[_]
     ): FMClassificationModel = instrumented { instr =>
 
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val data: RDD[(Double, OldVector)] =
-      dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-        case Row(label: Double, features: Vector) =>
-          require(label == 0 || label == 1, s"FMClassifier was given" +
-            s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
-            s" FMClassifier currently only supports binary classification.")
-          (label, features)
-      }
-
-    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
-
     val numClasses = 2
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -212,8 +200,20 @@ class FMClassifier @Since("3.0.0") (
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
     instr.logNumClasses(numClasses)
 
-    val numFeatures = data.first()._2.size
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    val data: RDD[(Double, OldVector)] =
+      dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
+        case Row(label: Double, features: Vector) =>
+          require(label == 0 || label == 1, s"FMClassifier was given" +
+            s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
+            s" FMClassifier currently only supports binary classification.")
+          (label, features)
+      }
+
+    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 
     val coefficients = trainImpl(data, numFeatures, LogisticLoss)
 
