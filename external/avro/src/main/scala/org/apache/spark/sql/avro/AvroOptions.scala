@@ -36,17 +36,13 @@ class AvroOptions(
   }
 
   /**
-   * Optional schema provided by an user in JSON format.
+   * Optional schema provided by an user in JSON format. This option can be set when
+   * 1. for reading Avro, the expected schema for deserialization is compatible with
+   *    - but not the same as - the actual Avro schema.
+   * 2. On writing Avro, the expected output Avro schema doesn't match the schema converted
+   *    by Spark.
    */
   val schema: Option[String] = parameters.get("avroSchema")
-
-  /**
-   * Optional Avro schema (in JSON format) that was used to serialize the data.
-   * This should be set if the schema provided for deserialization is compatible
-   * with - but not the same as - the one used to originally convert the data to Avro.
-   * See SPARK-27506 for more details.
-   */
-  val actualSchema: Option[String] = parameters.get("actualSchema")
 
   /**
    * Top level record name in write result, which is required in Avro spec.

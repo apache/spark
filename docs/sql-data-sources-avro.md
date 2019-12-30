@@ -198,9 +198,13 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
-    <td>Optional Avro schema provided by a user in JSON format. The data type and naming of record fields
-    should match the Avro data type when reading from Avro or match the Spark's internal data type (e.g., StringType, IntegerType) when writing to Avro files; otherwise, the read/write action will fail.</td>
-    <td>read and write</td>
+    <td>Optional Avro schema provided by a user in JSON format. This option can be set when
+      <ul>
+        <li>for reading Avro, the expected schema for deserialization is compatible with - but not the same as - the actual Avro schema.</li>
+        <li>for writing Avro, the expected output Avro schema doesn't match the schema converted by Spark.</li>
+      </ul>
+    </td>
+    <td> read, write and function <code>from_avro</code></td>
   </tr>
   <tr>
     <td><code>recordName</code></td>
@@ -237,15 +241,6 @@ Data source options of Avro can be set via:
         <li><code>PERMISSIVE</code>: Corrupt records are processed as null result. Therefore, the
         data schema is forced to be fully nullable, which might be different from the one user provided.</li>
       </ul>
-    </td>
-    <td>function <code>from_avro</code></td>
-  </tr>
-  <tr>
-    <td><code>actualSchema</code></td>
-    <td>None</td>
-    <td>Optional Avro schema (in JSON format) that was used to serialize the data. This should be set if the schema provided
-      for deserialization is compatible with - but not the same as - the one used to originally convert the data to Avro.
-      For more information on Avro's schema evolution and compatibility, please refer to the [documentation of Confluent](https://docs.confluent.io/current/schema-registry/avro.html).
     </td>
     <td>function <code>from_avro</code></td>
   </tr>
