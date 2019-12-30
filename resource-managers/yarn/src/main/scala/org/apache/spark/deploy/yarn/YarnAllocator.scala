@@ -310,8 +310,8 @@ private[yarn] class YarnAllocator(
               customResources(rName) = execReq.amount.toString
           }
         }
-        val resource = Resource.newInstance(
-          heapMem + offHeapMem + overheadMem + pysparkMem, cores)
+        val totalMem = (heapMem + offHeapMem + overheadMem + pysparkMem).toInt
+        val resource = Resource.newInstance(totalMem, cores)
         ResourceRequestHelper.setResourceRequests(customResources.toMap, resource)
         logDebug(s"Created resource capability: $resource")
         rpIdToYarnResource(rp.id) = resource
@@ -436,7 +436,6 @@ private[yarn] class YarnAllocator(
       // For locality unmatched and locality free container requests, cancel these container
       // requests, since required locality preference has been changed, recalculating using
       // container placement strategy.
-      logWarning(s"host to local is: $hostToLocalTaskCountPerResourceProfileId")
       val hostToLocalTaskCount =
         hostToLocalTaskCountPerResourceProfileId.getOrElse(rpId, Map.empty)
       val pendingAllocate = pendingAllocatePerResourceProfileId.getOrElse(rpId, Seq.empty)
@@ -451,7 +450,7 @@ private[yarn] class YarnAllocator(
             s"${resource.getVirtualCores} core(s) and " +
             s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)"
           if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
-            resource.getResources.nonEmpty) {
+            ResourceRequestHelper.isYarnCustomResourcesNonEmpty(resource)) {
             requestContainerMessage ++= s" with custom resources: " + resource.toString
           }
           logInfo(requestContainerMessage)
