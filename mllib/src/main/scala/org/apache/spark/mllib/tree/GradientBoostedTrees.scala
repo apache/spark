@@ -70,7 +70,7 @@ class GradientBoostedTrees private[spark] (
     val (trees, treeWeights) = NewGBT.run(input.map {
       case LabeledPoint(label, features) =>
         Instance(label, 1.0, features.asML)
-    }, boostingStrategy, seed.toLong, "all", None)
+    }, boostingStrategy, seed.toLong, "all")
     new GradientBoostedTreesModel(algo, trees.map(_.toOld), treeWeights)
   }
 
@@ -104,7 +104,7 @@ class GradientBoostedTrees private[spark] (
     }, validationInput.map {
       case LabeledPoint(label, features) =>
         Instance(label, 1.0, features.asML)
-    }, boostingStrategy, seed.toLong, "all", None)
+    }, boostingStrategy, seed.toLong, "all")
     new GradientBoostedTreesModel(algo, trees.map(_.toOld), treeWeights)
   }
 

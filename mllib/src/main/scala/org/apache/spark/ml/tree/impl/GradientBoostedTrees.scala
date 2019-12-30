@@ -45,7 +45,8 @@ private[spark] object GradientBoostedTrees extends Logging {
       boostingStrategy: OldBoostingStrategy,
       seed: Long,
       featureSubsetStrategy: String,
-      instr: Option[Instrumentation]): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      instr: Option[Instrumentation] = None):
+        (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
@@ -79,7 +80,8 @@ private[spark] object GradientBoostedTrees extends Logging {
       boostingStrategy: OldBoostingStrategy,
       seed: Long,
       featureSubsetStrategy: String,
-      instr: Option[Instrumentation]): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      instr: Option[Instrumentation] = None):
+        (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
@@ -265,7 +267,8 @@ private[spark] object GradientBoostedTrees extends Logging {
       validate: Boolean,
       seed: Long,
       featureSubsetStrategy: String,
-      instr: Option[Instrumentation]): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      instr: Option[Instrumentation] = None):
+        (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
