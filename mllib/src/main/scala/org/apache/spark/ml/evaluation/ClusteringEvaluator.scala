@@ -20,7 +20,6 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
@@ -178,15 +177,6 @@ private[evaluation] abstract class Silhouette {
    */
   def overallScore(df: DataFrame, scoreColumn: Column): Double = {
     df.select(avg(scoreColumn)).collect()(0).getDouble(0)
-  }
-
-  protected def getNumberOfFeatures(dataFrame: DataFrame, columnName: String): Int = {
-    val group = AttributeGroup.fromStructField(dataFrame.schema(columnName))
-    if (group.size < 0) {
-      dataFrame.select(col(columnName)).first().getAs[Vector](0).size
-    } else {
-      group.size
-    }
   }
 }
 
@@ -378,7 +368,7 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
     df: DataFrame,
     predictionCol: String,
     featuresCol: String): Map[Double, ClusterStats] = {
-    val numFeatures = getNumberOfFeatures(df, featuresCol)
+    val numFeatures = MetadataUtils.getNumFeatures(df, featuresCol)
     val clustersStatsRDD = df.select(
         col(predictionCol).cast(DoubleType), col(featuresCol), col("squaredNorm"))
       .rdd
@@ -574,7 +564,7 @@ private[evaluation] object CosineSilhouette extends Silhouette {
       df: DataFrame,
       featuresCol: String,
       predictionCol: String): Map[Double, (Vector, Long)] = {
-    val numFeatures = getNumberOfFeatures(df, featuresCol)
+    val numFeatures = MetadataUtils.getNumFeatures(df, featuresCol)
     val clustersStatsRDD = df.select(
       col(predictionCol).cast(DoubleType), col(normalizedFeaturesColName))
       .rdd

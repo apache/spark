@@ -20,7 +20,7 @@ package org.apache.spark.ml.tree.impl
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
+import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
@@ -306,8 +306,12 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val firstTree = new DecisionTreeRegressor().setSeed(seed)
-    val firstTreeModel = firstTree.train(input, treeStrategy, featureSubsetStrategy)
+    val metadata = RandomForest.buildMetadata(input, treeStrategy,
+      numTrees = 1, featureSubsetStrategy)
+    val firstTreeModel = RandomForest.run(input, treeStrategy, numTrees = 1,
+      featureSubsetStrategy, seed = seed, instr = None,
+      parentUID = None, precomputedMetadata = Some(metadata))
+      .head.asInstanceOf[DecisionTreeRegressionModel]
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = firstTreeWeight
@@ -342,8 +346,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
 
-      val dt = new DecisionTreeRegressor().setSeed(seed + m)
-      val model = dt.train(data, treeStrategy, featureSubsetStrategy)
+      val model = RandomForest.run(data, treeStrategy, numTrees = 1,
+        featureSubsetStrategy, seed = seed + m, instr = None,
+        parentUID = None, precomputedMetadata = Some(metadata))
+        .head.asInstanceOf[DecisionTreeRegressionModel]
       timer.stop(s"building tree $m")
       // Update partial model
       baseLearners(m) = model

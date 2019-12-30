@@ -22,7 +22,8 @@ from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
 from pyspark.ml.param.shared import *
-from pyspark.ml.common import inherit_doc
+from pyspark.ml.common import inherit_doc, _java2py
+from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql import DataFrame
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
@@ -97,7 +98,7 @@ class ClusteringSummary(JavaWrapper):
 
 @inherit_doc
 class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                             HasProbabilityCol, HasTol, HasAggregationDepth):
+                             HasProbabilityCol, HasTol, HasAggregationDepth, HasWeightCol):
     """
     Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
 
@@ -161,7 +162,11 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
         Array of :py:class:`MultivariateGaussian` where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i
         """
-        return self._call_java("gaussians")
+        sc = SparkContext._active_spark_context
+        jgaussians = self._java_obj.gaussians()
+        return [
+            MultivariateGaussian(_java2py(sc, jgaussian.mean()), _java2py(sc, jgaussian.cov()))
+            for jgaussian in jgaussians]
 
     @property
     @since("2.0.0")
@@ -263,6 +268,21 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> gaussians = model.gaussians
     >>> len(gaussians)
     3
+    >>> gaussians[0].mean
+    DenseVector([0.825, 0.8675])
+    >>> gaussians[0].cov.toArray()
+    array([[ 0.005625  , -0.0050625 ],
+           [-0.0050625 ,  0.00455625]])
+    >>> gaussians[1].mean
+    DenseVector([-0.4777, -0.4096])
+    >>> gaussians[1].cov.toArray()
+    array([[ 0.1679695 ,  0.13181786],
+           [ 0.13181786,  0.10524592]])
+    >>> gaussians[2].mean
+    DenseVector([-0.4473, -0.3853])
+    >>> gaussians[2].cov.toArray()
+    array([[ 0.16730412,  0.13112435],
+           [ 0.13112435,  0.10469614]])
     >>> model.gaussiansDF.select("mean").head()
     Row(mean=DenseVector([0.825, 0.8675]))
     >>> model.gaussiansDF.select("cov").head()
@@ -285,12 +305,24 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     False
     >>> model2.weights == model.weights
     True
-    >>> model2.gaussians == model.gaussians
+    >>> model2.gaussians[0].mean == model.gaussians[0].mean
+    True
+    >>> model2.gaussians[0].cov == model.gaussians[0].cov
+    True
+    >>> model2.gaussians[1].mean == model.gaussians[1].mean
+    True
+    >>> model2.gaussians[1].cov == model.gaussians[1].cov
+    True
+    >>> model2.gaussians[2].mean == model.gaussians[2].mean
+    True
+    >>> model2.gaussians[2].cov == model.gaussians[2].cov
     True
     >>> model2.gaussiansDF.select("mean").head()
     Row(mean=DenseVector([0.825, 0.8675]))
     >>> model2.gaussiansDF.select("cov").head()
     Row(cov=DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False))
+    >>> gm2.setWeightCol("weight")
+    GaussianMixture...
 
     .. versionadded:: 2.0.0
     """
@@ -298,11 +330,11 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                 aggregationDepth=2):
+                 aggregationDepth=2, weightCol=None):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                 aggregationDepth=2)
+                 aggregationDepth=2, weightCol=None)
         """
         super(GaussianMixture, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.GaussianMixture",
@@ -318,11 +350,11 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     @since("2.0.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                  aggregationDepth=2):
+                  aggregationDepth=2, weightCol=None):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                  aggregationDepth=2)
+                  aggregationDepth=2, weightCol=None)
 
         Sets params for GaussianMixture.
         """
@@ -363,6 +395,13 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
         Sets the value of :py:attr:`probabilityCol`.
         """
         return self._set(probabilityCol=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
 
     @since("2.0.0")
     def setSeed(self, value):

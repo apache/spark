@@ -2315,7 +2315,7 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver, Has
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>>
-    >>> fm = FMRegressor(factorSize=2, maxIter=1000)
+    >>> fm = FMRegressor(factorSize=2, seed=16)
     >>> model = fm.fit(df)
     >>> test0 = spark.createDataFrame([
     ...     (Vectors.dense(-2.0),),
@@ -2331,12 +2331,13 @@ class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver, Has
     |[1.0]   |0.994586620589689  |
     |[4.0]   |3.9880970124135344 |
     +--------+-------------------+
+    ...
     >>> model.intercept
     -0.0032501766849261557
     >>> model.linear
     DenseVector([0.9978])
     >>> model.factors
-    DenseMatrix(1, 2, [0.0146, -0.0078], 1)
+    DenseMatrix(1, 2, [0.0173, 0.0021], 1)
 
     .. versionadded:: 3.0.0
     """
