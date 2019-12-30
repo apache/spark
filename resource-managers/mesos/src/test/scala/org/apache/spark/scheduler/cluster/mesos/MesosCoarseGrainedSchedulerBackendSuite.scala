@@ -53,7 +53,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   private var externalShuffleClient: MesosExternalBlockStoreClient = _
   private var driverEndpoint: RpcEndpointRef = _
   @volatile private var stopCalled = false
-  private val defaultResourceProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   // All 'requests' to the scheduler run immediately on the same thread, so
   // demand that all futures have their value available immediately.
@@ -74,6 +73,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     val totalExecs = Map(ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf) -> 0)
     // kills executors
+    val defaultResourceProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
     assert(backend.doRequestTotalExecutors(Map(defaultResourceProfile -> 0)).futureValue)
     assert(backend.doKillExecutors(Seq("0")).futureValue)
     val taskID0 = createTaskId("0")

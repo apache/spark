@@ -68,7 +68,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
       numRequested <- 0 until 10
       hostToLocalCount <- IndexedSeq(
-        Map.empty[Int, Map[String, Int]],
+        Map(defaultResourceProf.id -> Map.empty[String, Int]),
         Map(defaultResourceProf.id -> Map("a" -> 1, "b" -> 2))
       )
     } {

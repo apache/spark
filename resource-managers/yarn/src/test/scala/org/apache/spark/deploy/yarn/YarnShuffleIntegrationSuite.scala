@@ -86,20 +86,6 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
       assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
     }
   }
-
-  test("ResourceProfile with yarn dynamic allocation cluster mode") {
-    testResourceProfile(true)
-  }
-
-  private def testResourceProfile(clientMode: Boolean): Unit = {
-    val conf = extraSparkConf()
-    val rpConf = conf ++ Map(DYN_ALLOCATION_ENABLED.key -> "true")
-
-    val result = File.createTempFile("result", null, tempDir)
-    val finalState = runSpark(clientMode, mainClassName(ResourceProfileTestApp.getClass),
-      appArgs = Seq(result.getAbsolutePath), extraConf = extraSparkConf())
-    checkResult(finalState, result, "true")
-  }
 }
 
 /**
