@@ -114,8 +114,6 @@ object ExtractIntervalPart {
 abstract class IntervalNumOperation(interval: Expression, num: Expression, operationName: String)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
 
-  protected val checkOverflow: Boolean = SQLConf.get.ansiEnabled
-
   protected val methodStr: String =
     IntervalUtils.getClass.getName.stripSuffix("$") + "." + operationName + "Exact"
 

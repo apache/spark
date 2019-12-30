@@ -1130,14 +1130,16 @@ struct<(b + INTERVAL '1 months'):interval>
 -- !query 117
 select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b)
 -- !query 117 schema
-struct<multiply_interval(a, CAST(1.1 AS DOUBLE)):interval>
+struct<>
 -- !query 117 output
--178956970 years -8 months -2147483648 days -2562047788 hours -54.775808 seconds
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query 118
 select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b)
 -- !query 118 schema
-struct<divide_interval(a, CAST(0.5 AS DOUBLE)):interval>
+struct<>
 -- !query 118 output
--178956970 years -8 months -2147483648 days -2562047788 hours -54.775808 seconds
+java.lang.ArithmeticException
+integer overflow
