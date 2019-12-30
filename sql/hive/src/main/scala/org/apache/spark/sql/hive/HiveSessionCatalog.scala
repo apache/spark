@@ -116,7 +116,7 @@ private[sql] class HiveSessionCatalog(
     try {
       lookupFunction0(name, children)
     } catch {
-      case NonFatal(_) =>
+      case NonFatal(_) if children.exists(_.dataType.isInstanceOf[DecimalType]) =>
         // SPARK-16228 ExternalCatalog may recognize `double`-type only.
         val newChildren = children.map { child =>
           if (child.dataType.isInstanceOf[DecimalType]) Cast(child, DoubleType) else child
