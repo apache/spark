@@ -23,8 +23,8 @@ import scala.collection.mutable.ListBuffer
 
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
-import org.apache.spark._
 
+import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config

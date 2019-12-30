@@ -183,7 +183,6 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val rprof1 = new ImmutableResourceProfile(rp1.executorResources, rp1.taskResources)
     rpManager.addResourceProfile(rprof1)
     post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
-    
     val updatesNeeded =
       new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
@@ -1331,7 +1330,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     val numMap = manager invokePrivate _numExecutorsTargetPerResourceProfileId()
     numMap(rpId)
   }
-  
+
   private def addExecutorsToTargetForDefaultProfile(
       manager: ExecutorAllocationManager,
       updatesNeeded: mutable.HashMap[ImmutableResourceProfile,

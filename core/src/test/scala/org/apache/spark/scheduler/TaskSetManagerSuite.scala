@@ -666,7 +666,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
-      0, 0, 0, null,  ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      0, 0, 0, null, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     intercept[TaskNotSerializableException] {

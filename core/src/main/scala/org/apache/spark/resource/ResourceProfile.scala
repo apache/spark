@@ -83,12 +83,14 @@ class ResourceProfile() extends Serializable {
 }
 
 private[spark] object ResourceProfile {
+  // task resources
   val CPUS = "cpus"
+  // Executor resources
   val CORES = "cores"
   val MEMORY = "memory"
   val OVERHEAD_MEM = "memoryOverhead"
   val PYSPARK_MEM = "pyspark.memory"
 
-  // all known spark executor resources (minus the custom resources like GPUs/FPGAs)
+  // all supported spark executor resources (minus the custom resources like GPUs/FPGAs)
   val allSupportedExecutorResources = Seq(CORES, MEMORY, OVERHEAD_MEM, PYSPARK_MEM)
 }

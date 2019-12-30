@@ -143,9 +143,10 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       reset(allocationClient)
       when(allocationClient.getExecutorIds()).thenReturn((1 to numExecs).map(_.toString))
       requestExecutors(allocationManager, numNewExecs)
+      val defaultProfId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
       verify(allocationClient, times(1)).requestTotalExecutors(
-        meq(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)), meq(Map.empty),
-        meq(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> expectedRequestedTotalExecs)))
+        meq(Map(defaultProfId -> 0)), meq(Map.empty),
+        meq(Map(defaultProfId -> expectedRequestedTotalExecs)))
     }
 
     withAllocationManager(numReceivers = 1) { case (_, allocationManager) =>

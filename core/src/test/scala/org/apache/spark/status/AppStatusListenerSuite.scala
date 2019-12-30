@@ -154,8 +154,10 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     // Start a job with 2 stages / 4 tasks each
     time += 1
     val stages = Seq(
-      new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1",  resourceProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
-      new StageInfo(2, 0, "stage2", 4, Nil, Seq(1), "details2", resourceProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      new StageInfo(1, 0, "stage1", 4, Nil, Nil,
+        "details1", resourceProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
+      new StageInfo(2, 0, "stage2", 4, Nil, Seq(1),
+        "details2", resourceProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
     val jobProps = new Properties()
     jobProps.setProperty(SparkContext.SPARK_JOB_DESCRIPTION, "jobDescription")

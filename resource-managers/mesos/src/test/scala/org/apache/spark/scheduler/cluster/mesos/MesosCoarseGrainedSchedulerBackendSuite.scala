@@ -637,10 +637,11 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     assert(backend.getExecutorIds().isEmpty)
 
+    val defaultProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     val defaultProf = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    backend.requestTotalExecutors(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
-      Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> Map("hosts10" -> 1, "hosts11" -> 1)),
-      Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2))
+    backend.requestTotalExecutors(Map(defaultProfileId -> 2),
+      Map(defaultProfileId -> Map("hosts10" -> 1, "hosts11" -> 1)),
+      Map(defaultProfileId -> 2))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(1, false)

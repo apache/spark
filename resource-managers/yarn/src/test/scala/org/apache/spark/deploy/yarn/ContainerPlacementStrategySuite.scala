@@ -21,8 +21,8 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.resource.ImmutableResourceProfile
 
 class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
