@@ -20,30 +20,35 @@ license: |
 ---
 
 ### Description
-`REFRESH` is used to invalidate and refresh all the cached data (and the associated metadata) for
-all Dataset, that contains the given data source path. Path matching is by prefix, i.e. "/" would 
-invalidate everything that is cached.
+REFRESH` is used to invalidate and refresh all the cached data (and the associated metadata) for
+all Datasets that contains the given data source path. Path matching is by prefix, i.e. "/" would
+invalidate everything that is cached. 
 
 ### Syntax
 {% highlight sql %}
-REFRESH resource_name
+REFRESH resource_path
 {% endhighlight %}
 
 ### Parameters
 <dl>
- <dt><code><em>resource_name</em></code></dt>
+ <dt><code><em>resource_path</em></code></dt>
  <dd>The path of the resource that is to be refreshed.</dd>
 </dl>
 
 ### Examples
 {% highlight sql %}
-REFRESH /tmp/test.jar;
-REFRESH "/tmp/test.txt";
-REFRESH '/tmp/test.txt';
+ -- The Path is resolved using the datasource's File Index.
+ 
+CREATE TABLE test(ID INT) using parquet;
+INSERT INTO test SELECT 1000;
+CACHE TABLE test;
+INSERT INTO test SELECT 100;
+REFRESH "hdfs://path/to/table";
+ 
 {% endhighlight %}
 
 ### Related Statements
- * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
- * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
- * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
- * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
+- [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+- [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+- [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
+- [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)
