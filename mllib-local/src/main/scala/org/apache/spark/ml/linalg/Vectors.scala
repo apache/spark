@@ -548,12 +548,10 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
     val ii = new Array[Int](nnz)
     val vv = new Array[Double](nnz)
     var k = 0
-    foreachActive { (i, v) =>
-      if (v != 0) {
-        ii(k) = i
-        vv(k) = v
-        k += 1
-      }
+    foreachNonZero { (i, v) =>
+      ii(k) = i
+      vv(k) = v
+      k += 1
     }
     new SparseVector(size, ii, vv)
   }
@@ -695,12 +693,10 @@ class SparseVector @Since("2.0.0") (
       val ii = new Array[Int](nnz)
       val vv = new Array[Double](nnz)
       var k = 0
-      foreachActive { (i, v) =>
-        if (v != 0.0) {
-          ii(k) = i
-          vv(k) = v
-          k += 1
-        }
+      foreachNonZero { (i, v) =>
+        ii(k) = i
+        vv(k) = v
+        k += 1
       }
       new SparseVector(size, ii, vv)
     }
