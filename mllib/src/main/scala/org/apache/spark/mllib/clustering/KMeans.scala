@@ -232,7 +232,10 @@ class KMeans private (
     val zippedData = data.zip(norms).map { case ((v, w), norm) =>
       (new VectorWithNorm(v, norm), w)
     }
-    zippedData.persist(StorageLevel.MEMORY_AND_DISK)
+
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      zippedData.persist(StorageLevel.MEMORY_AND_DISK)
+    }
     val model = runAlgorithmWithWeight(zippedData, instr)
     zippedData.unpersist()
 
