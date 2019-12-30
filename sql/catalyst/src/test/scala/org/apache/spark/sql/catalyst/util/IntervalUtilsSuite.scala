@@ -267,21 +267,17 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("multiply by num") {
-    Seq[(CalendarInterval, Double) => CalendarInterval](multiplyExact, multiply).foreach { func =>
-      var interval = new CalendarInterval(0, 0, 0)
-      assert(interval === func(interval, 0))
-      interval = new CalendarInterval(123, 456, 789)
-      assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === func(interval, 42))
-      interval = new CalendarInterval(-123, -456, -789)
-      assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === func(interval, 42))
-      assert(new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR) ===
-        func(new CalendarInterval(1, 5, 0), 1.5))
-      assert(new CalendarInterval(2, 14, 12 * MICROS_PER_HOUR) ===
-        func(new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR), 1.2))
-    }
+    var interval = new CalendarInterval(0, 0, 0)
+    assert(interval === multiplyExact(interval, 0))
+    interval = new CalendarInterval(123, 456, 789)
+    assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === multiplyExact(interval, 42))
+    interval = new CalendarInterval(-123, -456, -789)
+    assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === multiplyExact(interval, 42))
+    assert(new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR) ===
+      multiplyExact(new CalendarInterval(1, 5, 0), 1.5))
+    assert(new CalendarInterval(2, 14, 12 * MICROS_PER_HOUR) ===
+      multiplyExact(new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR), 1.2))
 
-    assert(CalendarInterval.MAX_VALUE ===
-      multiply(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE))
     try {
       multiplyExact(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE)
       fail("Expected to throw an exception on months overflow")
@@ -291,22 +287,20 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("divide by num") {
-    Seq[(CalendarInterval, Double) => CalendarInterval](divideExact, divide).foreach { func =>
-      var interval = new CalendarInterval(0, 0, 0)
-      assert(interval === func(interval, 10))
-      interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
-      assert(new CalendarInterval(0, 16, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
-        func(interval, 2))
-      assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === func(interval, 0.5))
-      interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
-      assert(new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND) === func(interval, 2))
-      assert(new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE) === func(interval, 0.5))
-      try {
-        func(new CalendarInterval(123, 456, 789), 0)
-        fail("Expected to throw an exception on divide by zero")
-      } catch {
-        case e: ArithmeticException => assert(e.getMessage.contains("divide by zero"))
-      }
+    var interval = new CalendarInterval(0, 0, 0)
+    assert(interval === divideExact(interval, 10))
+    interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
+    assert(new CalendarInterval(0, 16, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
+      divideExact(interval, 2))
+    assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === divideExact(interval, 0.5))
+    interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
+    assert(new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND) === divideExact(interval, 2))
+    assert(new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE) === divideExact(interval, 0.5))
+    try {
+      divideExact(new CalendarInterval(123, 456, 789), 0)
+      fail("Expected to throw an exception on divide by zero")
+    } catch {
+      case e: ArithmeticException => assert(e.getMessage.contains("divide by zero"))
     }
   }
 
@@ -464,8 +458,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       new CalendarInterval(Int.MinValue, Int.MaxValue, Long.MaxValue))
 
     intercept[ArithmeticException](multiplyExact(CalendarInterval.MAX_VALUE, 2))
-    assert(multiply(CalendarInterval.MAX_VALUE, 2) === CalendarInterval.MAX_VALUE)
     intercept[ArithmeticException](divideExact(CalendarInterval.MAX_VALUE, 0.5))
-    assert(divide(CalendarInterval.MAX_VALUE, 0.5) === CalendarInterval.MAX_VALUE)
   }
 }

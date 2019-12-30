@@ -199,11 +199,17 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("multiply") {
     def check(interval: String, num: Double, expected: String,
-        modes: Seq[String] = Seq("true", "false")): Unit = {
+        modes: Seq[String] = Seq("true", "false"), checkException: Boolean = false): Unit = {
       modes.foreach { v =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> v) {
-          checkEvaluation(MultiplyInterval(Literal(stringToInterval(interval)), Literal(num)),
-            if (expected == null) null else stringToInterval(expected))
+          if (checkException) {
+            checkExceptionInExpression[ArithmeticException](
+              MultiplyInterval(Literal(stringToInterval(interval)), Literal(num)),
+              "integer overflow")
+          } else {
+            checkEvaluation(MultiplyInterval(Literal(stringToInterval(interval)), Literal(num)),
+              if (expected == null) null else stringToInterval(expected))
+          }
         }
       }
     }
@@ -216,12 +222,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("-100 years -1 millisecond", 0.5, "-50 years -500 microseconds")
     check("2 months 4 seconds", -0.5, "-1 months -2 seconds")
     check("1 month 2 microseconds", 1.5, "1 months 15 days 3 microseconds")
-    check("2 months", Int.MaxValue, CalendarInterval.MAX_VALUE.toString, Seq("false"))
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkExceptionInExpression[ArithmeticException](
-        MultiplyInterval(Literal(stringToInterval("2 months")), Literal(Int.MaxValue.toDouble)),
-        "integer overflow")
-    }
+    check("2 months", Int.MaxValue, CalendarInterval.MAX_VALUE.toString, checkException = true)
   }
 
   test("divide") {

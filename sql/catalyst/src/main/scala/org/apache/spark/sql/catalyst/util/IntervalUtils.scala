@@ -524,13 +524,6 @@ object IntervalUtils {
   }
 
   /**
-   * Return a new calendar interval instance of the left interval times a multiplier.
-   */
-  def multiply(interval: CalendarInterval, num: Double): CalendarInterval = {
-    safeFromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
-  }
-
-  /**
    * Return a new calendar interval instance of the left interval divides by a dividend.
    *
    * @throws ArithmeticException if the result overflows any field value or divided by zero
@@ -538,16 +531,6 @@ object IntervalUtils {
   def divideExact(interval: CalendarInterval, num: Double): CalendarInterval = {
     if (num == 0) throw new ArithmeticException("divide by zero")
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
-  }
-
-  /**
-   * Return a new calendar interval instance of the left interval divides by a dividend.
-   *
-   * @throws ArithmeticException if divided by zero
-   */
-  def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (num == 0) throw new ArithmeticException("divide by zero")
-    safeFromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
   // `toString` implementation in CalendarInterval is the multi-units format currently.

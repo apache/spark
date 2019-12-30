@@ -116,10 +116,8 @@ abstract class IntervalNumOperation(interval: Expression, num: Expression, opera
 
   protected val checkOverflow: Boolean = SQLConf.get.ansiEnabled
 
-  protected val operation: String =
-    IntervalUtils.getClass.getName.stripSuffix("$") + "." + {
-      if (checkOverflow) operationName + "Exact" else operationName
-    }
+  protected val methodStr: String =
+    IntervalUtils.getClass.getName.stripSuffix("$") + "." + operationName + "Exact"
 
   override def left: Expression = interval
   override def right: Expression = num
@@ -137,15 +135,11 @@ case class MultiplyInterval(interval: Expression, num: Expression)
   extends IntervalNumOperation(interval, num, "multiply") {
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    if (checkOverflow) {
-      multiplyExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-    } else {
-      multiply(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-    }
+    multiplyExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (interval, num) => s"$operation($interval, $num)")
+    defineCodeGen(ctx, ev, (interval, num) => s"$methodStr($interval, $num)")
   }
 }
 
@@ -154,11 +148,7 @@ case class DivideInterval(interval: Expression, num: Expression)
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     if (num == 0) return null
-    if (checkOverflow) {
-      divideExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-    } else {
-      divide(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-    }
+    divideExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -167,7 +157,7 @@ case class DivideInterval(interval: Expression, num: Expression)
          |if ($num == 0) {
          |  ${ev.isNull} = true;
          |} else {
-         |  ${ev.value} = $operation($interval, $num);
+         |  ${ev.value} = $methodStr($interval, $num);
          |}
          |""".stripMargin
     })
