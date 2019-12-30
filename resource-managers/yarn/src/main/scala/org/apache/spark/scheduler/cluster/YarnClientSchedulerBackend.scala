@@ -164,7 +164,7 @@ private[spark] class YarnClientSchedulerBackend(
 
     super.stop()
     client.stop()
-    logInfo("Stopped")
+    logInfo("YarnClientSchedulerBackend Stopped")
   }
 
   override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
