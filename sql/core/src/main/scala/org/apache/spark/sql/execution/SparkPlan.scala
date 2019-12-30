@@ -322,10 +322,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         // To collect n from the last, we should anyway read everything with keeping the n.
         // Otherwise, we don't know where is the last from the iterator.
         var last: Seq[UnsafeRow] = Seq.empty[UnsafeRow]
-        if (n > 0) {
-          val slidingIter = iter.map(_.copy()).sliding(n)
-          while (slidingIter.hasNext) { last = slidingIter.next().asInstanceOf[Seq[UnsafeRow]] }
-        }
+        val slidingIter = iter.map(_.copy()).sliding(n)
+        while (slidingIter.hasNext) { last = slidingIter.next().asInstanceOf[Seq[UnsafeRow]] }
         var i = 0
         count = last.length
         while (i < count) {
