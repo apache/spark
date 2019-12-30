@@ -25,7 +25,7 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
 class RunnableCommandSuite extends SQLTestUtils with SharedSparkSession {
 
-  test("Add Directory when ADD_DIRECTORY_USING_RECURSIVE not set to true") {
+  test("Add Directory when LEGACY_ADD_DIRECTORY_USING_RECURSIVE not set to true") {
     withTempDir { dir =>
       val msg = intercept[SparkException] {
           spark.sql(s"ADD FILE $dir")
@@ -34,10 +34,10 @@ class RunnableCommandSuite extends SQLTestUtils with SharedSparkSession {
     }
   }
 
-  test("Add Directory when ADD_DIRECTORY_USING_RECURSIVE set to true") {
+  test("Add Directory when LEGACY_ADD_DIRECTORY_USING_RECURSIVE set to true") {
     withTempDir { testDir =>
       val testFile = File.createTempFile("testFile", "1", testDir)
-      withSQLConf(SQLConf.ADD_DIRECTORY_USING_RECURSIVE.key -> "true") {
+      withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "true") {
         spark.sql(s"ADD FILE $testDir")
         assert(new File(SparkFiles.get(s"${testDir.getName}/${testFile.getName}")).exists())
       }
