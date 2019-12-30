@@ -34,8 +34,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ImmutableResourceProfile._
 import org.apache.spark.resource.ResourceInformation
-import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
@@ -79,8 +79,13 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
+      val rpIdToRegister = if (resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
+        DEFAULT_RESOURCE_PROFILE_ID
+      } else {
+        resourceProfileId
+      }
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, resources, resourceProfileId))
+        extractAttributes, resources, rpIdToRegister))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>
@@ -93,7 +98,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   // visible for testing
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     logDebug(s"Resource profile id is: $resourceProfileId")
-    // if resource profile specified we look at different confs
+    // if the resource profile was specified we look at different confs
     val resources = if (resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
       getOrDiscoverAllResources(env.conf, SPARK_EXECUTOR_PREFIX, resourcesFileOpt)
     } else {

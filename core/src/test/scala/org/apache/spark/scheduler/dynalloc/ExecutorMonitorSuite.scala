@@ -27,7 +27,7 @@ import org.mockito.Mockito.{doAnswer, mock, when}
 import org.apache.spark._
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, UNKNOWN_RESOURCE_PROFILE_ID}
+import org.apache.spark.resource.ImmutableResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, UNKNOWN_RESOURCE_PROFILE_ID}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._

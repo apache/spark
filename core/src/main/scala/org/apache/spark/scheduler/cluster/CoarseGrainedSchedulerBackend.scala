@@ -33,8 +33,7 @@ import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
-import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.resource.ResourceRequirement
+import org.apache.spark.resource.ImmutableResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -579,7 +578,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // this function is for testing only
   def getExecutorResourceProfileId(executorId: String): Int = synchronized {
     val res = executorDataMap.get(executorId)
-    res.map(_.resourceProfileId).getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+    res.map(_.resourceProfileId).getOrElse(ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
   /**

@@ -28,7 +28,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SPARK_TASK_PREFIX
-import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -112,7 +111,7 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   def listResourceIds(sparkConf: SparkConf, componentName: String): Seq[ResourceID] = {
-    sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_DOT").map { case (key, _) =>
+    sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_PREFIX.").map { case (key, _) =>
       key.substring(0, key.indexOf('.'))
     }.toSet.toSeq.map(name => ResourceID(componentName, name))
   }
@@ -125,6 +124,35 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
+  // Used to take a fraction amount from a task resource requirement and split into a real
+  // integer amount and the number of parts expected. For instance, if the amount is 0.5,
+  // the we get (1, 2) back out.
+  // Returns tuple of (amount, numParts)
+  def calculateAmountAndPartsForFraction(amount: Double): (Int, Int) = {
+    val parts = if (amount <= 0.5) {
+      Math.floor(1.0 / amount).toInt
+    } else if (amount % 1 != 0) {
+      throw new SparkException(
+        s"The resource amount ${amount} must be either <= 0.5, or a whole number.")
+    } else {
+      1
+    }
+    (Math.ceil(amount).toInt, parts)
+  }
+
+  // Add any task resource requests from the spark conf to the TaskResourceRequests passed in
+  def addTaskResourceRequests(
+      sparkConf: SparkConf,
+      treqs: TaskResourceRequests): Unit = {
+    listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
+      val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
+      val amountDouble = settings.getOrElse(AMOUNT,
+        throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+      ).toDouble
+      treqs.resource(resourceId.resourceName, amountDouble)
+    }
+  }
+
   def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
     : Seq[ResourceRequirement] = {
     listResourceIds(sparkConf, componentName).map { resourceId =>
@@ -133,15 +161,7 @@ private[spark] object ResourceUtils extends Logging {
         throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
       ).toDouble
       val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
-        val parts = if (amountDouble <= 0.5) {
-          Math.floor(1.0 / amountDouble).toInt
-        } else if (amountDouble % 1 != 0) {
-          throw new SparkException(
-            s"The resource amount ${amountDouble} must be either <= 0.5, or a whole number.")
-        } else {
-          1
-        }
-        (Math.ceil(amountDouble).toInt, parts)
+        calculateAmountAndPartsForFraction(amountDouble)
       } else if (amountDouble % 1 != 0) {
         throw new SparkException(
           s"Only tasks support fractional resources, please check your $componentName settings")
@@ -242,7 +262,8 @@ private[spark] object ResourceUtils extends Logging {
       sparkConf: SparkConf,
       resourcesFileOpt: Option[String],
       componentName: String): Map[String, ResourceInformation] = {
-    val requests = getResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
+    val requests =
+      ImmutableResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
     val resourceIdToRequest = requests.map(req => (req.id, req)).toMap
     val requestResourceIds = resourceIdToRequest.keySet.toSeq
     val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt,

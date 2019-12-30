@@ -29,7 +29,7 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+import org.apache.spark.resource.ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{Clock, ManualClock, SystemClock}
