@@ -744,7 +744,7 @@ class Analyzer(
           .getOrElse(i)
       case u @ UnresolvedTable(ident) =>
         lookupTempView(ident).foreach { _ =>
-          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
+          u.failAnalysis(s"${ident.quoted} is a view not table.")
         }
         u
     }
@@ -888,7 +888,7 @@ class Analyzer(
         assert(newIdent.namespace.length == 1)
         CatalogV2Util.loadTable(catalog, newIdent) match {
           case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-            u.failAnalysis(s"$newIdent is a temp view not table.")
+            u.failAnalysis(s"$newIdent is a view not table.")
           case Some(table) => ResolvedTable(catalog.asTableCatalog, newIdent, table)
           case None => u
         }

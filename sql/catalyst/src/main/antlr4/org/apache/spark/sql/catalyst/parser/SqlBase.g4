@@ -212,7 +212,7 @@ statement
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         multipartIdentifier partitionSpec? describeColName?            #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
-    | COMMENT ON (database | NAMESPACE) multipartIdentifier IS
+    | COMMENT ON namespace multipartIdentifier IS
         commennt=(STRING | NULL)                                       #commentNamespace
     | COMMENT ON TABLE multipartIdentifier IS commennt=(STRING | NULL) #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
