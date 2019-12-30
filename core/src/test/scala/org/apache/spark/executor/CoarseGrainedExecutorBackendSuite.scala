@@ -100,9 +100,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("parsing multiple resources resource profile") {
     val gpuExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$GPU")
+      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
     val fpgaExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$FPGA")
+      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
     testParsingMultipleResources(gpuExecInternalConf.amountConf,
       fpgaExecInternalConf.amountConf, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
@@ -184,7 +184,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("executor resource found less than required resource profile") {
     val gpuExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$GPU")
+      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
     testExecutorResourceFoundLessThanRequired(gpuExecInternalConf.amountConf,
       ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
@@ -245,7 +245,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("use resource discovery and allocated file option with resource profile") {
     val fpgaExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$FPGA")
+      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
     allocatedFileAndConfigsResourceDiscoveryTestFpga(fpgaExecInternalConf.amountConf,
       fpgaExecInternalConf.discoveryScriptConf,
       ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
@@ -292,7 +292,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("resource profile id missing from confs") {
     val fpgaExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, s"$RESOURCE_DOT$FPGA")
+      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
     val conf = new SparkConf
     conf.set(fpgaExecInternalConf.amountConf, "3")
     assume(!(Utils.isWindows))
