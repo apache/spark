@@ -45,15 +45,15 @@ SELECT double('infinity');
 SELECT double('          -INFINiTY   ');
 -- [SPARK-27923] Spark SQL insert there bad special inputs to NULL
 -- bad special inputs
-SELECT double('N A N');
-SELECT double('NaN x');
-SELECT double(' INFINITY    x');
+-- SELECT double('N A N');
+-- SELECT double('NaN x');
+-- SELECT double(' INFINITY    x');
 
 SELECT double('Infinity') + 100.0;
 SELECT double('Infinity') / double('Infinity');
 SELECT double('NaN') / double('NaN');
 -- [SPARK-28315] Decimal can not accept NaN as input
-SELECT double(decimal('nan'));
+-- SELECT double(decimal('nan'));
 
 SELECT '' AS five, * FROM FLOAT8_TBL;
 

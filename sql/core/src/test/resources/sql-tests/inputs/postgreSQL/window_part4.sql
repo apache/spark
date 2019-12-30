@@ -368,9 +368,9 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
 
 -- [SPARK-29638] Spark handles 'NaN' as 0 in sums
 -- ensure aggregate over numeric properly recovers from NaN values
-SELECT a, b,
-       SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
-FROM (VALUES(1,1),(2,2),(3,(cast('nan' as int))),(4,3),(5,4)) t(a,b);
+-- SELECT a, b,
+--       SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+-- FROM (VALUES(1,1),(2,2),(3,(cast('nan' as int))),(4,3),(5,4)) t(a,b);
 
 -- It might be tempting for someone to add an inverse trans function for
 -- float and double precision. This should not be done as it can give incorrect
