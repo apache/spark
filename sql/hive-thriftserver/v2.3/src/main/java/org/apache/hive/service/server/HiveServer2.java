@@ -159,8 +159,6 @@ public class HiveServer2 extends CompositeService {
     ServerOptionsProcessor oproc = new ServerOptionsProcessor("hiveserver2");
     ServerOptionsProcessorResponse oprocResponse = oproc.parse(args);
 
-    // NOTE: It is critical to do this here so that log4j is reinitialized
-    // before any of the other core hive classes are loaded
     HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG);
 
     // Log debug message from "oproc" after log4j initialize properly
