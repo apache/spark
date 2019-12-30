@@ -388,8 +388,8 @@ private[spark] class DAGScheduler(
       shuffleDep: ShuffleDependency[K, V, C], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
 
-    // TODO - need to make sure RDD across stages get profile in both - like groupby
-    // TODO - later do we want to track the merged so we don't recreate it
+    // something we may consider later is do we want to track the merged profile
+    // so we don't recreate it if the user runs the same operation multiple times
     val resourceProfile = mergeResourceProfilesForStage(rdd)
     // this ResourceProfile could be different if it was merged so we have to add it to
     // our ResourceProfileManager
@@ -451,6 +451,9 @@ private[spark] class DAGScheduler(
     }
   }
 
+  // This is a basic merge resource profiles function that takes the max
+  // value of the profiles. We may want to make this more complex in the future as
+  // you may want to sum some resources (like memory).
   private[scheduler] def mergeResourceProfiles(
       r1: ImmutableResourceProfile,
       r2: ImmutableResourceProfile): ImmutableResourceProfile = {
@@ -522,10 +525,11 @@ private[spark] class DAGScheduler(
       partitions: Array[Int],
       jobId: Int,
       callSite: CallSite): ResultStage = {
+    // something we may consider later is do we want to track the merged profile
+    // so we don't recreate it if the user runs the same operation multiple times
     val resourceProfile = mergeResourceProfilesForStage(rdd)
     // this ResourceProfile could be different if it was merged so we have to add it to
     // our ResourceProfileManager.
-    // TODO - later do we want to track the merged so we don't recreate it
     sc.resourceProfileManager.addResourceProfile(resourceProfile)
 
     checkBarrierStageWithDynamicAllocation(rdd)
@@ -611,8 +615,6 @@ private[spark] class DAGScheduler(
 
   private[scheduler] def getResourceProfilesForRDDsInStage(
       rdd: RDD[_]): HashSet[ImmutableResourceProfile] = {
-    logInfo("getting stage resource profiles for rdd: " + rdd + " profile: "
-      + rdd.getImmutableResourceProfile)
     val resourceProfiles = new HashSet[ImmutableResourceProfile]
     val visited = new HashSet[RDD[_]]
     val waitingForVisit = new ListBuffer[RDD[_]]
@@ -621,12 +623,10 @@ private[spark] class DAGScheduler(
       val toVisit = waitingForVisit.remove(0)
       if (!visited(toVisit)) {
         visited += toVisit
-        logInfo("getting stage resource profiles for tovisit: " + toVisit + " profile: ")
         toVisit.getImmutableResourceProfile.foreach(resourceProfiles += _)
         toVisit.dependencies.foreach {
           case _: ShuffleDependency[_, _, _] =>
           // Not within the same stage with current rdd, do nothing.
-          // TODO - need to handle operations that cross stage boundaries like groupby, join, etc!!
           case dependency =>
             waitingForVisit.prepend(dependency.rdd)
         }

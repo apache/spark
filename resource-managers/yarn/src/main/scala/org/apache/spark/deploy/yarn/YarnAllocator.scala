@@ -76,8 +76,8 @@ private[yarn] class YarnAllocator(
   import YarnAllocator._
 
   // Visible for testing.
-  val allocatedHostToContainersMapPerRPId = new HashMap[Int,
-    HashMap[String, collection.mutable.Set[ContainerId]]]
+  val allocatedHostToContainersMapPerRPId =
+    new HashMap[Int, HashMap[String, collection.mutable.Set[ContainerId]]]
   allocatedHostToContainersMapPerRPId(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     new HashMap[String, mutable.Set[ContainerId]]()
 
@@ -232,12 +232,11 @@ private[yarn] class YarnAllocator(
   // We could allocate per Stage to make sure earlier stages get priority but Spark
   // always finishes a stage before starting a later one and if we have 2 running in parallel
   // I don't think the priority matters.
-  // TODO - do we want to store these for later use?
   private def getContainerPriority(resourceProfileId: Int): Priority = {
     Priority.newInstance(resourceProfileId)
   }
 
-  // ResourceProfile id = priority
+  // The ResourceProfile id is the priority
   private def getResourceProfileIdFromPriority(priority: Int): Int = {
     priority
   }
@@ -273,7 +272,6 @@ private[yarn] class YarnAllocator(
         .asScala.flatMap(_.asScala)
       allContainerRequests(id) = result
     }
-    logWarning(s"all container requests is: $allContainerRequests")
     allContainerRequests.toMap
   }
 
@@ -292,17 +290,17 @@ private[yarn] class YarnAllocator(
         val customResources = new mutable.HashMap[String, String]
         // track the resource profile if not already there
         getOrUpdateRunningExecutorForRPId(rp.id)
-        logInfo(s"resource profile ${rp.id} doesn't exist, adding it")
+        logInfo(s"Resource profile ${rp.id} doesn't exist, adding it")
         val execResources = rp.executorResources
         execResources.foreach { case (r, execReq) =>
           r match {
-            case "memory" =>
+            case ResourceProfile.MEMORY =>
               heapMem = execReq.amount
-            case "memoryOverhead" =>
+            case ResourceProfile.OVERHEAD_MEM =>
               overheadMem = execReq.amount
-            case "pyspark.memory" =>
+            case ResourceProfile.PYSPARK_MEM =>
               pysparkMem = execReq.amount
-            case "cores" =>
+            case ResourceProfile.CORES =>
               cores = execReq.amount.toInt
             case "gpu" =>
               customResources(YARN_GPU_RESOURCE_CONFIG) = execReq.amount.toString
@@ -349,7 +347,7 @@ private[yarn] class YarnAllocator(
 
     val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
       if (numExecs != getTargetNumExecutorsForRPId(rp.id)) {
-        logInfo(s"Driver updated requested a total number of $numExecs executor(s) " +
+        logInfo(s"Driver requested a total number of $numExecs executor(s) " +
           s"for resource profile id: ${rp.id}.")
         targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
         allocatorBlacklistTracker.setSchedulerBlacklistedNodes(nodeBlacklist)
@@ -432,7 +430,6 @@ private[yarn] class YarnAllocator(
     }.toMap
 
     missingPerProfile.foreach { case (rpId, missing) =>
-
       // Split the pending container request into three groups: locality matched list, locality
       // unmatched list and non-locality list. Take the locality matched container request into
       // consideration of container placement, treat as allocated containers.
@@ -446,12 +443,8 @@ private[yarn] class YarnAllocator(
       val (localRequests, staleRequests, anyHostRequests) = splitPendingAllocationsByLocality(
         hostToLocalTaskCount, pendingAllocate)
       val numPendingAllocate = pendingAllocate.size
-
       if (missing > 0) {
-
         val resource = rpIdToYarnResource(rpId)
-
-        // TODO - test this log message
         if (log.isInfoEnabled()) {
           var requestContainerMessage = s"Will request $missing executor container(s) for " +
             s" ResourceProfile Id: $rpId, each with " +
@@ -651,7 +644,6 @@ private[yarn] class YarnAllocator(
       containersToUse: ArrayBuffer[Container],
       remaining: ArrayBuffer[Container]): Unit = {
     val rpId = getResourceProfileIdFromPriority(allocatedContainer.getPriority.getPriority())
-
     // SPARK-6050: certain Yarn configurations return a virtual core count that doesn't match the
     // request; for example, capacity scheduler + DefaultResourceCalculator. So match on requested
     // memory, but use the asked vcore count for matching, effectively disabling matching on vcore

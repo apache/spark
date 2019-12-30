@@ -55,7 +55,6 @@ private[spark] class ExecutorMonitor(
   private val executors = new ConcurrentHashMap[String, Tracker]()
   private val execResourceProfileCount = new ConcurrentHashMap[Int, Int]()
 
-
   // The following fields are an optimization to avoid having to scan all executors on every EAM
   // schedule interval to find out which ones are timed out. They keep track of when the next
   // executor timeout is expected to happen, and the current list of timed out executors. There's

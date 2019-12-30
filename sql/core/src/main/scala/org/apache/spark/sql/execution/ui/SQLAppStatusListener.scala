@@ -197,6 +197,7 @@ class SQLAppStatusListener(
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
     val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
+
     val taskMetrics = exec.stages.toSeq
       .flatMap { stageId => Option(stageMetrics.get(stageId)) }
       .flatMap(_.metricValues())
