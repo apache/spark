@@ -251,7 +251,7 @@ private[spark] object ResourceUtils extends Logging {
   /**
    * Gets all allocated resource information based on the ResourceProfile information. It gets
    * the ResourceProfile information using the spark internal confs that looks like:
-   * spark.resourceProfile.executor.[rpId].resource.gpu.[amount, vendor, discoveryScript].
+   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
    * This uses the input resources file and discovers the remaining via discovery scripts
    * from the ResourceProfile. It also verifies the resource allocation meets required amount
    * for each resource.

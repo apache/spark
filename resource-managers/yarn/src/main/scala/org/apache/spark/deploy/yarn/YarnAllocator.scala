@@ -176,6 +176,7 @@ private[yarn] class YarnAllocator(
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource, resolver)
 
+  // Using default profile for now until the ResourceProfile stuff is fully supported in YARN
   private val defaultResourceProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   def getNumExecutorsRunning: Int = runningExecutors.size()
