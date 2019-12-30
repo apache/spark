@@ -224,6 +224,10 @@ case class AdaptiveSparkPlanExec(
     getFinalPhysicalPlan().executeTake(n)
   }
 
+  override def executeTail(n: Int): Array[InternalRow] = {
+    getFinalPhysicalPlan().executeTail(n)
+  }
+
   override def doExecute(): RDD[InternalRow] = {
     getFinalPhysicalPlan().execute()
   }
