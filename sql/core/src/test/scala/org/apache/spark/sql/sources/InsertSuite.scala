@@ -822,7 +822,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-29174 Support LOCAL in INSERT OVERWRITE DIRECTORY to data source") {
-    withTempDir { dir =>
+    withTempPath { dir =>
       val path = dir.toURI.getPath
       sql(s"""create table tab1 ( a int) location '$path'""")
       sql("insert into tab1 values(1)")
