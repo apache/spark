@@ -130,8 +130,6 @@ private[kafka010] class InternalKafkaConsumer(
   }
 }
 
-// TODO: consider changing this to normal class, as having mutable variables in
-//   case class sounds weird.
 /**
  * The internal object to store the fetched data from Kafka consumer and the next offset to poll.
  *
@@ -192,8 +190,6 @@ private[kafka010] case class FetchedData(
   def offsetAfterPoll: Long = _offsetAfterPoll
 }
 
-// TODO: consider changing this to normal class, as having mutable variables in
-//   case class sounds weird.
 /**
  * The internal object returned by the `fetchRecord` method. If `record` is empty, it means it is
  * invisible (either a transaction message, or an aborted message when the consumer's
@@ -613,7 +609,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       consumerPool.close()
     } catch {
       case e: Throwable =>
-        logWarning("Ignoring exception while shutting down pools from shutdown hook", e)
+        logWarning("Ignoring Exception while shutting down pools from shutdown hook", e)
     }
   }
 
@@ -637,11 +633,6 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     }
 
     new KafkaDataConsumer(topicPartition, kafkaParams, consumerPool, fetchedDataPool)
-  }
-
-  private[kafka010] def clear(): Unit = {
-    consumerPool.reset()
-    fetchedDataPool.reset()
   }
 
   private def reportDataLoss0(

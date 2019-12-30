@@ -507,7 +507,7 @@ private[spark] class ExecutorAllocationManager(
   private def removeExecutors(executors: Seq[String]): Seq[String] = synchronized {
     val executorIdsToBeRemoved = new ArrayBuffer[String]
 
-    logInfo("Request to remove executorIds: " + executors.mkString(", "))
+    logDebug(s"Request to remove executorIds: ${executors.mkString(", ")}")
     val numExecutorsTotalPerRpId = mutable.Map[Int, Int]()
 
     executors.foreach { executorIdToBeRemoved =>

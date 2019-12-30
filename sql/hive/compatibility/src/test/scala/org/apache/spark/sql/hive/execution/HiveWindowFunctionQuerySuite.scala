@@ -58,7 +58,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |  p_size INT,
         |  p_container STRING,
         |  p_retailprice DOUBLE,
-        |  p_comment STRING)
+        |  p_comment STRING) USING hive
       """.stripMargin)
     val testData1 = TestHive.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
     sql(

@@ -421,6 +421,52 @@ class PlannerSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-30036: Remove unnecessary RoundRobinPartitioning " +
+      "if SortExec is followed by RoundRobinPartitioning") {
+    val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
+    val partitioning = RoundRobinPartitioning(5)
+    assert(!partitioning.satisfies(distribution))
+
+    val inputPlan = SortExec(SortOrder(Literal(1), Ascending) :: Nil,
+      global = true,
+      child = ShuffleExchangeExec(
+        partitioning,
+        DummySparkPlan(outputPartitioning = partitioning)))
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assert(outputPlan.find {
+      case ShuffleExchangeExec(_: RoundRobinPartitioning, _, _) => true
+      case _ => false
+    }.isEmpty,
+      "RoundRobinPartitioning should be changed to RangePartitioning")
+
+    val query = testData.select('key, 'value).repartition(2).sort('key.asc)
+    assert(query.rdd.getNumPartitions == 2)
+    assert(query.rdd.collectPartitions()(0).map(_.get(0)).toSeq == (1 to 50))
+  }
+
+  test("SPARK-30036: Remove unnecessary HashPartitioning " +
+    "if SortExec is followed by HashPartitioning") {
+    val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
+    val partitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    assert(!partitioning.satisfies(distribution))
+
+    val inputPlan = SortExec(SortOrder(Literal(1), Ascending) :: Nil,
+      global = true,
+      child = ShuffleExchangeExec(
+        partitioning,
+        DummySparkPlan(outputPartitioning = partitioning)))
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assert(outputPlan.find {
+      case ShuffleExchangeExec(_: HashPartitioning, _, _) => true
+      case _ => false
+    }.isEmpty,
+      "HashPartitioning should be changed to RangePartitioning")
+
+    val query = testData.select('key, 'value).repartition(5, 'key).sort('key.asc)
+    assert(query.rdd.getNumPartitions == 5)
+    assert(query.rdd.collectPartitions()(0).map(_.get(0)).toSeq == (1 to 20))
+  }
+
   test("EnsureRequirements does not eliminate Exchange with different partitioning") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val partitioning = HashPartitioning(Literal(2) :: Nil, 5)
@@ -855,6 +901,30 @@ class PlannerSuite extends SharedSparkSession {
         StructField("f1", StringType, nullable = true),
         StructField("f2", StringType, nullable = true),
         StructField("f3", StringType, nullable = false))))
+  }
+
+  test("Do not analyze subqueries twice") {
+    // Analyzing the subquery twice will result in stacked
+    // CheckOverflow & PromotePrecision expressions.
+    val df = sql(
+      """
+        |SELECT id,
+        |       (SELECT 1.3000000 * AVG(CAST(id AS DECIMAL(10, 3))) FROM range(13)) AS ref
+        |FROM   range(5)
+        |""".stripMargin)
+
+    val Seq(subquery) = df.queryExecution.executedPlan.subqueriesAll
+    subquery.foreach { node =>
+      node.expressions.foreach { expression =>
+        expression.foreach {
+          case PromotePrecision(_: PromotePrecision) =>
+            fail(s"$expression contains stacked PromotePrecision expressions.")
+          case CheckOverflow(_: CheckOverflow, _, _) =>
+            fail(s"$expression contains stacked CheckOverflow expressions.")
+          case _ => // Ok
+        }
+      }
+    }
   }
 }
 

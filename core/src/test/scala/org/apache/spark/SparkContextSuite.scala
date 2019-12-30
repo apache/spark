@@ -233,6 +233,42 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("SPARK-30126: addFile when file path contains spaces with recursive works") {
+    withTempDir { dir =>
+      try {
+        val sep = File.separator
+        val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+        val tmpConfFile1 = File.createTempFile("test file", ".conf", tmpDir)
+
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc.addFile(tmpConfFile1.getAbsolutePath, true)
+
+        assert(sc.listFiles().size == 1)
+        assert(sc.listFiles().head.contains(new Path(tmpConfFile1.getName).toUri.toString))
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
+  test("SPARK-30126: addFile when file path contains spaces without recursive works") {
+    withTempDir { dir =>
+      try {
+          val sep = File.separator
+          val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+          val tmpConfFile2 = File.createTempFile("test file", ".conf", tmpDir)
+
+          sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+          sc.addFile(tmpConfFile2.getAbsolutePath)
+
+          assert(sc.listFiles().size == 1)
+          assert(sc.listFiles().head.contains(new Path(tmpConfFile2.getName).toUri.toString))
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
   test("addFile recursive can't add directories by default") {
     withTempDir { dir =>
       try {
@@ -291,6 +327,24 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           sc.addFile(jarPath)
           sc.addFile(jarPath)
       }
+    }
+  }
+
+  test("SPARK-30126: add jar when path contains spaces") {
+    withTempDir { dir =>
+       try {
+          val sep = File.separator
+          val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+          val tmpJar = File.createTempFile("test", ".jar", tmpDir)
+
+          sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+          sc.addJar(tmpJar.getAbsolutePath)
+
+          assert(sc.listJars().size == 1)
+          assert(sc.listJars().head.contains(tmpJar.getName))
+       } finally {
+         sc.stop()
+       }
     }
   }
 

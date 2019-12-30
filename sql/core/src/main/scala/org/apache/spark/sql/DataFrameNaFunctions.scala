@@ -40,7 +40,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def drop(): DataFrame = drop("any", df.columns)
+  def drop(): DataFrame = drop0("any", outputAttributes)
 
   /**
    * Returns a new `DataFrame` that drops rows containing null or NaN values.
@@ -50,7 +50,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def drop(how: String): DataFrame = drop(how, df.columns)
+  def drop(how: String): DataFrame = drop0(how, outputAttributes)
 
   /**
    * Returns a new `DataFrame` that drops rows containing any null or NaN values
@@ -89,11 +89,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def drop(how: String, cols: Seq[String]): DataFrame = {
-    how.toLowerCase(Locale.ROOT) match {
-      case "any" => drop(cols.size, cols)
-      case "all" => drop(1, cols)
-      case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
-    }
+    drop0(how, toAttributes(cols))
   }
 
   /**
@@ -119,10 +115,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = {
-    // Filtering condition:
-    // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
-    val predicate = AtLeastNNonNulls(minNonNulls, cols.map(name => df.resolve(name)))
-    df.filter(Column(predicate))
+    drop0(minNonNulls, toAttributes(cols))
   }
 
   /**
@@ -459,11 +452,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * TODO: This can be optimized to use broadcast join when replacementMap is large.
    */
-  private def replaceCol(col: StructField, replacementMap: Map[_, _]): Column = {
+  private def replaceCol[K, V](col: StructField, replacementMap: Map[K, V]): Column = {
     val keyExpr = df.col(col.name).expr
     def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType)
     val branches = replacementMap.flatMap { case (source, target) =>
-      Seq(buildExpr(source), buildExpr(target))
+      Seq(Literal(source), buildExpr(target))
     }.toSeq
     new Column(CaseKeyWhen(keyExpr, branches :+ keyExpr)).as(col.name)
   }
@@ -485,6 +478,23 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   private def outputAttributes: Seq[Attribute] = {
     df.queryExecution.analyzed.output
+  }
+
+  private def drop0(how: String, cols: Seq[Attribute]): DataFrame = {
+    how.toLowerCase(Locale.ROOT) match {
+      case "any" => drop0(cols.size, cols)
+      case "all" => drop0(1, cols)
+      case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
+    }
+  }
+
+  private def drop0(minNonNulls: Int, cols: Seq[Attribute]): DataFrame = {
+    // Filtering condition:
+    // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
+    val predicate = AtLeastNNonNulls(
+      minNonNulls,
+      outputAttributes.filter{ col => cols.exists(_.semanticEquals(col)) })
+    df.filter(Column(predicate))
   }
 
   /**

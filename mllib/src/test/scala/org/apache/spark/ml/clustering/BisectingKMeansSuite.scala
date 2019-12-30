@@ -149,7 +149,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
 
   test("BisectingKMeans with cosine distance is not supported for 0-length vectors") {
     val model = new BisectingKMeans().setK(2).setDistanceMeasure(DistanceMeasure.COSINE).setSeed(1)
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(0.0, 0.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5)
@@ -160,7 +160,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("BisectingKMeans with cosine distance") {
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(1.0, 1.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5),
@@ -174,6 +174,8 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       .setSeed(1)
       .fit(df)
     val predictionDf = model.transform(df)
+    checkNominalOnDF(predictionDf, "prediction", model.getK)
+
     assert(predictionDf.select("prediction").distinct().count() == 3)
     val predictionsMap = predictionDf.collect().map(row =>
       row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap

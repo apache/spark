@@ -151,8 +151,9 @@ class UISeleniumSuite
         summaryText should contain ("Total delay:")
 
         findAll(cssSelector("""#batch-job-table th""")).map(_.text).toSeq should be {
-          List("Output Op Id", "Description", "Output Op Duration", "Status", "Job Id",
-            "Job Duration", "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total",
+          List("Output Op Id", "Description", "Output Op Duration (?)", "Status", "Job Id",
+            "Job Duration (?)", "Stages: Succeeded/Total",
+            "Tasks (for all stages): Succeeded/Total",
             "Error")
         }
 
@@ -163,7 +164,7 @@ class UISeleniumSuite
 
         // Check job ids
         val jobIdCells = findAll(cssSelector( """#batch-job-table a""")).toSeq
-        jobIdCells.map(_.text) should be (List("0", "1", "2", "3"))
+        jobIdCells.map(_.text).filter(_.forall(_.isDigit)) should be (List("0", "1", "2", "3"))
 
         val jobLinks = jobIdCells.flatMap(_.attribute("href"))
         jobLinks.size should be (4)

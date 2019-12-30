@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.ViewType
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -141,7 +142,11 @@ case class ReplaceTableAsSelectStatement(
 /**
  * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
  */
-case class QualifiedColType(name: Seq[String], dataType: DataType, comment: Option[String])
+case class QualifiedColType(
+    name: Seq[String],
+    dataType: DataType,
+    comment: Option[String],
+    position: Option[ColumnPosition])
 
 /**
  * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
@@ -157,7 +162,8 @@ case class AlterTableAlterColumnStatement(
     tableName: Seq[String],
     column: Seq[String],
     dataType: Option[DataType],
-    comment: Option[String]) extends ParsedStatement
+    comment: Option[String],
+    position: Option[ColumnPosition]) extends ParsedStatement
 
 /**
  * ALTER TABLE ... RENAME COLUMN command, as parsed from SQL.
@@ -485,3 +491,27 @@ case class ShowCurrentNamespaceStatement() extends ParsedStatement
 case class ShowTablePropertiesStatement(
     tableName: Seq[String],
     propertyKey: Option[String]) extends ParsedStatement
+
+/**
+ * A DESCRIBE FUNCTION statement, as parsed from SQL
+ */
+case class DescribeFunctionStatement(
+    functionName: Seq[String],
+    isExtended: Boolean) extends ParsedStatement
+
+/**
+ *  SHOW FUNCTIONS statement, as parsed from SQL
+ */
+case class ShowFunctionsStatement(
+    userScope: Boolean,
+    systemScope: Boolean,
+    pattern: Option[String],
+    functionName: Option[Seq[String]]) extends ParsedStatement
+
+/**
+ *  DROP FUNCTION statement, as parsed from SQL
+ */
+case class DropFunctionStatement(
+    functionName: Seq[String],
+    ifExists: Boolean,
+    isTemp: Boolean) extends ParsedStatement

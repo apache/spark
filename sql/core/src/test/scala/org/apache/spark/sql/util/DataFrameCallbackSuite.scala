@@ -20,7 +20,7 @@ package org.apache.spark.sql.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, AnalysisException, QueryTest}
+import org.apache.spark.sql.{functions, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
@@ -224,6 +224,54 @@ class DataFrameCallbackSuite extends QueryTest with SharedSparkSession {
       assert(errors.length == 1)
       assert(errors.head._1 == "insertInto")
       assert(errors.head._2 == e)
+    }
+  }
+
+  test("get observable metrics by callback") {
+    val metricMaps = ArrayBuffer.empty[Map[String, Row]]
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        metricMaps += qe.observedMetrics
+      }
+
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Throwable): Unit = {
+        // No-op
+      }
+    }
+    spark.listenerManager.register(listener)
+    try {
+      val df = spark.range(100)
+        .observe(
+          name = "my_event",
+          min($"id").as("min_val"),
+          max($"id").as("max_val"),
+          sum($"id").as("sum_val"),
+          count(when($"id" % 2 === 0, 1)).as("num_even"))
+        .observe(
+          name = "other_event",
+          avg($"id").cast("int").as("avg_val"))
+
+      def checkMetrics(metrics: Map[String, Row]): Unit = {
+        assert(metrics.size === 2)
+        assert(metrics("my_event") === Row(0L, 99L, 4950L, 50L))
+        assert(metrics("other_event") === Row(49))
+      }
+
+      // First run
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metricMaps.size === 1)
+      checkMetrics(metricMaps.head)
+      metricMaps.clear()
+
+      // Second run should produce the same result as the first run.
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metricMaps.size === 1)
+      checkMetrics(metricMaps.head)
+
+    } finally {
+      spark.listenerManager.unregister(listener)
     }
   }
 }

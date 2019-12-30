@@ -28,7 +28,7 @@ In case of an external table, only the associated metadata information is remove
 
 ### Syntax
 {% highlight sql %}
-DROP TABLE [IF EXISTS] [database_name.]table_name
+DROP TABLE [ IF EXISTS ] table_identifier
 {% endhighlight %}
 
 ### Parameter
@@ -37,13 +37,13 @@ DROP TABLE [IF EXISTS] [database_name.]table_name
   <dd>
      If specified, no exception is thrown when the table does not exists.
   </dd>
-  <dt><code><em>database_name</em></code></dt>
+  <dt><code><em>table_identifier</em></code></dt>
   <dd>
-     Specifies the database name where table is present.
-  </dd>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>
-     Specifies the table name to be dropped.
+    Specifies the table name to be dropped. The table name may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
   </dd>
 </dl>
 

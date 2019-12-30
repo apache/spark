@@ -71,23 +71,27 @@ object AggregateExpression {
   def apply(
       aggregateFunction: AggregateFunction,
       mode: AggregateMode,
-      isDistinct: Boolean): AggregateExpression = {
+      isDistinct: Boolean,
+      filter: Option[Expression] = None): AggregateExpression = {
     AggregateExpression(
       aggregateFunction,
       mode,
       isDistinct,
+      filter,
       NamedExpression.newExprId)
   }
 }
 
 /**
  * A container for an [[AggregateFunction]] with its [[AggregateMode]] and a field
- * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
+ * (`isDistinct`) indicating if DISTINCT keyword is specified for this function and
+ * a field (`filter`) indicating if filter clause is specified for this function.
  */
 case class AggregateExpression(
     aggregateFunction: AggregateFunction,
     mode: AggregateMode,
     isDistinct: Boolean,
+    filter: Option[Expression],
     resultId: ExprId)
   extends Expression
   with Unevaluable {
@@ -104,6 +108,8 @@ case class AggregateExpression(
     UnresolvedAttribute(aggregateFunction.toString)
   }
 
+  lazy val filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
+
   // We compute the same thing regardless of our final result.
   override lazy val canonicalized: Expression = {
     val normalizedAggFunc = mode match {
@@ -119,10 +125,12 @@ case class AggregateExpression(
       normalizedAggFunc.canonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
+      filter.map(_.canonicalized),
       ExprId(0))
   }
 
-  override def children: Seq[Expression] = aggregateFunction :: Nil
+  override def children: Seq[Expression] = aggregateFunction +: filter.toSeq
+
   override def dataType: DataType = aggregateFunction.dataType
   override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
@@ -130,7 +138,7 @@ case class AggregateExpression(
   @transient
   override lazy val references: AttributeSet = {
     mode match {
-      case Partial | Complete => aggregateFunction.references
+      case Partial | Complete => aggregateFunction.references ++ filterAttributes
       case PartialMerge | Final => AttributeSet(aggregateFunction.aggBufferAttributes)
     }
   }

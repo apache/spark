@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, Loc
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -46,6 +48,26 @@ class DDLParserSuite extends AnalysisTest {
 
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
+  }
+
+  test("SPARK-30098: create table without provider should " +
+    "use default data source under non-legacy mode") {
+    val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)"
+    val defaultProvider = conf.defaultDataSourceName
+    val expectedPlan = CreateTableStatement(
+      Seq("my_tab"),
+      new StructType()
+        .add("a", IntegerType, nullable = true, "test")
+        .add("b", StringType),
+      Seq.empty[Transform],
+      None,
+      Map.empty[String, String],
+      defaultProvider,
+      Map.empty[String, String],
+      None,
+      None,
+      false)
+    parseCompare(createSql, expectedPlan)
   }
 
   test("create/replace table using - schema") {
@@ -471,7 +493,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, None)
+        QualifiedColType(Seq("x"), IntegerType, None, None)
       )))
   }
 
@@ -479,8 +501,8 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int, y string"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, None),
-        QualifiedColType(Seq("y"), StringType, None)
+        QualifiedColType(Seq("x"), IntegerType, None, None),
+        QualifiedColType(Seq("y"), StringType, None, None)
       )))
   }
 
@@ -488,7 +510,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, None)
+        QualifiedColType(Seq("x"), IntegerType, None, None)
       )))
   }
 
@@ -496,7 +518,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int)"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, None)
+        QualifiedColType(Seq("x"), IntegerType, None, None)
       )))
   }
 
@@ -504,7 +526,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int COMMENT 'doc')"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, Some("doc"))
+        QualifiedColType(Seq("x"), IntegerType, Some("doc"), None)
       )))
   }
 
@@ -512,7 +534,21 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int COMMENT 'doc'"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, Some("doc"))
+        QualifiedColType(Seq("x"), IntegerType, Some("doc"), None)
+      )))
+  }
+
+  test("alter table: add column with position") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMN x int FIRST"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x"), IntegerType, None, Some(first()))
+      )))
+
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMN x int AFTER y"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x"), IntegerType, None, Some(after("y")))
       )))
   }
 
@@ -520,23 +556,17 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc'"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x", "y", "z"), IntegerType, Some("doc"))
+        QualifiedColType(Seq("x", "y", "z"), IntegerType, Some("doc"), None)
       )))
   }
 
   test("alter table: add multiple columns with nested column name") {
     comparePlans(
-      parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc', a.b string"),
+      parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc', a.b string FIRST"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x", "y", "z"), IntegerType, Some("doc")),
-        QualifiedColType(Seq("a", "b"), StringType, None)
+        QualifiedColType(Seq("x", "y", "z"), IntegerType, Some("doc"), None),
+        QualifiedColType(Seq("a", "b"), StringType, None, Some(first()))
       )))
-  }
-
-  test("alter table: add column at position (not supported)") {
-    assertUnsupported("ALTER TABLE table_name ADD COLUMNS name bigint COMMENT 'doc' FIRST, a.b int")
-    assertUnsupported("ALTER TABLE table_name ADD COLUMN name bigint COMMENT 'doc' FIRST")
-    assertUnsupported("ALTER TABLE table_name ADD COLUMN name string AFTER a.b")
   }
 
   test("alter table: set location") {
@@ -568,6 +598,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq("table_name"),
         Seq("a", "b", "c"),
         Some(LongType),
+        None,
         None))
   }
 
@@ -578,6 +609,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq("table_name"),
         Seq("a", "b", "c"),
         Some(LongType),
+        None,
         None))
   }
 
@@ -588,22 +620,31 @@ class DDLParserSuite extends AnalysisTest {
         Seq("table_name"),
         Seq("a", "b", "c"),
         None,
-        Some("new comment")))
+        Some("new comment"),
+        None))
   }
 
-  test("alter table: update column type and comment") {
+  test("alter table: update column position") {
     comparePlans(
-      parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint COMMENT 'new comment'"),
+      parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c FIRST"),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        None,
+        None,
+        Some(first())))
+  }
+
+  test("alter table: update column type, comment and position") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c " +
+        "TYPE bigint COMMENT 'new comment' AFTER d"),
       AlterTableAlterColumnStatement(
         Seq("table_name"),
         Seq("a", "b", "c"),
         Some(LongType),
-        Some("new comment")))
-  }
-
-  test("alter table: change column position (not supported)") {
-    assertUnsupported("ALTER TABLE table_name CHANGE COLUMN name COMMENT 'doc' FIRST")
-    assertUnsupported("ALTER TABLE table_name CHANGE COLUMN name TYPE INT AFTER other_col")
+        Some("new comment"),
+        Some(after("d"))))
   }
 
   test("alter table: drop column") {
@@ -1776,6 +1817,66 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
       ShowTablePropertiesStatement(Seq("a", "b", "c"), Some("propKey1")))
+  }
+
+  test("DESCRIBE FUNCTION") {
+    comparePlans(
+      parsePlan("DESC FUNCTION a"),
+      DescribeFunctionStatement(Seq("a"), false))
+    comparePlans(
+      parsePlan("DESCRIBE FUNCTION a"),
+      DescribeFunctionStatement(Seq("a"), false))
+    comparePlans(
+      parsePlan("DESCRIBE FUNCTION a.b.c"),
+      DescribeFunctionStatement(Seq("a", "b", "c"), false))
+    comparePlans(
+      parsePlan("DESCRIBE FUNCTION EXTENDED a.b.c"),
+      DescribeFunctionStatement(Seq("a", "b", "c"), true))
+  }
+
+  test("SHOW FUNCTIONS") {
+    comparePlans(
+      parsePlan("SHOW FUNCTIONS"),
+      ShowFunctionsStatement(true, true, None, None))
+    comparePlans(
+      parsePlan("SHOW USER FUNCTIONS"),
+      ShowFunctionsStatement(true, false, None, None))
+    comparePlans(
+      parsePlan("SHOW user FUNCTIONS"),
+      ShowFunctionsStatement(true, false, None, None))
+    comparePlans(
+      parsePlan("SHOW SYSTEM FUNCTIONS"),
+      ShowFunctionsStatement(false, true, None, None))
+    comparePlans(
+      parsePlan("SHOW ALL FUNCTIONS"),
+      ShowFunctionsStatement(true, true, None, None))
+    comparePlans(
+      parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
+      ShowFunctionsStatement(true, true, Some("funct*"), None))
+    comparePlans(
+      parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
+      ShowFunctionsStatement(true, true, None, Some(Seq("a", "b", "c"))))
+    val sql = "SHOW other FUNCTIONS"
+    intercept(sql, s"$sql not supported")
+  }
+
+  test("DROP FUNCTION") {
+    comparePlans(
+      parsePlan("DROP FUNCTION a"),
+      DropFunctionStatement(Seq("a"), false, false))
+    comparePlans(
+      parsePlan("DROP FUNCTION a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), false, false))
+    comparePlans(
+      parsePlan("DROP TEMPORARY FUNCTION a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), false, true))
+    comparePlans(
+      parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), true, false))
+    comparePlans(
+      parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
+      DropFunctionStatement(Seq("a", "b", "c"), true, true))
+
   }
 
   private case class TableSpec(

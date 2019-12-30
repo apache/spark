@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite

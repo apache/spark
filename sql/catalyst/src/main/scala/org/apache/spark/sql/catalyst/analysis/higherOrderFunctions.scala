@@ -33,11 +33,14 @@ import org.apache.spark.sql.types.DataType
 case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-    case u @ UnresolvedFunction(fn, children, false)
+    case u @ UnresolvedFunction(fn, children, false, filter)
         if hasLambdaAndResolvedArguments(children) =>
       withPosition(u) {
         catalog.lookupFunction(fn, children) match {
-          case func: HigherOrderFunction => func
+          case func: HigherOrderFunction =>
+            filter.foreach(_.failAnalysis("FILTER predicate specified, " +
+              s"but ${func.prettyName} is not an aggregate function"))
+            func
           case other => other.failAnalysis(
             "A lambda function should only be used in a higher order function. However, " +
               s"its class is ${other.getClass.getCanonicalName}, which is not a " +

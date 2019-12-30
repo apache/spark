@@ -99,6 +99,15 @@ private[spark] object RandomForest extends Logging with Serializable {
     run(instances, strategy, numTrees, featureSubsetStrategy, seed, None)
   }
 
+  def buildMetadata(
+      input: RDD[Instance],
+      strategy: OldStrategy,
+      numTrees: Int,
+      featureSubsetStrategy: String): DecisionTreeMetadata = {
+    val retaggedInput = input.retag(classOf[Instance])
+    DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
+  }
+
   /**
    * Train a random forest.
    *
@@ -113,7 +122,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed: Long,
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
-      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+      parentUID: Option[String] = None,
+      precomputedMetadata: Option[DecisionTreeMetadata] = None): Array[DecisionTreeModel] = {
 
     val timer = new TimeTracker()
 
@@ -122,8 +132,9 @@ private[spark] object RandomForest extends Logging with Serializable {
     timer.start("init")
 
     val retaggedInput = input.retag(classOf[Instance])
-    val metadata =
+    val metadata = precomputedMetadata.getOrElse {
       DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
+    }
 
     instr match {
       case Some(instrumentation) =>
