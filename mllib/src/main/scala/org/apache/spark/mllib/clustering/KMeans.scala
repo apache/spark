@@ -233,7 +233,7 @@ class KMeans private (
     }
     val model = runAlgorithmWithWeight(zippedData, instr)
     zippedData.unpersist()
-    
+
     model
   }
 
