@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
+import java.nio.file.Paths
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -34,7 +35,7 @@ import com.google.common.collect.MapMaker
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
+import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, InvalidFileTypeException, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
@@ -1885,6 +1886,13 @@ class SparkContext(config: SparkConf) extends Logging {
     if (path == null || path.isEmpty) {
       logWarning("null or empty path specified as parameter to addJar")
     } else {
+      val fileExtension =
+        Paths.get(path).getFileName.toString.split("\\.").last.toUpperCase(Locale.ROOT)
+      if ("JAR" != fileExtension) {
+        throw new InvalidFileTypeException(s"Unsupported file type extension $fileExtension, " +
+          s"please add .jar extension file")
+      }
+
       val key = if (path.contains("\\")) {
         // For local paths with backslashes on Windows, URI throws an exception
         addLocalJarFile(new File(path))

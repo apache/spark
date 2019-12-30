@@ -28,7 +28,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
-import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.mapred.{InvalidFileTypeException, TextInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.json4s.{DefaultFormats, Extraction}
 import org.scalatest.Matchers._
@@ -345,6 +345,25 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
        } finally {
          sc.stop()
        }
+    }
+  }
+
+  test("add jar with unsupported file extension") {
+    withTempDir { dir =>
+      try {
+        val sep = File.separator
+        val tmpDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+        val tmpJar = File.createTempFile("test", ".csv", tmpDir)
+
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+        assert(intercept[InvalidFileTypeException] {
+          sc.addJar(tmpJar.getAbsolutePath)
+      }.getMessage.contains("Unsupported file type extension CSV, please add .jar extension file"))
+
+      } finally {
+        sc.stop()
+      }
     }
   }
 
