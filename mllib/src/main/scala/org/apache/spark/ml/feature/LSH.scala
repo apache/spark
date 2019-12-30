@@ -349,7 +349,7 @@ private[ml] abstract class LSH[T <: LSHModel[T]]
 
   override def fit(dataset: Dataset[_]): T = {
     transformSchema(dataset.schema, logging = true)
-    val inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
+    val inputDim = MetadataUtils.getNumFeatures(dataset, $(inputCol))
     val model = createRawLSHModel(inputDim).setParent(this)
     copyValues(model)
   }

@@ -410,6 +410,14 @@ class FMRegressor @Since("3.0.0") (
       dataset: Dataset[_]
     ): FMRegressionModel = instrumented { instr =>
 
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
+      miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
+
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    instr.logNumFeatures(numFeatures)
+
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val data: RDD[(Double, OldVector)] =
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
@@ -418,14 +426,6 @@ class FMRegressor @Since("3.0.0") (
       }
 
     if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
-
-    instr.logPipelineStage(this)
-    instr.logDataset(dataset)
-    instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
-      miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
-
-    val numFeatures = data.first()._2.size
-    instr.logNumFeatures(numFeatures)
 
     val coefficients = trainImpl(data, numFeatures, SquaredError)
 
