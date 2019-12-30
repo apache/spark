@@ -632,8 +632,11 @@ private[spark] object LiveEntityHelpers {
 
   private def accuValuetoString(value: Any): String = value match {
     case list: java.util.List[_] =>
+      // SPARK-30379: For collection accumulator, string representation might
+      // takes much more memory (e.g. long => string of it) and cause OOM.
+      // So we only show first few elements.
       if (list.size() > 5) {
-        "[" + list.asScala.take(5).mkString(", ") + "...]"
+        list.asScala.take(5).mkString("[", ",", "," + "... " + (list.size() - 5) + " more items]")
       } else {
         list.toString
       }

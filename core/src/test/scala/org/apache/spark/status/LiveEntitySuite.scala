@@ -61,7 +61,7 @@ class LiveEntitySuite extends SparkFunSuite {
     acc.setValue(value)
     acc.metadata = AccumulatorMetadata(0L, None, false)
     val accuInfo = LiveEntityHelpers.newAccumulatorInfos(Seq(acc.toInfo(None, Some(acc.value))))(0)
-    assert(accuInfo.value == "[1, 2, 3, 4, 5...]")
+    assert(accuInfo.value == "[1,2,3,4,5,... 5 more items]")
   }
 
   private def checkSize(seq: Seq[_], expected: Int): Unit = {
