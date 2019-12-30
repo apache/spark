@@ -19,8 +19,14 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton {
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
 
   test("writing data out metrics: hive") {
     testMetricsNonDynamicPartition("hive", "t1")
