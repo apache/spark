@@ -2527,7 +2527,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         assert(Thread.currentThread().getContextClassLoader eq
           spark.sqlContext.sharedState.jarClassLoader)
 
-        // Roll back to the original classloader and run query again.
+        // Roll back to the original classloader and run query again. Without this line, the test
+        // would pass, as thread's context classloader is changed to jar classloader. But thread
+        // context classloader can be changed from others as well which would fail the query; one
+        // example is spark-shell, which thread context classloader rolls back automatically. This
+        // mimics the behavior of spark-shell.
         Thread.currentThread().setContextClassLoader(sparkClassLoader)
         checkAnswer(
           sql("SELECT udtf_count3(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
