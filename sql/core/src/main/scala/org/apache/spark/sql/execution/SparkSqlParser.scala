@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.util.Locale
+import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
 
@@ -772,7 +773,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     }
 
     if (!path.isEmpty) {
-      val customLocation = Some(CatalogUtils.stringToURI(path))
+      val customLocation = if (ctx.LOCAL() != null) {
+        // force scheme to be file rather than fs.default.name
+        Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())
+      } else {
+        Some(CatalogUtils.stringToURI(path))
+      }
       storage = storage.copy(locationUri = customLocation)
     }
 
