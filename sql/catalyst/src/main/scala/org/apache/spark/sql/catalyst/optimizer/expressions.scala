@@ -395,6 +395,7 @@ object SimplifyBinaryComparison
     if (!left.nullable && !right.nullable && left.semanticEquals(right)) {
       true
     } else {
+      // We do more checks for non-nullable cases
       plan match {
         case Filter(fc, _) =>
           splitConjunctivePredicates(fc).exists { condition =>
