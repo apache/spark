@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-REFRESH` is used to invalidate and refresh all the cached data (and the associated metadata) for
+`REFRESH` is used to invalidate and refresh all the cached data (and the associated metadata) for
 all Datasets that contains the given data source path. Path matching is by prefix, i.e. "/" would
 invalidate everything that is cached. 
 
