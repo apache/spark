@@ -25,9 +25,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils.isTesting
 
-
 /**
- * Manager of resource profiles.
+ * Manager of resource profiles. The manager allows one place to keep the actual ResourceProfiles
+ * and everywhere else we can use the ResourceProfile Id to save on space.
  * Note we never remove a resource profile at this point. Its expected this number if small
  * so this shouldn't be much overhead.
  */
@@ -44,13 +44,13 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
   def defaultResourceProfile: ImmutableResourceProfile = defaultProfile
 
   private val taskCpusDefaultProfile = defaultProfile.getTaskCpus.get
-  val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
-  val isNotYarn = master.isDefined && !master.get.equals("yarn")
+  private val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
+  private val isNotYarn = master.isDefined && !master.get.equals("yarn")
 
-  // If we use anything except the default profile, its only supported on YARN right now
-  // throws exception if not supported
+  // If we use anything except the default profile, its only supported on YARN right now.
+  // Throw an exception if not supported.
   private[spark] def isSupported(rp: ImmutableResourceProfile): Boolean = {
-    // is master isn't defined we go ahead and allow it for testing purposes
+    // if the master isn't defined we go ahead and allow it for testing purposes
     val shouldError = !isTesting || sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
     val isNotDefaultProfile = rp.id != ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     val notYarnAndNotDefaultProfile = isNotDefaultProfile && isNotYarn

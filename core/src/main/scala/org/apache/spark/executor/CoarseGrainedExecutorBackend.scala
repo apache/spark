@@ -99,7 +99,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   // visible for testing
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     logDebug(s"Resource profile id is: $resourceProfileId")
-    // if resource profile specified we look at different confs
+    // if the resource profile was specified we look at different confs
     val resources = if (resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
       getOrDiscoverAllResources(env.conf, SPARK_EXECUTOR_PREFIX, resourcesFileOpt)
     } else {

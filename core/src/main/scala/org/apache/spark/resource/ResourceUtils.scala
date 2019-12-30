@@ -141,7 +141,7 @@ private[spark] object ResourceUtils extends Logging {
     (Math.ceil(amount).toInt, parts)
   }
 
-  // Add any task resource requets from the spark conf to the TaskResourceRequests passed in
+  // Add any task resource requests from the spark conf to the TaskResourceRequests passed in
   def addTaskResourceRequests(
       sparkConf: SparkConf,
       treqs: TaskResourceRequests): Unit = {

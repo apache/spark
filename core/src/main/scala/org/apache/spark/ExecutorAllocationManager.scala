@@ -549,9 +549,6 @@ private[spark] class ExecutorAllocationManager(
         countFailures = false, force = false)
     }
 
-    // TODO - I think this call to requestTotalExecutors can actually be removed because
-    // SPARK-23365 change the killExecutors call to not adjust the target number.
-    // Perhaps write test to validate.
     // [SPARK-21834] killExecutors api reduces the target number of executors.
     // So we need to update the target with desired value.
     client.requestTotalExecutors(numLocalityAwareTasksPerResourceProfileId.toMap,
@@ -592,8 +589,7 @@ private[spark] class ExecutorAllocationManager(
     numExecutorsToAddPerResourceProfileId.keys.foreach(numExecutorsToAddPerResourceProfileId(_) = 1)
   }
 
-  // TOOD - change to not be private
-  case class StageAttempt(stageId: Int, stageAttemptId: Int) {
+  private case class StageAttempt(stageId: Int, stageAttemptId: Int) {
     override def toString: String = s"Stage $stageId (Attempt $stageAttemptId)"
   }
 
@@ -638,10 +634,9 @@ private[spark] class ExecutorAllocationManager(
         allocationManager.onSchedulerBacklogged()
         // need to keep stage task requirements to ask for the right containers
         val profId = stageSubmitted.stageInfo.resourceProfileId
-        logInfo("stage resource profile id is: " + profId)
+        logDebug(s"Stage resource profile id is: $profId with numTasks: $numTasks")
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
-        logInfo("adding to execResourceReqsToNumTasks: " + numTasks)
         numExecutorsToAddPerResourceProfileId.getOrElseUpdate(profId, 1)
         numExecutorsTargetPerResourceProfileId.getOrElseUpdate(profId, initialNumExecutors)
 
@@ -722,18 +717,14 @@ private[spark] class ExecutorAllocationManager(
       val taskIndex = taskEnd.taskInfo.index
       allocationManager.synchronized {
         if (stageAttemptToNumRunningTask.contains(stageAttempt)) {
-          logWarning(s"stage attempt num running -1 before " +
-            s"is ${stageAttemptToNumRunningTask(stageAttempt)}")
           stageAttemptToNumRunningTask(stageAttempt) -= 1
           if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
-            logWarning("stage attempt num running 0: " + stageAttempt)
             stageAttemptToNumRunningTask -= stageAttempt
             if (!stageAttemptToNumTasks.contains(stageAttempt)) {
               val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
                 v.contains(stageAttempt)
               }.keys
               if (rpForStage.size == 1) {
-                logWarning(s"removing stage attmpe $stageAttempt for rp: ${rpForStage.head}")
                 // be careful about the removal from here due to late tasks, make sure stage is
                 // really complete and no tasks left
                 resourceProfileIdToStageAttempt(rpForStage.head) -= stageAttempt

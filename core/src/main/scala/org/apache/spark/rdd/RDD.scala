@@ -1743,7 +1743,6 @@ abstract class RDD[T: ClassTag](
   // used internally to Spark as an immutable version
   private var immutableResourceProfile: Option[ImmutableResourceProfile] = None
 
-
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = sc.getCallSite()
 

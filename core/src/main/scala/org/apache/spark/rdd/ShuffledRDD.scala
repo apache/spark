@@ -43,11 +43,6 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     part: Partitioner)
   extends RDD[(K, C)](prev.context, Nil) {
 
-  // with shuffledRDD we need to see if the prev rdd has a resourceProfile with it and pull it in
-  // TODO - is this ok if the prev stage had rp due to other rdd before the one that had shuffle?
-  private val parentResourceProfile = prev.getImmutableResourceProfile
-  logInfo(s"parent rdd has a resource profile $parentResourceProfile")
-
   private var userSpecifiedSerializer: Option[Serializer] = None
 
   private var keyOrdering: Option[Ordering[K]] = None
