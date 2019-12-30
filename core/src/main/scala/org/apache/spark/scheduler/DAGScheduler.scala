@@ -608,8 +608,9 @@ private[spark] class DAGScheduler(
    *
    * @param job The job whose state to cleanup.
    */
-  private def cleanupStateForJobAndIndependentStages(job: ActiveJob): Unit = {
+  private def cleanupStateForJobAndIndependentStages(job: ActiveJob): HashSet[Stage] = {
     val registeredStages = jobIdToStageIds.get(job.jobId)
+    val removedStages = new HashSet[Stage]
     if (registeredStages.isEmpty || registeredStages.get.isEmpty) {
       logError("No stages registered for job " + job.jobId)
     } else {
@@ -627,6 +628,7 @@ private[spark] class DAGScheduler(
                 if (runningStages.contains(stage)) {
                   logDebug("Removing running stage %d".format(stageId))
                   runningStages -= stage
+                  removedStages += stage
                 }
                 for ((k, v) <- shuffleIdToMapStage.find(_._2 == stage)) {
                   shuffleIdToMapStage.remove(k)
@@ -660,6 +662,7 @@ private[spark] class DAGScheduler(
       case r: ResultStage => r.removeActiveJob()
       case m: ShuffleMapStage => m.removeActiveJob(job)
     }
+    removedStages
   }
 
   /**
@@ -1431,21 +1434,28 @@ private[spark] class DAGScheduler(
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(resultStage)
-                    cleanupStateForJobAndIndependentStages(job)
-                    try {
-                      // killAllTaskAttempts will fail if a SchedulerBackend does not implement
-                      // killTask.
-                      logInfo(s"Job ${job.jobId} is finished. Cancelling potential speculative " +
-                        "or zombie tasks for this job")
-                      // ResultStage is only used by this job. It's safe to kill speculative or
-                      // zombie tasks in this stage.
-                      taskScheduler.killAllTaskAttempts(
-                        stageId,
-                        shouldInterruptTaskThread(job),
-                        reason = "Stage finished")
-                    } catch {
-                      case e: UnsupportedOperationException =>
-                        logWarning(s"Could not cancel tasks for stage $stageId", e)
+                    val removedStages = cleanupStateForJobAndIndependentStages(job)
+                    removedStages += resultStage
+                    val shouldInterrupt = shouldInterruptTaskThread(job)
+                    // removedStages are only used by this job. It's safe to kill speculative or
+                    // zombie tasks in these stages.
+                    logInfo(s"Job ${job.jobId} is finished. Cancelling potential speculative " +
+                      "or zombie tasks for this job")
+                    removedStages.foreach { stage =>
+                      try {
+                        // killAllTaskAttempts will fail if a SchedulerBackend does not implement
+                        // killTask.
+                        if (stage == resultStage) {
+                          taskScheduler.killAllTaskAttempts(
+                            stage.id, shouldInterrupt, reason = "Stage finished")
+                        } else {
+                          markStageAsFinished(stage, Some(s"Job ${job.jobId} finished."))
+                          taskScheduler.cancelTasks(stage.id, shouldInterrupt)
+                        }
+                      } catch {
+                        case e: UnsupportedOperationException =>
+                          logInfo(s"Could not cancel tasks for stage ${stage.id}", e)
+                      }
                     }
                     listenerBus.post(
                       SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
