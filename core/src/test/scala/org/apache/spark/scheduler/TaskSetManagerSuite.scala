@@ -1785,12 +1785,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       speculationQuantile: Double,
       numTasks: Int,
       numSlots: Int): (TaskSetManager, ManualClock) = {
+    val taskCpus = 1
     sc = new SparkContext("local", "test")
     sc.conf.set(config.SPECULATION_ENABLED, true)
     sc.conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
     // Set the number of slots per executor
     sc.conf.set(config.EXECUTOR_CORES.key, numSlots.toString)
-    sc.conf.set(config.CPUS_PER_TASK.key, "1")
+    sc.conf.set(config.CPUS_PER_TASK.key, taskCpus.toString)
     if (speculationThresholdOpt.isDefined) {
       sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
     }
@@ -1803,7 +1804,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Offer resources for the task to start
     for (i <- 1 to numTasks) {
-      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF)
+      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF, taskCpus)
     }
     (manager, clock)
   }
