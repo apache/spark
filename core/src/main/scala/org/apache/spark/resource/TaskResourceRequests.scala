@@ -54,9 +54,9 @@ class TaskResourceRequests() extends Serializable {
    *               lets you configure X number of tasks to run on a single resource,
    *               ie amount equals 0.5 translates into 2 tasks per resource address.
    */
-  def resource(rName: String, amount: Double): this.type = {
-    val treq = new TaskResourceRequest(rName, amount)
-    _taskResources.put(rName, treq)
+  def resource(resourceName: String, amount: Double): this.type = {
+    val treq = new TaskResourceRequest(resourceName, amount)
+    _taskResources.put(resourceName, treq)
     this
   }
 
