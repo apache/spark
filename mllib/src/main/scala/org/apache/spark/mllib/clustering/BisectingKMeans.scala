@@ -170,13 +170,12 @@ class BisectingKMeans private (
       logWarning(s"The input RDD ${input.id} is not directly cached, which may hurt performance if"
         + " its parent RDDs are also not cached.")
     }
-    val d = input.map( i => i._1.size).first()
+    val d = input.map(_._1.size).first
     logInfo(s"Feature dimension: $d.")
 
-    val dataVectorWithNorm = input.map(d => d._1)
     val dMeasure: DistanceMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
     // Compute and cache vector norms for fast distance computation.
-    val norms = dataVectorWithNorm.map(v => Vectors.norm(v, 2.0))
+    val norms = input.map(d => Vectors.norm(d._1, 2.0))
       .persist(StorageLevel.MEMORY_AND_DISK)
     val vectors = input.zip(norms).map {
       case ((x, weight), norm) => new VectorWithNorm(x, norm, weight)
@@ -337,7 +336,7 @@ private object BisectingKMeans extends Serializable {
       weightSum += v.weight
       // TODO: use a numerically stable approach to estimate cost
       sumSq += v.norm * v.norm  * v.weight
-      distanceMeasure.updateClusterSum(v, sum, v.weight)
+      distanceMeasure.updateClusterSum(v, sum)
       this
     }
 
