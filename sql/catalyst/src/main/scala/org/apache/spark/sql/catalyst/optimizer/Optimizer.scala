@@ -495,6 +495,18 @@ object LimitPushDown extends Rule[LogicalPlan] {
         case _ => join
       }
       LocalLimit(exp, newJoin)
+    // Pushdown limit to outer join through projects if projects are deterministic.
+    case l @ LocalLimit(exp, proj @ Project(projs, join @ Join(left, right, joinType, _, _))) =>
+      if (projs.forall(_.deterministic)) {
+        val newJoin = joinType match {
+          case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
+          case LeftOuter => join.copy(left = maybePushLocalLimit(exp, left))
+          case _ => join
+        }
+        LocalLimit(exp, proj.copy(child = newJoin))
+      } else {
+        l
+      }
   }
 }
 

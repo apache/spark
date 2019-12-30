@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Add
+import org.apache.spark.sql.catalyst.expressions.{Add, Rand}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -170,5 +170,37 @@ class LimitPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     // No pushdown for FULL OUTER JOINS.
     comparePlans(optimized, originalQuery)
+  }
+
+  test("test pushdown left outer join through projects") {
+    // test deterministic project
+    val originalQuery =
+      testRelation.join(testRelation2, LeftOuter).select("a").limit(1)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      Limit(1, LocalLimit(1, testRelation).join(testRelation2, LeftOuter).select("a"))
+    comparePlans(optimized, correctAnswer.analyze)
+
+    // test non-deterministic project
+    val originalQuery1 =
+      testRelation.join(testRelation2, LeftOuter).select(Rand(Symbol("a"))).limit(1)
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    comparePlans(optimized1, originalQuery1.analyze)
+  }
+
+  test("test pushdown right outer join through projects") {
+    // test deterministic project
+    val originalQuery =
+      testRelation.join(testRelation2, RightOuter).select("a").limit(1)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      Limit(1, testRelation.join(LocalLimit(1, testRelation2), RightOuter).select("a"))
+    comparePlans(optimized, correctAnswer.analyze)
+
+    // test non-deterministic project
+    val originalQuery1 =
+      testRelation.join(testRelation2, RightOuter).select(Rand(Symbol("a"))).limit(1)
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    comparePlans(optimized1, originalQuery1.analyze)
   }
 }
