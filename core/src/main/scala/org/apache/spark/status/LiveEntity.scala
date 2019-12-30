@@ -654,7 +654,7 @@ private[spark] object LiveEntityHelpers {
         new v1.AccumulableInfo(
           acc.id,
           acc.name.map(weakIntern).orNull,
-          acc.update.map(_.toString()),
+          acc.update.map(accuValuetoString),
           acc.value.map(accuValuetoString).orNull)
       }
       .toSeq

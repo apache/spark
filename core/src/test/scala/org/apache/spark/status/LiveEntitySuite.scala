@@ -60,7 +60,9 @@ class LiveEntitySuite extends SparkFunSuite {
     val value = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     acc.setValue(value)
     acc.metadata = AccumulatorMetadata(0L, None, false)
-    val accuInfo = LiveEntityHelpers.newAccumulatorInfos(Seq(acc.toInfo(None, Some(acc.value))))(0)
+    val accuInfo = LiveEntityHelpers
+      .newAccumulatorInfos(Seq(acc.toInfo(Some(acc.value), Some(acc.value))))(0)
+    assert(accuInfo.update.get == "[1,2,3,4,5,... 5 more items]")
     assert(accuInfo.value == "[1,2,3,4,5,... 5 more items]")
   }
 
