@@ -33,9 +33,17 @@ import org.apache.spark.sql.internal.SQLConf
 
 class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite {
 
+  var originalValue: String = _
+  // when enable AQE, the 'AdaptiveSparkPlanExec' node does not have a logical plan link
   override def beforeAll(): Unit = {
     super.beforeAll()
+    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
     spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
+
+  override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
+    super.afterAll()
   }
 
   override protected def checkGeneratedCode(

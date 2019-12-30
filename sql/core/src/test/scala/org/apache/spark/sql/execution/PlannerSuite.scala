@@ -427,6 +427,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   test("SPARK-30036: Remove unnecessary RoundRobinPartitioning " +
       "if SortExec is followed by RoundRobinPartitioning") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // when enable AQE, the post partiiton number is changed.
       val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
       val partitioning = RoundRobinPartitioning(5)
       assert(!partitioning.satisfies(distribution))
@@ -452,6 +453,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   test("SPARK-30036: Remove unnecessary HashPartitioning " +
     "if SortExec is followed by HashPartitioning") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // when enable AQE, the post partiiton number is changed.
       val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
       val partitioning = HashPartitioning(Literal(1) :: Nil, 5)
       assert(!partitioning.satisfies(distribution))
@@ -854,9 +856,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
 
     // InMemoryTableScan is PartitioningCollection
-    // when enable AQE, the InMemoryTableScan is UnknownPartitioning.
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m").persist()
       checkInMemoryTableScanOutputPartitioningRewrite(
         Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m"),

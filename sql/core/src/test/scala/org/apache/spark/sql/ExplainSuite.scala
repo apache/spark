@@ -26,6 +26,18 @@ import org.apache.spark.sql.types.StructType
 class ExplainSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
+  var originalValue: String = _
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
+    super.afterAll()
+  }
+
   private def getNormalizedExplain(df: DataFrame, mode: ExplainMode): String = {
     val output = new java.io.ByteArrayOutputStream()
     Console.withOut(output) {
@@ -227,8 +239,7 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
   test("explain formatted - check presence of subquery in case of DPP") {
     withTable("df1", "df2") {
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
         withTable("df1", "df2") {
           spark.range(1000).select(col("id"), col("id").as("k"))
             .write
@@ -274,44 +285,42 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Support ExplainMode in Dataset.explain") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")
-      val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
-      val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
+    val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")
+    val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
+    val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
 
-      val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
-      assert(simpleExplainOutput.startsWith("== Physical Plan =="))
-      Seq("== Parsed Logical Plan ==",
-        "== Analyzed Logical Plan ==",
-        "== Optimized Logical Plan ==").foreach { planType =>
-        assert(!simpleExplainOutput.contains(planType))
-      }
-      checkKeywordsExistsInExplain(
-        testDf,
-        ExtendedMode,
-        "== Parsed Logical Plan ==" ::
-          "== Analyzed Logical Plan ==" ::
-          "== Optimized Logical Plan ==" ::
-          "== Physical Plan ==" ::
-          Nil: _*)
-      checkKeywordsExistsInExplain(
-        testDf,
-        CostMode,
-        "Statistics(sizeInBytes=" ::
-          Nil: _*)
-      checkKeywordsExistsInExplain(
-        testDf,
-        CodegenMode,
-        "WholeStageCodegen subtrees" ::
-          "Generated code:" ::
-          Nil: _*)
-      checkKeywordsExistsInExplain(
-        testDf,
-        FormattedMode,
-        "* LocalTableScan (1)" ::
-          "(1) LocalTableScan [codegen id :" ::
-          Nil: _*)
+    val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
+    assert(simpleExplainOutput.startsWith("== Physical Plan =="))
+    Seq("== Parsed Logical Plan ==",
+      "== Analyzed Logical Plan ==",
+      "== Optimized Logical Plan ==").foreach { planType =>
+      assert(!simpleExplainOutput.contains(planType))
     }
+    checkKeywordsExistsInExplain(
+      testDf,
+      ExtendedMode,
+      "== Parsed Logical Plan ==" ::
+        "== Analyzed Logical Plan ==" ::
+        "== Optimized Logical Plan ==" ::
+        "== Physical Plan ==" ::
+        Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      CostMode,
+      "Statistics(sizeInBytes=" ::
+        Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      CodegenMode,
+      "WholeStageCodegen subtrees" ::
+        "Generated code:" ::
+        Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      FormattedMode,
+      "* LocalTableScan (1)" ::
+        "(1) LocalTableScan [codegen id :" ::
+        Nil: _*)
   }
 
   test("Dataset.toExplainString has mode as string") {

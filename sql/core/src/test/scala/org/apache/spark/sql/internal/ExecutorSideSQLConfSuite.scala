@@ -100,6 +100,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     Seq(true, false).foreach { flag =>
       withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString,
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.
         val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
           .queryExecution.executedPlan)
         assert(res.length == 2)

@@ -32,11 +32,19 @@ import org.apache.spark.sql.types.StructType
 
 class DebuggingSuite extends SharedSparkSession {
 
-  protected override def beforeAll(): Unit = {
+
+  var originalValue: String = _
+  // With on AQE, the WholeStageCodegenExec is added when running QueryStageExec.
+  override def beforeAll(): Unit = {
     super.beforeAll()
+    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
     spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
   }
 
+  override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
+    super.afterAll()
+  }
 
   test("DataFrame.debug()") {
     testData.debug()

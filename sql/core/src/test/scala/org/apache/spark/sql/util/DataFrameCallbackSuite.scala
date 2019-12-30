@@ -91,6 +91,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSparkSession {
 
   test("get numRows metrics by callback") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.
       val metrics = ArrayBuffer.empty[Long]
       val listener = new QueryExecutionListener {
         // Only test successful case here, so no need to implement `onFailure`

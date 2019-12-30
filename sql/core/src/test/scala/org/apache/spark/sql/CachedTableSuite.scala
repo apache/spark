@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution.{ExecSubqueryExpression, RDDScanExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
@@ -482,8 +482,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("A cached table preserves the partitioning and ordering of its cached SparkPlan") {
-    // when enable AQE, there will introduce additional shuffle
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val table3x = testData.union(testData).union(testData)
       table3x.createOrReplaceTempView("testData3x")
 
@@ -626,8 +624,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         uncacheTable("t1")
         uncacheTable("t2")
       }
-    }
-
   }
 
   test("SPARK-15870 DataFrame can't execute after uncacheTable") {

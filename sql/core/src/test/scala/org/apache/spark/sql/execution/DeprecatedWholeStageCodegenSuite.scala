@@ -31,8 +31,9 @@ class DeprecatedWholeStageCodegenSuite extends QueryTest
 
   test("simple typed UDAF should be included in WholeStageCodegen") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // With enable AQE, the WholeStageCodegenExec rule is applied when running QueryStageExec.
       import testImplicits._
-      spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+
       val ds = Seq(("a", 10), ("b", 1), ("b", 2), ("c", 1)).toDS()
         .groupByKey(_._1).agg(typed.sum(_._2))
 

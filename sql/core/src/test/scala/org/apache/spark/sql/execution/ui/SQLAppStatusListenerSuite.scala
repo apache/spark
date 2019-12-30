@@ -622,6 +622,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
   test("SPARK-29894 test Codegen Stage Id in SparkPlanInfo") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.
       val df = createTestDataFrame.select(count("*"))
       val sparkPlanInfo = SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)
       assert(sparkPlanInfo.nodeName === "WholeStageCodegen (2)")

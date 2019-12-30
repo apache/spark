@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -53,7 +53,7 @@ case class InsertAdaptiveSparkPlan(
     case _: SortAggregateExec => true
     case _: SortExec => true
     case _: SortMergeJoinExec => true
-    case _: ShuffleExchangeExec => true
+    case _: Exchange => true
     case _ => false
   }
 

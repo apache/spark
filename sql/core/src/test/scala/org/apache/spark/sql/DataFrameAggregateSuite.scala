@@ -617,6 +617,7 @@ class DataFrameAggregateSuite extends QueryTest
         (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
         (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString),
         (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false")) {
+        // When enable AQE, the WholeStageCodegenExec is added during QueryStageExec.
 
         val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
 
