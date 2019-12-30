@@ -50,14 +50,19 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   override def reset(): Unit = _value = _zeroValue
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value += o.value
+    case o: SQLMetric =>
+      if (_value < 0) _value = 0
+      if (o.value > 0) _value += o.value
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   override def isZero(): Boolean = _value == _zeroValue
 
-  override def add(v: Long): Unit = _value += v
+  override def add(v: Long): Unit = {
+    if (_value < 0) _value = 0
+    _value += v
+  }
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
@@ -65,7 +70,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def set(v: Long): Unit = _value = v
 
-  def +=(v: Long): Unit = _value += v
+  def +=(v: Long): Unit = add(v)
 
   override def value: Long = _value
 

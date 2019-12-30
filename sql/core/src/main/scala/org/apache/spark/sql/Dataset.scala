@@ -450,12 +450,14 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset where each record has been mapped on to the specified type. The
    * method used to map columns depend on the type of `U`:
-   *  - When `U` is a class, fields for the class will be mapped to columns of the same name
-   *    (case sensitivity is determined by `spark.sql.caseSensitive`).
-   *  - When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
-   *    be assigned to `_1`).
-   *  - When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
-   *    `DataFrame` will be used.
+   * <ul>
+   *   <li>When `U` is a class, fields for the class will be mapped to columns of the same name
+   *   (case sensitivity is determined by `spark.sql.caseSensitive`).</li>
+   *   <li>When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
+   *   be assigned to `_1`).</li>
+   *   <li>When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
+   *   `DataFrame` will be used.</li>
+   * </ul>
    *
    * If the schema of the Dataset does not match the desired `U` type, you can use `select`
    * along with `alias` or `as` to rearrange or rename as required.
@@ -718,11 +720,12 @@ class Dataset[T] private[sql](
    * before which we assume no more late data is going to arrive.
    *
    * Spark will use this watermark for several purposes:
-   *  - To know when a given time window aggregation can be finalized and thus can be emitted when
-   *    using output modes that do not allow updates.
-   *  - To minimize the amount of state that we need to keep for on-going aggregations,
-   *    `mapGroupsWithState` and `dropDuplicates` operators.
-   *
+   * <ul>
+   *   <li>To know when a given time window aggregation can be finalized and thus can be emitted
+   *   when using output modes that do not allow updates.</li>
+   *   <li>To minimize the amount of state that we need to keep for on-going aggregations,
+   *    `mapGroupsWithState` and `dropDuplicates` operators.</li>
+   * </ul>
    *  The current watermark is computed by looking at the `MAX(eventTime)` seen across
    *  all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
    *  of coordinating this value across partitions, the actual watermark used is only guaranteed
@@ -1868,12 +1871,14 @@ class Dataset[T] private[sql](
  /**
   * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
   * that returns the same result as the input, with the following guarantees:
-  * - It will compute the defined aggregates (metrics) on all the data that is flowing through the
-  *   Dataset at that point.
-  * - It will report the value of the defined aggregate columns as soon as we reach a completion
+  * <ul>
+  *   <li>It will compute the defined aggregates (metrics) on all the data that is flowing through
+  *   the Dataset at that point.</li>
+  *   <li>It will report the value of the defined aggregate columns as soon as we reach a completion
   *   point. A completion point is either the end of a query (batch mode) or the end of a streaming
   *   epoch. The value of the aggregates only reflects the data processed since the previous
-  *   completion point.
+  *   completion point.</li>
+  * </ul>
   * Please note that continuous execution is currently not supported.
   *
   * The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
@@ -2511,13 +2516,14 @@ class Dataset[T] private[sql](
 
   /**
    * Computes specified statistics for numeric and string columns. Available statistics are:
-   *
-   * - count
-   * - mean
-   * - stddev
-   * - min
-   * - max
-   * - arbitrary approximate percentiles specified as a percentage (eg, 75%)
+   * <ul>
+   *   <li>count</li>
+   *   <li>mean</li>
+   *   <li>stddev</li>
+   *   <li>min</li>
+   *   <li>max</li>
+   *   <li>arbitrary approximate percentiles specified as a percentage (e.g. 75%)</li>
+   * </ul>
    *
    * If no statistics are given, this function computes count, mean, stddev, min,
    * approximate quartiles (percentiles at 25%, 50%, and 75%), and max.

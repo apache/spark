@@ -36,7 +36,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
 
   // We use `col1 BIGINT, col2 STRUCT<_1: BIGINT, _2: STRING>,
   // col3 ARRAY<STRUCT<_1: BIGINT, _2: STRING>>` as a test schema.
-  // col1, col2._1 and col3._1 are used for comparision. col2._2 and col3._2 mimics the burden
+  // col1, col2._1 and col3._1 are used for comparison. col2._2 and col3._2 mimics the burden
   // for the other columns
   private val df = spark
     .range(N * 10)

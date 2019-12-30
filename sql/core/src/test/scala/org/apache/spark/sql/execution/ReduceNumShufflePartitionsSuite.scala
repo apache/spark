@@ -24,6 +24,7 @@ import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.adaptive.{CoalescedShuffleReaderExec, ReduceNumShufflePartitions}
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -530,7 +531,9 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       QueryTest.checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      assert(finalPlan.collect { case p: ReusedQueryStageExec => p }.length == 2)
+      assert(finalPlan.collect {
+        case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
+      }.length == 2)
       assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 3)
 
 
@@ -561,7 +564,9 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       assert(leafStages.length == 2)
 
       val reusedStages = level1Stages.flatMap { stage =>
-        stage.plan.collect { case r: ReusedQueryStageExec => r }
+        stage.plan.collect {
+          case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
+        }
       }
       assert(reusedStages.length == 1)
     }

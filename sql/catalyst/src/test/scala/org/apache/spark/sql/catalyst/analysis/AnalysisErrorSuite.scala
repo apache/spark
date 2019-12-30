@@ -167,12 +167,38 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "distinct function",
     CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
-    "DISTINCT specified, but hex is not an aggregate function" :: Nil)
+    "DISTINCT or FILTER specified, but hex is not an aggregate function" :: Nil)
+
+  errorTest(
+    "non aggregate function with filter predicate",
+    CatalystSqlParser.parsePlan("SELECT hex(a) FILTER (WHERE c = 1) FROM TaBlE2"),
+    "DISTINCT or FILTER specified, but hex is not an aggregate function" :: Nil)
 
   errorTest(
     "distinct window function",
-    CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) over () FROM TaBlE"),
-    "DISTINCT specified, but percent_rank is not an aggregate function" :: Nil)
+    CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) OVER () FROM TaBlE"),
+    "DISTINCT or FILTER specified, but percent_rank is not an aggregate function" :: Nil)
+
+  errorTest(
+    "window function with filter predicate",
+    CatalystSqlParser.parsePlan("SELECT percent_rank(a) FILTER (WHERE c > 1) OVER () FROM TaBlE2"),
+    "DISTINCT or FILTER specified, but percent_rank is not an aggregate function" :: Nil)
+
+  errorTest(
+    "higher order function with filter predicate",
+    CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
+      "FILTER (WHERE c > 1)"),
+    "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
+
+  errorTest(
+    "DISTINCT and FILTER cannot be used in aggregate functions at the same time",
+    CatalystSqlParser.parsePlan("SELECT count(DISTINCT a) FILTER (WHERE c > 1) FROM TaBlE2"),
+    "DISTINCT and FILTER cannot be used in aggregate functions at the same time" :: Nil)
+
+  errorTest(
+    "FILTER expression is non-deterministic, it cannot be used in aggregate functions",
+    CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
+    "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
 
   errorTest(
     "nested aggregate functions",

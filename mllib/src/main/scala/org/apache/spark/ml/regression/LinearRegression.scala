@@ -318,7 +318,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
     // Extract the number of features before deciding optimization solver.
-    val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
 
     val instances = extractInstances(dataset)
 
