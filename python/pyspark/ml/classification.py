@@ -25,7 +25,7 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _TreeEnsembleModel, _RandomForestParams, _GBTParams, \
     _HasVarianceImpurity, _TreeClassifierParams, _TreeEnsembleParams
-from pyspark.ml.regression import DecisionTreeRegressionModel
+from pyspark.ml.regression import _FactorizationMachinesParams, DecisionTreeRegressionModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
     JavaPredictor, _JavaPredictorParams, JavaPredictionModel, JavaWrapper
@@ -2765,8 +2765,8 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol, HasSolver,
-                   HasSeed, HasFitIntercept, HasRegParam, JavaMLWritable, JavaMLReadable):
+class FMClassifier(JavaProbabilisticClassifier, _FactorizationMachinesParams, JavaMLWritable,
+                   JavaMLReadable):
     """
     Factorization Machines learning algorithm for classification.
 
@@ -2780,8 +2780,12 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> fm = FMClassifier(factorSize=2, seed=11)
+    >>> fm = FMClassifier(factorSize=2)
+    >>> fm.setSeed(11)
+    FMClassifier...
     >>> model = fm.fit(df)
+    >>> model.getMaxIter()
+    100
     >>> test0 = spark.createDataFrame([
     ...     (Vectors.dense(-1.0),),
     ...     (Vectors.dense(0.5),),
@@ -2895,8 +2899,58 @@ class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol,
         """
         return self._set(initStd=value)
 
+    @since("3.0.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
 
-class FMClassificationModel(JavaProbabilisticClassificationModel, JavaMLWritable, JavaMLReadable):
+    @since("3.0.0")
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
+
+    @since("3.0.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    @since("3.0.0")
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    @since("3.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("3.0.0")
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    @since("3.0.0")
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+
+class FMClassificationModel(JavaProbabilisticClassificationModel, _FactorizationMachinesParams,
+                            JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`FMClassifier`.
 
