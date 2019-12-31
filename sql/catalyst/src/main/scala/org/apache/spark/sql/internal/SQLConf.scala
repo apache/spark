@@ -170,6 +170,16 @@ object SQLConf {
     }
   }
 
+  /**
+   * The map contains info about removed SQL configs. Keys are SQL config names,
+   * map values are tuples of default config value and the version in which
+   * the SQL config was removed.
+   */
+  val removedSQLConfigs = Map[String, (String, String)](
+    "spark.sql.fromJsonForceNullableSchema" -> ("true", "3.0.0"),
+    "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation" -> ("false", "3.0.0"),
+    "spark.sql.legacy.compareDateTimestampInTimestamp" -> ("true", "3.0.0"))
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")

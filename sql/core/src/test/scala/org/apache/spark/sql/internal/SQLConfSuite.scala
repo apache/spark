@@ -320,4 +320,16 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(e2.getMessage.contains("spark.sql.shuffle.partitions"))
   }
 
+  test("set removed configs to non-default values") {
+    Seq(
+      "spark.sql.fromJsonForceNullableSchema" -> false,
+      "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation" -> true,
+      "spark.sql.legacy.compareDateTimestampInTimestamp" -> false).foreach { case (k, v) =>
+      val e = intercept[AnalysisException] {
+        spark.conf.set(k, v)
+      }
+      assert(e.getMessage.contains(k))
+      spark.conf.set(k, !v)
+    }
+  }
 }

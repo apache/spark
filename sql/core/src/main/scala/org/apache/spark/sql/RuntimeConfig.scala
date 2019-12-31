@@ -38,6 +38,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   def set(key: String, value: String): Unit = {
     requireNonStaticConf(key)
+    requireDefaultValueOfRemovedConf(key, value)
     sqlConf.setConfString(key, value)
   }
 
@@ -156,6 +157,14 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
     if (sqlConf.setCommandRejectsSparkCoreConfs &&
         ConfigEntry.findEntry(key) != null && !SQLConf.sqlConfEntries.containsKey(key)) {
       throw new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+    }
+  }
+
+  private def requireDefaultValueOfRemovedConf(key: String, value: String): Unit = {
+    SQLConf.removedSQLConfigs.get(key).foreach { case (defaultValue, version) =>
+      if (value != defaultValue) {
+        throw new AnalysisException(s"The SQL config '$key' was removed in the version $version.")
+      }
     }
   }
 }
