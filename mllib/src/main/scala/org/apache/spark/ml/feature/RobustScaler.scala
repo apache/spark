@@ -197,10 +197,7 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
             new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
           while (iter.hasNext) {
             val vec = iter.next
-            Iterator.range(0, numFeatures).foreach { i =>
-              val v = vec(i)
-              if (!v.isNaN) summaries(i) = summaries(i).insert(v)
-            }
+            vec.foreach { (i, v) => if (!v.isNaN) summaries(i) = summaries(i).insert(v) }
           }
           Iterator.tabulate(numFeatures)(i => (i, summaries(i).compress))
         } else Iterator.empty

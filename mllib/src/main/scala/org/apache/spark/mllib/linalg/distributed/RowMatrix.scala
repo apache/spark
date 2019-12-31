@@ -761,7 +761,7 @@ class RowMatrix @Since("1.0.0") (
     val mat = BDM.zeros[Double](m, n)
     var i = 0
     rows.collect().foreach { vector =>
-      vector.foreachActive { case (j, v) =>
+      vector.foreachNonZero { case (j, v) =>
         mat(i, j) = v
       }
       i += 1
