@@ -95,11 +95,14 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         checkAuth(client, msg.appId);
 
         if (!blockManager.executors.containsKey(new AppExecId(msg.appId, msg.execId))) {
-          logger.warn("the App {} with execId {} is not exist, so do not fetch", msg.appId, msg.execId);
+          logger.warn("the App {} with execId {} is not exist, so do not fetch",
+                  msg.appId, msg.execId);
           client.getChannel().close();
         } else {
-          long streamId = streamManager.registerStream(msg.appId,
-                  new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds), client.getChannel());
+          long streamId = streamManager.registerStream(
+                  msg.appId,
+                  new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds),
+                  client.getChannel());
           if (logger.isTraceEnabled()) {
             logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
                     streamId,
