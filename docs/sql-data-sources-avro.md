@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Apache Avro Data Source Guide
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -139,6 +154,37 @@ StreamingQuery query = output
 
 {% endhighlight %}
 </div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.sql.avro.functions import from_avro, to_avro
+
+# `from_avro` requires Avro schema in JSON string format.
+jsonFormatSchema = open("examples/src/main/resources/user.avsc", "r").read()
+
+df = spark\
+  .readStream\
+  .format("kafka")\
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
+  .option("subscribe", "topic1")\
+  .load()
+
+# 1. Decode the Avro data into a struct;
+# 2. Filter by column `favorite_color`;
+# 3. Encode the column `name` in Avro format.
+output = df\
+  .select(from_avro("value", jsonFormatSchema).alias("user"))\
+  .where('user.favorite_color == "red"')\
+  .select(to_avro("user.name").alias("value"))
+
+query = output\
+  .writeStream\
+  .format("kafka")\
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
+  .option("topic", "topic2")\
+  .start()
+
+{% endhighlight %}
+</div>
 </div>
 
 ## Data Source Option
@@ -152,9 +198,22 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
-    <td>Optional Avro schema provided by a user in JSON format. The date type and naming of record fields
-    should match the input Avro data or Catalyst data, otherwise the read/write action will fail.</td>
-    <td>read and write</td>
+    <td>Optional schema provided by a user in JSON format.
+      <ul>
+        <li>
+          When reading Avro, this option can be set to an evolved schema, which is compatible but different with
+          the actual Avro schema. The deserialization schema will be consistent with the evolved schema.
+          For example, if we set an evolved schema containing one additional column with a default value,
+          the reading result in Spark will contain the new column too.
+        </li>
+        <li>
+          When writing Avro, this option can be set if the expected output Avro schema doesn't match the
+          schema converted by Spark. For example, the expected schema of one column is of "enum" type,
+          instead of "string" type in the default converted schema.
+        </li>
+      </ul>
+    </td>
+    <td> read, write and function <code>from_avro</code></td>
   </tr>
   <tr>
     <td><code>recordName</code></td>

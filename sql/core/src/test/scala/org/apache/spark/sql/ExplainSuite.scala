@@ -17,20 +17,38 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class ExplainSuite extends QueryTest with SharedSQLContext {
+class ExplainSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  private def getNormalizedExplain(df: DataFrame, mode: ExplainMode): String = {
+    val output = new java.io.ByteArrayOutputStream()
+    Console.withOut(output) {
+      df.explain(mode.name)
+    }
+    output.toString.replaceAll("#\\d+", "#x")
+  }
 
   /**
    * Get the explain from a DataFrame and run the specified action on it.
    */
-  private def withNormalizedExplain(df: DataFrame, extended: Boolean)(f: String => Unit) = {
+  private def withNormalizedExplain(df: DataFrame, mode: ExplainMode)(f: String => Unit) = {
+    f(getNormalizedExplain(df, mode))
+  }
+
+  /**
+   * Get the explain by running the sql. The explain mode should be part of the
+   * sql text itself.
+   */
+  private def withNormalizedExplain(queryText: String)(f: String => Unit) = {
     val output = new java.io.ByteArrayOutputStream()
     Console.withOut(output) {
-      df.explain(extended = extended)
+      sql(queryText).show(false)
     }
     val normalizedOutput = output.toString.replaceAll("#\\d+", "#x")
     f(normalizedOutput)
@@ -39,12 +57,17 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
   /**
    * Runs the plan and makes sure the plans contains all of the keywords.
    */
-  private def checkKeywordsExistsInExplain(df: DataFrame, keywords: String*): Unit = {
-    withNormalizedExplain(df, extended = true) { normalizedOutput =>
+  private def checkKeywordsExistsInExplain(
+      df: DataFrame, mode: ExplainMode, keywords: String*): Unit = {
+    withNormalizedExplain(df, mode) { normalizedOutput =>
       for (key <- keywords) {
         assert(normalizedOutput.contains(key))
       }
     }
+  }
+
+  private def checkKeywordsExistsInExplain(df: DataFrame, keywords: String*): Unit = {
+    checkKeywordsExistsInExplain(df, ExtendedMode, keywords: _*)
   }
 
   test("SPARK-23034 show rdd names in RDD scan nodes (Dataset)") {
@@ -195,10 +218,115 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
     withTable("temptable") {
       val df = sql("create table temptable using parquet as select * from range(2)")
-      withNormalizedExplain(df, extended = false) { normalizedOutput =>
+      withNormalizedExplain(df, SimpleMode) { normalizedOutput =>
         assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 1)
       }
     }
+  }
+
+  test("explain formatted - check presence of subquery in case of DPP") {
+    withTable("df1", "df2") {
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
+        withTable("df1", "df2") {
+          spark.range(1000).select(col("id"), col("id").as("k"))
+            .write
+            .partitionBy("k")
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable("df1")
+
+          spark.range(100)
+            .select(col("id"), col("id").as("k"))
+            .write
+            .partitionBy("k")
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable("df2")
+
+          val sqlText =
+            """
+              |EXPLAIN FORMATTED SELECT df1.id, df2.k
+              |FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2
+              |""".stripMargin
+
+          val expected_pattern1 =
+            "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN subquery#x"
+          val expected_pattern2 =
+            "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
+              "IN subquery#x\\)\\]"
+          val expected_pattern3 =
+            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+              "/df2/.*, ... 99 entries\\]"
+          val expected_pattern4 =
+            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+              "/df1/.*, ... 999 entries\\]"
+          withNormalizedExplain(sqlText) { normalizedOutput =>
+            assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern2.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 2)
+            assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
+          }
+        }
+      }
+    }
+  }
+
+  test("Support ExplainMode in Dataset.explain") {
+    val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")
+    val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
+    val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
+
+    val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
+    assert(simpleExplainOutput.startsWith("== Physical Plan =="))
+    Seq("== Parsed Logical Plan ==",
+        "== Analyzed Logical Plan ==",
+        "== Optimized Logical Plan ==").foreach { planType =>
+      assert(!simpleExplainOutput.contains(planType))
+    }
+    checkKeywordsExistsInExplain(
+      testDf,
+      ExtendedMode,
+      "== Parsed Logical Plan ==" ::
+        "== Analyzed Logical Plan ==" ::
+        "== Optimized Logical Plan ==" ::
+        "== Physical Plan ==" ::
+        Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      CostMode,
+      "Statistics(sizeInBytes=" ::
+        Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      CodegenMode,
+      "WholeStageCodegen subtrees" ::
+        "Generated code:" ::
+        Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      FormattedMode,
+      "* LocalTableScan (1)" ::
+        "(1) LocalTableScan [codegen id :" ::
+        Nil: _*)
+  }
+
+  test("Dataset.toExplainString has mode as string") {
+    val df = spark.range(10).toDF
+    def assertExplainOutput(mode: ExplainMode): Unit = {
+      assert(df.queryExecution.explainString(mode).replaceAll("#\\d+", "#x").trim ===
+        getNormalizedExplain(df, mode).trim)
+    }
+    assertExplainOutput(SimpleMode)
+    assertExplainOutput(ExtendedMode)
+    assertExplainOutput(CodegenMode)
+    assertExplainOutput(CostMode)
+    assertExplainOutput(FormattedMode)
+
+    val errMsg = intercept[IllegalArgumentException] {
+      ExplainMode.fromString("unknown")
+    }.getMessage
+    assert(errMsg.contains("Unknown explain mode: unknown"))
   }
 }
 

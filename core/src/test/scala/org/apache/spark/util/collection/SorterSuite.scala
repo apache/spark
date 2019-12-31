@@ -18,7 +18,7 @@
 package org.apache.spark.util.collection
 
 import java.lang.{Float => JFloat}
-import java.util.{Arrays, Comparator}
+import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
@@ -59,7 +59,7 @@ class SorterSuite extends SparkFunSuite with Logging {
 
     Arrays.sort(keys)
     new Sorter(new KVArraySortDataFormat[Double, Number])
-      .sort(keyValueArray, 0, keys.length, Ordering.Double)
+      .sort(keyValueArray, 0, keys.length, (x, y) => java.lang.Double.compare(x, y))
 
     keys.zipWithIndex.foreach { case (k, i) =>
       assert(k === keyValueArray(2 * i))
@@ -154,6 +154,7 @@ class SorterSuite extends SparkFunSuite with Logging {
     // The sort must finish without ArrayIndexOutOfBoundsException
     // The arrayToSort contains runLengths.length elements of 1, and others are 0.
     // Those 1 must be placed at the end of arrayToSort after sorting.
+    /*
     var i: Int = 0
     sum = 0
     val amountOfZeros = arrayToSort.length - runLengths.length
@@ -169,6 +170,7 @@ class SorterSuite extends SparkFunSuite with Logging {
       i += 1
     } while (i < sizeOfArrayToSort)
     assert(sum === runLengths.length)
+    */
   }
 
   /** Runs an experiment several times. */
@@ -219,10 +221,8 @@ class SorterSuite extends SparkFunSuite with Logging {
       System.arraycopy(kvTuples, 0, kvTupleArray, 0, numElements)
     }
     runExperiment("Tuple-sort using Arrays.sort()")({
-      Arrays.sort(kvTupleArray, new Comparator[AnyRef] {
-        override def compare(x: AnyRef, y: AnyRef): Int =
-          x.asInstanceOf[(JFloat, _)]._1.compareTo(y.asInstanceOf[(JFloat, _)]._1)
-      })
+      Arrays.sort(kvTupleArray, (x: AnyRef, y: AnyRef) =>
+        x.asInstanceOf[(JFloat, _)]._1.compareTo(y.asInstanceOf[(JFloat, _)]._1))
     }, prepareKvTupleArray)
 
     // Test our Sorter where each element alternates between Float and Integer, non-primitive
@@ -245,9 +245,7 @@ class SorterSuite extends SparkFunSuite with Logging {
 
     val sorter = new Sorter(new KVArraySortDataFormat[JFloat, AnyRef])
     runExperiment("KV-sort using Sorter")({
-      sorter.sort(keyValueArray, 0, numElements, new Comparator[JFloat] {
-        override def compare(x: JFloat, y: JFloat): Int = x.compareTo(y)
-      })
+      sorter.sort(keyValueArray, 0, numElements, (x: JFloat, y: JFloat) => x.compareTo(y))
     }, prepareKeyValueArray)
   }
 
@@ -280,11 +278,9 @@ class SorterSuite extends SparkFunSuite with Logging {
       System.arraycopy(intObjects, 0, intObjectArray, 0, numElements)
     }
 
-    runExperiment("Java Arrays.sort() on non-primitive int array")({
-      Arrays.sort(intObjectArray, new Comparator[Integer] {
-        override def compare(x: Integer, y: Integer): Int = x.compareTo(y)
-      })
-    }, prepareIntObjectArray)
+    runExperiment("Java Arrays.sort() on non-primitive int array")(
+      Arrays.sort(intObjectArray, (x: Integer, y: Integer) => x.compareTo(y)),
+      prepareIntObjectArray)
 
     val intPrimitiveArray = new Array[Int](numElements)
     val prepareIntPrimitiveArray = () => {
@@ -315,12 +311,13 @@ abstract class AbstractIntArraySortDataFormat[K] extends SortDataFormat[K, Array
     data(pos1) = tmp
   }
 
-  override def copyElement(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int) {
+  override def copyElement(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int): Unit = {
     dst(dstPos) = src(srcPos)
   }
 
   /** Copy a range of elements starting at src(srcPos) to dest, starting at destPos. */
-  override def copyRange(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int, length: Int) {
+  override def copyRange(src: Array[Int], srcPos: Int,
+      dst: Array[Int], dstPos: Int, length: Int): Unit = {
     System.arraycopy(src, srcPos, dst, dstPos, length)
   }
 
@@ -338,13 +335,13 @@ abstract class AbstractByteArraySortDataFormat[K] extends SortDataFormat[K, Arra
     data(pos1) = tmp
   }
 
-  override def copyElement(src: Array[Byte], srcPos: Int, dst: Array[Byte], dstPos: Int) {
+  override def copyElement(src: Array[Byte], srcPos: Int, dst: Array[Byte], dstPos: Int): Unit = {
     dst(dstPos) = src(srcPos)
   }
 
   /** Copy a range of elements starting at src(srcPos) to dest, starting at destPos. */
   override def copyRange(src: Array[Byte],
-                         srcPos: Int, dst: Array[Byte], dstPos: Int, length: Int) {
+                         srcPos: Int, dst: Array[Byte], dstPos: Int, length: Int): Unit = {
     System.arraycopy(src, srcPos, dst, dstPos, length)
   }
 

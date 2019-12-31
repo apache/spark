@@ -40,7 +40,7 @@ private[streaming] object HdfsUtils {
         }
       } else {
         // we dont' want to use hdfs erasure coding, as that lacks support for append and hflush
-        SparkHadoopUtil.createNonECFile(dfs, dfsPath)
+        SparkHadoopUtil.createFile(dfs, dfsPath, false)
       }
     }
     stream
@@ -62,7 +62,7 @@ private[streaming] object HdfsUtils {
     }
   }
 
-  def checkState(state: Boolean, errorMsg: => String) {
+  def checkState(state: Boolean, errorMsg: => String): Unit = {
     if (!state) {
       throw new IllegalStateException(errorMsg)
     }

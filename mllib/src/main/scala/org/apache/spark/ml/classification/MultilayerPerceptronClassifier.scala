@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.feature.OneHotEncoderModel
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -320,9 +320,16 @@ class MultilayerPerceptronClassificationModel private[ml] (
     mlpModel.raw2ProbabilityInPlace(rawPrediction)
   }
 
-  override protected def predictRaw(features: Vector): Vector = mlpModel.predictRaw(features)
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = mlpModel.predictRaw(features)
 
   override def numClasses: Int = layers.last
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"MultilayerPerceptronClassificationModel: uid=$uid, numLayers=${layers.length}, " +
+      s"numClasses=$numClasses, numFeatures=$numFeatures"
+  }
 }
 
 @Since("2.0.0")

@@ -47,7 +47,7 @@ private[streaming] abstract class RateController(val streamUID: Int, rateEstimat
   /**
    * An initialization method called both from the constructor and Serialization code.
    */
-  private def init() {
+  private def init(): Unit = {
     executionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonSingleThreadExecutor("stream-rate-update"))
     rateLimit = new AtomicLong(-1L)
@@ -72,7 +72,7 @@ private[streaming] abstract class RateController(val streamUID: Int, rateEstimat
 
   def getLatestRate(): Long = rateLimit.get()
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     val elements = batchCompleted.batchInfo.streamIdToInputInfo
 
     for {

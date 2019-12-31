@@ -16,13 +16,14 @@
 #
 import os
 import shutil
+import stat
 import tempfile
 import threading
 import time
 import unittest
 from collections import namedtuple
 
-from pyspark import SparkFiles, SparkContext
+from pyspark import SparkConf, SparkFiles, SparkContext
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, SPARK_HOME
 
 
@@ -213,6 +214,10 @@ class ContextTests(unittest.TestCase):
             rdd = sc.parallelize(range(10)).map(lambda x: time.sleep(100))
 
             def run():
+                # When thread is pinned, job group should be set for each thread for now.
+                # Local properties seem not being inherited like Scala side does.
+                if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
+                    sc.setJobGroup('test_progress_api', '', True)
                 try:
                     rdd.count()
                 except Exception:
@@ -256,13 +261,46 @@ class ContextTests(unittest.TestCase):
             SparkContext(gateway=mock_insecure_gateway)
         self.assertIn("insecure Py4j gateway", str(context.exception))
 
+    def test_resources(self):
+        """Test the resources are empty by default."""
+        with SparkContext() as sc:
+            resources = sc.resources
+            self.assertEqual(len(resources), 0)
+
+
+class ContextTestsWithResources(unittest.TestCase):
+
+    def setUp(self):
+        class_name = self.__class__.__name__
+        self.tempFile = tempfile.NamedTemporaryFile(delete=False)
+        self.tempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
+        self.tempFile.close()
+        os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
+                 stat.S_IROTH | stat.S_IXOTH)
+        conf = SparkConf().set("spark.test.home", SPARK_HOME)
+        conf = conf.set("spark.driver.resource.gpu.amount", "1")
+        conf = conf.set("spark.driver.resource.gpu.discoveryScript", self.tempFile.name)
+        self.sc = SparkContext('local-cluster[2,1,1024]', class_name, conf=conf)
+
+    def test_resources(self):
+        """Test the resources are available."""
+        resources = self.sc.resources
+        self.assertEqual(len(resources), 1)
+        self.assertTrue('gpu' in resources)
+        self.assertEqual(resources['gpu'].name, 'gpu')
+        self.assertEqual(resources['gpu'].addresses, ['0'])
+
+    def tearDown(self):
+        os.unlink(self.tempFile.name)
+        self.sc.stop()
+
 
 if __name__ == "__main__":
     from pyspark.tests.test_context import *
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

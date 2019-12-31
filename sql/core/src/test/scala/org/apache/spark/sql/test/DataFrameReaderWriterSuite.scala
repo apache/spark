@@ -38,10 +38,15 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
 
 
@@ -137,7 +142,7 @@ class MessageCapturingCommitProtocol(jobId: String, path: String)
 }
 
 
-class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
   import testImplicits._
 
   private val userSchema = new StructType().add("s", StringType)
@@ -219,16 +224,146 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     assert(LastOptions.parameters("opt3") == "3")
   }
 
-  test("save mode") {
-    val df = spark.read
+  test("pass partitionBy as options") {
+    Seq(1).toDF.write
       .format("org.apache.spark.sql.test")
-      .load()
+      .partitionBy("col1", "col2")
+      .save()
 
-    df.write
+    val partColumns = LastOptions.parameters(DataSourceUtils.PARTITIONING_COLUMNS_KEY)
+    assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
+  }
+
+  test ("SPARK-29537: throw exception when user defined a wrong base path") {
+    withTempPath { p =>
+      val path = new Path(p.toURI).toString
+      Seq((1, 1), (2, 2)).toDF("c1", "c2")
+        .write.partitionBy("c1").mode(SaveMode.Overwrite).parquet(path)
+      val wrongBasePath = new File(p, "unknown")
+      // basePath must be a directory
+      wrongBasePath.mkdir()
+      val msg = intercept[IllegalArgumentException] {
+        spark.read.option("basePath", wrongBasePath.getCanonicalPath).parquet(path)
+      }.getMessage
+      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+    }
+  }
+
+  test("save mode") {
+    spark.range(10).write
       .format("org.apache.spark.sql.test")
       .mode(SaveMode.ErrorIfExists)
       .save()
     assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
+
+    spark.range(10).write
+      .format("org.apache.spark.sql.test")
+      .mode(SaveMode.Append)
+      .save()
+    assert(LastOptions.saveMode === SaveMode.Append)
+
+    // By default the save mode is `ErrorIfExists` for data source v1.
+    spark.range(10).write
+      .format("org.apache.spark.sql.test")
+      .save()
+    assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
+
+    spark.range(10).write
+      .format("org.apache.spark.sql.test")
+      .mode("default")
+      .save()
+    assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
+  }
+
+  test("save mode for data source v2") {
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+    }
+
+    spark.listenerManager.register(listener)
+    try {
+      // append mode creates `AppendData`
+      spark.range(10).write
+        .format(classOf[NoopDataSource].getName)
+        .mode(SaveMode.Append)
+        .save()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(plan.isInstanceOf[AppendData])
+
+      // overwrite mode creates `OverwriteByExpression`
+      spark.range(10).write
+        .format(classOf[NoopDataSource].getName)
+        .mode(SaveMode.Overwrite)
+        .save()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(plan.isInstanceOf[OverwriteByExpression])
+
+      // By default the save mode is `ErrorIfExists` for data source v2.
+      val e = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .save()
+      }
+      assert(e.getMessage.contains("ErrorIfExists"))
+
+      val e2 = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .mode("default")
+          .save()
+      }
+      assert(e2.getMessage.contains("ErrorIfExists"))
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("Throw exception on unsafe table insertion with strict casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        // Calling `saveAsTable` to an existing table with append mode results in table insertion.
+        var msg = intercept[AnalysisException] {
+          Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+
+        // Insert into table successfully.
+        Seq((1, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
+        // The API `saveAsTable` matches the fields by name.
+        Seq((4.0, 3)).toDF("d", "i").write.mode("append").saveAsTable("t")
+        checkAnswer(sql("select * from t"), Seq(Row(1, 2.0), Row(3, 4.0)))
+      }
+    }
+  }
+
+  test("Throw exception on unsafe cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        // Calling `saveAsTable` to an existing table with append mode results in table insertion.
+        var msg = intercept[AnalysisException] {
+          Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+
+        msg = intercept[AnalysisException] {
+          Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+      }
+    }
   }
 
   test("test path option in load") {
@@ -334,7 +469,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
   test("write path implements onTaskCommit API correctly") {
     withSQLConf(
-        "spark.sql.sources.commitProtocolClass" ->
+        SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
           classOf[MessageCapturingCommitProtocol].getCanonicalName) {
       withTempDir { dir =>
         val path = dir.getCanonicalPath
@@ -354,11 +489,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     // when users do not specify the schema
     checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
 
-    // when users specify the schema
+    // when users specify a wrong schema
     val inputSchema = new StructType().add("s", IntegerType, nullable = false)
     val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
-    assert(e.getMessage.contains(
-      "org.apache.spark.sql.sources.SimpleScanSource does not allow user-specified schemas"))
+    assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
   }
 
   test("read a data source that does not extend RelationProvider") {
@@ -838,6 +972,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "parquet", c0, c1, src)
           checkReadPartitionColumnDuplication("parquet", c0, c1, src)
+
+          // Check ORC format
+          checkWriteDataColumnDuplication("orc", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "orc", c0, c1, src)
+          checkReadPartitionColumnDuplication("orc", c0, c1, src)
         }
       }
     }
@@ -934,7 +1074,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           checkDatasetUnorderly(
             spark.read.parquet(dir.getCanonicalPath).as[(Long, Long)],
             0L -> 0L, 1L -> 1L, 2L -> 2L)
-          sparkContext.listenerBus.waitUntilEmpty(10000)
+          sparkContext.listenerBus.waitUntilEmpty()
           assert(jobDescriptions.asScala.toList.exists(
             _.contains("Listing leaf files and directories for 3 paths")))
         } finally {

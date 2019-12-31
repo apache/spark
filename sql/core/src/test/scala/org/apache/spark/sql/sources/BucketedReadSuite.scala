@@ -28,17 +28,18 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSQLContext {
+class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
@@ -48,6 +49,16 @@ class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedS
 
 abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.sessionState.conf.unsetConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING)
+    super.afterAll()
+  }
 
   private val maxI = 5
   private val maxJ = 13
@@ -372,8 +383,16 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           joined.sort("bucketed_table1.k", "bucketed_table2.k"),
           df1.join(df2, joinCondition(df1, df2), joinType).sort("df1.k", "df2.k"))
 
-        assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoinExec])
-        val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoinExec]
+        val joinOperator = if (joined.sqlContext.conf.adaptiveExecutionEnabled) {
+          val executedPlan =
+            joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+          assert(executedPlan.isInstanceOf[SortMergeJoinExec])
+          executedPlan.asInstanceOf[SortMergeJoinExec]
+        } else {
+          val executedPlan = joined.queryExecution.executedPlan
+          assert(executedPlan.isInstanceOf[SortMergeJoinExec])
+          executedPlan.asInstanceOf[SortMergeJoinExec]
+        }
 
         // check existence of shuffle
         assert(
@@ -733,6 +752,74 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       checkAnswer(spark.table("bucketed_table").groupBy("j").agg(max("k")),
         df1.groupBy("j").agg(max("k")))
+    }
+  }
+
+  //  A test with a partition where the number of files in the partition is
+  //  large. tests for the condition where the serialization of such a task may result in a stack
+  //  overflow if the files list is stored in a recursive data structure
+  //  This test is ignored because it takes long to run (~3 min)
+  ignore("SPARK-27100 stack overflow: read data with large partitions") {
+    val nCount = 20000
+    // reshuffle data so that many small files are created
+    val nShufflePartitions = 10000
+    // and with one table partition, should result in 10000 files in one partition
+    val nPartitions = 1
+    val nBuckets = 2
+    val dfPartitioned = (0 until nCount)
+      .map(i => (i % nPartitions, i % nBuckets, i.toString)).toDF("i", "j", "k")
+
+    // non-bucketed tables. This part succeeds without the fix for SPARK-27100
+    try {
+      withTable("non_bucketed_table") {
+        dfPartitioned.repartition(nShufflePartitions)
+          .write
+          .format("parquet")
+          .partitionBy("i")
+          .saveAsTable("non_bucketed_table")
+
+        val table = spark.table("non_bucketed_table")
+        val nValues = table.select("j", "k").count()
+        assert(nValues == nCount)
+      }
+    } catch {
+      case e: Exception => fail("Failed due to exception: " + e)
+    }
+    // bucketed tables. This fails without the fix for SPARK-27100
+    try {
+      withTable("bucketed_table") {
+        dfPartitioned.repartition(nShufflePartitions)
+          .write
+          .format("parquet")
+          .partitionBy("i")
+          .bucketBy(nBuckets, "j")
+          .saveAsTable("bucketed_table")
+
+        val table = spark.table("bucketed_table")
+        val nValues = table.select("j", "k").count()
+        assert(nValues == nCount)
+      }
+    } catch {
+      case e: Exception => fail("Failed due to exception: " + e)
+    }
+  }
+
+  test("SPARK-29655 Read bucketed tables obeys spark.sql.shuffle.partitions") {
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key -> "7")  {
+      val bucketSpec = Some(BucketSpec(6, Seq("i", "j"), Nil))
+      Seq(false, true).foreach { enableAdaptive =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enableAdaptive") {
+          val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
+          val bucketedTableTestSpecRight = BucketedTableTestSpec(None, expectedShuffle = true)
+          testBucketing(
+            bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+            bucketedTableTestSpecRight = bucketedTableTestSpecRight,
+            joinCondition = joinCondition(Seq("i", "j"))
+          )
+        }
+      }
     }
   }
 }

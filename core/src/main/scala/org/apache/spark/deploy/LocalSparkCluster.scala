@@ -64,14 +64,15 @@ class LocalSparkCluster(
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
       val workerEnv = Worker.startRpcEnvAndEndpoint(localHostname, 0, 0, coresPerWorker,
-        memoryPerWorker, masters, null, Some(workerNum), _conf)
+        memoryPerWorker, masters, null, Some(workerNum), _conf,
+        conf.get(config.Worker.SPARK_WORKER_RESOURCE_FILE))
       workerRpcEnvs += workerEnv
     }
 
     masters
   }
 
-  def stop() {
+  def stop(): Unit = {
     logInfo("Shutting down local Spark cluster.")
     // Stop the workers before the master so they don't get upset that it disconnected
     workerRpcEnvs.foreach(_.shutdown())

@@ -32,6 +32,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -130,6 +131,8 @@ private[yarn] class YarnAllocator(
 
   // Executor memory in MiB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
+  // Executor offHeap memory in MiB.
+  protected val executorOffHeapMemory = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf)
   // Additional memory overhead.
   protected val memoryOverhead: Int = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN)).toInt
@@ -142,12 +145,13 @@ private[yarn] class YarnAllocator(
   protected val executorCores = sparkConf.get(EXECUTOR_CORES)
 
   private val executorResourceRequests =
-    sparkConf.getAllWithPrefix(config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX).toMap
+    getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
+    getYarnResourcesFromSparkResources(SPARK_EXECUTOR_PREFIX, sparkConf)
 
   // Resource capability requested for each executor
   private[yarn] val resource: Resource = {
     val resource = Resource.newInstance(
-      executorMemory + memoryOverhead + pysparkWorkerMemory, executorCores)
+      executorMemory + executorOffHeapMemory + memoryOverhead + pysparkWorkerMemory, executorCores)
     ResourceRequestHelper.setResourceRequests(executorResourceRequests, resource)
     logDebug(s"Created resource capability: $resource")
     resource
@@ -192,11 +196,9 @@ private[yarn] class YarnAllocator(
    * A sequence of pending container requests at the given location that have not yet been
    * fulfilled.
    */
-  private def getPendingAtLocation(location: String): Seq[ContainerRequest] = {
+  private def getPendingAtLocation(location: String): Seq[ContainerRequest] =
     amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala
       .flatMap(_.asScala)
-      .toSeq
-  }
 
   /**
    * Request as many executors from the ResourceManager as needed to reach the desired total. If
@@ -381,6 +383,13 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  def stop(): Unit = {
+    // Forcefully shut down the launcher pool, in case this is being called in the middle of
+    // container allocation. This will prevent queued executors from being started - and
+    // potentially interrupt active ExecutorRunnable instances too.
+    launcherPool.shutdownNow()
+  }
+
   private def hostStr(request: ContainerRequest): String = {
     Option(request.getNodes) match {
       case Some(nodes) => nodes.asScala.mkString(",")
@@ -417,12 +426,40 @@ private[yarn] class YarnAllocator(
         containersToUse, remainingAfterHostMatches)
     }
 
-    // Match remaining by rack
+    // Match remaining by rack. Because YARN's RackResolver swallows thread interrupts
+    // (see SPARK-27094), which can cause this code to miss interrupts from the AM, use
+    // a separate thread to perform the operation.
     val remainingAfterRackMatches = new ArrayBuffer[Container]
-    for (allocatedContainer <- remainingAfterHostMatches) {
-      val rack = resolver.resolve(conf, allocatedContainer.getNodeId.getHost)
-      matchContainerToRequest(allocatedContainer, rack, containersToUse,
-        remainingAfterRackMatches)
+    if (remainingAfterHostMatches.nonEmpty) {
+      var exception: Option[Throwable] = None
+      val thread = new Thread("spark-rack-resolver") {
+        override def run(): Unit = {
+          try {
+            for (allocatedContainer <- remainingAfterHostMatches) {
+              val rack = resolver.resolve(allocatedContainer.getNodeId.getHost)
+              matchContainerToRequest(allocatedContainer, rack, containersToUse,
+                remainingAfterRackMatches)
+            }
+          } catch {
+            case e: Throwable =>
+              exception = Some(e)
+          }
+        }
+      }
+      thread.setDaemon(true)
+      thread.start()
+
+      try {
+        thread.join()
+      } catch {
+        case e: InterruptedException =>
+          thread.interrupt()
+          throw e
+      }
+
+      if (exception.isDefined) {
+        throw exception.get
+      }
     }
 
     // Assign remaining that are neither node-local nor rack-local
@@ -432,7 +469,7 @@ private[yarn] class YarnAllocator(
         remainingAfterOffRackMatches)
     }
 
-    if (!remainingAfterOffRackMatches.isEmpty) {
+    if (remainingAfterOffRackMatches.nonEmpty) {
       logDebug(s"Releasing ${remainingAfterOffRackMatches.size} unneeded containers that were " +
         s"allocated to us")
       for (container <- remainingAfterOffRackMatches) {
@@ -515,35 +552,33 @@ private[yarn] class YarnAllocator(
       if (runningExecutors.size() < targetNumExecutors) {
         numExecutorsStarting.incrementAndGet()
         if (launchContainers) {
-          launcherPool.execute(new Runnable {
-            override def run(): Unit = {
-              try {
-                new ExecutorRunnable(
-                  Some(container),
-                  conf,
-                  sparkConf,
-                  driverUrl,
-                  executorId,
-                  executorHostname,
-                  executorMemory,
-                  executorCores,
-                  appAttemptId.getApplicationId.toString,
-                  securityMgr,
-                  localResources
-                ).run()
-                updateInternalState()
-              } catch {
-                case e: Throwable =>
-                  numExecutorsStarting.decrementAndGet()
-                  if (NonFatal(e)) {
-                    logError(s"Failed to launch executor $executorId on container $containerId", e)
-                    // Assigned container should be released immediately
-                    // to avoid unnecessary resource occupation.
-                    amClient.releaseAssignedContainer(containerId)
-                  } else {
-                    throw e
-                  }
-              }
+          launcherPool.execute(() => {
+            try {
+              new ExecutorRunnable(
+                Some(container),
+                conf,
+                sparkConf,
+                driverUrl,
+                executorId,
+                executorHostname,
+                executorMemory,
+                executorCores,
+                appAttemptId.getApplicationId.toString,
+                securityMgr,
+                localResources
+              ).run()
+              updateInternalState()
+            } catch {
+              case e: Throwable =>
+                numExecutorsStarting.decrementAndGet()
+                if (NonFatal(e)) {
+                  logError(s"Failed to launch executor $executorId on container $containerId", e)
+                  // Assigned container should be released immediately
+                  // to avoid unnecessary resource occupation.
+                  amClient.releaseAssignedContainer(containerId)
+                } else {
+                  throw e
+                }
             }
           })
         } else {
@@ -741,7 +776,7 @@ private[yarn] class YarnAllocator(
       }
     }
 
-    (localityMatched.toSeq, localityUnMatched.toSeq, localityFree.toSeq)
+    (localityMatched, localityUnMatched, localityFree)
   }
 
 }

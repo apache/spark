@@ -23,12 +23,17 @@ DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 SPARK_TGZ="N/A"
 IMAGE_TAG="N/A"
+BASE_IMAGE_NAME=
+JVM_IMAGE_NAME=
+PYTHON_IMAGE_NAME=
+R_IMAGE_NAME=
 SPARK_MASTER=
 NAMESPACE=
 SERVICE_ACCOUNT=
 CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
+JAVA_VERSION="8"
 MVN="$TEST_ROOT_DIR/build/mvn"
 
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
@@ -79,6 +84,26 @@ while (( "$#" )); do
       EXCLUDE_TAGS="$2"
       shift
       ;;
+    --base-image-name)
+      BASE_IMAGE_NAME="$2"
+      shift
+      ;;
+    --jvm-image-name)
+      JVM_IMAGE_NAME="$2"
+      shift
+      ;;
+    --python-image-name)
+      PYTHON_IMAGE_NAME="$2"
+      shift
+      ;;
+    --r-image-name)
+      R_IMAGE_NAME="$2"
+      shift
+      ;;
+    --java-version)
+      JAVA_VERSION="$2"
+      shift
+      ;;
     *)
       break
       ;;
@@ -87,6 +112,7 @@ while (( "$#" )); do
 done
 
 properties=(
+  -Djava.version=$JAVA_VERSION \
   -Dspark.kubernetes.test.sparkTgz=$SPARK_TGZ \
   -Dspark.kubernetes.test.imageTag=$IMAGE_TAG \
   -Dspark.kubernetes.test.imageRepo=$IMAGE_REPO \
@@ -118,5 +144,16 @@ if [ -n $EXCLUDE_TAGS ];
 then
   properties=( ${properties[@]} -Dtest.exclude.tags=$EXCLUDE_TAGS )
 fi
+
+BASE_IMAGE_NAME=${BASE_IMAGE_NAME:-spark}
+JVM_IMAGE_NAME=${JVM_IMAGE_NAME:-${BASE_IMAGE_NAME}}
+PYTHON_IMAGE_NAME=${PYTHON_IMAGE_NAME:-${BASE_IMAGE_NAME}-py}
+R_IMAGE_NAME=${R_IMAGE_NAME:-${BASE_IMAGE_NAME}-r}
+
+properties+=(
+  -Dspark.kubernetes.test.jvmImage=$JVM_IMAGE_NAME
+  -Dspark.kubernetes.test.pythonImage=$PYTHON_IMAGE_NAME
+  -Dspark.kubernetes.test.rImage=$R_IMAGE_NAME
+)
 
 $TEST_ROOT_DIR/build/mvn integration-test -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests -am -Pscala-$SCALA_VERSION -Pkubernetes -Pkubernetes-integration-tests ${properties[@]}

@@ -193,6 +193,8 @@ case class CreateDataSourceTableAsSelectCommand(
       }
     }
 
+    CommandUtils.updateTableStats(sparkSession, table)
+
     Seq.empty[Row]
   }
 

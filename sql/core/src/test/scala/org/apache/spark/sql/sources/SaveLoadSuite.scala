@@ -25,11 +25,11 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAndAfter {
   import testImplicits._
 
   protected override lazy val sql = spark.sql _
@@ -146,13 +146,15 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
   }
 
   test("skip empty files in non bucketed read") {
-    withTempDir { dir =>
-      val path = dir.getCanonicalPath
-      Files.write(Paths.get(path, "empty"), Array.empty[Byte])
-      Files.write(Paths.get(path, "notEmpty"), "a".getBytes(StandardCharsets.UTF_8))
-      val readback = spark.read.option("wholetext", true).text(path)
+    Seq("csv", "text").foreach { format =>
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        Files.write(Paths.get(path, "empty"), Array.empty[Byte])
+        Files.write(Paths.get(path, "notEmpty"), "a".getBytes(StandardCharsets.UTF_8))
+        val readBack = spark.read.option("wholetext", true).format(format).load(path)
 
-      assert(readback.rdd.getNumPartitions === 1)
+        assert(readBack.rdd.getNumPartitions === 1)
+      }
     }
   }
 }

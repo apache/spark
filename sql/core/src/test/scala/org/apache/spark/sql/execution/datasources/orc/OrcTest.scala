@@ -25,7 +25,11 @@ import scala.reflect.runtime.universe.TypeTag
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 
@@ -102,6 +106,31 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
       df.repartition(numRows).write.orc(file.getCanonicalPath)
       val actual = stripSparkFilter(spark.read.orc(file.getCanonicalPath).where(predicate)).count()
       assert(actual < numRows)
+    }
+  }
+
+  protected def checkNoFilterPredicate
+      (predicate: Predicate, noneSupported: Boolean = false)
+      (implicit df: DataFrame): Unit = {
+    val output = predicate.collect { case a: Attribute => a }.distinct
+    val query = df
+      .select(output.map(e => Column(e)): _*)
+      .where(Column(predicate))
+
+    query.queryExecution.optimizedPlan match {
+      case PhysicalOperation(_, filters,
+          DataSourceV2ScanRelation(_, OrcScan(_, _, _, _, _, _, _, pushedFilters), _)) =>
+        assert(filters.nonEmpty, "No filter is analyzed from the given query")
+        if (noneSupported) {
+          assert(pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
+        } else {
+          assert(pushedFilters.nonEmpty, "No filter is pushed down")
+          val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
+          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for $pushedFilters")
+        }
+
+      case _ =>
+        throw new AnalysisException("Can not match OrcTable in the query.")
     }
   }
 }

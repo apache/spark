@@ -2,6 +2,21 @@
 layout: global
 title: Performance Tuning
 displayTitle: Performance Tuning
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -92,22 +107,29 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
 </table>
 
-## Broadcast Hint for SQL Queries
+## Join Strategy Hints for SQL Queries
 
-The `BROADCAST` hint guides Spark to broadcast each specified table when joining them with another table or view.
-When Spark deciding the join methods, the broadcast hash join (i.e., BHJ) is preferred,
-even if the statistics is above the configuration `spark.sql.autoBroadcastJoinThreshold`.
-When both sides of a join are specified, Spark broadcasts the one having the lower statistics.
-Note Spark does not guarantee BHJ is always chosen, since not all cases (e.g. full outer join)
-support BHJ. When the broadcast nested loop join is selected, we still respect the hint.
+The join strategy hints, namely `BROADCAST`, `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL`,
+instruct Spark to use the hinted strategy on each specified relation when joining them with another
+relation. For example, when the `BROADCAST` hint is used on table 't1', broadcast join (either
+broadcast hash join or broadcast nested loop join depending on whether there is any equi-join key)
+with 't1' as the build side will be prioritized by Spark even if the size of table 't1' suggested
+by the statistics is above the configuration `spark.sql.autoBroadcastJoinThreshold`.
+
+When different join strategy hints are specified on both sides of a join, Spark prioritizes the
+`BROADCAST` hint over the `MERGE` hint over the `SHUFFLE_HASH` hint over the `SHUFFLE_REPLICATE_NL`
+hint. When both sides are specified with the `BROADCAST` hint or the `SHUFFLE_HASH` hint, Spark will
+pick the build side based on the join type and the sizes of the relations.
+
+Note that there is no guarantee that Spark will choose the join strategy specified in the hint since
+a specific strategy may not support all join types.
 
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-import org.apache.spark.sql.functions.broadcast
-broadcast(spark.table("src")).join(spark.table("records"), "key").show()
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 {% endhighlight %}
 
 </div>
@@ -115,8 +137,7 @@ broadcast(spark.table("src")).join(spark.table("records"), "key").show()
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-import static org.apache.spark.sql.functions.broadcast;
-broadcast(spark.table("src")).join(spark.table("records"), "key").show();
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show();
 {% endhighlight %}
 
 </div>
@@ -124,8 +145,7 @@ broadcast(spark.table("src")).join(spark.table("records"), "key").show();
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-from pyspark.sql.functions import broadcast
-broadcast(spark.table("src")).join(spark.table("records"), "key").show()
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 {% endhighlight %}
 
 </div>
@@ -135,7 +155,7 @@ broadcast(spark.table("src")).join(spark.table("records"), "key").show()
 {% highlight r %}
 src <- sql("SELECT * FROM src")
 records <- sql("SELECT * FROM records")
-head(join(broadcast(src), records, src$key == records$key))
+head(join(src, hint(records, "broadcast"), src$key == records$key))
 {% endhighlight %}
 
 </div>
@@ -149,3 +169,18 @@ SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 
 </div>
 </div>
+
+## Coalesce Hints for SQL Queries
+
+Coalesce hints allows the Spark SQL users to control the number of output files just like the
+`coalesce`, `repartition` and `repartitionByRange` in Dataset API, they can be used for performance
+tuning and reducing the number of output files. The "COALESCE" hint only has a partition number as a
+parameter. The "REPARTITION" hint has a partition number, columns, or both of them as parameters.
+The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional.
+
+    SELECT /*+ COALESCE(3) */ * FROM t
+    SELECT /*+ REPARTITION(3) */ * FROM t
+    SELECT /*+ REPARTITION(c) */ * FROM t
+    SELECT /*+ REPARTITION(3, c) */ * FROM t
+    SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t
+    SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t

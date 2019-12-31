@@ -18,6 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
@@ -25,7 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.xml._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.config.SCHEDULER_MODE
@@ -70,7 +71,10 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       val jobId = job.jobId
       val status = job.status
       val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
-      val jobDescription = UIUtils.makeDescription(lastStageDescription, "", plainText = true).text
+      val jobDescription = UIUtils.makeDescription(
+        job.description.getOrElse(lastStageDescription),
+        "",
+        plainText = true).text
 
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
@@ -122,7 +126,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="bottom"' +
+           |    'data-toggle="tooltip" data-placement="top"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
            |    'data-html="true">Executor ${e.id} added</div>'
@@ -138,7 +142,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-toggle="tooltip" data-placement="top"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -182,7 +186,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     <span class="expand-application-timeline">
       <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="right">
+      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="top">
         Event Timeline
       </a>
     </span> ++
@@ -448,7 +452,11 @@ private[ui] class JobDataSource(
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
     val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store, jobData)
 
-    val jobDescription = UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
+    val jobDescription =
+      UIUtils.makeDescription(
+        jobData.description.getOrElse(lastStageDescription),
+        basePath,
+        plainText = false)
 
     val detailUrl = "%s/jobs/job/?id=%s".format(basePath, jobData.jobId)
 
@@ -524,7 +532,7 @@ private[ui] class JobPagedTable(
     desc)
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$jobTag.sort=$encodedSortColumn" +
@@ -534,18 +542,21 @@ private[ui] class JobPagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     s"$parameterPath&$jobTag.sort=$encodedSortColumn&$jobTag.desc=$desc#$tableHeaderId"
   }
 
   override def headers: Seq[Node] = {
     // Information for each header: title, cssClass, and sortable
-    val jobHeadersAndCssClasses: Seq[(String, String, Boolean)] =
+    val jobHeadersAndCssClasses: Seq[(String, String, Boolean, Option[String])] =
       Seq(
-        (jobIdTitle, "", true),
-        ("Description", "", true), ("Submitted", "", true), ("Duration", "", true),
-        ("Stages: Succeeded/Total", "", false),
-        ("Tasks (for all stages): Succeeded/Total", "", false)
+        (jobIdTitle, "", true, None),
+        ("Description", "", true, None),
+        ("Submitted", "", true, None),
+        ("Duration", "", true, Some("Elapsed time since the job was submitted " +
+          "until execution completion of all its stages.")),
+        ("Stages: Succeeded/Total", "", false, None),
+        ("Tasks (for all stages): Succeeded/Total", "", false, None)
       )
 
     if (!jobHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
@@ -553,11 +564,11 @@ private[ui] class JobPagedTable(
     }
 
     val headerRow: Seq[Node] = {
-      jobHeadersAndCssClasses.map { case (header, cssClass, sortable) =>
+      jobHeadersAndCssClasses.map { case (header, cssClass, sortable, tooltip) =>
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
-              s"&$jobTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&$jobTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&$jobTag.desc=${!desc}" +
               s"&$jobTag.pageSize=$pageSize" +
               s"#$tableHeaderId")
@@ -565,27 +576,55 @@ private[ui] class JobPagedTable(
 
           <th class={cssClass}>
             <a href={headerLink}>
-              {header}<span>
-              &nbsp;{Unparsed(arrow)}
-            </span>
+              {
+                if (tooltip.nonEmpty) {
+                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                    {header}&nbsp;{Unparsed(arrow)}
+                  </span>
+                } else {
+                  <span>
+                    {header}&nbsp;{Unparsed(arrow)}
+                  </span>
+                }
+              }
             </a>
           </th>
         } else {
           if (sortable) {
             val headerLink = Unparsed(
               parameterPath +
-                s"&$jobTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+                s"&$jobTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
                 s"&$jobTag.pageSize=$pageSize" +
                 s"#$tableHeaderId")
 
             <th class={cssClass}>
               <a href={headerLink}>
-                {header}
-              </a>
+                {
+                  if (tooltip.nonEmpty) {
+                    <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                      {header}
+                    </span>
+                  } else {
+                    <span>
+                      {header}
+                    </span>
+                  }
+                }
+               </a>
             </th>
           } else {
             <th class={cssClass}>
-              {header}
+              {
+                if (tooltip.nonEmpty) {
+                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
+                    {header}
+                  </span>
+                } else {
+                  <span>
+                    {header}
+                  </span>
+                }
+              }
             </th>
           }
         }

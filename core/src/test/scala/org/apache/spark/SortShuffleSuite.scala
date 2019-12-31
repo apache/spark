@@ -37,7 +37,7 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
 
   private var tempDir: File = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     // Once 'spark.local.dir' is set, it is cached. Unless this is manually cleared
     // before/after a test, it could return the same directory even if this property

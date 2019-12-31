@@ -31,8 +31,9 @@ import org.apache.spark.api.r._
 import org.apache.spark.api.r.SpecialLengths
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.arrow.{ArrowUtils, ArrowWriter}
+import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 
@@ -47,7 +48,7 @@ class ArrowRRunner(
     schema: StructType,
     timeZoneId: String,
     mode: Int)
-  extends RRunner[ColumnarBatch](
+  extends BaseRRunner[Iterator[InternalRow], ColumnarBatch](
     func,
     "arrow",
     "arrow",
@@ -58,60 +59,10 @@ class ArrowRRunner(
     schema.fieldNames,
     mode) {
 
-  // TODO: it needs to refactor to share the same code with RRunner, and have separate
-  // ArrowRRunners.
-  private val getNextBatch = {
-    if (mode == RRunnerModes.DATAFRAME_GAPPLY) {
-      // gapply
-      (inputIterator: Iterator[_], keys: collection.mutable.ArrayBuffer[Array[Byte]]) => {
-        val (key, nextBatch) = inputIterator
-          .asInstanceOf[Iterator[(Array[Byte], Iterator[InternalRow])]].next()
-        keys.append(key)
-        nextBatch
-      }
-    } else {
-      // dapply
-      (inputIterator: Iterator[_], keys: collection.mutable.ArrayBuffer[Array[Byte]]) => {
-        inputIterator
-          .asInstanceOf[Iterator[Iterator[InternalRow]]].next()
-      }
-    }
-  }
-
-  protected override def writeData(
-      dataOut: DataOutputStream,
-      printOut: PrintStream,
-      inputIterator: Iterator[_]): Unit = if (inputIterator.hasNext) {
-    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
-    val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-      "stdout writer for R", 0, Long.MaxValue)
-    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+  protected def bufferedWrite(
+      dataOut: DataOutputStream)(writeFunc: ByteArrayOutputStream => Unit): Unit = {
     val out = new ByteArrayOutputStream()
-    val keys = collection.mutable.ArrayBuffer.empty[Array[Byte]]
-
-    Utils.tryWithSafeFinally {
-      val arrowWriter = ArrowWriter.create(root)
-      val writer = new ArrowStreamWriter(root, null, Channels.newChannel(out))
-      writer.start()
-
-      while (inputIterator.hasNext) {
-        val nextBatch: Iterator[InternalRow] = getNextBatch(inputIterator, keys)
-
-        while (nextBatch.hasNext) {
-          arrowWriter.write(nextBatch.next())
-        }
-
-        arrowWriter.finish()
-        writer.writeBatch()
-        arrowWriter.reset()
-      }
-      writer.end()
-    } {
-      // Don't close root and allocator in TaskCompletionListener to prevent
-      // a race condition. See `ArrowPythonRunner`.
-      root.close()
-      allocator.close()
-    }
+    writeFunc(out)
 
     // Currently, there looks no way to read batch by batch by socket connection in R side,
     // See ARROW-4512. Therefore, it writes the whole Arrow streaming-formatted binary at
@@ -119,13 +70,57 @@ class ArrowRRunner(
     val data = out.toByteArray
     dataOut.writeInt(data.length)
     dataOut.write(data)
+  }
 
-    keys.foreach(dataOut.write)
+  protected override def newWriterThread(
+      output: OutputStream,
+      inputIterator: Iterator[Iterator[InternalRow]],
+      partitionIndex: Int): WriterThread = {
+    new WriterThread(output, inputIterator, partitionIndex) {
+
+      /**
+       * Writes input data to the stream connected to the R worker.
+       */
+      override protected def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+        if (inputIterator.hasNext) {
+          val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+          val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+            "stdout writer for R", 0, Long.MaxValue)
+          val root = VectorSchemaRoot.create(arrowSchema, allocator)
+
+          bufferedWrite(dataOut) { out =>
+            Utils.tryWithSafeFinally {
+              val arrowWriter = ArrowWriter.create(root)
+              val writer = new ArrowStreamWriter(root, null, Channels.newChannel(out))
+              writer.start()
+
+              while (inputIterator.hasNext) {
+                val nextBatch: Iterator[InternalRow] = inputIterator.next()
+
+                while (nextBatch.hasNext) {
+                  arrowWriter.write(nextBatch.next())
+                }
+
+                arrowWriter.finish()
+                writer.writeBatch()
+                arrowWriter.reset()
+              }
+              writer.end()
+            } {
+              // Don't close root and allocator in TaskCompletionListener to prevent
+              // a race condition. See `ArrowPythonRunner`.
+              root.close()
+              allocator.close()
+            }
+          }
+        }
+      }
+    }
   }
 
   protected override def newReaderIterator(
-      dataStream: DataInputStream, errThread: BufferedStreamThread): Iterator[ColumnarBatch] = {
-    new Iterator[ColumnarBatch] {
+      dataStream: DataInputStream, errThread: BufferedStreamThread): ReaderIterator = {
+    new ReaderIterator(dataStream, errThread) {
       private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
         "stdin reader for R", 0, Long.MaxValue)
 
@@ -141,29 +136,8 @@ class ArrowRRunner(
       }
 
       private var batchLoaded = true
-      private var nextObj: ColumnarBatch = _
-      private var eos = false
 
-      override def hasNext: Boolean = nextObj != null || {
-        if (!eos) {
-          nextObj = read()
-          hasNext
-        } else {
-          false
-        }
-      }
-
-      override def next(): ColumnarBatch = {
-        if (hasNext) {
-          val obj = nextObj
-          nextObj = null.asInstanceOf[ColumnarBatch]
-          obj
-        } else {
-          Iterator.empty.next()
-        }
-      }
-
-      private def read(): ColumnarBatch = try {
+      protected override def read(): ColumnarBatch = try {
         if (reader != null && batchLoaded) {
           batchLoaded = reader.loadNextBatch()
           if (batchLoaded) {
@@ -173,8 +147,8 @@ class ArrowRRunner(
           } else {
             reader.close(false)
             allocator.close()
-            eos = true
-            null
+            // Should read timing data after this.
+            read()
           }
         } else {
           dataStream.readInt() match {
@@ -202,7 +176,9 @@ class ArrowRRunner(
               // Likewise, there looks no way to send each batch in streaming format via socket
               // connection. See ARROW-4512.
               // So, it reads the whole Arrow streaming-formatted binary at once for now.
-              val in = new ByteArrayReadableSeekableByteChannel(readByteArrayData(length))
+              val buffer = new Array[Byte](length)
+              dataStream.readFully(buffer)
+              val in = new ByteArrayReadableSeekableByteChannel(buffer)
               reader = new ArrowStreamReader(in, allocator)
               root = reader.getVectorSchemaRoot
               vectors = root.getFieldVectors.asScala.map { vector =>
@@ -210,15 +186,12 @@ class ArrowRRunner(
               }.toArray[ColumnVector]
               read()
             case length if length == 0 =>
+              // End of stream
               eos = true
               null
           }
         }
-      } catch {
-        case eof: EOFException =>
-          throw new SparkException(
-            "R worker exited unexpectedly (crashed)\n " + errThread.getLines(), eof)
-      }
+      } catch handleException
     }
   }
 }

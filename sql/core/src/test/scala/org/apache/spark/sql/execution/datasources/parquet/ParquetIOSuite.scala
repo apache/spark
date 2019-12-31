@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -66,7 +66,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
     new WriteContext(schema, new java.util.HashMap[String, String]())
   }
 
-  override def write(record: Group) {
+  override def write(record: Group): Unit = {
     groupWriter.write(record)
   }
 }
@@ -74,7 +74,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
+class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession {
   import testImplicits._
 
   /**
@@ -475,7 +475,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       val extraOptions = Map(
         SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
-        "spark.sql.parquet.output.committer.class" ->
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
           classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
       )
       withTempPath { dir =>
@@ -505,7 +505,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       // Using a output committer that always fail when committing a task, so that both
       // `commitTask()` and `abortTask()` are invoked.
       val extraOptions = Map[String, String](
-        "spark.sql.parquet.output.committer.class" ->
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
           classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
       )
 

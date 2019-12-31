@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ClosureCleaner
@@ -329,8 +330,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     {
       val schema = ExpressionEncoder[(Int, (String, Int))].schema
       assert(schema(0).nullable === false)
-      assert(schema(1).nullable === true)
-      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable === true)
+      assert(schema(1).nullable)
+      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
     }
 
@@ -340,8 +341,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
         ExpressionEncoder[Int],
         ExpressionEncoder[(String, Int)]).schema
       assert(schema(0).nullable === false)
-      assert(schema(1).nullable === true)
-      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable === true)
+      assert(schema(1).nullable)
+      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
     }
   }
@@ -368,6 +369,91 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     val encoder = ExpressionEncoder[Map[Integer, String]]()
     val e = intercept[RuntimeException](encoder.toRow(Map((1, "a"), (null, "b"))))
     assert(e.getMessage.contains("Cannot use null as map key"))
+  }
+
+  test("throw exception for tuples with more than 22 elements") {
+    val encoders = (0 to 22).map(_ => Encoders.scalaInt.asInstanceOf[ExpressionEncoder[_]])
+
+    val e = intercept[UnsupportedOperationException] {
+      ExpressionEncoder.tuple(encoders)
+    }
+    assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
+  }
+
+  // Scala / Java big decimals ----------------------------------------------------------
+
+  encodeDecodeTest(BigDecimal(("9" * 20) + "." + "9" * 18),
+    "scala decimal within precision/scale limit")
+  encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18),
+    "java decimal within precision/scale limit")
+
+  encodeDecodeTest(-BigDecimal(("9" * 20) + "." + "9" * 18),
+    "negative scala decimal within precision/scale limit")
+  encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18).negate,
+    "negative java decimal within precision/scale limit")
+
+  testOverflowingBigNumeric(BigDecimal("1" * 21), "scala big decimal")
+  testOverflowingBigNumeric(new java.math.BigDecimal("1" * 21), "java big decimal")
+
+  testOverflowingBigNumeric(-BigDecimal("1" * 21), "negative scala big decimal")
+  testOverflowingBigNumeric(new java.math.BigDecimal("1" * 21).negate, "negative java big decimal")
+
+  testOverflowingBigNumeric(BigDecimal(("1" * 21) + ".123"),
+    "scala big decimal with fractional part")
+  testOverflowingBigNumeric(new java.math.BigDecimal(("1" * 21) + ".123"),
+    "java big decimal with fractional part")
+
+  testOverflowingBigNumeric(BigDecimal(("1" * 21)  + "." + "9999" * 100),
+    "scala big decimal with long fractional part")
+  testOverflowingBigNumeric(new java.math.BigDecimal(("1" * 21)  + "." + "9999" * 100),
+    "java big decimal with long fractional part")
+
+  // Scala / Java big integers ----------------------------------------------------------
+
+  encodeDecodeTest(BigInt("9" * 38), "scala big integer within precision limit")
+  encodeDecodeTest(new BigInteger("9" * 38), "java big integer within precision limit")
+
+  encodeDecodeTest(-BigInt("9" * 38),
+    "negative scala big integer within precision limit")
+  encodeDecodeTest(new BigInteger("9" * 38).negate(),
+    "negative java big integer within precision limit")
+
+  testOverflowingBigNumeric(BigInt("1" * 39), "scala big int")
+  testOverflowingBigNumeric(new BigInteger("1" * 39), "java big integer")
+
+  testOverflowingBigNumeric(-BigInt("1" * 39), "negative scala big int")
+  testOverflowingBigNumeric(new BigInteger("1" * 39).negate, "negative java big integer")
+
+  testOverflowingBigNumeric(BigInt("9" * 100), "scala very large big int")
+  testOverflowingBigNumeric(new BigInteger("9" * 100), "java very big int")
+
+  encodeDecodeTest("foo" -> 1L, "makeCopy") {
+    Encoders.product[(String, Long)].makeCopy.asInstanceOf[ExpressionEncoder[(String, Long)]]
+  }
+
+  private def testOverflowingBigNumeric[T: TypeTag](bigNumeric: T, testName: String): Unit = {
+    Seq(true, false).foreach { ansiEnabled =>
+      testAndVerifyNotLeakingReflectionObjects(
+        s"overflowing $testName, ansiEnabled=$ansiEnabled") {
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString
+        ) {
+          // Need to construct Encoder here rather than implicitly resolving it
+          // so that SQLConf changes are respected.
+          val encoder = ExpressionEncoder[T]()
+          if (!ansiEnabled) {
+            val convertedBack = encoder.resolveAndBind().fromRow(encoder.toRow(bigNumeric))
+            assert(convertedBack === null)
+          } else {
+            val e = intercept[RuntimeException] {
+              encoder.toRow(bigNumeric)
+            }
+            assert(e.getMessage.contains("Error while encoding"))
+            assert(e.getCause.getClass === classOf[ArithmeticException])
+          }
+        }
+      }
+    }
   }
 
   private def encodeDecodeTest[T : ExpressionEncoder](
@@ -467,7 +553,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     r
   }
 
-  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any) {
+  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any): Unit = {
     test(testName) {
       verifyNotLeakingReflectionObjects(testFun)
     }

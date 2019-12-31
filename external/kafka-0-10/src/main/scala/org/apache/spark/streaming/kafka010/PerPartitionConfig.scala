@@ -39,8 +39,8 @@ abstract class PerPartitionConfig extends Serializable {
  */
 private class DefaultPerPartitionConfig(conf: SparkConf)
     extends PerPartitionConfig {
-  val maxRate = conf.getLong("spark.streaming.kafka.maxRatePerPartition", 0)
-  val minRate = conf.getLong("spark.streaming.kafka.minRatePerPartition", 1)
+  val maxRate = conf.get(MAX_RATE_PER_PARTITION)
+  val minRate = conf.get(MIN_RATE_PER_PARTITION)
 
   def maxRatePerPartition(topicPartition: TopicPartition): Long = maxRate
   override def minRatePerPartition(topicPartition: TopicPartition): Long = minRate

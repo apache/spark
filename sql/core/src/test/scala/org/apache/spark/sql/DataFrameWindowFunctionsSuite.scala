@@ -25,13 +25,13 @@ import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
  * Window function testing for DataFrame API.
  */
-class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
+class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
@@ -633,20 +633,20 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       assert(thrownException.message.contains("window functions inside WHERE and HAVING clauses"))
     }
 
-    checkAnalysisError(testData2.select('a).where(rank().over(Window.orderBy('b)) === 1))
-    checkAnalysisError(testData2.where('b === 2 && rank().over(Window.orderBy('b)) === 1))
+    checkAnalysisError(testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1))
+    checkAnalysisError(testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(avg('b).as("avgb"))
-        .where('a > 'avgb && rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(avg($"b").as("avgb"))
+        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where(rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where(rank().over(Window.orderBy($"a")) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where('sumb === 5 && rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1))
 
     checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"))
     checkAnalysisError(sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"))
@@ -697,13 +697,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("NaN and -0.0 in window partition keys") {
-    import java.lang.Float.floatToRawIntBits
-    import java.lang.Double.doubleToRawLongBits
-
-    // 0.0/0.0 and NaN are different values.
-    assert(floatToRawIntBits(0.0f/0.0f) != floatToRawIntBits(Float.NaN))
-    assert(doubleToRawLongBits(0.0/0.0) != doubleToRawLongBits(Double.NaN))
-
     val df = Seq(
       (Float.NaN, Double.NaN),
       (0.0f/0.0f, 0.0/0.0),

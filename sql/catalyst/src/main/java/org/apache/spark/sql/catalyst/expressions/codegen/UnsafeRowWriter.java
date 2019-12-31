@@ -135,44 +135,52 @@ public final class UnsafeRowWriter extends UnsafeWriter {
     return startingOffset + nullBitsSize + 8L * ordinal;
   }
 
+  @Override
   public void write(int ordinal, boolean value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0L);
     writeBoolean(offset, value);
   }
 
+  @Override
   public void write(int ordinal, byte value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0L);
     writeByte(offset, value);
   }
 
+  @Override
   public void write(int ordinal, short value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0L);
     writeShort(offset, value);
   }
 
+  @Override
   public void write(int ordinal, int value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0L);
     writeInt(offset, value);
   }
 
+  @Override
   public void write(int ordinal, long value) {
     writeLong(getFieldOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, float value) {
     final long offset = getFieldOffset(ordinal);
     writeLong(offset, 0);
     writeFloat(offset, value);
   }
 
+  @Override
   public void write(int ordinal, double value) {
     writeDouble(getFieldOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, Decimal input, int precision, int scale) {
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       // make sure Decimal object has the same scale as DecimalType

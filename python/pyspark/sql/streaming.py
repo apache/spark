@@ -186,7 +186,7 @@ class StreamingQuery(object):
             je = self._jsq.exception().get()
             msg = je.toString().split(': ', 1)[1]  # Drop the Java StreamingQueryException type info
             stackTrace = '\n\t at '.join(map(lambda x: x.toString(), je.getStackTrace()))
-            return StreamingQueryException(msg, stackTrace)
+            return StreamingQueryException(msg, stackTrace, je.getCause())
         else:
             return None
 
@@ -405,7 +405,8 @@ class DataStreamReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None,
-             dropFieldIfAllNull=None, encoding=None):
+             dropFieldIfAllNull=None, encoding=None, pathGlobFilter=None,
+             recursiveFileLookup=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -458,12 +459,12 @@ class DataStreamReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
+                           default value, ``uuuu-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
@@ -481,6 +482,13 @@ class DataStreamReader(OptionUtils):
                          the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
                          the encoding of input JSON will be detected automatically
                          when the multiLine option is set to ``true``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
+
+        .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -496,17 +504,27 @@ class DataStreamReader(OptionUtils):
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
-            dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding)
+            dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
             raise TypeError("path can be only a single string")
 
     @since(2.3)
-    def orc(self, path):
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
         """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
 
         .. note:: Evolving.
+
+        :param mergeSchema: sets whether we should merge schemas collected from all
+                            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
+                            The default value is specified in ``spark.sql.orc.mergeSchema``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+            disables `partition discovery`_.
 
         >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
         >>> orc_sdf.isStreaming
@@ -514,21 +532,29 @@ class DataStreamReader(OptionUtils):
         >>> orc_sdf.schema == sdf_schema
         True
         """
+        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
+                       recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.orc(path))
         else:
             raise TypeError("path can be only a single string")
 
     @since(2.0)
-    def parquet(self, path):
-        """Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
-
-        You can set the following Parquet-specific option(s) for reading Parquet files:
-            * ``mergeSchema``: sets whether we should merge schemas collected from all \
-                Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``. \
-                The default value is specified in ``spark.sql.parquet.mergeSchema``.
+    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
+        """
+        Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
         .. note:: Evolving.
+
+        :param mergeSchema: sets whether we should merge schemas collected from all
+                            Parquet part-files. This will override
+                            ``spark.sql.parquet.mergeSchema``. The default value is specified in
+                            ``spark.sql.parquet.mergeSchema``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         >>> parquet_sdf = spark.readStream.schema(sdf_schema).parquet(tempfile.mkdtemp())
         >>> parquet_sdf.isStreaming
@@ -536,6 +562,8 @@ class DataStreamReader(OptionUtils):
         >>> parquet_sdf.schema == sdf_schema
         True
         """
+        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
+                       recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.parquet(path))
         else:
@@ -543,11 +571,13 @@ class DataStreamReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def text(self, path, wholetext=False, lineSep=None):
+    def text(self, path, wholetext=False, lineSep=None, pathGlobFilter=None,
+             recursiveFileLookup=None):
         """
         Loads a text file stream and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
+        The text files must be encoded as UTF-8.
 
         By default, each line in the text file is a new row in the resulting DataFrame.
 
@@ -557,6 +587,11 @@ class DataStreamReader(OptionUtils):
         :param wholetext: if true, read each file from input path(s) as a single row.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
@@ -564,7 +599,9 @@ class DataStreamReader(OptionUtils):
         >>> "value" in str(text_sdf.schema)
         True
         """
-        self._set_opts(wholetext=wholetext, lineSep=lineSep)
+        self._set_opts(
+            wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.text(path))
         else:
@@ -577,7 +614,8 @@ class DataStreamReader(OptionUtils):
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            enforceSchema=None, emptyValue=None, locale=None, lineSep=None):
+            enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
+            pathGlobFilter=None, recursiveFileLookup=None):
         r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -589,8 +627,8 @@ class DataStreamReader(OptionUtils):
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets a single character as a separator for each field and value.
-                    If None is set, it uses the default value, ``,``.
+        :param sep: sets a separator (one or more characters) for each field and value. If None is
+                    set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
         :param quote: sets a single character used for escaping quoted values where the
@@ -633,12 +671,12 @@ class DataStreamReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
+                           default value, ``uuuu-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -680,6 +718,11 @@ class DataStreamReader(OptionUtils):
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
                         Maximum length is 1 character.
+        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
+                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+                               It does not change the behavior of `partition discovery`_.
+        :param recursiveFileLookup: recursively scan a directory for files. Using this option
+                                    disables `partition discovery`_.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -697,7 +740,8 @@ class DataStreamReader(OptionUtils):
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
-            emptyValue=emptyValue, locale=locale, lineSep=lineSep)
+            emptyValue=emptyValue, locale=locale, lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
@@ -832,10 +876,13 @@ class DataStreamWriter(object):
         .. note:: Evolving.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
-                               Set a trigger that runs a query periodically based on the processing
-                               time. Only one trigger can be set.
+                               Set a trigger that runs a microbatch query periodically based on the
+                               processing time. Only one trigger can be set.
         :param once: if set to True, set a trigger that processes only one batch of data in a
                      streaming query then terminates the query. Only one trigger can be set.
+        :param continuous: a time interval as a string, e.g. '5 seconds', '1 minute'.
+                           Set a trigger that runs a continuous query with a given checkpoint
+                           interval. Only one trigger can be set.
 
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
@@ -1055,7 +1102,7 @@ class DataStreamWriter(object):
         >>> def func(batch_df, batch_id):
         ...     batch_df.collect()
         ...
-        >>> writer = sdf.writeStream.foreach(func)
+        >>> writer = sdf.writeStream.foreachBatch(func)
         """
 
         from pyspark.java_gateway import ensure_callback_server_started
@@ -1148,7 +1195,7 @@ def _test():
     globs['sqlContext'] = SQLContext.getOrCreate(spark.sparkContext)
     globs['sdf'] = \
         spark.readStream.format('text').load('python/test_support/sql/streaming')
-    globs['sdf_schema'] = StructType([StructField("data", StringType(), False)])
+    globs['sdf_schema'] = StructType([StructField("data", StringType(), True)])
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
 

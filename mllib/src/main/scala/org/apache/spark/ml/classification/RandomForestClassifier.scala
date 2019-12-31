@@ -25,7 +25,7 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.tree.{RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
+import org.apache.spark.ml.tree.{TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.StructType
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> learning algorithm for
@@ -136,12 +137,14 @@ class RandomForestClassifier @Since("1.4.0") (
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
 
     instr.logParams(this, labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
-      impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
-      minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
+      leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB,
+      minInfoGain, minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds,
+      checkpointInterval)
 
     val trees = RandomForest
       .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
+    trees.foreach(copyValues(_))
 
     val numFeatures = trees.head.numFeatures
     instr.logNumClasses(numClasses)
@@ -208,21 +211,36 @@ class RandomForestClassificationModel private[ml] (
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
-    val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateField(outputSchema, getLeafField($(leafCol)))
     }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    outputSchema
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+
+    val outputData = super.transform(dataset)
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
+        outputSchema($(leafCol)).metadata)
+    } else {
+      outputData
+    }
+  }
+
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
     // Classifies using majority votes.
     // Ignore the tree weights since all are 1.0 for now.
-    val votes = Array.fill[Double](numClasses)(0.0)
+    val votes = Array.ofDim[Double](numClasses)
     _trees.view.foreach { tree =>
-      val classCounts: Array[Double] = tree.rootNode.predictImpl(features).impurityStats.stats
+      val classCounts = tree.rootNode.predictImpl(features).impurityStats.stats
       val total = classCounts.sum
       if (total != 0) {
         var i = 0
@@ -254,7 +272,8 @@ class RandomForestClassificationModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"RandomForestClassificationModel (uid=$uid) with $getNumTrees trees"
+    s"RandomForestClassificationModel: uid=$uid, numTrees=$getNumTrees, numClasses=$numClasses, " +
+      s"numFeatures=$numFeatures"
   }
 
   /**

@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 
-class SimpleShowCreateTableSuite extends ShowCreateTableSuite with SharedSQLContext
+class SimpleShowCreateTableSuite extends ShowCreateTableSuite with SharedSparkSession
 
 abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
@@ -159,6 +159,26 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     withView("v1") {
       sql("CREATE VIEW v1 (b) AS SELECT 1 AS a")
       checkCreateView("v1")
+    }
+  }
+
+  test("temp view") {
+    val viewName = "spark_28383"
+    withTempView(viewName) {
+      sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT 1 AS a")
+      val ex = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE $viewName")
+      }
+      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+    }
+
+    withGlobalTempView(viewName) {
+      sql(s"CREATE GLOBAL TEMPORARY VIEW $viewName AS SELECT 1 AS a")
+      val ex = intercept[AnalysisException] {
+        val globalTempViewDb = spark.sessionState.catalog.globalTempViewManager.database
+        sql(s"SHOW CREATE TABLE $globalTempViewDb.$viewName")
+      }
+      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
     }
   }
 

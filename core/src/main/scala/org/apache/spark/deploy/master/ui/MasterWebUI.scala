@@ -40,7 +40,7 @@ class MasterWebUI(
   initialize()
 
   /** Initialize all components of the server. */
-  def initialize() {
+  def initialize(): Unit = {
     val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
     attachPage(masterPage)

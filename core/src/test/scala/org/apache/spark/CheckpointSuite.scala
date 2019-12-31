@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd._
@@ -511,8 +512,8 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     assert(rdd.isCheckpointed === false)
     assert(rdd.isCheckpointedAndMaterialized === false)
     assert(rdd.count() === 0)
-    assert(rdd.isCheckpointed === true)
-    assert(rdd.isCheckpointedAndMaterialized === true)
+    assert(rdd.isCheckpointed)
+    assert(rdd.isCheckpointedAndMaterialized)
     assert(rdd.partitions.size === 0)
   }
 
@@ -531,7 +532,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
       checkpoint(rdd2, reliableCheckpoint)
       rdd2.count()
       assert(rdd1.isCheckpointed === checkpointAllMarkedAncestors)
-      assert(rdd2.isCheckpointed === true)
+      assert(rdd2.isCheckpointed)
     } finally {
       sc.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, null)
     }
@@ -584,7 +585,7 @@ object CheckpointSuite {
   }
 }
 
-class CheckpointCompressionSuite extends SparkFunSuite with LocalSparkContext {
+class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
 
   test("checkpoint compression") {
     withTempDir { checkpointDir =>
@@ -616,6 +617,29 @@ class CheckpointCompressionSuite extends SparkFunSuite with LocalSparkContext {
 
       // Verify that the compressed content can be read back
       assert(rdd.collect().toSeq === (1 to 20))
+    }
+  }
+
+  test("cache checkpoint preferred location") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME.key, "10")
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 1)
+      rdd.checkpoint()
+      assert(rdd.collect().toSeq === (1 to 20))
+
+      // Verify that RDD is checkpointed
+      assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
+      val checkpointedRDD = rdd.firstParent.asInstanceOf[ReliableCheckpointRDD[_]]
+      val partiton = checkpointedRDD.partitions(0)
+      assert(!checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partiton))
+
+      val preferredLoc = checkpointedRDD.preferredLocations(partiton)
+      assert(checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partiton))
+      assert(preferredLoc == checkpointedRDD.cachedPreferredLocations.get(partiton))
     }
   }
 }

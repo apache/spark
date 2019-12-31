@@ -120,23 +120,21 @@ object TypeCoercion {
    */
   private def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
-    // We should cast all relative timestamp/date/string comparison into string comparisons
-    // This behaves as a user would expect because timestamp strings sort lexicographically.
-    // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
-    case (StringType, DateType) => Some(StringType)
-    case (DateType, StringType) => Some(StringType)
-    case (StringType, TimestampType) => Some(StringType)
-    case (TimestampType, StringType) => Some(StringType)
+    case (StringType, DateType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    case (DateType, StringType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    case (StringType, TimestampType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
+    case (TimestampType, StringType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
 
     // Cast to TimestampType when we compare DateType with TimestampType
-    // if conf.compareDateTimestampInTimestamp is true
     // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
-    case (TimestampType, DateType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
-    case (DateType, TimestampType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
+    case (TimestampType, DateType) => Some(TimestampType)
+    case (DateType, TimestampType) => Some(TimestampType)
 
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
@@ -245,7 +243,7 @@ object TypeCoercion {
    * string. If the wider decimal type exceeds system limitation, this rule will truncate
    * the decimal type before return it.
    */
-  private[analysis] def findWiderTypeWithoutStringPromotionForTwo(
+  private[catalyst] def findWiderTypeWithoutStringPromotionForTwo(
       t1: DataType,
       t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
@@ -472,8 +470,7 @@ object TypeCoercion {
         val rhs = sub.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeForBinaryComparison(l.dataType, r.dataType, conf)
-            .orElse(findTightestCommonType(l.dataType, r.dataType))
+          findWiderTypeForTwo(l.dataType, r.dataType)
         }
 
         // The number of columns/expressions must match between LHS and RHS of an
@@ -818,24 +815,24 @@ object TypeCoercion {
     }
   }
 
-  /**
-   * Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
-   * to TimeAdd/TimeSub
-   */
   object DateTimeOperations extends Rule[LogicalPlan] {
-
-    private val acceptedTypes = Seq(DateType, TimestampType, StringType)
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
+      case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case Add(l @ CalendarIntervalType(), r) if acceptedTypes.contains(r.dataType) =>
-        Cast(TimeAdd(r, l), r.dataType)
-      case Add(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
-        Cast(TimeAdd(l, r), l.dataType)
-      case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
-        Cast(TimeSub(l, r), l.dataType)
+      case s @ SubtractTimestamps(DateType(), _) =>
+        s.copy(endTimestamp = Cast(s.endTimestamp, TimestampType))
+      case s @ SubtractTimestamps(_, DateType()) =>
+        s.copy(startTimestamp = Cast(s.startTimestamp, TimestampType))
+
+      case t @ TimeAdd(DateType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+      case t @ TimeSub(DateType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+      case t @ TimeSub(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }
   }
 
@@ -848,7 +845,10 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
+      // If DecimalType operands are involved, DecimalPrecision will handle it
+      case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
+          !right.dataType.isInstanceOf[DecimalType] &&
+          left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.

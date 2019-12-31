@@ -22,7 +22,7 @@ import scala.collection.immutable.Queue
 import scala.collection.mutable.{LinkedHashMap => LHMap}
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 case class IntClass(value: Int)
 
@@ -47,7 +47,7 @@ package object packageobject {
   case class PackageClass(value: Int)
 }
 
-class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
+class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("toDS") {
@@ -171,7 +171,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
   test("groupBy function, map") {
     val ds = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11).toDS()
     val grouped = ds.groupByKey(_ % 2)
-    val agged = grouped.mapGroups { case (g, iter) =>
+    val agged = grouped.mapGroups { (g, iter) =>
       val name = if (g == 0) "even" else "odd"
       (name, iter.size)
     }
@@ -184,7 +184,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
   test("groupBy function, flatMap") {
     val ds = Seq("a", "b", "c", "xyz", "hello").toDS()
     val grouped = ds.groupByKey(_.length)
-    val agged = grouped.flatMapGroups { case (g, iter) => Iterator(g.toString, iter.mkString) }
+    val agged = grouped.flatMapGroups { (g, iter) => Iterator(g.toString, iter.mkString) }
 
     checkDatasetUnorderly(
       agged,

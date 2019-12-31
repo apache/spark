@@ -164,7 +164,7 @@ class WriteAheadLogBackedBlockRDDSuite
       testIsBlockValid: Boolean = false,
       testBlockRemove: Boolean = false,
       testStoreInBM: Boolean = false
-    ) {
+    ): Unit = {
     require(numPartitionsInBM <= numPartitions,
       "Can't put more partitions in BlockManager than that in RDD")
     require(numPartitionsInWAL <= numPartitions,

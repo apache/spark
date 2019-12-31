@@ -38,7 +38,7 @@ class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("auth secret shouldn't appear in java opts") {
-    val buildLocalCommand = PrivateMethod[Command]('buildLocalCommand)
+    val buildLocalCommand = PrivateMethod[Command](Symbol("buildLocalCommand"))
     val conf = new SparkConf
     val secret = "This is the secret sauce"
     // set auth secret

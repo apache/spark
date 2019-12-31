@@ -29,7 +29,7 @@ object DeserializerBuildHelper {
       path: Expression,
       part: String,
       dataType: DataType,
-      walkedTypePath: Seq[String]): Expression = {
+      walkedTypePath: WalkedTypePath): Expression = {
     val newPath = UnresolvedExtractValue(path, expressions.Literal(part))
     upCastToExpectedType(newPath, dataType, walkedTypePath)
   }
@@ -39,40 +39,30 @@ object DeserializerBuildHelper {
       path: Expression,
       ordinal: Int,
       dataType: DataType,
-      walkedTypePath: Seq[String]): Expression = {
+      walkedTypePath: WalkedTypePath): Expression = {
     val newPath = GetStructField(path, ordinal)
     upCastToExpectedType(newPath, dataType, walkedTypePath)
-  }
-
-  def deserializerForWithNullSafety(
-      expr: Expression,
-      dataType: DataType,
-      nullable: Boolean,
-      walkedTypePath: Seq[String],
-      funcForCreatingNewExpr: (Expression, Seq[String]) => Expression): Expression = {
-    val newExpr = funcForCreatingNewExpr(expr, walkedTypePath)
-    expressionWithNullSafety(newExpr, nullable, walkedTypePath)
   }
 
   def deserializerForWithNullSafetyAndUpcast(
       expr: Expression,
       dataType: DataType,
       nullable: Boolean,
-      walkedTypePath: Seq[String],
-      funcForCreatingNewExpr: (Expression, Seq[String]) => Expression): Expression = {
+      walkedTypePath: WalkedTypePath,
+      funcForCreatingDeserializer: (Expression, WalkedTypePath) => Expression): Expression = {
     val casted = upCastToExpectedType(expr, dataType, walkedTypePath)
-    deserializerForWithNullSafety(casted, dataType, nullable, walkedTypePath,
-      funcForCreatingNewExpr)
+    expressionWithNullSafety(funcForCreatingDeserializer(casted, walkedTypePath),
+      nullable, walkedTypePath)
   }
 
-  private def expressionWithNullSafety(
+  def expressionWithNullSafety(
       expr: Expression,
       nullable: Boolean,
-      walkedTypePath: Seq[String]): Expression = {
+      walkedTypePath: WalkedTypePath): Expression = {
     if (nullable) {
       expr
     } else {
-      AssertNotNull(expr, walkedTypePath)
+      AssertNotNull(expr, walkedTypePath.getPaths)
     }
   }
 
@@ -97,6 +87,15 @@ object DeserializerBuildHelper {
       DateTimeUtils.getClass,
       ObjectType(classOf[java.sql.Date]),
       "toJavaDate",
+      path :: Nil,
+      returnNullable = false)
+  }
+
+  def createDeserializerForLocalDate(path: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[java.time.LocalDate]),
+      "daysToLocalDate",
       path :: Nil,
       returnNullable = false)
   }
@@ -158,10 +157,10 @@ object DeserializerBuildHelper {
   private def upCastToExpectedType(
       expr: Expression,
       expected: DataType,
-      walkedTypePath: Seq[String]): Expression = expected match {
+      walkedTypePath: WalkedTypePath): Expression = expected match {
     case _: StructType => expr
     case _: ArrayType => expr
     case _: MapType => expr
-    case _ => UpCast(expr, expected, walkedTypePath)
+    case _ => UpCast(expr, expected, walkedTypePath.getPaths)
   }
 }

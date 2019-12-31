@@ -110,25 +110,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(nestedMap, Literal("a")), Map("b" -> "c"))
   }
 
-  test("SPARK-26747 handles GetMapValue nullability correctly when input key is foldable") {
-    // String key test
-    val k1 = Literal("k1")
-    val v1 = AttributeReference("v1", StringType, nullable = true)()
-    val k2 = Literal("k2")
-    val v2 = AttributeReference("v2", StringType, nullable = false)()
-    val map1 = CreateMap(k1 :: v1 :: k2 :: v2 :: Nil)
-    assert(GetMapValue(map1, Literal("k1")).nullable)
-    assert(!GetMapValue(map1, Literal("k2")).nullable)
-    assert(GetMapValue(map1, Literal("non-existent-key")).nullable)
-
-    // Complex type key test
-    val k3 = Literal.create((1, "a"))
-    val k4 = Literal.create((2, "b"))
-    val map2 = CreateMap(k3 :: v1 :: k4 :: v2 :: Nil)
-    assert(GetMapValue(map2, Literal.create((1, "a"))).nullable)
-    assert(!GetMapValue(map2, Literal.create((2, "b"))).nullable)
-  }
-
   test("GetStructField") {
     val typeS = StructType(StructField("a", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), typeS)
@@ -154,9 +135,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nullStruct_fieldNotNullable = Literal.create(null, typeS_fieldNotNullable)
 
     assert(getStructField(struct_fieldNotNullable, "a").nullable === false)
-    assert(getStructField(struct, "a").nullable === true)
-    assert(getStructField(nullStruct_fieldNotNullable, "a").nullable === true)
-    assert(getStructField(nullStruct, "a").nullable === true)
+    assert(getStructField(struct, "a").nullable)
+    assert(getStructField(nullStruct_fieldNotNullable, "a").nullable)
+    assert(getStructField(nullStruct, "a").nullable)
   }
 
   test("GetArrayStructFields") {
@@ -388,7 +369,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val b = AttributeReference("b", IntegerType)()
     checkMetadata(CreateStruct(Seq(a, b)))
     checkMetadata(CreateNamedStruct(Seq("a", a, "b", b)))
-    checkMetadata(CreateNamedStructUnsafe(Seq("a", a, "b", b)))
   }
 
   test("StringToMap") {

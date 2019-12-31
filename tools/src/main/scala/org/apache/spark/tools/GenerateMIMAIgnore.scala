@@ -115,7 +115,7 @@ object GenerateMIMAIgnore {
     ).filter(x => isPackagePrivate(x)).map(_.fullName) ++ getInnerFunctions(classSymbol)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     import scala.tools.nsc.io.File
     val (privateClasses, privateMembers) = privateWithin("org.apache.spark")
     val previousContents = Try(File(".generated-mima-class-excludes").lines()).

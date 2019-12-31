@@ -30,9 +30,10 @@ import io.fabric8.kubernetes.client.Watcher.Action
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
 import org.scalatest.Matchers
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
+import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.time.{Minutes, Seconds, Span}
 
-import org.apache.spark.{SPARK_VERSION, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.internal.Logging
@@ -40,8 +41,8 @@ import org.apache.spark.internal.config._
 
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
-  with Logging with Eventually with Matchers {
+  with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
+  with DepsTestsSuite with RTestsSuite with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
@@ -103,21 +104,25 @@ class KubernetesSuite extends SparkFunSuite
       System.clearProperty(key)
     }
 
-    val sparkDirProp = System.getProperty(CONFIG_KEY_UNPACK_DIR)
-    require(sparkDirProp != null, "Spark home directory must be provided in system properties.")
+    val possible_spark_dirs = List(
+      // If someone specified the tgz for the tests look at the extraction dir
+      System.getProperty(CONFIG_KEY_UNPACK_DIR),
+      // Try the spark test home
+      sys.props("spark.test.home")
+    )
+    val sparkDirProp = possible_spark_dirs.filter(x =>
+      new File(Paths.get(x).toFile, "bin/spark-submit").exists).headOption.getOrElse(null)
+    require(sparkDirProp != null,
+      s"Spark home directory must be provided in system properties tested $possible_spark_dirs")
     sparkHomeDir = Paths.get(sparkDirProp)
     require(sparkHomeDir.toFile.isDirectory,
       s"No directory found for spark home specified at $sparkHomeDir.")
-    image = testImageRef("spark")
-    pyImage = testImageRef("spark-py")
-    rImage = testImageRef("spark-r")
+    image = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_JVM, "spark"))
+    pyImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_PYTHON, "spark-py"))
+    rImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_R, "spark-r"))
 
-    val scalaVersion = scala.util.Properties.versionNumberString
-      .split("\\.")
-      .take(2)
-      .mkString(".")
     containerLocalSparkDistroExamplesJar =
-      s"local:///opt/spark/examples/jars/spark-examples_$scalaVersion-${SPARK_VERSION}.jar"
+      s"local:///opt/spark/examples/jars/${Utils.getExamplesJarName()}"
     testBackend = IntegrationTestBackendFactory.getTestBackend
     testBackend.initialize()
     kubernetesTestComponents = new KubernetesTestComponents(testBackend.getKubernetesClient)
@@ -170,12 +175,36 @@ class KubernetesSuite extends SparkFunSuite
       isJVM)
   }
 
+  protected def runDFSReadWriteAndVerifyCompletion(
+      wordCount: Int,
+      appResource: String = containerLocalSparkDistroExamplesJar,
+      driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
+      executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
+      appArgs: Array[String] = Array.empty[String],
+      appLocator: String = appLocator,
+      isJVM: Boolean = true,
+      interval: Option[PatienceConfiguration.Interval] = None): Unit = {
+    runSparkApplicationAndVerifyCompletion(
+      appResource,
+      SPARK_DFS_READ_WRITE_TEST,
+      Seq(s"Success! Local Word Count $wordCount and " +
+    s"DFS Word Count $wordCount agree."),
+      appArgs,
+      driverPodChecker,
+      executorPodChecker,
+      appLocator,
+      isJVM,
+      None,
+      Option((interval, None)))
+  }
+
   protected def runSparkRemoteCheckAndVerifyCompletion(
       appResource: String = containerLocalSparkDistroExamplesJar,
       driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
       executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
       appArgs: Array[String],
-      appLocator: String = appLocator): Unit = {
+      appLocator: String = appLocator,
+      timeout: Option[PatienceConfiguration.Timeout] = None): Unit = {
     runSparkApplicationAndVerifyCompletion(
       appResource,
       SPARK_REMOTE_MAIN_CLASS,
@@ -184,7 +213,8 @@ class KubernetesSuite extends SparkFunSuite
       driverPodChecker,
       executorPodChecker,
       appLocator,
-      true)
+      true,
+      executorPatience = Option((None, timeout)))
   }
 
   protected def runSparkJVMCheckAndVerifyCompletion(
@@ -233,7 +263,8 @@ class KubernetesSuite extends SparkFunSuite
       executorPodChecker: Pod => Unit,
       appLocator: String,
       isJVM: Boolean,
-      pyFiles: Option[String] = None): Unit = {
+      pyFiles: Option[String] = None,
+      executorPatience: Option[(Option[Interval], Option[Timeout])] = None): Unit = {
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,
@@ -273,10 +304,20 @@ class KubernetesSuite extends SparkFunSuite
           }
         }
       })
-    Eventually.eventually(TIMEOUT, INTERVAL) { execPods.values.nonEmpty should be (true) }
+
+    val (patienceInterval, patienceTimeout) = {
+      executorPatience match {
+        case Some(patience) => (patience._1.getOrElse(INTERVAL), patience._2.getOrElse(TIMEOUT))
+        case _ => (INTERVAL, TIMEOUT)
+      }
+    }
+
+    Eventually.eventually(patienceTimeout, patienceInterval) {
+      execPods.values.nonEmpty should be (true)
+    }
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
-    Eventually.eventually(TIMEOUT, INTERVAL) {
+    Eventually.eventually(TIMEOUT, patienceInterval) {
       expectedLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
@@ -294,6 +335,10 @@ class KubernetesSuite extends SparkFunSuite
       === baseMemory)
   }
 
+  protected def doExecutorServiceAccountCheck(executorPod: Pod, account: String): Unit = {
+    doBasicExecutorPodCheck(executorPod)
+    assert(executorPod.getSpec.getServiceAccount == kubernetesTestComponents.serviceAccountName)
+  }
 
   protected def doBasicDriverPyPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
@@ -374,7 +419,9 @@ class KubernetesSuite extends SparkFunSuite
 
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
+  val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
+  val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))

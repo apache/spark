@@ -95,7 +95,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
-       2
+       6
   """)
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
 
@@ -153,4 +153,36 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
   protected override def nullSafeEval(input: Any): Any = not(input)
 
   override def sql: String = s"~${child.sql}"
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the number of bits that are set in the argument expr as an" +
+    " unsigned 64-bit integer, or NULL if the argument is NULL.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       0
+  """)
+case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
+
+  override def dataType: DataType = IntegerType
+
+  override def toString: String = s"bit_count($child)"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
+    case BooleanType => defineCodeGen(ctx, ev, c => s"if ($c) 1 else 0")
+    case _ => defineCodeGen(ctx, ev, c => s"java.lang.Long.bitCount($c)")
+  }
+
+  protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case BooleanType => if (input.asInstanceOf[Boolean]) 1 else 0
+    case ByteType => java.lang.Long.bitCount(input.asInstanceOf[Byte])
+    case ShortType => java.lang.Long.bitCount(input.asInstanceOf[Short])
+    case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
+    case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
+  }
+
+  override def sql: String = s"bit_count(${child.sql})"
 }

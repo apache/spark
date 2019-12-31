@@ -52,7 +52,7 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
         import spark.implicits._
         Seq[Int]().toDS().toDF()
       }
-      override def stop() {}
+      override def stop(): Unit = {}
     }
   }
 
@@ -60,11 +60,7 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
       spark: SQLContext,
       parameters: Map[String, String],
       partitionColumns: Seq[String],
-      outputMode: OutputMode): Sink = {
-    new Sink {
-      override def addBatch(batchId: Long, data: DataFrame): Unit = {}
-    }
-  }
+      outputMode: OutputMode): Sink = (_: Long, _: DataFrame) => {}
 }
 
 object BlockingSource {

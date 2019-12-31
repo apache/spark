@@ -18,66 +18,70 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Synthetic benchmark for nested schema pruning performance.
- * To run this benchmark:
- * {{{
- *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *      Results will be written to "benchmarks/NestedSchemaPruningBenchmark-results.txt".
- * }}}
+ * The base class for synthetic benchmark for nested schema pruning performance.
  */
-object NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
+abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
 
   import spark.implicits._
 
-  private val N = 1000000
-  private val numIters = 10
+  val dataSourceName: String
+  val benchmarkName: String
 
-  // We use `col1 BIGINT, col2 STRUCT<_1: BIGINT, _2: STRING>` as a test schema.
-  // col1 and col2._1 is used for comparision. col2._2 mimics the burden for the other columns
+  protected val N = 1000000
+  protected val numIters = 10
+
+  // We use `col1 BIGINT, col2 STRUCT<_1: BIGINT, _2: STRING>,
+  // col3 ARRAY<STRUCT<_1: BIGINT, _2: STRING>>` as a test schema.
+  // col1, col2._1 and col3._1 are used for comparison. col2._2 and col3._2 mimics the burden
+  // for the other columns
   private val df = spark
     .range(N * 10)
     .sample(false, 0.1)
-    .map(x => (x, (x, s"$x" * 100)))
-    .toDF("col1", "col2")
+    .map { x =>
+      val col3 = (0 until 5).map(i => (x + i, s"$x" * 5))
+      (x, (x, s"$x" * 100), col3)
+    }.toDF("col1", "col2", "col3")
 
   private def addCase(benchmark: Benchmark, name: String, sql: String): Unit = {
     benchmark.addCase(name) { _ =>
-      spark.sql(sql).write.format("noop").save()
+      spark.sql(sql)
+        .write
+        .format("noop")
+        .mode(Overwrite)
+        .save()
     }
   }
 
-  private def selectBenchmark(numRows: Int, numIters: Int): Unit = {
+  protected def selectBenchmark(numRows: Int, numIters: Int): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
-        df.write.parquet(path + s"/$i")
-        spark.read.parquet(path + s"/$i").createOrReplaceTempView(s"t$i")
+      Seq(1, 2, 3).foreach { i =>
+        df.write.format(dataSourceName).save(path + s"/$i")
+        spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
       val benchmark = new Benchmark(s"Selection", numRows, numIters, output = output)
 
       addCase(benchmark, "Top-level column", "SELECT col1 FROM (SELECT col1 FROM t1)")
       addCase(benchmark, "Nested column", "SELECT col2._1 FROM (SELECT col2 FROM t2)")
+      addCase(benchmark, "Nested column in array", "SELECT col3._1 FROM (SELECT col3 FROM t3)")
 
       benchmark.run()
     }
   }
 
-  private def limitBenchmark(numRows: Int, numIters: Int): Unit = {
+  protected def limitBenchmark(numRows: Int, numIters: Int): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
-        df.write.parquet(path + s"/$i")
-        spark.read.parquet(path + s"/$i").createOrReplaceTempView(s"t$i")
+      Seq(1, 2, 3).foreach { i =>
+        df.write.format(dataSourceName).save(path + s"/$i")
+        spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
       val benchmark = new Benchmark(s"Limiting", numRows, numIters, output = output)
@@ -86,18 +90,20 @@ object NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         s"SELECT col1 FROM (SELECT col1 FROM t1 LIMIT ${Int.MaxValue})")
       addCase(benchmark, "Nested column",
         s"SELECT col2._1 FROM (SELECT col2 FROM t2 LIMIT ${Int.MaxValue})")
+      addCase(benchmark, "Nested column in array",
+        s"SELECT col3._1 FROM (SELECT col3 FROM t3 LIMIT ${Int.MaxValue})")
 
       benchmark.run()
     }
   }
 
-  private def repartitionBenchmark(numRows: Int, numIters: Int): Unit = {
+  protected def repartitionBenchmark(numRows: Int, numIters: Int): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
-        df.write.parquet(path + s"/$i")
-        spark.read.parquet(path + s"/$i").createOrReplaceTempView(s"t$i")
+      Seq(1, 2, 3).foreach { i =>
+        df.write.format(dataSourceName).save(path + s"/$i")
+        spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
       val benchmark = new Benchmark(s"Repartitioning", numRows, numIters, output = output)
@@ -106,18 +112,20 @@ object NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         s"SELECT col1 FROM (SELECT /*+ REPARTITION(1) */ col1 FROM t1)")
       addCase(benchmark, "Nested column",
         s"SELECT col2._1 FROM (SELECT /*+ REPARTITION(1) */ col2 FROM t2)")
+      addCase(benchmark, "Nested column in array",
+        s"SELECT col3._1 FROM (SELECT /*+ REPARTITION(1) */ col3 FROM t3)")
 
       benchmark.run()
     }
   }
 
-  private def repartitionByExprBenchmark(numRows: Int, numIters: Int): Unit = {
+  protected def repartitionByExprBenchmark(numRows: Int, numIters: Int): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
-        df.write.parquet(path + s"/$i")
-        spark.read.parquet(path + s"/$i").createOrReplaceTempView(s"t$i")
+      Seq(1, 2, 3).foreach { i =>
+        df.write.format(dataSourceName).save(path + s"/$i")
+        spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
       val benchmark = new Benchmark(s"Repartitioning by exprs", numRows, numIters, output = output)
@@ -126,37 +134,63 @@ object NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         s"SELECT col1 FROM (SELECT col1 FROM t1 DISTRIBUTE BY col1)")
       addCase(benchmark, "Nested column",
         s"SELECT col2._1 FROM (SELECT col2 FROM t2 DISTRIBUTE BY col2._1)")
+      addCase(benchmark, "Nested column in array",
+        s"SELECT col3._1 FROM (SELECT col3 FROM t3 DISTRIBUTE BY col3._1)")
 
       benchmark.run()
     }
   }
 
-  private def sortBenchmark(numRows: Int, numIters: Int): Unit = {
+  protected def sampleBenchmark(numRows: Int, numIters: Int): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
-        df.write.parquet(path + s"/$i")
-        spark.read.parquet(path + s"/$i").createOrReplaceTempView(s"t$i")
+      Seq(1, 2, 3).foreach { i =>
+        df.write.format(dataSourceName).save(path + s"/$i")
+        spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
+      }
+
+      val benchmark = new Benchmark(s"Sample", numRows, numIters, output = output)
+
+      addCase(benchmark, "Top-level column",
+        s"SELECT col1 FROM (SELECT col1 FROM t1 TABLESAMPLE(100 percent))")
+      addCase(benchmark, "Nested column",
+        s"SELECT col2._1 FROM (SELECT col2 FROM t2 TABLESAMPLE(100 percent))")
+      addCase(benchmark, "Nested column in array",
+        s"SELECT col3._1 FROM (SELECT col3 FROM t3 TABLESAMPLE(100 percent))")
+
+      benchmark.run()
+    }
+  }
+
+  protected def sortBenchmark(numRows: Int, numIters: Int): Unit = {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      Seq(1, 2, 3).foreach { i =>
+        df.write.format(dataSourceName).save(path + s"/$i")
+        spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
       val benchmark = new Benchmark(s"Sorting", numRows, numIters, output = output)
 
       addCase(benchmark, "Top-level column", "SELECT col1 FROM t1 ORDER BY col1")
       addCase(benchmark, "Nested column", "SELECT col2._1 FROM t2 ORDER BY col2._1")
+      addCase(benchmark, "Nested column in array", "SELECT col3._1 FROM t3 ORDER BY col3._1")
 
       benchmark.run()
     }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runBenchmark(s"Nested Schema Pruning Benchmark") {
-      withSQLConf (SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-        selectBenchmark (N, numIters)
-        limitBenchmark (N, numIters)
-        repartitionBenchmark (N, numIters)
-        repartitionByExprBenchmark (N, numIters)
-        sortBenchmark (N, numIters)
+    runBenchmark(benchmarkName) {
+      withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+        selectBenchmark(N, numIters)
+        limitBenchmark(N, numIters)
+        repartitionBenchmark(N, numIters)
+        repartitionByExprBenchmark(N, numIters)
+        sampleBenchmark(N, numIters)
+        sortBenchmark(N, numIters)
       }
     }
   }

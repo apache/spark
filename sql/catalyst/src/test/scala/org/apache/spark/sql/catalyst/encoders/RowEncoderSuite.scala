@@ -162,6 +162,32 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(row.toSeq(schema).head == decimal)
   }
 
+  test("SPARK-23179: RowEncoder should respect nullOnOverflow for decimals") {
+    val schema = new StructType().add("decimal", DecimalType.SYSTEM_DEFAULT)
+    testDecimalOverflow(schema, Row(BigDecimal("9" * 100)))
+    testDecimalOverflow(schema, Row(new java.math.BigDecimal("9" * 100)))
+  }
+
+  private def testDecimalOverflow(schema: StructType, row: Row): Unit = {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val encoder = RowEncoder(schema).resolveAndBind()
+      intercept[Exception] {
+        encoder.toRow(row)
+      } match {
+        case e: ArithmeticException =>
+          assert(e.getMessage.contains("cannot be represented as Decimal"))
+        case e: RuntimeException =>
+          assert(e.getCause.isInstanceOf[ArithmeticException])
+          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+      }
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val encoder = RowEncoder(schema).resolveAndBind()
+      assert(encoder.fromRow(encoder.toRow(row)).get(0) == null)
+    }
+  }
+
   test("RowEncoder should preserve schema nullability") {
     val schema = new StructType().add("int", IntegerType, nullable = false)
     val encoder = RowEncoder(schema).resolveAndBind()
@@ -283,7 +309,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("encoding/decoding TimestampType to/from java.time.Instant") {
-    withSQLConf(SQLConf.TIMESTAMP_EXTERNAL_TYPE.key -> "Instant") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val schema = new StructType().add("t", TimestampType)
       val encoder = RowEncoder(schema).resolveAndBind()
       val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
@@ -291,6 +317,18 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       assert(row.getLong(0) === DateTimeUtils.instantToMicros(instant))
       val readback = encoder.fromRow(row)
       assert(readback.get(0) === instant)
+    }
+  }
+
+  test("encoding/decoding DateType to/from java.time.LocalDate") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val schema = new StructType().add("d", DateType)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val localDate = java.time.LocalDate.parse("2019-02-27")
+      val row = encoder.toRow(Row(localDate))
+      assert(row.getLong(0) === DateTimeUtils.localDateToDays(localDate))
+      val readback = encoder.fromRow(row)
+      assert(readback.get(0).equals(localDate))
     }
   }
 

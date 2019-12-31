@@ -60,7 +60,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getVolumeMounts.size() === 1)
     assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
     assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
-    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === true)
+    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly)
 
   }
 

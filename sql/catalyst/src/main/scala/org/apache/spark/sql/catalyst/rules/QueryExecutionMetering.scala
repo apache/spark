@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.google.common.util.concurrent.AtomicLongMap
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 
 case class QueryExecutionMetering() {
   private val timeMap = AtomicLongMap.create[String]()
@@ -64,7 +64,11 @@ case class QueryExecutionMetering() {
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
     val map = timeMap.asMap().asScala
-    val maxLengthRuleNames = map.keys.map(_.toString.length).max
+    val maxLengthRuleNames = if (map.isEmpty) {
+      0
+    } else {
+      map.keys.map(_.toString.length).max
+    }
 
     val colRuleName = "Rule".padTo(maxLengthRuleNames, " ").mkString
     val colRunTime = "Effective Time / Total Time".padTo(len = 47, " ").mkString

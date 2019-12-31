@@ -29,6 +29,12 @@ private[spark] object Status {
     .timeConf(TimeUnit.NANOSECONDS)
     .createWithDefaultString("100ms")
 
+  val LIVE_ENTITY_UPDATE_MIN_FLUSH_PERIOD = ConfigBuilder("spark.ui.liveUpdate.minFlushPeriod")
+    .doc("Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when " +
+      "incoming task events are not fired frequently.")
+    .timeConf(TimeUnit.NANOSECONDS)
+    .createWithDefaultString("1s")
+
   val MAX_RETAINED_JOBS = ConfigBuilder("spark.ui.retainedJobs")
     .intConf
     .createWithDefault(1000)
@@ -49,8 +55,8 @@ private[spark] object Status {
     .intConf
     .createWithDefault(Int.MaxValue)
 
-  val APP_STATUS_METRICS_ENABLED =
-    ConfigBuilder("spark.app.status.metrics.enabled")
+  val METRICS_APP_STATUS_SOURCE_ENABLED =
+    ConfigBuilder("spark.metrics.appStatusSource.enabled")
       .doc("Whether Dropwizard/Codahale metrics " +
         "will be reported for the status of the running spark app.")
       .booleanConf

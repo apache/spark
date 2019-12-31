@@ -18,23 +18,97 @@
 package org.apache.spark.util
 
 import java.util.concurrent._
+import java.util.concurrent.locks.ReentrantLock
 
-import scala.collection.TraversableLike
-import scala.collection.generic.CanBuildFrom
-import scala.language.higherKinds
-
-import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
-import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
+import scala.language.higherKinds
 import scala.util.control.NonFatal
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder
+
 import org.apache.spark.SparkException
+import org.apache.spark.rpc.RpcAbortException
 
 private[spark] object ThreadUtils {
 
   private val sameThreadExecutionContext =
-    ExecutionContext.fromExecutorService(MoreExecutors.sameThreadExecutor())
+    ExecutionContext.fromExecutorService(sameThreadExecutorService())
+
+  // Inspired by Guava MoreExecutors.sameThreadExecutor; inlined and converted
+  // to Scala here to avoid Guava version issues
+  def sameThreadExecutorService(): ExecutorService = new AbstractExecutorService {
+    private val lock = new ReentrantLock()
+    private val termination = lock.newCondition()
+    private var runningTasks = 0
+    private var serviceIsShutdown = false
+
+    override def shutdown(): Unit = {
+      lock.lock()
+      try {
+        serviceIsShutdown = true
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def shutdownNow(): java.util.List[Runnable] = {
+      shutdown()
+      java.util.Collections.emptyList()
+    }
+
+    override def isShutdown: Boolean = {
+      lock.lock()
+      try {
+        serviceIsShutdown
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def isTerminated: Boolean = synchronized {
+      lock.lock()
+      try {
+        serviceIsShutdown && runningTasks == 0
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def awaitTermination(timeout: Long, unit: TimeUnit): Boolean = {
+      var nanos = unit.toNanos(timeout)
+      lock.lock()
+      try {
+        while (nanos > 0 && !isTerminated()) {
+          nanos = termination.awaitNanos(nanos)
+        }
+        isTerminated()
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def execute(command: Runnable): Unit = {
+      lock.lock()
+      try {
+        if (isShutdown()) throw new RejectedExecutionException("Executor already shutdown")
+        runningTasks += 1
+      } finally {
+        lock.unlock()
+      }
+      try {
+        command.run()
+      } finally {
+        lock.lock()
+        try {
+          runningTasks -= 1
+          if (isTerminated()) termination.signalAll()
+        } finally {
+          lock.unlock()
+        }
+      }
+    }
+  }
 
   /**
    * An `ExecutionContextExecutor` that runs each task in the thread that invokes `execute/submit`.
@@ -181,17 +255,17 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Construct a new Scala ForkJoinPool with a specified max parallelism and name prefix.
+   * Construct a new ForkJoinPool with a specified max parallelism and name prefix.
    */
-  def newForkJoinPool(prefix: String, maxThreadNumber: Int): SForkJoinPool = {
+  def newForkJoinPool(prefix: String, maxThreadNumber: Int): ForkJoinPool = {
     // Custom factory to set thread names
-    val factory = new SForkJoinPool.ForkJoinWorkerThreadFactory {
-      override def newThread(pool: SForkJoinPool) =
-        new SForkJoinWorkerThread(pool) {
+    val factory = new ForkJoinPool.ForkJoinWorkerThreadFactory {
+      override def newThread(pool: ForkJoinPool) =
+        new ForkJoinWorkerThread(pool) {
           setName(prefix + "-" + super.getName)
         }
     }
-    new SForkJoinPool(maxThreadNumber, factory,
+    new ForkJoinPool(maxThreadNumber, factory,
       null, // handler
       false // asyncMode
     )
@@ -221,8 +295,10 @@ private[spark] object ThreadUtils {
     } catch {
       case e: SparkFatalException =>
         throw e.throwable
-      // TimeoutException is thrown in the current thread, so not need to warp the exception.
-      case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
+      // TimeoutException and RpcAbortException is thrown in the current thread, so not need to warp
+      // the exception.
+      case NonFatal(t)
+          if !t.isInstanceOf[TimeoutException] && !t.isInstanceOf[RpcAbortException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }
@@ -273,13 +349,7 @@ private[spark] object ThreadUtils {
    * @return new collection in which each element was given from the input collection `in` by
    *         applying the lambda function `f`.
    */
-  def parmap[I, O, Col[X] <: TraversableLike[X, Col[X]]]
-      (in: Col[I], prefix: String, maxThreads: Int)
-      (f: I => O)
-      (implicit
-        cbf: CanBuildFrom[Col[I], Future[O], Col[Future[O]]], // For in.map
-        cbf2: CanBuildFrom[Col[Future[O]], O, Col[O]] // for Future.sequence
-      ): Col[O] = {
+  def parmap[I, O](in: Seq[I], prefix: String, maxThreads: Int)(f: I => O): Seq[O] = {
     val pool = newForkJoinPool(prefix, maxThreads)
     try {
       implicit val ec = ExecutionContext.fromExecutor(pool)

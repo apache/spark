@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Spark Standalone Mode
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -85,12 +100,13 @@ If you do not have a password-less setup, you can set the environment variable S
 Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/sbin`:
 
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
-- `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
-- `sbin/start-slave.sh` - Starts a slave instance on the machine the script is executed on.
-- `sbin/start-all.sh` - Starts both a master and a number of slaves as described above.
+- `sbin/start-slaves.sh` - Starts a worker instance on each machine specified in the `conf/slaves` file.
+- `sbin/start-slave.sh` - Starts a worker instance on the machine the script is executed on.
+- `sbin/start-all.sh` - Starts both a master and a number of workers as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
-- `sbin/stop-slaves.sh` - Stops all slave instances on the machines specified in the `conf/slaves` file.
-- `sbin/stop-all.sh` - Stops both the master and the slaves as described above.
+- `sbin/stop-slave.sh` - Stops all worker instances on the machine the script is executed on.
+- `sbin/stop-slaves.sh` - Stops all worker instances on the machines specified in the `conf/slaves` file.
+- `sbin/stop-all.sh` - Stops both the master and the workers as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
 
@@ -227,6 +243,37 @@ SPARK_MASTER_OPTS supports the following system properties:
     receives no heartbeats.
   </td>
 </tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.amount</code></td>
+  <td>(none)</td>
+  <td>
+    Amount of a particular resource to use on the worker.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resource discovery script, which is used to find a particular resource while worker starting up.
+    And the output of the script should be formatted like the <code>ResourceInformation</code> class.
+    When <code>spark.resources.coordinate.enable</code> is off, the discovery script must assign different
+    resources for workers and drivers in client mode that run on the same host to avoid resource conflict.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.resourcesFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resources file which is used to find various resources while worker starting up.
+    The content of resources file should be formatted like <code>
+    [[{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]]</code>.
+    When <code>spark.resources.coordinate.enable</code> is off, resources file must assign different
+    resources for workers and drivers in client mode that run on the same host to avoid resource conflict.
+    If a particular resource is not found in the resources file, the discovery script would be used to
+    find that resource. If the discovery script also does not find the resources, the worker will fail
+    to start up.
+  </td>
+</tr>
 </table>
 
 SPARK_WORKER_OPTS supports the following system properties:
@@ -239,6 +286,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
+    This should be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
 </tr>
 <tr>
@@ -257,6 +305,16 @@ SPARK_WORKER_OPTS supports the following system properties:
     and should depend on the amount of available disk space you have.  Application logs and jars are
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.db.enabled</code></td>
+  <td>true</td>
+  <td>
+    Store External Shuffle service state on local disk so that when the external shuffle service is restarted, it will
+    automatically reload info on current executors.  This only affects standalone mode (yarn always has this behavior
+    enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
+    eventually gets cleaned up.  This config may be removed in the future.
   </td>
 </tr>
 <tr>
@@ -281,6 +339,18 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 </table>
+
+# Resource Allocation and Configuration Overview
+
+Please make sure to have read the Custom Resource Scheduling and Configuration Overview section on the [configuration page](configuration.html). This section only talks about the Spark Standalone specific aspects of resource scheduling.
+
+Spark Standalone has 2 parts, the first is configuring the resources for the Worker, the second is the resource allocation for a specific application.
+
+The user must configure the Workers to have a set of resources available so that it can assign them out to Executors. The <code>spark.worker.resource.{resourceName}.amount</code> is used to control the amount of each resource the worker has allocated. The user must also specify either <code>spark.worker.resourcesFile</code> or <code>spark.worker.resource.{resourceName}.discoveryScript</code> to specify how the Worker discovers the resources its assigned. See the descriptions above for each of those to see which method works best for your setup. Please take note of <code>spark.resources.coordinate.enable</code> as it indicates whether Spark should handle coordinating resources or if the user has made sure each Worker has separate resources. Also note that if using the resources coordination <code>spark.resources.dir</code> can be used to specify the directory used to do that coordination.
+
+The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesfile</code> or <code>spark.driver.resources.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers or Workers there are 2 ways to make sure the they don't use the same resources. The user can either configure <code>spark.resources.coordinate.enable</code> on and give all the Driver/Workers the same set or resources and Spark will handle make sure each Driver/Worker has separate resources, or the user can make sure the resources file or discovery script only returns resources the do not conflict with other Drivers or Workers running on the same node.
+
+Note, the user does not need to specify a discovery script when submitting an application as the Worker will start each Executor with the resources it allocates to it.
 
 # Connecting an Application to the Cluster
 
@@ -362,7 +432,7 @@ In addition, detailed log output for each job is also written to the work direct
 
 # Running Alongside Hadoop
 
-You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use a hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
+You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use an hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
 
 
 # Configuring Ports for Network Security
