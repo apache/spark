@@ -47,6 +47,7 @@ from pyspark.join import python_join, python_left_outer_join, \
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
+from pyspark.resourceprofile import ResourceProfile
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
@@ -2476,6 +2477,33 @@ class RDD(object):
         .. versionadded:: 2.4.0
         """
         return RDDBarrier(self)
+
+    def withResources(self, profile):
+        """
+        .. note:: Experimental
+
+        Specify a ResourceProfile to use when calculating this RDD. This is only supported on
+        certain cluster managers and currently requires dynamic allocation to be enabled.
+        It will result in new executors with the resources specified being acquired to
+        calculate the RDD.
+
+        .. versionadded:: 3.0.0
+       """
+        self._jrdd.withResources(profile._jResourceProfile)
+        return self
+
+    def getResourceProfile(self):
+        """
+        .. note:: Experimental
+
+        Get the ResourceProfile specified with this RDD or None if it wasn't specified.
+
+        :return: the user specified ResourceProfile or null if none was specified
+
+        .. versionadded:: 3.0.0
+        """
+        return ResourceProfile(self._jrdd.getResourceProfile())
+
 
     def _is_barrier(self):
         """

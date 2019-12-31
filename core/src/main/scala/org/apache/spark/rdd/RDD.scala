@@ -1715,8 +1715,14 @@ abstract class RDD[T: ClassTag](
   @Since("2.4.0")
   def barrier(): RDDBarrier[T] = withScope(new RDDBarrier[T](this))
 
-  // @Experimental
-  // @Since("3.0.0")
+  /**
+   * Specify a ResourceProfile to use when calculating this RDD. This is only supported on
+   * certain cluster managers and currently requires dynamic allocation to be enabled.
+   * It will result in new executors with the resources specified being acquired to
+   * calculate the RDD.
+   */
+  @Experimental
+  @Since("3.0.0")
   def withResources(rp: ResourceProfile): this.type = {
     // copy it in case the user changes it after calling this
     resourceProfile = Some(rp.clone())
@@ -1730,7 +1736,14 @@ abstract class RDD[T: ClassTag](
     immutableResourceProfile
   }
 
-  def getResourceProfile(): Option[ResourceProfile] = resourceProfile
+  /**
+   * Get the ResourceProfile specified with this RDD or None if it wasn't specified.
+   * @return the user specified ResourceProfile or null (for Java compiatibility) if
+   *         none was specified
+   */
+  @Experimental
+  @Since("3.0.0")
+  def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
 
   // =======================================================================
   // Other internal methods and fields
@@ -1861,7 +1874,7 @@ abstract class RDD[T: ClassTag](
           info.numCachedPartitions, bytesToString(info.memSize),
           bytesToString(info.externalBlockStoreSize), bytesToString(info.diskSize)))
 
-      val resourceProfileInfo = rdd.getResourceProfile().map(x => x.toString()).getOrElse("")
+      val resourceProfileInfo = rdd.resourceProfile.map(x => x.toString()).getOrElse("")
 
       s"$rdd [$persistence][$resourceProfileInfo][isBarrier = $isBarrier()]" +: storageInfo
     }

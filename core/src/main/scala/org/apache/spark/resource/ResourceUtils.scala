@@ -232,9 +232,12 @@ private[spark] object ResourceUtils extends Logging {
 
   /**
    * Gets all allocated resource information for the input component from input resources file and
-   * discover the remaining via discovery scripts.
+   * the application level Spark configs. It first looks to see if resource were explicitly
+   * specified in the resources file (this would include specified address assignments and it only
+   * specified in certain cluster managers) and then it looks at the Spark configs to get any
+   * others not specified in the file. The resources not explicitly set in the file require a
+   * discovery script for it to run to get the addresses of the resource.
    * It also verifies the resource allocation meets required amount for each resource.
-   * This uses the global application resource configs.
    * @return a map from resource name to resource info
    */
   def getOrDiscoverAllResources(
@@ -250,12 +253,18 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   /**
-   * Gets all allocated resource information based on the ResourceProfile information. It gets
-   * the ResourceProfile information using the spark internal confs that looks like:
-   * spark.resourceProfile.executor.[rpId].resource.gpu.[amount, vendor, discoveryScript].
-   * This uses the input resources file and discovers the remaining via discovery scripts
-   * from the ResourceProfile. It also verifies the resource allocation meets required amount
-   * for each resource.
+   * This function is just like getOrDiscoverallResources, except for it uses the ResourceProfile
+   * information instead of the application level configs.
+   * It gets the ResourceProfile details using the spark internal confs that looks like:
+   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
+   *
+   * It first looks to see if resource were explicitly
+   * specified in the resources file (this would include specified address assignments and it only
+   * specified in certain cluster managers) and then it looks at the ResourceProfile configs to get
+   * any others not specified in the file. The resources not explicitly set in the file require a
+   * discovery script for it to run to get the addresses of the resource.
+   * It also verifies the resource allocation meets required amount for each resource.
+   *
    * @return a map from resource name to resource info
    */
   def getOrDiscoverAllResourcesForResourceProfile(

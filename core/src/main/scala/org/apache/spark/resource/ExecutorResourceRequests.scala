@@ -17,6 +17,7 @@
 
 package org.apache.spark.resource
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -34,6 +35,8 @@ class ExecutorResourceRequests() extends Serializable {
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
   def requests: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
+
+  def requestsJMap: JMap[String, ExecutorResourceRequest] = _executorResources.asScala.asJava
 
   /**
    * Specify heap memory. The value specified will be converted to MiB.

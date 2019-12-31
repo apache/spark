@@ -301,7 +301,7 @@ private[spark] object ImmutableResourceProfile extends Logging {
    * Parse out just the resourceName given the map of confs. It only looks for confs that
    * end with .amount because we should always have one of those for every resource.
    * Format is expected to be: [resourcename].amount, where resourceName could have multiple
-   * .'s like resource.gpu.foo.amount
+   * .'s like gpu.foo.amount
    */
   private def listResourceNames(confs: Map[String, String]): Seq[String] = {
     confs.filterKeys(_.endsWith(ResourceUtils.AMOUNT)).
@@ -312,7 +312,6 @@ private[spark] object ImmutableResourceProfile extends Logging {
    * Get the executor ResourceRequests from the internal resource confs
    * The configs looks like:
    * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
-   * Note that custom resources have names prefixed with resource., ie resource.gpu
    */
   def getResourceRequestsFromInternalConfs(
       sparkConf: SparkConf,

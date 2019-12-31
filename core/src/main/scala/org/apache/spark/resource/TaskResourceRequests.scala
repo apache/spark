@@ -17,6 +17,7 @@
 
 package org.apache.spark.resource
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -33,6 +34,8 @@ class TaskResourceRequests() extends Serializable {
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
 
   def requests: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
+
+  def requestsJMap: JMap[String, TaskResourceRequest] = _taskResources.asScala.asJava
 
   /**
    * Specify number of cpus per Task.
