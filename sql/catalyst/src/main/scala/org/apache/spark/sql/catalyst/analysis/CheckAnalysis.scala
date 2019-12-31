@@ -221,13 +221,14 @@ trait CheckAnalysis extends PredicateHelper {
                 e.aggregateFunction.children.take(1).toSet
               }
             }
-            val useDistinctAndFilter = aggExpressions.exists(e => e.isDistinct && e.filter.isDefined)
-            // TODO: SPARK-30396 When there are multiple DISTINCT aggregate expressions acting on
-            // different fields, any DISTINCT aggregate expression allows the use of the FILTER clause
+            val useDistinctAndFilter = aggWithDistinctAndFilters.exists(_.filter.isDefined)
+            // TODO: SPARK-30396 When there are multiple DISTINCT aggregate expressions
+            // acting on different fields, any DISTINCT aggregate expression allows the use of
+            // the FILTER clause
             if (aggGroups.size > 1 && useDistinctAndFilter) {
               failAnalysis(
-                "When there are multiple DISTINCT aggregate expressions acting on different fields, " +
-                "any DISTINCT aggregate expression not allow use FILTER clause.")
+                "When there are multiple DISTINCT aggregate expressions acting on different " +
+                "fields, any DISTINCT aggregate expression not allow use FILTER clause.")
             }
             def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)

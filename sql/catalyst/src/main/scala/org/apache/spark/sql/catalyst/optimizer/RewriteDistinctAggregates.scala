@@ -388,7 +388,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val phantomId = i + 1
             val unfoldableChildren = af.children.filter(!_.foldable)
             val exprAttrs = unfoldableChildren.map { c =>
-              (c, AttributeReference(s"phantom$phantomId-${c.sql}", c.dataType, nullable = c.nullable)())
+              (c, AttributeReference(s"phantom$phantomId-${c.sql}", c.dataType, c.nullable)())
             }
             val exprAttrLookup = exprAttrs.toMap
             val newChildren = af.children.map(c => exprAttrLookup.getOrElse(c, c))
@@ -415,7 +415,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         val groupByAttrs = groupByMap.map(_._2)
         // Construct the expand operator.
         val expand = Expand(rewriteAggProjections, groupByAttrs ++ allAggAttrs, a.child)
-        val rewriteAggExprLookup = (rewriteDistinctOperatorMap.map(_._3) ++ regularOperatorMap).toMap
+        val rewriteAggExprLookup =
+          (rewriteDistinctOperatorMap.map(_._3) ++ regularOperatorMap).toMap
         val patchedAggExpressions = a.aggregateExpressions.map { e =>
           e.transformDown {
             case ae: AggregateExpression => rewriteAggExprLookup.getOrElse(ae, ae)
