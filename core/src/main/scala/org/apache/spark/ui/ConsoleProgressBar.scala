@@ -94,7 +94,9 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     // only refresh if it's changed OR after 1 minute (or the ssh connection will be closed
     // after idle some time)
     if (bar != lastProgressBar || now - lastUpdateTime > 60 * 1000L) {
-      System.err.print(CR + bar)
+      // scalastyle:off println
+      System.err.println(CR + bar)
+      // scalastyle:on println
       lastUpdateTime = now
     }
     lastProgressBar = bar
