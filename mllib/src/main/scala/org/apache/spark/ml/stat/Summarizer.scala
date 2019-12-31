@@ -218,7 +218,7 @@ private[ml] class SummaryBuilderImpl(
   }
 }
 
-private[ml] object SummaryBuilderImpl extends Logging {
+private[spark] object SummaryBuilderImpl extends Logging {
 
   def implementedMetrics: Seq[String] = allMetrics.map(_._1).sorted
 
@@ -248,7 +248,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
     StructType(fields)
   }
 
-  private[ml] def createSummarizerBuffer(requested: String*): SummarizerBuffer = {
+  private[spark] def createSummarizerBuffer(requested: String*): SummarizerBuffer = {
     val (metrics, computeMetrics) = getRelevantMetrics(requested)
     new SummarizerBuffer(metrics, computeMetrics)
   }
@@ -304,7 +304,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
   private[stat] case object ComputeMax extends ComputeMetric
   private[stat] case object ComputeMin extends ComputeMetric
 
-  private[ml] class SummarizerBuffer(
+  private[spark] class SummarizerBuffer(
       requestedMetrics: Seq[Metric],
       requestedCompMetrics: Seq[ComputeMetric]
   ) extends Serializable {
@@ -331,16 +331,13 @@ private[ml] object SummaryBuilderImpl extends Logging {
       )
     }
 
-    /**
-     * Add a new sample to this summarizer, and update the statistical summary.
-     */
-    def add(instance: Vector, weight: Double): this.type = {
+    def add(nonZeroIterator: Iterator[(Int, Double)], size: Int, weight: Double): this.type = {
       require(weight >= 0.0, s"sample weight, $weight has to be >= 0.0")
       if (weight == 0.0) return this
 
       if (n == 0) {
-        require(instance.size > 0, s"Vector should have dimension larger than zero.")
-        n = instance.size
+        require(size > 0, s"Vector should have dimension larger than zero.")
+        n = size
 
         if (requestedCompMetrics.contains(ComputeMean)) { currMean = Array.ofDim[Double](n) }
         if (requestedCompMetrics.contains(ComputeM2n)) { currM2n = Array.ofDim[Double](n) }
@@ -358,48 +355,50 @@ private[ml] object SummaryBuilderImpl extends Logging {
         }
       }
 
-      require(n == instance.size, s"Dimensions mismatch when adding new sample." +
-        s" Expecting $n but got ${instance.size}.")
+      require(n == size, s"Dimensions mismatch when adding new sample." +
+        s" Expecting $n but got $size.")
 
-      val localCurrMean = currMean
-      val localCurrM2n = currM2n
-      val localCurrM2 = currM2
-      val localCurrL1 = currL1
-      val localCurrWeightSum = currWeightSum
-      val localNumNonzeros = nnz
-      val localCurrMax = currMax
-      val localCurrMin = currMin
-      instance.foreachNonZero { (index, value) =>
-        if (localCurrMax != null && localCurrMax(index) < value) {
-          localCurrMax(index) = value
-        }
-        if (localCurrMin != null && localCurrMin(index) > value) {
-          localCurrMin(index) = value
-        }
-
-        if (localCurrWeightSum != null) {
-          if (localCurrMean != null) {
-            val prevMean = localCurrMean(index)
-            val diff = value - prevMean
-            localCurrMean(index) = prevMean +
-              weight * diff / (localCurrWeightSum(index) + weight)
-
-            if (localCurrM2n != null) {
-              localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
-            }
+      if (nonZeroIterator.nonEmpty) {
+        val localCurrMean = currMean
+        val localCurrM2n = currM2n
+        val localCurrM2 = currM2
+        val localCurrL1 = currL1
+        val localCurrWeightSum = currWeightSum
+        val localNumNonzeros = nnz
+        val localCurrMax = currMax
+        val localCurrMin = currMin
+        nonZeroIterator.foreach { case (index, value) =>
+          if (localCurrMax != null && localCurrMax(index) < value) {
+            localCurrMax(index) = value
           }
-          localCurrWeightSum(index) += weight
-        }
+          if (localCurrMin != null && localCurrMin(index) > value) {
+            localCurrMin(index) = value
+          }
 
-        if (localCurrM2 != null) {
-          localCurrM2(index) += weight * value * value
-        }
-        if (localCurrL1 != null) {
-          localCurrL1(index) += weight * math.abs(value)
-        }
+          if (localCurrWeightSum != null) {
+            if (localCurrMean != null) {
+              val prevMean = localCurrMean(index)
+              val diff = value - prevMean
+              localCurrMean(index) = prevMean +
+                weight * diff / (localCurrWeightSum(index) + weight)
 
-        if (localNumNonzeros != null) {
-          localNumNonzeros(index) += 1
+              if (localCurrM2n != null) {
+                localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
+              }
+            }
+            localCurrWeightSum(index) += weight
+          }
+
+          if (localCurrM2 != null) {
+            localCurrM2(index) += weight * value * value
+          }
+          if (localCurrL1 != null) {
+            localCurrL1(index) += weight * math.abs(value)
+          }
+
+          if (localNumNonzeros != null) {
+            localNumNonzeros(index) += 1
+          }
         }
       }
 
@@ -408,6 +407,12 @@ private[ml] object SummaryBuilderImpl extends Logging {
       totalCnt += 1
       this
     }
+
+    /**
+     * Add a new sample to this summarizer, and update the statistical summary.
+     */
+    def add(instance: Vector, weight: Double): this.type =
+      add(instance.nonZeroIterator, instance.size, weight)
 
     def add(instance: Vector): this.type = add(instance, 1.0)
 
