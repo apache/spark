@@ -24,6 +24,7 @@ import org.apache.spark.sql.{functions, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.internal.SQLConf
@@ -90,7 +91,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSparkSession {
   }
 
   test("get numRows metrics by callback") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.
       val metrics = ArrayBuffer.empty[Long]
       val listener = new QueryExecutionListener {
@@ -98,7 +99,11 @@ class DataFrameCallbackSuite extends QueryTest with SharedSparkSession {
         override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
 
         override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-          val metric = qe.executedPlan match {
+          val plan = qe.executedPlan match {
+            case a: AdaptiveSparkPlanExec => a.executedPlan
+            case other => other
+          }
+          val metric = plan match {
             case w: WholeStageCodegenExec => w.child.longMetric("numOutputRows")
             case other => other.longMetric("numOutputRows")
           }

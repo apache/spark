@@ -309,11 +309,9 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
         // FULL OUTER && t1Size < t2Size => BuildLeft
         assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
         // LEFT JOIN => BuildRight
-        assertJoinBuildSide(
-          "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", bl, BuildRight)
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", bl, BuildRight)
         // RIGHT JOIN => BuildLeft
-        assertJoinBuildSide(
-          "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
 
         /* #### test with broadcast hint #### */
         // INNER JOIN && broadcast(t1) => BuildLeft
@@ -321,8 +319,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
         // INNER JOIN && broadcast(t2) => BuildRight
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2", bl, BuildRight)
         // FULL OUTER && broadcast(t1) => BuildLeft
-        assertJoinBuildSide(
-          "SELECT /*+ MAPJOIN(t1) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
         // FULL OUTER && broadcast(t2) => BuildRight
         assertJoinBuildSide(
           "SELECT /*+ MAPJOIN(t2) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildRight)
@@ -335,6 +332,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
   }
 
   test("Shouldn't bias towards build right if user didn't specify") {
+
     withTempView("t1", "t2") {
       Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
       Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
@@ -380,11 +378,10 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
   private val bl = BroadcastNestedLoopJoinExec.toString
 
   private def assertJoinBuildSide(sqlStr: String, joinMethod: String, buildSide: BuildSide): Any = {
-    var executedPlan = sql(sqlStr).queryExecution.executedPlan
-    // when AQE on, we need check the executedPlan of AdaptiveSparkPlanExec
-    executedPlan = if (executedPlan.isInstanceOf[AdaptiveSparkPlanExec]) {
-      executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-    } else executedPlan
+    val executedPlan = sql(sqlStr).queryExecution.executedPlan match {
+      case a: AdaptiveSparkPlanExec => a.executedPlan
+      case other => other
+    }
 
     executedPlan match {
       case b: BroadcastNestedLoopJoinExec =>

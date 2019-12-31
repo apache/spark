@@ -57,10 +57,11 @@ trait AdaptiveSparkPlanHelper {
 
   /**
    * Returns a Seq containing the result of applying the given function to each
-   * node in this tree in a preorder traversal.
+   * node in this tree in a preorder traversal.In order to avoid naming conflicts,
+   * change the function name from map to mapPlans.
    * @param f the function to be applied.
    */
-  def map[A](p: SparkPlan)(f: SparkPlan => A): Seq[A] = {
+  def mapPlans[A](p: SparkPlan)(f: SparkPlan => A): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(p)(ret += f(_))
     ret

@@ -533,7 +533,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("collect_set functions cannot have maps") {
     val df = Seq((1, 3, 0), (2, 3, 0), (3, 4, 1))
       .toDF("a", "x", "y")
-      .select($"a", functions.map($"x", $"y").as("b"))
+      .select($"a", map($"x", $"y").as("b"))
     val error = intercept[AnalysisException] {
       df.select(collect_set($"a"), collect_set($"b"))
     }
@@ -853,7 +853,7 @@ class DataFrameAggregateSuite extends QueryTest
     withTempView("tempView") {
       val dfWithMap = Seq((0, "a"), (1, "b"), (2, "c"))
         .toDF("x", "y")
-        .select($"x", functions.map($"x", $"y").as("y"))
+        .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
       val error = intercept[AnalysisException] {
         sql("SELECT max_by(x, y) FROM tempView").show
@@ -909,7 +909,7 @@ class DataFrameAggregateSuite extends QueryTest
     withTempView("tempView") {
       val dfWithMap = Seq((0, "a"), (1, "b"), (2, "c"))
         .toDF("x", "y")
-        .select($"x", functions.map($"x", $"y").as("y"))
+        .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
       val error = intercept[AnalysisException] {
         sql("SELECT min_by(x, y) FROM tempView").show

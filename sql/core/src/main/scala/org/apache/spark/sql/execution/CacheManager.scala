@@ -80,10 +80,10 @@ class CacheManager extends Logging {
       logWarning("Asked to cache already cached data.")
     } else {
       val sparkSession = query.sparkSession
+      val qe = sparkSession.sessionState.executePlan(planToCache)
       val originalValue = sparkSession.sessionState.conf.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
       val inMemoryRelation = try {
         sparkSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
-        val qe = sparkSession.sessionState.executePlan(planToCache)
         InMemoryRelation(
           sparkSession.sessionState.conf.useCompression,
           sparkSession.sessionState.conf.columnBatchSize, storageLevel,

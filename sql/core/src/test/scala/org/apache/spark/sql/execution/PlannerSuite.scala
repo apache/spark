@@ -426,24 +426,23 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-30036: Remove unnecessary RoundRobinPartitioning " +
       "if SortExec is followed by RoundRobinPartitioning") {
+    val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
+    val partitioning = RoundRobinPartitioning(5)
+    assert(!partitioning.satisfies(distribution))
+
+    val inputPlan = SortExec(SortOrder(Literal(1), Ascending) :: Nil,
+      global = true,
+      child = ShuffleExchangeExec(
+        partitioning,
+        DummySparkPlan(outputPartitioning = partitioning)))
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assert(outputPlan.find {
+      case ShuffleExchangeExec(_: RoundRobinPartitioning, _, _) => true
+      case _ => false
+    }.isEmpty,
+      "RoundRobinPartitioning should be changed to RangePartitioning")
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // when enable AQE, the post partiiton number is changed.
-      val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
-      val partitioning = RoundRobinPartitioning(5)
-      assert(!partitioning.satisfies(distribution))
-
-      val inputPlan = SortExec(SortOrder(Literal(1), Ascending) :: Nil,
-        global = true,
-        child = ShuffleExchangeExec(
-          partitioning,
-          DummySparkPlan(outputPartitioning = partitioning)))
-      val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-      assert(outputPlan.find {
-        case ShuffleExchangeExec(_: RoundRobinPartitioning, _, _) => true
-        case _ => false
-      }.isEmpty,
-        "RoundRobinPartitioning should be changed to RangePartitioning")
-
       val query = testData.select('key, 'value).repartition(2).sort('key.asc)
       assert(query.rdd.getNumPartitions == 2)
       assert(query.rdd.collectPartitions()(0).map(_.get(0)).toSeq == (1 to 50))
@@ -452,24 +451,23 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-30036: Remove unnecessary HashPartitioning " +
     "if SortExec is followed by HashPartitioning") {
+    val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
+    val partitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    assert(!partitioning.satisfies(distribution))
+
+    val inputPlan = SortExec(SortOrder(Literal(1), Ascending) :: Nil,
+      global = true,
+      child = ShuffleExchangeExec(
+        partitioning,
+        DummySparkPlan(outputPartitioning = partitioning)))
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assert(outputPlan.find {
+      case ShuffleExchangeExec(_: HashPartitioning, _, _) => true
+      case _ => false
+    }.isEmpty,
+      "HashPartitioning should be changed to RangePartitioning")
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // when enable AQE, the post partiiton number is changed.
-      val distribution = OrderedDistribution(SortOrder(Literal(1), Ascending) :: Nil)
-      val partitioning = HashPartitioning(Literal(1) :: Nil, 5)
-      assert(!partitioning.satisfies(distribution))
-
-      val inputPlan = SortExec(SortOrder(Literal(1), Ascending) :: Nil,
-        global = true,
-        child = ShuffleExchangeExec(
-          partitioning,
-          DummySparkPlan(outputPartitioning = partitioning)))
-      val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-      assert(outputPlan.find {
-        case ShuffleExchangeExec(_: HashPartitioning, _, _) => true
-        case _ => false
-      }.isEmpty,
-        "HashPartitioning should be changed to RangePartitioning")
-
       val query = testData.select('key, 'value).repartition(5, 'key).sort('key.asc)
       assert(query.rdd.getNumPartitions == 5)
       assert(query.rdd.collectPartitions()(0).map(_.get(0)).toSeq == (1 to 20))

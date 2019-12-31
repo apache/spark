@@ -214,8 +214,7 @@ class DatasetSuite extends QueryTest
   }
 
   test("as map of case class - reorder fields by name") {
-    val df = spark.range(3).select(
-      functions.map(lit(1), struct($"id".cast("int").as("b"), lit("a").as("a"))))
+    val df = spark.range(3).select(map(lit(1), struct($"id".cast("int").as("b"), lit("a").as("a"))))
     val ds = df.as[Map[Int, ClassData]]
     assert(ds.collect() === Array(
       Map(1 -> ClassData("a", 0)),

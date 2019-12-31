@@ -292,8 +292,8 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
     val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
     assert(simpleExplainOutput.startsWith("== Physical Plan =="))
     Seq("== Parsed Logical Plan ==",
-      "== Analyzed Logical Plan ==",
-      "== Optimized Logical Plan ==").foreach { planType =>
+        "== Analyzed Logical Plan ==",
+        "== Optimized Logical Plan ==").foreach { planType =>
       assert(!simpleExplainOutput.contains(planType))
     }
     checkKeywordsExistsInExplain(

@@ -2042,7 +2042,7 @@ class DataFrameSuite extends QueryTest
       .select(when($"cond", array(lit("a"), lit("b"))).otherwise($"a") as "res")
       .select($"res".getItem(0))
     def mapWhenDF: DataFrame = sourceDF
-      .select(when($"cond", functions.map(lit(0), lit("a"))).otherwise($"m") as "res")
+      .select(when($"cond", map(lit(0), lit("a"))).otherwise($"m") as "res")
       .select($"res".getItem(0))
 
     def structIfDF: DataFrame = sourceDF
@@ -2077,7 +2077,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-24313: access map with binary keys") {
-    val mapWithBinaryKey = functions.map(lit(Array[Byte](1.toByte)), lit(1))
+    val mapWithBinaryKey = map(lit(Array[Byte](1.toByte)), lit(1))
     checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
   }
 

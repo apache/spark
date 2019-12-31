@@ -4,7 +4,7 @@ CREATE table  explain_temp2 (key int, val int) USING PARQUET;
 CREATE table  explain_temp3 (key int, val int) USING PARQUET;
 
 SET spark.sql.codegen.wholeStage = true;
-
+SET spark.sql.adaptive.enabled = false;
 -- single table
 EXPLAIN FORMATTED
   SELECT key, max(val) 
