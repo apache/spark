@@ -207,6 +207,28 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
+            val aggExpressions = aggregateExprs.flatMap { e =>
+              e.collect {
+                case ae: AggregateExpression => ae
+              }
+            }
+            val aggWithDistinctAndFilters = aggExpressions.filter(e => e.isDistinct)
+            val aggGroups = aggWithDistinctAndFilters.groupBy { e =>
+              val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
+              if (unfoldableChildren.nonEmpty) {
+                unfoldableChildren
+              } else {
+                e.aggregateFunction.children.take(1).toSet
+              }
+            }
+            val useDistinctAndFilter = aggExpressions.exists(e => e.isDistinct && e.filter.isDefined)
+            // TODO: SPARK-30396 When there are multiple DISTINCT aggregate expressions acting on
+            // different fields, any DISTINCT aggregate expression allows the use of the FILTER clause
+            if (aggGroups.size > 1 && useDistinctAndFilter) {
+              failAnalysis(
+                "When there are multiple DISTINCT aggregate expressions acting on different fields, " +
+                "any DISTINCT aggregate expression not allow use FILTER clause.")
+            }
             def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
