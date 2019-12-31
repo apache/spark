@@ -288,7 +288,7 @@ class BlockMatrix @Since("1.3.0") (
 
           vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
               val offset = colsPerBlock * blockColIdx
-              vec.foreachActive { case (colIdx: Int, value: Double) =>
+              vec.foreachNonZero { (colIdx: Int, value: Double) =>
                 arrBufferIndices += offset + colIdx
                 arrBufferValues  += value
               }

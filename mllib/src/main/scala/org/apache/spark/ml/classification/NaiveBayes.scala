@@ -353,22 +353,12 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
     Set(Multinomial, Bernoulli, Gaussian, Complement)
 
   private[ml] def requireNonnegativeValues(v: Vector): Unit = {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-
-    require(values.forall(_ >= 0.0),
+    require(v.nonZeroIterator.forall(_._2 > 0.0),
       s"Naive Bayes requires nonnegative feature values but found $v.")
   }
 
   private[ml] def requireZeroOneBernoulliValues(v: Vector): Unit = {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-
-    require(values.forall(v => v == 0.0 || v == 1.0),
+    require(v.nonZeroIterator.forall(_._2 == 1.0),
       s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
   }
 
