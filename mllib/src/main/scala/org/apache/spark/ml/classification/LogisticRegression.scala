@@ -1127,7 +1127,8 @@ class LogisticRegressionModel private[spark] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     if (isMultinomial) {
       margins(features)
     } else {

@@ -309,7 +309,8 @@ class LinearSVCModel private[classification] (
     if (margin(features) > $(threshold)) 1.0 else 0.0
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     val m = margin(features)
     Vectors.dense(-m, m)
   }

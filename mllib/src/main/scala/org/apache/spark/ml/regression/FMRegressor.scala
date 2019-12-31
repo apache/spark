@@ -463,6 +463,7 @@ class FMRegressionModel private[regression] (
   @Since("3.0.0")
   override val numFeatures: Int = linear.size
 
+  @Since("3.0.0")
   override def predict(features: Vector): Double = {
     getRawPrediction(features, intercept, linear, factors)
   }

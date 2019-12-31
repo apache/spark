@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -200,7 +200,8 @@ abstract class ProbabilisticClassificationModel[
    *
    * @return Estimated class conditional probabilities
    */
-  protected def predictProbability(features: FeaturesType): Vector = {
+  @Since("3.0.0")
+  def predictProbability(features: FeaturesType): Vector = {
     val rawPreds = predictRaw(features)
     raw2probabilityInPlace(rawPreds)
   }

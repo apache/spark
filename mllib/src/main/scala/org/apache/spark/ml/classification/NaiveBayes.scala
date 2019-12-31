@@ -521,7 +521,8 @@ class NaiveBayesModel private[ml] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = predictRawFunc(features)
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = predictRawFunc(features)
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
