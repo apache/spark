@@ -44,8 +44,12 @@ public class OneForOneStreamManager extends StreamManager {
   private final AtomicLong nextStreamId;
   private final ConcurrentHashMap<Long, StreamState> streams;
 
+  public ConcurrentHashMap<Long, StreamState> getStreams() {
+    return streams;
+  }
+
   /** State of a single stream. */
-  private static class StreamState {
+  public static class StreamState {
     final String appId;
     final Iterator<ManagedBuffer> buffers;
 
@@ -63,6 +67,14 @@ public class OneForOneStreamManager extends StreamManager {
       this.appId = appId;
       this.buffers = Preconditions.checkNotNull(buffers);
       this.associatedChannel = channel;
+    }
+
+    public String getAppId() {
+      return appId;
+    }
+
+    public Iterator<ManagedBuffer> getBuffers() {
+      return buffers;
     }
   }
 

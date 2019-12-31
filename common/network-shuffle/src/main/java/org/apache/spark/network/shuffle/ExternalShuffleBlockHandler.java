@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
@@ -30,6 +31,7 @@ import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +39,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
+import org.apache.spark.network.server.OneForOneStreamManager.StreamState;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
@@ -90,16 +93,22 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       try {
         OpenBlocks msg = (OpenBlocks) msgObj;
         checkAuth(client, msg.appId);
-        long streamId = streamManager.registerStream(client.getClientId(),
-          new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds), client.getChannel());
-        if (logger.isTraceEnabled()) {
-          logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
-                       streamId,
-                       msg.blockIds.length,
-                       client.getClientId(),
-                       getRemoteAddress(client.getChannel()));
+
+        if (!blockManager.executors.containsKey(new AppExecId(msg.appId, msg.execId))) {
+          logger.warn("the App {} with execId {} is not exist, so do not fetch", msg.appId, msg.execId);
+          client.getChannel().close();
+        } else {
+          long streamId = streamManager.registerStream(msg.appId,
+                  new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds), client.getChannel());
+          if (logger.isTraceEnabled()) {
+            logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
+                    streamId,
+                    msg.blockIds.length,
+                    client.getClientId(),
+                    getRemoteAddress(client.getChannel()));
+          }
+          callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
         }
-        callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
       } finally {
         responseDelayContext.stop();
       }
@@ -135,6 +144,20 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
    * local directories associated with the executors of that application in a separate thread.
    */
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
+    logger.info("current numStreamStates size: {}", streamManager.numStreamStates());
+    ConcurrentHashMap<Long, StreamState> streams = streamManager.getStreams();
+    for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
+      StreamState state = entry.getValue();
+      if (StringUtils.isNoneEmpty(state.getAppId()) && state.getAppId().equals(appId)) {
+        logger.warn("found finished app: {} , but streamState is still in memory", appId);
+        streams.remove(entry.getKey());
+
+        // Release all remaining buffers.
+        while (state.getBuffers().hasNext()) {
+          state.getBuffers().next().release();
+        }
+      }
+    }
     blockManager.applicationRemoved(appId, cleanupLocalDirs);
   }
 
