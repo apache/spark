@@ -19,17 +19,14 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
+import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
-import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.NextIterator
-
 
 /** Offset range that one partition of the KafkaSourceRDD has to read */
 private[kafka010] case class KafkaSourceRDDOffsetRange(
