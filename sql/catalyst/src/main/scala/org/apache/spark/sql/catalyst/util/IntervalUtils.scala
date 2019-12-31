@@ -416,39 +416,8 @@ object IntervalUtils {
   }
 
   /**
-   * Makes an interval from months, days and micros with the fractional part by
-   * adding the month fraction to days and the days fraction to micros.
-   */
-  private def safeFromDoubles(
-      monthsWithFraction: Double,
-      daysWithFraction: Double,
-      microsWithFraction: Double): CalendarInterval = {
-    val monthInLong = monthsWithFraction.toLong
-    val truncatedMonths = if (monthInLong > Int.MaxValue) {
-      Int.MaxValue
-    } else if (monthInLong < Int.MinValue) {
-      Int.MinValue
-    } else {
-      monthInLong.toInt
-    }
-    val days = daysWithFraction + DAYS_PER_MONTH * (monthsWithFraction - truncatedMonths)
-    val dayInLong = days.toLong
-    val truncatedDays = if (dayInLong > Int.MaxValue) {
-      Int.MaxValue
-    } else if (monthInLong < Int.MinValue) {
-      Int.MinValue
-    } else {
-      dayInLong.toInt
-    }
-    val micros = microsWithFraction + MICROS_PER_DAY * (days - truncatedDays)
-    new CalendarInterval(truncatedMonths, truncatedDays.toInt, micros.round)
-  }
-
-  /**
    * Unary minus, return the negated the calendar interval value.
    *
-   * @param interval the interval to be negated
-   * @return a new calendar interval instance with all it parameters negated from the origin one.
    * @throws ArithmeticException if the result overflows any field value
    */
   def negateExact(interval: CalendarInterval): CalendarInterval = {
@@ -461,8 +430,6 @@ object IntervalUtils {
   /**
    * Unary minus, return the negated the calendar interval value.
    *
-   * @param interval the interval to be negated
-   * @return a new calendar interval instance with all it parameters negated from the origin one.
    */
   def negate(interval: CalendarInterval): CalendarInterval = {
     new CalendarInterval(-interval.months, -interval.days, -interval.microseconds)
