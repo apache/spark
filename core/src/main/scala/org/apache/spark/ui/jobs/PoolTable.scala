@@ -40,7 +40,7 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
         </th>
         <th>
           <span data-toggle="tooltip" data-placement="top" title="Pool's share of cluster resources
-           relative to others pools">Pool Weight</span>
+           relative to others">Pool Weight</span>
         </th>
         <th>Active Stages</th>
         <th>Running Tasks</th>
