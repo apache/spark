@@ -744,7 +744,7 @@ class Analyzer(
           .getOrElse(i)
       case u @ UnresolvedTable(ident) =>
         lookupTempView(ident).foreach { _ =>
-          u.failAnalysis(s"${ident.quoted} is a view not table.")
+          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
         }
         u
     }
