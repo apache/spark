@@ -97,7 +97,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var rpHostToLocalTaskCount: Map[Int, Map[String, Int]] = Map.empty
 
-
   // The number of pending tasks per ResourceProfile id which is locality required
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var numLocalityAwareTasksPerResourceProfileId = Map.empty[Int, Int]
