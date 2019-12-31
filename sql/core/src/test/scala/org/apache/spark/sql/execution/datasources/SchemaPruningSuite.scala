@@ -299,6 +299,11 @@ abstract class SchemaPruningSuite
     checkAnswer(query, Row("Y.", 1) :: Row("X.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
   }
 
+  testSchemaPruning("Spark-27217: Push nested column when used in Aggregate") {
+    val query = sql("select sum(employer.id) from contacts")
+    checkScan(query, "struct<employer:struct<id:INT>>")
+  }
+
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {
     test(s"Spark vectorized reader - without partition data column - $testName") {
       withSQLConf(vectorizedReaderEnabledKey -> "true") {

@@ -166,4 +166,48 @@ object NestedColumnAliasing {
     case _: Inline => true
     case _ => false
   }
+
+  object OverAggregate {
+
+    private def canPrune(child: LogicalPlan, references: AttributeSet): Boolean = child match {
+      case p: Project => !p.references.subsetOf(references)
+      case _ => !child.outputSet.subsetOf(references)
+    }
+
+    private def unAlias(exp: Expression): Expression = exp match {
+      case a: Alias => a.child
+      case _ => exp
+    }
+
+    def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+      case a @ Aggregate(groupingExpressions, aggregateExpressions, child)
+          if canPrune(child, a.references) =>
+        val allExpressions = (aggregateExpressions ++ groupingExpressions).map(unAlias).distinct
+        val (nestedFieldReferences, otherRootReferences) =
+          allExpressions.flatMap(collectRootReferenceAndExtractValue).partition {
+            case _: ExtractValue => true
+            case _ => false
+          }
+
+        val aliasSub = nestedFieldReferences.asInstanceOf[Seq[ExtractValue]]
+          .filter(!_.references.subsetOf(AttributeSet(otherRootReferences)))
+          .groupBy(_.references.head).flatMap {
+            case (attr, nestedFields: Seq[ExtractValue]) =>
+              val nestedFieldToAlias = nestedFields.distinct.map { f =>
+                Alias(f, f.sql)()
+              }
+
+              if (nestedFieldToAlias.nonEmpty &&
+                nestedFieldToAlias.length < totalFieldNum(attr.dataType)) {
+                Some(nestedFieldToAlias)
+              } else {
+                None
+              }
+          }
+        val newProjectList: Seq[NamedExpression] =
+          aliasSub.flatten.toSeq ++ otherRootReferences.flatMap(_.references)
+        Some(a.copy(child = Project(newProjectList, child)))
+      case _ => None
+    }
+  }
 }
