@@ -254,7 +254,8 @@ class FMClassificationModel private[classification] (
   @Since("3.0.0")
   override val numFeatures: Int = linear.size
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     val rawPrediction = getRawPrediction(features, intercept, linear, factors)
     Vectors.dense(Array(-rawPrediction, rawPrediction))
   }
