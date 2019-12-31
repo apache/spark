@@ -319,6 +319,7 @@ private[parquet] class ParquetRowConverter(
 
       case t: StructType =>
         val wrappedUpdater = {
+          // SPARK-30338: avoid unnecessary InternalRow copying for nested structs:
           if (updater.isInstanceOf[RowUpdater]) {
             // `updater` is a RowUpdater, implying that the parent container is a struct.
             // We do NOT need to perform defensive copying here because either:
