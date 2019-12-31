@@ -375,6 +375,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     instr.logNumExamples(ySummarizer.count)
     instr.logNamedValue(Instrumentation.loggerTags.meanOfLabels, yMean)
     instr.logNamedValue(Instrumentation.loggerTags.varianceOfLabels, rawYStd)
+    instr.logSumOfWeights(featuresSummarizer.weightSum)
 
     if (rawYStd == 0.0) {
       if ($(fitIntercept) || yMean == 0.0) {

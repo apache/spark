@@ -181,6 +181,7 @@ class LinearSVC @Since("2.2.0") (
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
+    instr.logSumOfWeights(summarizer.weightSum)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
