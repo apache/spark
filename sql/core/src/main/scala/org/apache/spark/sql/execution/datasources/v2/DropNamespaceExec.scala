@@ -21,26 +21,36 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, SupportsNamespaces}
 
 /**
  * Physical plan node for dropping a namespace.
  */
 case class DropNamespaceExec(
-    catalog: SupportsNamespaces,
+    catalog: CatalogPlugin,
     namespace: Seq[String],
     ifExists: Boolean,
     cascade: Boolean)
   extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    val nsCatalog = catalog.asNamespaceCatalog
     val ns = namespace.toArray
-    if (catalog.namespaceExists(ns)) {
-      try {
-        catalog.dropNamespace(ns)
-      } catch {
-        case e: IllegalStateException if cascade =>
+    if (nsCatalog.namespaceExists(ns)) {
+      // The default behavior of `SupportsNamespace.dropNamespace()` is cascading,
+      // so make sure the namespace to drop is empty.
+      if (!cascade) {
+        if (catalog.asTableCatalog.listTables(ns).nonEmpty
+          || nsCatalog.listNamespaces(ns).nonEmpty) {
           throw new SparkException(
-            "Cascade option for droping namespace is not supported in V2 catalog", e)
+            s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
+              "Use CASCADE option to drop a non-empty namespace.")
+        }
+      }
+
+      if (!nsCatalog.dropNamespace(ns)) {
+        throw new SparkException(s"Failed to drop a namespace: ${namespace.quoted}.")
       }
     } else if (!ifExists) {
       throw new NoSuchNamespaceException(ns)

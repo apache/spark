@@ -174,7 +174,7 @@ class MinMaxScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val numFeatures = originalMax.size
     val scale = $(max) - $(min)
@@ -210,12 +210,18 @@ class MinMaxScalerModel private[ml] (
       Vectors.dense(values).compressed
     }
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), originalMin.size)
+    }
+    outputSchema
   }
 
   @Since("1.5.0")

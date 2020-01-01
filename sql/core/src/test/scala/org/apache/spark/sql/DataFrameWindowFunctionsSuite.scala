@@ -633,20 +633,20 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(thrownException.message.contains("window functions inside WHERE and HAVING clauses"))
     }
 
-    checkAnalysisError(testData2.select('a).where(rank().over(Window.orderBy('b)) === 1))
-    checkAnalysisError(testData2.where('b === 2 && rank().over(Window.orderBy('b)) === 1))
+    checkAnalysisError(testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1))
+    checkAnalysisError(testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(avg('b).as("avgb"))
-        .where('a > 'avgb && rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(avg($"b").as("avgb"))
+        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where(rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where(rank().over(Window.orderBy($"a")) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where('sumb === 5 && rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1))
 
     checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"))
     checkAnalysisError(sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"))

@@ -3,6 +3,11 @@
 -- Window Functions Testing
 -- https://github.com/postgres/postgres/blob/REL_12_STABLE/src/test/regress/sql/window.sql#L564-L911
 
+-- Test window operator with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 CREATE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1;
 
 CREATE TABLE empsalary (
@@ -399,7 +404,7 @@ SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
 -- filter
 
--- [SPARK-28500] Adds support for `filter` clause
+-- [SPARK-30182] Support nested aggregates
 -- SELECT sum(salary), row_number() OVER (ORDER BY depname), sum(
 --     sum(salary) FILTER (WHERE enroll_date > '2007-01-01')
 -- )

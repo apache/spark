@@ -24,8 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui._
-import org.apache.spark.ui.{UIUtils => SparkUIUtils}
+import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
 /**
  * A helper class to generate JavaScript and HTML for both timeline and histogram graphs.

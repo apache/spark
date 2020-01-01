@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap}
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -53,28 +53,37 @@ import org.apache.spark.sql.util.SchemaUtils
  * are identical to the ones defined in the source table.
  *
  * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
- * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
+ * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec by default.
  *
- * Use "CREATE TABLE t1 LIKE t2 USING file_format"
- * to specify new file format for t1 from a data source table t2.
+ * Use "CREATE TABLE t1 LIKE t2 USING file_format" to specify new provider for t1.
+ * For Hive compatibility, use "CREATE TABLE t1 LIKE t2 STORED AS hiveFormat"
+ * to specify new file storage format (inputFormat, outputFormat, serde) for t1.
  *
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name [USING provider] [locationSpec]
+ *   LIKE [other_db_name.]existing_table_name
+ *   [USING provider |
+ *    [
+ *     [ROW FORMAT row_format]
+ *     [STORED AS file_format] [WITH SERDEPROPERTIES (...)]
+ *    ]
+ *   ]
+ *   [locationSpec]
+ *   [TBLPROPERTIES (property_name=property_value, ...)]
  * }}}
  */
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
+    fileFormat: CatalogStorageFormat,
     provider: Option[String],
-    location: Option[String],
+    properties: Map[String, String] = Map.empty,
     ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
-
     val newProvider = if (provider.isDefined) {
       if (!DDLUtils.isHiveTable(provider)) {
         // check the validation of provider input, invalid provider will throw
@@ -84,24 +93,36 @@ case class CreateTableLikeCommand(
       provider
     } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)
+    } else if (fileFormat.inputFormat.isDefined) {
+      Some(DDLUtils.HIVE_PROVIDER)
     } else {
       sourceTableDesc.provider
     }
 
+    val newStorage = if (fileFormat.inputFormat.isDefined) {
+      fileFormat
+    } else {
+      sourceTableDesc.storage.copy(locationUri = fileFormat.locationUri)
+    }
+
     // If the location is specified, we create an external table internally.
     // Otherwise create a managed table.
-    val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
+    val tblType = if (newStorage.locationUri.isEmpty) {
+      CatalogTableType.MANAGED
+    } else {
+      CatalogTableType.EXTERNAL
+    }
 
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
-        storage = sourceTableDesc.storage.copy(
-          locationUri = location.map(CatalogUtils.stringToURI(_))),
+        storage = newStorage,
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
-        bucketSpec = sourceTableDesc.bucketSpec)
+        bucketSpec = sourceTableDesc.bucketSpec,
+        properties = properties)
 
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
@@ -699,7 +720,8 @@ case class DescribeColumnCommand(
     }
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
-    val colStats = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
+    val colStatsMap = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
+    val colStats = if (conf.caseSensitiveAnalysis) colStatsMap else CaseInsensitiveMap(colStatsMap)
     val cs = colStats.get(field.name)
 
     val comment = if (field.metadata.contains("comment")) {

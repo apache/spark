@@ -46,7 +46,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
    * `"weightedPrecision"`, `"weightedRecall"`, `"weightedTruePositiveRate"`,
    * `"weightedFalsePositiveRate"`, `"weightedFMeasure"`, `"truePositiveRateByLabel"`,
    * `"falsePositiveRateByLabel"`, `"precisionByLabel"`, `"recallByLabel"`,
-   * `"fMeasureByLabel"`, `"logLoss"`)
+   * `"fMeasureByLabel"`, `"logLoss"`, `"hammingLoss"`)
    *
    * @group param
    */
@@ -172,13 +172,15 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       case "precisionByLabel" => metrics.precision($(metricLabel))
       case "recallByLabel" => metrics.recall($(metricLabel))
       case "fMeasureByLabel" => metrics.fMeasure($(metricLabel), $(beta))
+      case "hammingLoss" => metrics.hammingLoss
       case "logLoss" => metrics.logLoss($(eps))
     }
   }
 
   @Since("1.5.0")
   override def isLargerBetter: Boolean = $(metricName) match {
-    case "weightedFalsePositiveRate" | "falsePositiveRateByLabel" | "logLoss" => false
+    case "weightedFalsePositiveRate" | "falsePositiveRateByLabel" | "logLoss" | "hammingLoss" =>
+      false
     case _ => true
   }
 
@@ -199,7 +201,7 @@ object MulticlassClassificationEvaluator
   private val supportedMetricNames = Array("f1", "accuracy", "weightedPrecision", "weightedRecall",
     "weightedTruePositiveRate", "weightedFalsePositiveRate", "weightedFMeasure",
     "truePositiveRateByLabel", "falsePositiveRateByLabel", "precisionByLabel", "recallByLabel",
-    "fMeasureByLabel", "logLoss")
+    "fMeasureByLabel", "logLoss", "hammingLoss")
 
   @Since("1.6.0")
   override def load(path: String): MulticlassClassificationEvaluator = super.load(path)

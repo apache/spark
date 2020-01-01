@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.arrow
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ArrowColumnVector
+import org.apache.spark.sql.vectorized._
 import org.apache.spark.unsafe.types.UTF8String
 
 class ArrowWriterSuite extends SparkFunSuite {
@@ -266,5 +266,121 @@ class ArrowWriterSuite extends SparkFunSuite {
     assert(reader.isNullAt(3))
 
     writer.root.close()
+  }
+
+  test("map") {
+    val schema = new StructType()
+      .add("map", MapType(IntegerType, StringType), nullable = true)
+    val writer = ArrowWriter.create(schema, null)
+    assert(writer.schema == schema)
+
+    writer.write(InternalRow(ArrayBasedMapData(
+      keys = Array(1, 2, 3),
+      values = Array(
+        UTF8String.fromString("v2"),
+        UTF8String.fromString("v3"),
+        UTF8String.fromString("v4")
+      )
+    )))
+    writer.write(InternalRow(ArrayBasedMapData(Array(43),
+      Array(UTF8String.fromString("v5"))
+    )))
+    writer.write(InternalRow(ArrayBasedMapData(Array(43), Array(null))))
+    writer.write(InternalRow(null))
+
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors.get(0))
+    val map0 = reader.getMap(0)
+    assert(map0.numElements() == 3)
+    assert(map0.keyArray().array().mkString(",") == Array(1, 2, 3).mkString(","))
+    assert(map0.valueArray().array().mkString(",") == Array("v2", "v3", "v4").mkString(","))
+
+    val map1 = reader.getMap(1)
+    assert(map1.numElements() == 1)
+    assert(map1.keyArray().array().mkString(",") == Array(43).mkString(","))
+    assert(map1.valueArray().array().mkString(",") == Array("v5").mkString(","))
+
+    val map2 = reader.getMap(2)
+    assert(map2.numElements() == 1)
+    assert(map2.keyArray().array().mkString(",") == Array(43).mkString(","))
+    assert(map2.valueArray().array().mkString(",") == Array(null).mkString(","))
+
+    val map3 = reader.getMap(3)
+    assert(map3 == null)
+    writer.root.close()
+  }
+
+  test("empty map") {
+    val schema = new StructType()
+      .add("map", MapType(IntegerType, StringType), nullable = true)
+    val writer = ArrowWriter.create(schema, null)
+    assert(writer.schema == schema)
+    writer.write(InternalRow(ArrayBasedMapData(Array(), Array())))
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors.get(0))
+
+    val map0 = reader.getMap(0)
+    assert(map0.numElements() == 0)
+    writer.root.close()
+  }
+
+  test("nested map") {
+    val valueSchema = new StructType()
+      .add("name", StringType)
+      .add("age", IntegerType)
+
+    val schema = new StructType()
+      .add("map",
+        MapType(
+          keyType = IntegerType,
+          valueType = valueSchema
+        ),
+        nullable = true)
+    val writer = ArrowWriter.create(schema, null)
+    assert(writer.schema == schema)
+
+    writer.write(InternalRow(
+      ArrayBasedMapData(
+        keys = Array(1),
+        values = Array(InternalRow(UTF8String.fromString("jon"), 20))
+      )))
+
+    writer.write(InternalRow(
+      ArrayBasedMapData(
+        keys = Array(1),
+        values = Array(InternalRow(UTF8String.fromString("alice"), 30))
+      )))
+
+    writer.write(InternalRow(
+      ArrayBasedMapData(
+        keys = Array(1),
+        values = Array(InternalRow(UTF8String.fromString("bob"), 40))
+      )))
+
+
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors.get(0))
+
+    def stringRepr(map: ColumnarMap): String = {
+      map.valueArray().getStruct(0, 2).toSeq(valueSchema).mkString(",")
+    }
+
+    val map0 = reader.getMap(0)
+    assert(map0.numElements() == 1)
+    assert(map0.keyArray().array().mkString(",") == Array(1).mkString(","))
+    assert(stringRepr(map0) == Array("jon", "20").mkString(","))
+
+    val map1 = reader.getMap(1)
+    assert(map1.numElements() == 1)
+    assert(map1.keyArray().array().mkString(",") == Array(1).mkString(","))
+    assert(stringRepr(map1) == Array("alice", "30").mkString(","))
+
+    val map2 = reader.getMap(2)
+    assert(map2.numElements() == 1)
+    assert(map2.keyArray().array().mkString(",") == Array(1).mkString(","))
+    assert(stringRepr(map2) == Array("bob", "40").mkString(","))
   }
 }

@@ -206,6 +206,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val gbtModel = gbt.fit(trainingDataset)
 
     testPredictionModelSinglePrediction(gbtModel, trainingDataset)
+    testClassificationModelSingleRawPrediction(gbtModel, trainingDataset)
+    testProbClassificationModelSingleProbPrediction(gbtModel, trainingDataset)
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {
@@ -473,6 +475,13 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       .setCheckpointInterval(5)
       .setSeed(123)
     val model = gbt.fit(df)
+    model.setLeafCol("predictedLeafId")
+
+    val transformed = model.transform(df)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "predictedLeafId", model.trees.length)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
 
     model.trees.foreach (i => {
       assert(i.getMaxDepth === model.getMaxDepth)

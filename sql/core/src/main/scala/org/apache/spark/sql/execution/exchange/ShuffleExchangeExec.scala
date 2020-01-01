@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.exchange
 import java.util.Random
 import java.util.function.Supplier
 
+import scala.concurrent.Future
+
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
@@ -64,6 +66,15 @@ case class ShuffleExchangeExec(
 
   @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
 
+  // 'mapOutputStatisticsFuture' is only needed when enable AQE.
+  @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
+    if (inputRDD.getNumPartitions == 0) {
+      Future.successful(null)
+    } else {
+      sparkContext.submitMapStage(shuffleDependency)
+    }
+  }
+
   /**
    * A [[ShuffleDependency]] that will partition rows of its child based on
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
@@ -83,8 +94,9 @@ case class ShuffleExchangeExec(
     new ShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndices)
   }
 
-  def createLocalShuffleRDD(): LocalShuffledRowRDD = {
-    new LocalShuffledRowRDD(shuffleDependency, readMetrics)
+  def createLocalShuffleRDD(
+      partitionStartIndicesPerMapper: Array[Array[Int]]): LocalShuffledRowRDD = {
+    new LocalShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndicesPerMapper)
   }
 
   /**

@@ -71,7 +71,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
 
   // `ReusedExchangeExec` can have distinct set of output attribute ids from its child, we need
   // to update the attribute ids in `outputPartitioning` and `outputOrdering`.
-  private lazy val updateAttr: Expression => Expression = {
+  private[sql] lazy val updateAttr: Expression => Expression = {
     val originalAttrToNewAttr = AttributeMap(child.output.zip(output))
     e => e.transform {
       case attr: Attribute => originalAttrToNewAttr.getOrElse(attr, attr)

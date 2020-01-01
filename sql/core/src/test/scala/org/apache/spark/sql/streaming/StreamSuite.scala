@@ -19,8 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 
+import scala.concurrent.TimeoutException
 import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
@@ -35,6 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.SimpleMode
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
@@ -42,7 +44,7 @@ import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreCon
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -471,7 +473,7 @@ class StreamSuite extends StreamTest {
     val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
 
     // Test `df.explain`
-    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explain = ExplainCommand(df.queryExecution.logical, SimpleMode)
     val explainString =
       spark.sessionState
         .executePlan(explain)
@@ -523,7 +525,7 @@ class StreamSuite extends StreamTest {
     val df = inputData.toDS().map(_ * 2).filter(_ > 5)
 
     // Test `df.explain`
-    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explain = ExplainCommand(df.queryExecution.logical, SimpleMode)
     val explainString =
       spark.sessionState
         .executePlan(explain)
@@ -755,9 +757,9 @@ class StreamSuite extends StreamTest {
         inputData.addData(9)
         streamingQuery.processAllAvailable()
 
-        QueryTest.checkAnswer(spark.table("counts").toDF(),
-          Row("1", 1) :: Row("2", 1) :: Row("3", 2) :: Row("4", 2) ::
-          Row("5", 2) :: Row("6", 2) :: Row("7", 1) :: Row("8", 1) :: Row("9", 1) :: Nil)
+        checkAnswer(spark.table("counts").toDF(),
+          Row(1, 1L) :: Row(2, 1L) :: Row(3, 2L) :: Row(4, 2L) ::
+          Row(5, 2L) :: Row(6, 2L) :: Row(7, 1L) :: Row(8, 1L) :: Row(9, 1L) :: Nil)
       } finally {
         if (streamingQuery ne null) {
           streamingQuery.stop()
@@ -1124,6 +1126,36 @@ class StreamSuite extends StreamTest {
         lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 2)
       }
     )
+  }
+
+  // ProcessingTime trigger generates MicroBatchExecution, and ContinuousTrigger starts a
+  // ContinuousExecution
+  Seq(Trigger.ProcessingTime("1 second"), Trigger.Continuous("1 second")).foreach { trigger =>
+    test(s"SPARK-30143: stop waits until timeout if blocked - trigger: $trigger") {
+      BlockOnStopSourceProvider.enableBlocking()
+      val sq = spark.readStream.format(classOf[BlockOnStopSourceProvider].getName)
+        .load()
+        .writeStream
+        .format("console")
+        .trigger(trigger)
+        .start()
+      failAfter(60.seconds) {
+        val startTime = System.nanoTime()
+        withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "2000") {
+          intercept[TimeoutException] {
+            sq.stop()
+          }
+        }
+        val duration = (System.nanoTime() - startTime) / 1e6
+        assert(duration >= 2000,
+          s"Should have waited more than 2000 millis, but waited $duration millis")
+
+        BlockOnStopSourceProvider.disableBlocking()
+        withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "0") {
+          sq.stop()
+        }
+      }
+    }
   }
 }
 

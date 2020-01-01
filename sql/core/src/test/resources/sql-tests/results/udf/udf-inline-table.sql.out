@@ -150,4 +150,4 @@ select udf(a), b from values (timestamp('1991-12-06 00:00:00.0'), array(timestam
 -- !query 16 schema
 struct<CAST(udf(cast(a as string)) AS TIMESTAMP):timestamp,b:array<timestamp>>
 -- !query 16 output
-1991-12-06 00:00:00	[1991-12-06 01:00:00.0,1991-12-06 12:00:00.0]
+1991-12-06 00:00:00	[1991-12-06 01:00:00,1991-12-06 12:00:00]

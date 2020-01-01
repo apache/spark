@@ -374,6 +374,10 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "truePositiveRateByLabel",
     ...     evaluator.metricLabel: 1.0})
     0.75...
+    >>> evaluator.setMetricName("hammingLoss")
+    MulticlassClassificationEvaluator...
+    >>> evaluator.evaluate(dataset)
+    0.33...
     >>> mce_path = temp_path + "/mce"
     >>> evaluator.save(mce_path)
     >>> evaluator2 = MulticlassClassificationEvaluator.load(mce_path)
@@ -408,7 +412,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                        "(f1|accuracy|weightedPrecision|weightedRecall|weightedTruePositiveRate|"
                        "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel|"
                        "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel|"
-                       "logLoss)",
+                       "logLoss|hammingLoss)",
                        typeConverter=TypeConverters.toString)
     metricLabel = Param(Params._dummy(), "metricLabel",
                         "The class whose metric will be computed in truePositiveRateByLabel|"

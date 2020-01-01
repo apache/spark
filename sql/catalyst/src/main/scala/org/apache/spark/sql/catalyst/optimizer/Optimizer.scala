@@ -246,7 +246,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
-        val Subquery(newPlan) = Optimizer.this.execute(Subquery(s.plan))
+        val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
         // to this subquery expression. Here we can safely remove any top level sort
         // in the plan as tuples produced by a subquery are un-ordered.
@@ -377,8 +377,8 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     plan match {
       // We want to keep the same output attributes for subqueries. This means we cannot remove
       // the aliases that produce these attributes
-      case Subquery(child) =>
-        Subquery(removeRedundantAliases(child, blacklist ++ child.outputSet))
+      case Subquery(child, correlated) =>
+        Subquery(removeRedundantAliases(child, blacklist ++ child.outputSet), correlated)
 
       // A join has to be treated differently, because the left and the right side of the join are
       // not allowed to use the same attributes. We use a blacklist to prevent us from creating a
@@ -406,7 +406,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 
         // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
         // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
-        // case we use the the first mapping (which should be provided by the first child).
+        // case we use the first mapping (which should be provided by the first child).
         val mapping = AttributeMap(currentNextAttrPairs)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
@@ -1002,12 +1002,11 @@ object EliminateSorts extends Rule[LogicalPlan] {
 
   private def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
     def isOrderIrrelevantAggFunction(func: AggregateFunction): Boolean = func match {
-      case _: Sum => true
-      case _: Min => true
-      case _: Max => true
-      case _: Count => true
-      case _: Average => true
-      case _: CentralMomentAgg => true
+      case _: Min | _: Max | _: Count => true
+      // Arithmetic operations for floating-point values are order-sensitive
+      // (they are not associative).
+      case _: Sum | _: Average | _: CentralMomentAgg =>
+        !Seq(FloatType, DoubleType).exists(_.sameType(func.children.head.dataType))
       case _ => false
     }
 
@@ -1460,7 +1459,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _), _) => af match {
+      case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _, _), _) => af match {
         case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(we.copy(windowFunction = ae.copy(aggregateFunction = Sum(UnscaledValue(e)))),
             prec + 10, scale)
@@ -1474,7 +1473,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 
         case _ => we
       }
-      case ae @ AggregateExpression(af, _, _, _) => af match {
+      case ae @ AggregateExpression(af, _, _, _, _) => af match {
         case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
 
@@ -1507,7 +1506,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Filter(condition, LocalRelation(output, data, isStreaming))
         if !hasUnevaluableExpr(condition) =>
-      val predicate = InterpretedPredicate.create(condition, output)
+      val predicate = Predicate.create(condition, output)
       predicate.initialize(0)
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming)
   }

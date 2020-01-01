@@ -29,7 +29,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
-import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
@@ -974,7 +974,7 @@ class JDBCSuite extends QueryTest
 
   test("test credentials in the properties are not in plan output") {
     val df = sql("SELECT * FROM parts")
-    val explain = ExplainCommand(df.queryExecution.logical, extended = true)
+    val explain = ExplainCommand(df.queryExecution.logical, ExtendedMode)
     spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
     }
@@ -987,7 +987,7 @@ class JDBCSuite extends QueryTest
 
   test("test credentials in the connection url are not in the plan output") {
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
-    val explain = ExplainCommand(df.queryExecution.logical, extended = true)
+    val explain = ExplainCommand(df.queryExecution.logical, ExtendedMode)
     spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
     }
@@ -1009,7 +1009,7 @@ class JDBCSuite extends QueryTest
              | password '$password')
            """.stripMargin)
 
-        val explain = ExplainCommand(df.queryExecution.logical, extended = true)
+        val explain = ExplainCommand(df.queryExecution.logical, ExtendedMode)
         spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach { r =>
           assert(!r.toString.contains(password))
         }
