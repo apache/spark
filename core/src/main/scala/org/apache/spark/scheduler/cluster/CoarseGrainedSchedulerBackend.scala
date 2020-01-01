@@ -198,6 +198,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
 
+      case RemoveWorker(workerId, host, message) =>
+        removeWorker(workerId, host, message)
+
       case LaunchedExecutor(executorId) =>
         executorDataMap.get(executorId).foreach { data =>
           data.freeCores = data.totalCores
@@ -274,10 +277,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case DecommissionExecutor(executorId) =>
         logInfo(s"Received decommission executor message ${executorId}.")
         context.reply(decommissionExecutor(executorId))
-
-      case RemoveWorker(workerId, host, message) =>
-        removeWorker(workerId, host, message)
-        context.reply(true)
 
       case RetrieveSparkAppConfig =>
         val reply = SparkAppConfig(
@@ -553,8 +552,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   protected def removeWorker(workerId: String, host: String, message: String): Unit = {
-    driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).failed.foreach(t =>
-      logError(t.getMessage, t))(ThreadUtils.sameThread)
+    driverEndpoint.send(RemoveWorker(workerId, host, message))
   }
 
   /**

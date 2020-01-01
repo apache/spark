@@ -65,4 +65,4 @@ case class SlaveLost(_message: String = "Slave lost", workerLost: Boolean = fals
  * This is used by the task scheduler to remove state associated with the executor, but
  * not yet fail any tasks that were running in the executor before the executor is "fully" lost.
  */
-private [spark] object WorkerDecommission extends ExecutorLossReason("Worker Decommission.")
+private [spark] object ExecutorDecommission extends ExecutorLossReason("Executor Decommission.")
