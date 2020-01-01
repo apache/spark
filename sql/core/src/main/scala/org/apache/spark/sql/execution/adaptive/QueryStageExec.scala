@@ -164,12 +164,12 @@ case class ShuffleQueryStageExec(
     }
   }
 
-  private def getPartitionIndexRanges(omittedPartitions: Set[Int]): Array[(Int, Int)] = {
-    val length = plan.shuffleDependency.partitioner.numPartitions
+  private def getPartitionIndexRanges(): Array[(Int, Int)] = {
+    val length = shuffle.shuffleDependency.partitioner.numPartitions
     val partitionStartIndices = ArrayBuffer[Int]()
     val partitionEndIndices = ArrayBuffer[Int]()
     (0 until length).map { i =>
-      if (!omittedPartitions.contains(i)) {
+      if (!excludedPartitions.contains(i)) {
         partitionStartIndices += i
         partitionEndIndices += i + 1
       }
@@ -181,8 +181,8 @@ case class ShuffleQueryStageExec(
 
   override def doExecute(): RDD[InternalRow] = {
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = plan.createShuffledRDD(
-        Some(getPartitionIndexRanges(excludedPartitions)))
+      cachedShuffleRDD = shuffle.createShuffledRDD(
+        Some(getPartitionIndexRanges()))
     }
     cachedShuffleRDD
   }

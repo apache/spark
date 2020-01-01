@@ -165,9 +165,9 @@ case class LocalShuffleReaderExec(
     // before shuffle.
     if (partitionStartIndicesPerMapper.forall(_.length == 1)) {
       child match {
-        case ShuffleQueryStageExec(_, s: ShuffleExchangeExec) =>
+        case ShuffleQueryStageExec(_, s: ShuffleExchangeExec, _) =>
           s.child.outputPartitioning
-        case ShuffleQueryStageExec(_, r @ ReusedExchangeExec(_, s: ShuffleExchangeExec)) =>
+        case ShuffleQueryStageExec(_, r @ ReusedExchangeExec(_, s: ShuffleExchangeExec), _) =>
           s.child.outputPartitioning match {
             case e: Expression => r.updateAttr(e).asInstanceOf[Partitioning]
             case other => other

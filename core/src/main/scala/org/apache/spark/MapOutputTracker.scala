@@ -352,10 +352,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    */
   def getMapSizesByRange(
       shuffleId: Int,
-      startPartition: Int,
-      endPartition: Int,
       startMapId: Int,
-      endMapId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
+      endMapId: Int,
+      startPartition: Int,
+      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -753,10 +753,10 @@ private[spark] class MapOutputTrackerMaster(
 
   override def getMapSizesByRange(
        shuffleId: Int,
-       startPartition: Int,
-       endPartition: Int,
        startMapId: Int,
-       endMapId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+       endMapId: Int,
+       startPartition: Int,
+       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
@@ -815,10 +815,10 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
 
   override def getMapSizesByRange(
       shuffleId: Int,
-      startPartition: Int,
-      endPartition: Int,
       startMapId: Int,
-      endMapId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+      endMapId: Int,
+      startPartition: Int,
+      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     val statuses = getStatuses(shuffleId, conf)
     try {
       MapOutputTracker.convertMapStatuses(

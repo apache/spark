@@ -46,9 +46,7 @@ class SkewedShuffledRowRDD(
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
   override def getPartitions: Array[Partition] = {
-    Array.tabulate[Partition](1) { i =>
-      new SkewedShuffledRowRDDPartition(i)
-    }
+    Array(new SkewedShuffledRowRDDPartition(0))
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {

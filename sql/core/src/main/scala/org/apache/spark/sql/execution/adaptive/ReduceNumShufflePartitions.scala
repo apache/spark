@@ -28,8 +28,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 
-import scala.collection.mutable
-
 /**
  * A rule to adjust the post shuffle partitions based on the map output statistics.
  *
@@ -56,7 +54,9 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
     if (!conf.reducePostShufflePartitionsEnabled) {
       return plan
     }
-    if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])) {
+    // we ned skip the leaf node of 'SkewedShufflePartitionReader'
+    val leafNodes = plan.collectLeaves().filter(!_.isInstanceOf[SkewedShufflePartitionReader])
+    if (!leafNodes.forall(_.isInstanceOf[QueryStageExec])) {
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.
@@ -88,12 +88,17 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       // partition) and a result of a SortMergeJoin (multiple partitions).
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
-      if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
-        val excludedPartitions =
-          shuffleStages.head.excludedPartitions
+      val distinctExcludedPartitions = shuffleStages.map(_.excludedPartitions).distinct
+      if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1
+        && distinctExcludedPartitions.length == 1) {
+        val excludedPartitions = shuffleStages.head.excludedPartitions
         val partitionIndices = estimatePartitionStartAndEndIndices(
           validMetrics.toArray, excludedPartitions)
+        // This transformation adds new nodes, so we must use `transformUp` here.
         plan.transformUp {
+          // even for shuffle exchange whose input RDD has 0 partition, we should still update its
+          // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
+          // number of output partitions.
           case stage: ShuffleQueryStageExec =>
             CoalescedShuffleReaderExec(stage, partitionIndices)
         }
@@ -154,19 +159,19 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
     var postShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId(firstStartIndex)).sum
     var i = firstStartIndex
     includedPartitions.drop(1).foreach {
-      nextPartitionIndices =>
+      nextPartitionIndex =>
         var nextShuffleInputSize =
-          mapOutputStatistics.map(_.bytesByPartitionId(nextPartitionIndices)).sum
+          mapOutputStatistics.map(_.bytesByPartitionId(nextPartitionIndex)).sum
         // If nextPartitionIndices is skewed and omitted, or including
         // the nextShuffleInputSize would exceed the target partition size,
         // then start a new partition.
-        if (nextPartitionIndices != i + 1 ||
+        if (nextPartitionIndex != i + 1 ||
           (postShuffleInputSize + nextShuffleInputSize > targetPostShuffleInputSize)) {
           partitionEndIndices += i + 1
-          partitionStartIndices += nextPartitionIndices
+          partitionStartIndices += nextPartitionIndex
           // reset postShuffleInputSize.
           postShuffleInputSize = nextShuffleInputSize
-          i = nextPartitionIndices
+          i = nextPartitionIndex
         } else {
           postShuffleInputSize += nextShuffleInputSize
           i += 1
