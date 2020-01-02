@@ -48,11 +48,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
 
   private def addCase(benchmark: Benchmark, name: String, sql: String): Unit = {
     benchmark.addCase(name) { _ =>
-      spark.sql(sql)
-        .write
-        .format("noop")
-        .mode(Overwrite)
-        .save()
+      spark.sql(sql).noop()
     }
   }
 
