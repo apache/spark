@@ -57,7 +57,7 @@ public class OneForOneStreamManager extends StreamManager {
     int curChunk = 0;
 
     // Used to keep track of the number of chunks being transferred and not finished yet.
-    volatile AtomicLong chunksBeingTransferred = new AtomicLong(0L);
+    final AtomicLong chunksBeingTransferred = new AtomicLong(0L);
 
     StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
       this.appId = appId;
