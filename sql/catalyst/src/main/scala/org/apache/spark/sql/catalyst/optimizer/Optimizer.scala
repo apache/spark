@@ -980,15 +980,25 @@ object EliminateSorts extends Rule[LogicalPlan] {
       if (newOrders.isEmpty) child else s.copy(order = newOrders)
     case Sort(orders, true, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
       child
-    case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
+    case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(s, child))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
       j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))
     case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
       g.copy(child = recursiveRemoveSort(originChild))
   }
 
+  private def recursiveRemoveSort(parent: Sort, plan: LogicalPlan): LogicalPlan = plan match {
+    case s @ Sort(_, _, child) =>
+      if (parent.global == s.global) {
+        recursiveRemoveSort(child)
+      } else {
+        s.copy(child = recursiveRemoveSort(child))
+      }
+    case _ => recursiveRemoveSort(plan)
+  }
+
   private def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = plan match {
-    case Sort(_, _, child) => recursiveRemoveSort(child)
+    case s @ Sort(_, _, child) => recursiveRemoveSort(s, child)
     case other if canEliminateSort(other) =>
       other.withNewChildren(other.children.map(recursiveRemoveSort))
     case _ => plan

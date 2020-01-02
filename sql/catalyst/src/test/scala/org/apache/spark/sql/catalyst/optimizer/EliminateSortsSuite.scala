@@ -308,4 +308,11 @@ class EliminateSortsSuite extends PlanTest {
     val correctAnswer = PushDownOptimizer.execute(noOrderByPlan.analyze)
     comparePlans(optimized, correctAnswer)
   }
+
+  test("should not remove orderBy in sortBy clause") {
+    val plan = testRelation.orderBy('a.asc).sortBy('b.desc)
+    val optimized = Optimize.execute(plan.analyze)
+    val correctAnswer = testRelation.orderBy('a.asc).sortBy('b.desc).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
