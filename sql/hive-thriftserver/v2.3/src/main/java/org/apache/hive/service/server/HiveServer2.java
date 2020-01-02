@@ -161,9 +161,6 @@ public class HiveServer2 extends CompositeService {
 
     HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG);
 
-    // Log debug message from "oproc" after log4j initialize properly
-    LOG.debug(oproc.getDebugMessage().toString());
-
     // Call the executor which will execute s  appropriate command based on the parsed options
     oprocResponse.getServerOptionsExecutor().execute();
   }
