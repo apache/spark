@@ -52,14 +52,18 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
   }
 }
 
-object ReplaceNonCorrelatedExists extends Rule[LogicalPlan] {
+/**
+ * Rewrite non correlated exists subquery to use ScalarSubquery
+ *   WHERE EXISTS ( SELECT A FROM TABLE B WHERE COL1 > 10)
+ * will be rewrite to
+ *   WHERE (SELECT A FROM TABLE B WHERE COL1 > 1 LIMIT 1) IS NOT NULL
+ */
+object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case exists: Exists
-      if !SubqueryExpression.hasInOrCorrelatedExistsSubquery(exists) =>
+    case exists: Exists if exists.children.isEmpty &&
+      !SubqueryExpression.hasInOrCorrelatedExistsSubquery(exists) =>
       IsNotNull(
-        ScalarSubquery(
-          plan = Limit(Literal(1, IntegerType), exists.plan),
-          exprId = exists.exprId))
+        ScalarSubquery(plan = Limit(Literal(1), exists.plan), exprId = exists.exprId))
   }
 }
 
