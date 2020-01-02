@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -514,4 +516,104 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   }
 
   override def prettyName: String = "str_to_map"
+}
+
+/**
+ * Adds/replaces fields in struct by name in given order.
+ *
+ * @param children Seq(struct, name1, val1, name2, val2, ...)
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(struct, name1, val1, name2, val2, ...) - Adds/replaces fields in struct by name in given order.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(NAMED_STRUCT("a", 1, "b", 2), "c", 3);
+       {"a":1,"b":2,"c":3}
+      > SELECT _FUNC_(NAMED_STRUCT("a", 1, "b", 2), "b", 3);
+       {"a":1,"b":3}
+      > SELECT _FUNC_(CAST(NULL AS struct<a:int,b:int>), "c", 3);
+       {"a":null,"b":null,"c":3}
+      > SELECT _FUNC_(a, 'b', 100) AS a FROM (VALUES (NAMED_STRUCT('a', 1, 'b', 2, 'b', 3)) AS T(a));
+       {"a":1,"b":100,"b":100}
+      > SELECT _FUNC_(a, 'a', _FUNC_(a.a, 'c', 3)) AS a FROM (VALUES (NAMED_STRUCT('a', NAMED_STRUCT('a', 1, 'b', 2))) AS T(a));
+       {"a":{"a":1,"b":2,"c":3}}
+  """)
+// scalastyle:on line.size.limit
+case class WithFields(children: Seq[Expression]) extends Unevaluable {
+
+  private lazy val structExpr = children.head
+  private lazy val structType = structExpr.dataType.asInstanceOf[StructType]
+  private lazy val (nameExprs, valExprs) = children.drop(1).grouped(2).map {
+    case Seq(name, value) => (name, value)
+  }.toList.unzip
+  private lazy val names = nameExprs.map(e => e.eval().toString)
+  private lazy val addOrReplaceExprs = names.zip(valExprs)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val expectedStructType = StructType(Nil).typeName
+    if (children.size % 2 == 0) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an odd number of arguments.")
+    } else if (structExpr.dataType.typeName != expectedStructType) {
+      TypeCheckResult.TypeCheckFailure(
+        s"Only $expectedStructType is allowed to appear at first position, got: " +
+          s"${structExpr.dataType.typeName}.")
+    } else if (!nameExprs.forall(e => e.foldable && e.dataType == StringType)) {
+      TypeCheckResult.TypeCheckFailure(
+        s"Only foldable ${StringType.catalogString} expressions are allowed to appear at odd " +
+          "position.")
+    } else if (names.contains(null)) {
+      TypeCheckResult.TypeCheckFailure("Field name should not be null.")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def dataType: StructType = {
+    val existingStructFields: Seq[(String, StructField)] = structType.fields.map { f =>
+      (f.name, f.copy(nullable = structExpr.nullable || f.nullable))
+    }
+    val addOrReplaceStructFields: Seq[(String, StructField)] = addOrReplaceExprs.map {
+      case (name, expr) => (name, StructField(name, expr.dataType, expr.nullable))
+    }
+    StructType(addOrReplace(existingStructFields, addOrReplaceStructFields).map(_._2))
+  }
+
+  override def foldable: Boolean = structExpr.foldable && valExprs.forall(_.foldable)
+
+  override def nullable: Boolean = false
+
+  override def prettyName: String = "with_fields"
+
+  def toCreateNamedStruct: CreateNamedStruct = {
+    val existingExprs = structType.fieldNames.zipWithIndex.map {
+      case (name, i) => (name, GetStructField(structExpr, i, Some(name)))
+    }
+    val newExprs = addOrReplace(existingExprs, addOrReplaceExprs).flatMap {
+      case (name, valExpr) => Seq(Literal(name), valExpr)
+    }
+    CreateNamedStruct(newExprs)
+  }
+
+  private def formatCase(s: String): String =
+    if (SQLConf.get.caseSensitiveAnalysis) s else s.toLowerCase(Locale.ROOT)
+
+  private lazy val existingFieldNames = structType.fieldNames.map(formatCase).toSet
+
+  private def addOrReplace[T](
+    existingFields: Seq[(String, T)],
+    addOrReplaceFields: Seq[(String, T)]): Seq[(String, T)] = {
+
+    addOrReplaceFields.foldLeft(existingFields) {
+      case (resultFields, newField @ (newFieldName, _)) =>
+        if (existingFieldNames.contains(formatCase(newFieldName))) {
+          resultFields.map {
+            case (name, _) if formatCase(name) == formatCase(newFieldName) => newField
+            case x => x
+          }
+        } else {
+          resultFields :+ newField
+        }
+    }
+  }
 }
