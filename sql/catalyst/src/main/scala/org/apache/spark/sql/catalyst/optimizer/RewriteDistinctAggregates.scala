@@ -387,8 +387,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           case (ae @ AggregateExpression(af, _, _, filter, _), i) =>
             val phantomId = i + 1
             val unfoldableChildren = af.children.filter(!_.foldable)
-            val exprAttrs = unfoldableChildren.map { c =>
-              (c, AttributeReference(s"phantom$phantomId-${c.sql}", c.dataType, c.nullable)())
+            val exprAttrs = unfoldableChildren.map { e =>
+              (e, AttributeReference(s"phantom$phantomId-${e.sql}", e.dataType, nullable = true)())
             }
             val exprAttrLookup = exprAttrs.toMap
             val newChildren = af.children.map(c => exprAttrLookup.getOrElse(c, c))
@@ -396,7 +396,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val aggExpr = ae.copy(aggregateFunction = raf, filter = None)
             // Expand projection
             val projection = unfoldableChildren.map {
-              case e if filter.isDefined => If(filter.get, e, Literal.create(null, e.dataType))
+              case e if filter.isDefined => If(filter.get, e, nullify(e))
               case e => e
             }
             (projection, exprAttrs, (ae, aggExpr))

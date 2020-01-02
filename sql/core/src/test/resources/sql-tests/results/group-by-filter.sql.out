@@ -99,7 +99,7 @@ SELECT COUNT(DISTINCT id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:
 -- !query 9 schema
 struct<count(DISTINCT id):bigint>
 -- !query 9 output
-3
+2
 
 
 -- !query 10
@@ -191,11 +191,11 @@ SELECT dept_id, SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-M
 struct<dept_id:int,sum(DISTINCT salary):double>
 -- !query 17 output
 10	300.0
-100	399.0
+100	400.0
 20	300.0
 30	400.0
 70	150.0
-NULL	-1.0
+NULL	NULL
 
 
 -- !query 18
