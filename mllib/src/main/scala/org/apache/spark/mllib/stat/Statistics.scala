@@ -48,14 +48,15 @@ object Statistics {
   }
 
   /**
-   * Computes required column-wise summary statistics for the input RDD[Vector].
+   * Computes required column-wise summary statistics for the input RDD[(Vector, Double)].
    *
-   * @param X an RDD[Vector] for which column-wise summary statistics are to be computed.
+   * @param X an RDD containing vectors and weights for which column-wise summary statistics
+   *          are to be computed.
    * @return [[SummarizerBuffer]] object containing column-wise summary statistics.
    */
-  private[mllib] def colStats(X: RDD[Vector], requested: Seq[String]) = {
+  private[mllib] def colStats(X: RDD[(Vector, Double)], requested: Seq[String]) = {
     X.treeAggregate(createSummarizerBuffer(requested: _*))(
-      seqOp = { case (c, v) => c.add(v.nonZeroIterator, v.size, 1.0) },
+      seqOp = { case (c, (v, w)) => c.add(v.nonZeroIterator, v.size, w) },
       combOp = { case (c1, c2) => c1.merge(c2) },
       depth = 2
     )

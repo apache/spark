@@ -55,7 +55,7 @@ class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) exten
   @Since("1.1.0")
   def fit(data: RDD[Vector]): StandardScalerModel = {
     // TODO: skip computation if both withMean and withStd are false
-    val summary = Statistics.colStats(data, Seq("mean", "std"))
+    val summary = Statistics.colStats(data.map((_, 1.0)), Seq("mean", "std"))
 
     new StandardScalerModel(
       Vectors.fromML(summary.std),

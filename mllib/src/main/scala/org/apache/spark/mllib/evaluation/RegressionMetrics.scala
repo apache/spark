@@ -19,8 +19,8 @@ package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.stat.SummaryBuilderImpl._
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -60,16 +60,14 @@ class RegressionMetrics @Since("2.0.0") (
    * Use SummarizerBuffer to calculate summary statistics of observations and errors.
    */
   private lazy val summary = {
-    predictionAndObservations.map {
+    val weightedVectors = predictionAndObservations.map {
       case (prediction: Double, observation: Double, weight: Double) =>
         (Vectors.dense(observation, observation - prediction, prediction), weight)
       case (prediction: Double, observation: Double) =>
         (Vectors.dense(observation, observation - prediction, prediction), 1.0)
-    }.treeAggregate(createSummarizerBuffer("mean", "normL1", "normL2", "variance"))(
-      seqOp = { case (c, (v, w)) => c.add(v.nonZeroIterator, v.size, w) },
-      combOp = { case (c1, c2) => c1.merge(c2) },
-      depth = 2
-    )
+    }
+    Statistics.colStats(weightedVectors,
+      Seq("mean", "normL1", "normL2", "variance"))
   }
 
   private lazy val SSy = math.pow(summary.normL2(0), 2)

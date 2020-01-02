@@ -433,7 +433,7 @@ class RowMatrix @Since("1.0.0") (
     val n = numCols().toInt
     checkNumColumns(n)
 
-    val summary = Statistics.colStats(rows, Seq("count", "mean"))
+    val summary = Statistics.colStats(rows.map((_, 1.0)), Seq("count", "mean"))
     val m = summary.count
     require(m > 1, s"RowMatrix.computeCovariance called on matrix with only $m rows." +
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
@@ -616,7 +616,7 @@ class RowMatrix @Since("1.0.0") (
       10 * math.log(numCols()) / threshold
     }
 
-    val summary = Statistics.colStats(rows, Seq("normL2"))
+    val summary = Statistics.colStats(rows.map((_, 1.0)), Seq("normL2"))
     columnSimilaritiesDIMSUM(summary.normL2.toArray, gamma)
   }
 
