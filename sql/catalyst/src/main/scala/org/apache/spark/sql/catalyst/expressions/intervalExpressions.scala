@@ -116,12 +116,10 @@ abstract class IntervalNumOperation(
     operation: (CalendarInterval, Double) => CalendarInterval,
     operationName: String)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
-
   override def left: Expression = interval
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DoubleType)
-
   override def dataType: DataType = CalendarIntervalType
 
   override def nullable: Boolean = true

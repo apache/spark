@@ -438,7 +438,6 @@ object IntervalUtils {
    * Return a new calendar interval instance of the sum of two intervals.
    *
    * @throws ArithmeticException if the result overflows any field value
-   *
    */
   def addExact(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
     val months = Math.addExact(left.months, right.months)
