@@ -106,21 +106,29 @@ public class OneForOneStreamManagerSuite {
     Mockito.when(buffers.hasNext()).thenReturn(true);
     Mockito.when(buffers.next()).thenThrow(RuntimeException.class);
 
+    ManagedBuffer mockManagedBuffer = Mockito.mock(ManagedBuffer.class);
+
+    Iterator<ManagedBuffer> buffers2 = Mockito.mock(Iterator.class);
+    Mockito.when(buffers2.hasNext()).thenReturn(true).thenReturn(true);
+    Mockito.when(buffers2.next()).thenReturn(mockManagedBuffer).thenThrow(RuntimeException.class);
+
     Channel dummyChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
     manager.registerStream("appId", buffers, dummyChannel);
-    manager.registerStream("appId", buffers, dummyChannel);
+    manager.registerStream("appId", buffers2, dummyChannel);
 
     Assert.assertEquals(2, manager.numStreamStates());
 
-    try {
-      manager.connectionTerminated(dummyChannel);
-      Assert.fail("connectionTerminated should throws RuntimeException in buffers.next()");
-    } catch (RuntimeException e) {
-      Mockito.verify(buffers, Mockito.times(1)).hasNext();
-      Mockito.verify(buffers, Mockito.times(1)).next();
+    manager.connectionTerminated(dummyChannel);
 
-      Assert.assertEquals(0, manager.numStreamStates());
-    }
+    Mockito.verify(buffers, Mockito.times(1)).hasNext();
+    Mockito.verify(buffers, Mockito.times(1)).next();
+
+    Mockito.verify(buffers2, Mockito.times(2)).hasNext();
+    Mockito.verify(buffers2, Mockito.times(2)).next();
+
+    Mockito.verify(mockManagedBuffer, Mockito.times(1)).release();
+
+    Assert.assertEquals(0, manager.numStreamStates());
   }
 
 }

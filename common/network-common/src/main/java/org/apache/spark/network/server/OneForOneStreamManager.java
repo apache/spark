@@ -129,11 +129,15 @@ public class OneForOneStreamManager extends StreamManager {
 
     for (StreamState state: removedStates) {
       // Release all remaining buffers.
-      while (state.buffers.hasNext()) {
-        ManagedBuffer buffer = state.buffers.next();
-        if (buffer != null) {
-          buffer.release();
+      try {
+        while (state.buffers.hasNext()) {
+          ManagedBuffer buffer = state.buffers.next();
+          if (buffer != null) {
+            buffer.release();
+          }
         }
+      } catch (RuntimeException e) {
+        logger.error("Exception trying to release remaining StreamState buffers", e);
       }
     }
   }
