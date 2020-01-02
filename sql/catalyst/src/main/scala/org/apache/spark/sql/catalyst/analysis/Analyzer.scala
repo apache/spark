@@ -721,16 +721,7 @@ class Analyzer(
     }
   }
 
-  // If we are resolving relations insides views (i.e. `AnalysisContext.catalogAndNamespace` is not
-  // empty), we need to expand single-part relation names with the current catalog and namespace of
-  // when the view was created.
-  private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
-    if (nameParts.length == 1 && AnalysisContext.get.catalogAndNamespace.nonEmpty) {
-      AnalysisContext.get.catalogAndNamespace :+ nameParts.head
-    } else {
-      nameParts
-    }
-  }
+  private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
 
   /**
    * Resolve relations to temp views. This is not an actual rule, and is called by
@@ -746,12 +737,30 @@ class Analyzer(
           .getOrElse(i)
     }
 
-    def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] =
-      expandRelationName(identifier) match {
+    def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
+      // Permanent View can't refer to temp views, no need to lookup at all.
+      if (isResolvingView) return None
+
+      identifier match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
         case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
         case _ => None
       }
+    }
+  }
+
+  // If we are resolving relations insides views, we need to expand single-part relation names with
+  // the current catalog and namespace of when the view was created.
+  private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
+    if (!isResolvingView) return nameParts
+
+    if (nameParts.length == 1) {
+      AnalysisContext.get.catalogAndNamespace :+ nameParts.head
+    } else if (catalogManager.isCatalogRegistered(nameParts.head)) {
+      nameParts
+    } else {
+      AnalysisContext.get.catalogAndNamespace.head +: nameParts
+    }
   }
 
   /**
