@@ -48,7 +48,7 @@ class ExecutorResourceRequests(object):
         self._javaExecutorResourceRequests.cores(amount)
         return self
 
-    def resource(self, resourceName, amount, discoveryScript = None, vendor = None):
+    def resource(self, resourceName, amount, discoveryScript="", vendor=""):
         self._javaExecutorResourceRequests.resource(resourceName, amount, discoveryScript, vendor)
         return self
 
