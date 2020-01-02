@@ -113,9 +113,6 @@ object ExtractIntervalPart {
 abstract class IntervalNumOperation(interval: Expression, num: Expression, operationName: String)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
 
-  protected val methodStr: String =
-    IntervalUtils.getClass.getName.stripSuffix("$") + "." + operationName + "Exact"
-
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -125,41 +122,39 @@ abstract class IntervalNumOperation(interval: Expression, num: Expression, opera
 
   override def nullable: Boolean = true
 
+  override def nullSafeEval(interval: Any, num: Any): Any = operationName match {
+    case "multiply" =>
+      multiplyExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+    case "divide" =>
+      if (num == 0) return null
+      divideExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val methodStr: String =
+      IntervalUtils.getClass.getName.stripSuffix("$") + "." + operationName + "Exact"
+    operationName match {
+      case "multiply" => defineCodeGen(ctx, ev, (interval, num) => s"$methodStr($interval, $num)")
+      case "divide" => nullSafeCodeGen(ctx, ev, (interval, num) => {
+        s"""
+           |if ($num == 0) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  ${ev.value} = $methodStr($interval, $num);
+           |}
+           |""".stripMargin
+      })
+    }
+  }
+
   override def prettyName: String = operationName + "_interval"
 }
 
 case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, "multiply") {
-
-  override def nullSafeEval(interval: Any, num: Any): Any = {
-    multiplyExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (interval, num) => s"$methodStr($interval, $num)")
-  }
-}
+  extends IntervalNumOperation(interval, num, "multiply")
 
 case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, "divide") {
-
-  override def nullSafeEval(interval: Any, num: Any): Any = {
-    if (num == 0) return null
-    divideExact(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (interval, num) => {
-      s"""
-         |if ($num == 0) {
-         |  ${ev.isNull} = true;
-         |} else {
-         |  ${ev.value} = $methodStr($interval, $num);
-         |}
-         |""".stripMargin
-    })
-  }
-}
+  extends IntervalNumOperation(interval, num, "divide")
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(

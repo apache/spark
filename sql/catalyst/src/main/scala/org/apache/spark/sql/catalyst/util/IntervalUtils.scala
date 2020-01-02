@@ -429,7 +429,6 @@ object IntervalUtils {
 
   /**
    * Unary minus, return the negated the calendar interval value.
-   *
    */
   def negate(interval: CalendarInterval): CalendarInterval = {
     new CalendarInterval(-interval.months, -interval.days, -interval.microseconds)
@@ -462,7 +461,6 @@ object IntervalUtils {
    * Return a new calendar interval instance of the left interval minus the right one.
    *
    * @throws ArithmeticException if the result overflows any field value
-   *
    */
   def subtractExact(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
     val months = Math.subtractExact(left.months, right.months)
