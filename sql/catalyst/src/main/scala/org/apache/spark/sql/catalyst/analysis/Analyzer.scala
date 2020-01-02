@@ -816,6 +816,33 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
+    // The current catalog and namespace may be different from when the view was created, we must
+    // resolve the view logical plan here, with the catalog and namespace stored in view metadata.
+    // This is done by keeping the catalog and namespace in `AnalysisContext`, and analyzer will
+    // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
+    // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
+    // with it, instead of current catalog and namespace.
+    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
+      // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
+      // `viewText` should be defined, or else we throw an error on the generation of the View
+      // operator.
+      case view @ View(desc, _, child) if !child.resolved =>
+        // Resolve all the UnresolvedRelations and Views in the child.
+        val newChild = AnalysisContext.withAnalysisContext(desc.viewCatalogAndNamespace) {
+          if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
+            view.failAnalysis(s"The depth of view ${desc.identifier} exceeds the maximum " +
+              s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
+              s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
+              "around this.")
+          }
+          executeSameContext(child)
+        }
+        view.copy(child = newChild)
+      case p @ SubqueryAlias(_, view: View) =>
+        p.copy(child = resolveViews(view))
+      case _ => plan
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
         val relation = table match {
@@ -832,35 +859,6 @@ class Analyzer(
 
       case u: UnresolvedRelation =>
         lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
-    }
-
-    // The current catalog and namespace may be different from when the view was created, we must
-    // resolve the view logical plan here, with the catalog and namespace stored in view metadata.
-    // This is done by keeping the catalog and namespace in `AnalysisContext`, and analyzer will
-    // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
-    // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
-    // with it, instead of current catalog and namespace.
-    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
-      case p @ SubqueryAlias(_, view: View) =>
-        p.copy(child = resolveViews(view))
-
-      // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
-      // `viewText` should be defined, or else we throw an error on the generation of the View
-      // operator.
-      case view @ View(desc, _, child) if !child.resolved =>
-        // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(desc.viewCatalogAndNamespace) {
-          if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
-            view.failAnalysis(s"The depth of view ${desc.identifier} exceeds the maximum " +
-              s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
-              s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
-              "around this.")
-          }
-          executeSameContext(child)
-        }
-        view.copy(child = newChild)
-
-      case _ => plan
     }
 
     // Look up a relation from the session catalog with the following logic:
