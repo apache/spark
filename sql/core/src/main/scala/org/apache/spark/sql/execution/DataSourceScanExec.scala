@@ -156,6 +156,7 @@ case class RowDataSourceScanExec(
  * @param optionalBucketSet Bucket ids for bucket pruning
  * @param dataFilters Filters on non-partition columns.
  * @param tableIdentifier identifier for the table in the metastore.
+ * @param translateCast whether to translate filter with [[Cast]]
  */
 case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
@@ -164,7 +165,8 @@ case class FileSourceScanExec(
     partitionFilters: Seq[Expression],
     optionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
-    override val tableIdentifier: Option[TableIdentifier])
+    override val tableIdentifier: Option[TableIdentifier],
+    translateCast: Boolean = false)
   extends DataSourceScanExec {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -325,7 +327,8 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private lazy val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
+  private lazy val pushedDownFilters =
+    dataFilters.flatMap(DataSourceStrategy.translateFilter(_, translateCast))
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")

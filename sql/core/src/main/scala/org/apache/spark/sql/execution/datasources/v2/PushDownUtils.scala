@@ -45,12 +45,27 @@ object PushDownUtils extends PredicateHelper {
         val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
+        // Catalyst filter expression which has Cast expression that wraps a column. Translate
+        // a filter with cast may can't return a specific filter(e.g. cast as deicmal). So, these
+        // filters must append to post-scan filters in order to match final rows.
+        val filterWithCastExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- filters) {
           val translated =
             DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr))
           if (translated.isEmpty) {
-            untranslatableExprs += filterExpr
+            if (SQLConf.get.translateFilterWithCast) {
+              val castTranslated = DataSourceStrategy.translateFilterWithMapping(
+                filterExpr, Some(translatedFilterToExpr), translateCast = true)
+              if (castTranslated.isEmpty) {
+                untranslatableExprs += filterExpr
+              } else {
+                translatedFilters += castTranslated.get
+                filterWithCastExprs += filterExpr
+              }
+            } else {
+              untranslatableExprs += filterExpr
+            }
           } else {
             translatedFilters += translated.get
           }
@@ -61,12 +76,12 @@ object PushDownUtils extends PredicateHelper {
         // As a result we must return it so Spark can plan an extra filter operator.
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
-        }
+        }.diff(filterWithCastExprs)
         // The filters which are marked as pushed to this data source
         val pushedFilters = r.pushedFilters().map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        (pushedFilters, untranslatableExprs ++ postScanFilters)
+        (pushedFilters, untranslatableExprs ++ filterWithCastExprs ++ postScanFilters)
 
       case _ => (Nil, filters)
     }

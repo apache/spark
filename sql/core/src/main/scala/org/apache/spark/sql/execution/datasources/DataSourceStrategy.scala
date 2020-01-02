@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{Decimal, _}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -444,6 +444,322 @@ object DataSourceStrategy {
     }
   }
 
+  private def roundDecimal(
+      value: Decimal,
+      originalType: DecimalType,
+      roundType: DecimalType,
+      roundMode: BigDecimal.RoundingMode.Value): Option[Decimal] = {
+    try {
+      // don't change original value since it will be used in post-scan filter
+      val cloneValue = value.clone()
+      if (cloneValue.changePrecision(roundType.precision, roundType.scale, roundMode)) {
+        Some(cloneValue)
+      } else {
+        None
+      }
+    } catch {
+      case _: ArithmeticException =>
+        None
+    }
+  }
+
+  private def translateCastFromDecimalInEqualTo(name: String, from: DecimalType, l: Literal)
+    : Option[Filter] = {
+    (l.value, l.dataType) match {
+      case (isTrue: Boolean, _) =>
+        val zero = Decimal.ZERO
+        roundDecimal(zero, DecimalType(1, 0), from, Decimal.ROUND_UNNECESSARY)
+          .map { d =>
+            val equalTo = sources.EqualTo(name, convertToScala(d, from))
+            if (isTrue) {
+              sources.Not(equalTo)
+            } else {
+              equalTo
+            }
+          }
+
+      case (v: UTF8String, _) =>
+        val value = Decimal(BigDecimal(v.toString.trim))
+        val dataType = Literal(value).dataType.asInstanceOf[DecimalType]
+        // TODO may handle cases like '1.0E+7', '123.000'
+        // Note that we can't lost any significant scale info for a String comparison.
+        // For example, assuming there's a Filter(Cast(d as string) = '123.456'), where
+        // the type of column d is DecimalType(5, 2). So, rounding '123.456' to decimal
+        // value 123.46 to push down is meaningless.
+        roundDecimal(value, dataType, from, Decimal.ROUND_UNNECESSARY)
+          .map(d => sources.EqualTo(name, convertToScala(d, from)))
+          .orElse(Some(sources.AlwaysFalse))
+
+      case (v: Long, _: TimestampType) =>
+        // cast Timestamp to Decimal will lose precision, so we should filter a range
+        // of values instead of a precision lost value to avoid wrong result at the end.
+        val value = Cast(Literal(v, TimestampType), from).eval().asInstanceOf[Decimal]
+        translateCastFromDecimalInEqualTo(name, from, Literal(value.toLong))
+
+      case (v: Decimal, t: DecimalType) =>
+        roundDecimal(v, t, from, Decimal.ROUND_UNNECESSARY)
+          .map(d => sources.EqualTo(name, convertToScala(d, from)))
+
+      case (v: Any, t: IntegralType) =>
+        val value = t.integral.asInstanceOf[Integral[Any]].toLong(v)
+        if (value == Long.MaxValue) {
+          val target = Decimal(value)
+          val dataType = Literal(target).dataType.asInstanceOf[DecimalType]
+          roundDecimal(target, dataType, from, Decimal.ROUND_UNNECESSARY)
+            .map(d => sources.EqualTo(name, convertToScala(d, from)))
+        } else {
+          val lowerBound = Decimal(value)
+          val upperBound = Decimal(value + 1)
+          val dataType = Literal(lowerBound).dataType.asInstanceOf[DecimalType]
+          for {
+            lower <- roundDecimal(lowerBound, dataType, from, Decimal.ROUND_UNNECESSARY)
+            upper <- roundDecimal(upperBound, dataType, from, Decimal.ROUND_UNNECESSARY)
+          } yield sources.And(sources.GreaterThanOrEqual(name, convertToScala(lower, from)),
+            sources.LessThan(name, convertToScala(upper, from)))
+        }
+
+      case (v: Any, t: FractionalType) =>
+        val value = Decimal(t.fractional.asInstanceOf[Fractional[Any]].toDouble(v))
+        translateCastFromDecimalInEqualTo(name, from, Literal(value))
+
+      case _ => None
+    }
+  }
+
+  // TODO handle UTF8StringType
+  private def translateCastFromDecimalInGreaterThan(name: String, from: DecimalType, l: Literal)
+    : Option[Filter] = {
+    (l.value, l.dataType) match {
+      case (isTrue: Boolean, _) =>
+        if (isTrue) {
+          // Zero is casted as false while other values are casted as true in Spark,
+          // so no values can be greater than true.
+          Some(sources.AlwaysFalse)
+        } else {
+          val zero = Decimal.ZERO
+          roundDecimal(zero, DecimalType(1, 0), from, Decimal.ROUND_UNNECESSARY)
+            .map( d => sources.Not(sources.EqualTo(name, convertToScala(d, from))))
+        }
+
+      case (v: Long, _: TimestampType) =>
+        val value = Cast(Literal(v, TimestampType), from).eval().asInstanceOf[Decimal]
+        roundDecimal(value, from, from, Decimal.ROUND_CEILING)
+          .map(d => sources.GreaterThanOrEqual(name, convertToScala(d, from)))
+
+      case (v: Decimal, t: DecimalType) =>
+        roundDecimal(v, t, from, Decimal.ROUND_CEILING)
+          .map { d =>
+            if (d == l.value) {
+              sources.GreaterThan(name, convertToScala(d, from))
+            } else {
+              sources.GreaterThanOrEqual(name, convertToScala(d, from))
+            }
+          }
+
+      case (v: Any, t: IntegralType) =>
+        val value = Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(v))
+        val dataType = Literal(value).dataType.asInstanceOf[DecimalType]
+        roundDecimal(value, dataType, from, Decimal.ROUND_UNNECESSARY)
+          .map(d => sources.GreaterThan(name, convertToScala(d, from)))
+
+      case (v: Any, t: FractionalType) =>
+        val value = Decimal(t.fractional.asInstanceOf[Fractional[Any]].toDouble(v))
+        val dataType = Literal(value).dataType.asInstanceOf[DecimalType]
+        roundDecimal(value, dataType, from, Decimal.ROUND_CEILING)
+          .map(d => sources.GreaterThanOrEqual(name, convertToScala(d, from)))
+
+      case _ => None
+    }
+  }
+
+  private def translateCastFromDecimalInGreaterThanOrEqual(
+      name: String,
+      from: DecimalType,
+      l: Literal)
+    : Option[Filter] = {
+    (l.value, l.dataType) match {
+      case (isTrue: Boolean, _) =>
+        val zero = Decimal.ZERO
+        if (isTrue) {
+          roundDecimal(zero, DecimalType(1, 0), from, Decimal.ROUND_UNNECESSARY)
+            .map( d => sources.Not(sources.EqualTo(name, convertToScala(d, from))))
+        } else {
+          Some(sources.AlwaysTrue)
+        }
+
+      case (v: Long, _: TimestampType) =>
+        val value = Cast(Literal(v, TimestampType), from).eval().asInstanceOf[Decimal]
+        roundDecimal(value, from, from, Decimal.ROUND_CEILING)
+          .map(d => sources.GreaterThanOrEqual(name, convertToScala(d, from)))
+
+      case (d: Decimal, t: DecimalType) =>
+        roundDecimal(d, t, from, Decimal.ROUND_CEILING)
+          .map(d => sources.GreaterThanOrEqual(name, convertToScala(d, from)))
+
+      case (v: Any, t: IntegralType) =>
+        val value = Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(v))
+        val dataType = Literal(value).dataType.asInstanceOf[DecimalType]
+        roundDecimal(value, dataType, from, Decimal.ROUND_UNNECESSARY)
+          .map(d => sources.GreaterThanOrEqual(name, convertToScala(d, from)))
+
+      case (v: Any, t: FractionalType) =>
+        val value = Decimal(t.fractional.asInstanceOf[Fractional[Any]].toDouble(v))
+        val dataType = Literal(value).dataType.asInstanceOf[DecimalType]
+        roundDecimal(value, dataType, from, Decimal.ROUND_CEILING)
+          .map(d => sources.GreaterThanOrEqual(name, convertToScala(d, from)))
+
+      case _ => None
+    }
+  }
+
+  private def translateCastFromDecimalInLessThan(name: String, from: DecimalType, l: Literal)
+    : Option[Filter] = {
+    (l.value, l.dataType) match {
+      case (isTrue: Boolean, _) =>
+        if (isTrue) {
+          val zero = Decimal.ZERO
+          roundDecimal(zero, DecimalType(1, 0), from, Decimal.ROUND_UNNECESSARY)
+            .map( d => sources.EqualTo(name, convertToScala(d, from)))
+        } else {
+          Some(sources.AlwaysFalse)
+        }
+
+      case (v: Long, _: TimestampType) =>
+        val value = Cast(Literal(v, TimestampType), from).eval().asInstanceOf[Decimal]
+        roundDecimal(value, from, from, Decimal.ROUND_FLOOR)
+          .map(d => sources.LessThanOrEqual(name, convertToScala(d, from)))
+
+      case (d: Decimal, t: DecimalType) =>
+        roundDecimal(d, t, from, Decimal.ROUND_FLOOR)
+          .map { d =>
+            if (d == l.value) {
+              sources.LessThan(name, convertToScala(d, from))
+            } else {
+              sources.LessThanOrEqual(name, convertToScala(d, from))
+            }
+          }
+
+      case (v: Any, t: IntegralType) =>
+        val value = Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(v))
+        val dataType = Literal(value).dataType.asInstanceOf[DecimalType]
+        roundDecimal(value, dataType, from, Decimal.ROUND_UNNECESSARY)
+          .map(d => sources.LessThan(name, convertToScala(d, from)))
+
+      case (v: Any, t: FractionalType) =>
+        val value = Decimal(t.fractional.asInstanceOf[Fractional[Any]].toDouble(v))
+        val dataType = Literal(value).dataType.asInstanceOf[DecimalType]
+        roundDecimal(value, dataType, from, Decimal.ROUND_FLOOR)
+          .map(d => sources.LessThanOrEqual(name, convertToScala(d, from)))
+
+      case _ => None
+    }
+  }
+
+  private def translateCastFromDecimalInLessThanOrEqual(
+      name: String,
+      from: DecimalType,
+      l: Literal)
+    : Option[Filter] = {
+    (l.value, l.dataType) match {
+      case (isTrue: Boolean, _) =>
+        if (isTrue) {
+          Some(sources.AlwaysTrue)
+        } else {
+          val zero = Decimal.ZERO
+          roundDecimal(zero, DecimalType(1, 0), from, Decimal.ROUND_UNNECESSARY)
+            .map( d => sources.EqualTo(name, convertToScala(d, from)))
+        }
+
+      case (v: Long, _: TimestampType) =>
+        val value = Cast(Literal(v, TimestampType), from).eval().asInstanceOf[Decimal]
+        roundDecimal(value, from, from, Decimal.ROUND_FLOOR)
+          .map(d => sources.LessThanOrEqual(name, convertToScala(d, from)))
+
+      case (d: Decimal, t: DecimalType) =>
+        roundDecimal(d, t, from, Decimal.ROUND_FLOOR)
+          .map(d => sources.LessThanOrEqual(name, convertToScala(d, from)))
+
+      case (v: Any, t: IntegralType) =>
+        val value = Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(v))
+        val dataType = Literal(value).dataType.asInstanceOf[DecimalType]
+        roundDecimal(value, dataType, from, Decimal.ROUND_UNNECESSARY)
+          .map(d => sources.LessThanOrEqual(name, convertToScala(d, from)))
+
+      case (v: Any, t: FractionalType) =>
+        val value = Decimal(t.fractional.asInstanceOf[Fractional[Any]].toDouble(v))
+        val dataType = Literal(value).dataType.asInstanceOf[DecimalType]
+        roundDecimal(value, dataType, from, Decimal.ROUND_FLOOR)
+          .map(d => sources.LessThanOrEqual(name, convertToScala(d, from)))
+
+      case _ => None
+    }
+  }
+
+  private def translateEqualToWithCast(a: Attribute, l: Literal): Option[Filter] = {
+    a.dataType match {
+      case d: DecimalType => translateCastFromDecimalInEqualTo(a.name, d, l)
+      case _ => None
+    }
+  }
+
+  private def translateGreaterThanWithCast(a: Attribute, l: Literal): Option[Filter] = {
+    a.dataType match {
+      case d: DecimalType => translateCastFromDecimalInGreaterThan(a.name, d, l)
+      case _ => None
+    }
+  }
+
+  private def translateGreaterThanOrEqualWithCast(a: Attribute, l: Literal): Option[Filter] = {
+    a.dataType match {
+      case d: DecimalType => translateCastFromDecimalInGreaterThanOrEqual(a.name, d, l)
+      case _ => None
+    }
+  }
+
+  private def translateLessThanOrEqualWithCast(a: Attribute, l: Literal): Option[Filter] = {
+    a.dataType match {
+      case d: DecimalType => translateCastFromDecimalInLessThanOrEqual(a.name, d, l)
+      case _ => None
+    }
+  }
+
+  private def translateLessThanWithCast(a: Attribute, l: Literal): Option[Filter] = {
+    a.dataType match {
+      case d: DecimalType => translateCastFromDecimalInLessThan(a.name, d, l)
+      case _ => None
+    }
+  }
+
+  private def translateFilterWithCast(predicate: Expression): Option[Filter] = predicate match {
+    case expressions.EqualTo(Cast(a: Attribute, _, _), l: Literal) =>
+      translateEqualToWithCast(a, l)
+    case expressions.EqualTo(l: Literal, Cast(a: Attribute, _, _)) =>
+      translateEqualToWithCast(a, l)
+
+    case expressions.GreaterThan(Cast(a: Attribute, _, _), l: Literal) =>
+      translateGreaterThanWithCast(a, l)
+    case expressions.GreaterThan(l: Literal, Cast(a: Attribute, _, _)) =>
+      translateLessThanWithCast(a, l)
+
+    case expressions.LessThan(Cast(a: Attribute, _, _), l: Literal) =>
+      translateLessThanWithCast(a, l)
+    case expressions.LessThan(l: Literal, Cast(a: Attribute, _, _)) =>
+      translateGreaterThanWithCast(a, l)
+
+    case expressions.GreaterThanOrEqual(Cast(a: Attribute, _, _), l: Literal) =>
+      translateGreaterThanOrEqualWithCast(a, l)
+    case expressions.GreaterThanOrEqual(l: Literal, Cast(a: Attribute, _, _)) =>
+      translateLessThanOrEqualWithCast(a, l)
+
+    case expressions.LessThanOrEqual(Cast(a: Attribute, _, _), l: Literal) =>
+      translateLessThanOrEqualWithCast(a, l)
+    case expressions.LessThanOrEqual(l: Literal, Cast(a: Attribute, _, _)) =>
+      translateGreaterThanOrEqualWithCast(a, l)
+
+    case _ => None
+
+  }
+
   private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = predicate match {
     case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
       Some(sources.EqualTo(a.name, convertToScala(v, t)))
@@ -514,8 +830,9 @@ object DataSourceStrategy {
    *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
-  protected[sql] def translateFilter(predicate: Expression): Option[Filter] = {
-    translateFilterWithMapping(predicate, None)
+  protected[sql] def translateFilter(predicate: Expression, translateCast: Boolean = false)
+    : Option[Filter] = {
+    translateFilterWithMapping(predicate, None, translateCast)
   }
 
   /**
@@ -525,11 +842,13 @@ object DataSourceStrategy {
    * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
    *                               translated [[Filter]]. The map is used for rebuilding
    *                               [[Expression]] from [[Filter]].
+   * @param translateCast whether to translate filter with [[Cast]]
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
       predicate: Expression,
-      translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]])
+      translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]],
+      translateCast: Boolean = false)
     : Option[Filter] = {
     predicate match {
       case expressions.And(left, right) =>
@@ -543,21 +862,27 @@ object DataSourceStrategy {
         // Pushing one leg of AND down is only safe to do at the top level.
         // You can see ParquetFilters' createFilter for more details.
         for {
-          leftFilter <- translateFilterWithMapping(left, translatedFilterToExpr)
-          rightFilter <- translateFilterWithMapping(right, translatedFilterToExpr)
+          leftFilter <- translateFilterWithMapping(left, translatedFilterToExpr, translateCast)
+          rightFilter <- translateFilterWithMapping(right, translatedFilterToExpr, translateCast)
         } yield sources.And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {
-          leftFilter <- translateFilterWithMapping(left, translatedFilterToExpr)
-          rightFilter <- translateFilterWithMapping(right, translatedFilterToExpr)
+          leftFilter <- translateFilterWithMapping(left, translatedFilterToExpr, translateCast)
+          rightFilter <- translateFilterWithMapping(right, translatedFilterToExpr, translateCast)
         } yield sources.Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
-        translateFilterWithMapping(child, translatedFilterToExpr).map(sources.Not)
+        translateFilterWithMapping(child, translatedFilterToExpr, translateCast).map(sources.Not)
 
       case other =>
-        val filter = translateLeafNodeFilter(other)
+        val filter = translateLeafNodeFilter(other).orElse {
+          if (translateCast) {
+            translateFilterWithCast(other)
+          } else {
+            None
+          }
+        }
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
           translatedFilterToExpr.get(filter.get) = predicate
         }
@@ -605,13 +930,23 @@ object DataSourceStrategy {
     // A map from original Catalyst expressions to corresponding translated data source filters.
     // If a predicate is not in this map, it means it cannot be pushed down.
     val translatedMap: Map[Expression, Filter] = predicates.flatMap { p =>
-      translateFilter(p).map(f => p -> f)
+      translateFilter(p, translateCast = false).map(f => p -> f)
     }.toMap
-
-    val pushedFilters: Seq[Filter] = translatedMap.values.toSeq
 
     // Catalyst predicate expressions that cannot be converted to data source filters.
     val nonconvertiblePredicates = predicates.filterNot(translatedMap.contains)
+
+    val translateCast = SQLConf.get.translateFilterWithCast
+    val translatedCastMap = if (translateCast) {
+      nonconvertiblePredicates.flatMap { p =>
+        translateFilter(p, translateCast = false).map(f => p -> f)
+      }.toMap
+    } else {
+      Map.empty[Expression, Filter]
+    }
+
+    val pushedFilters: Seq[Filter] =
+      translatedMap.values.toSeq ++ translatedCastMap.values.toSeq
 
     // Data source filters that cannot be handled by `relation`. An unhandled filter means
     // the data source cannot guarantee the rows returned can pass the filter.
@@ -622,6 +957,8 @@ object DataSourceStrategy {
     }.keys
     val handledFilters = pushedFilters.toSet -- unhandledFilters
 
+    // we don't filter translated cast filters out from nonconvertiblePredicates
+    // in order to make sure that those filters will be added to post-scan filters later.
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 }

@@ -596,6 +596,15 @@ object SQLConf {
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
       .createWithDefault(10)
 
+  val TRANSLATE_FILTER_WITH_CAST =
+    buildConf("spark.sql.translateFilterWithCast.enabled")
+      .doc("Whether to translate filter which has cast expression inside to push it down. " +
+        "Make sure that all translated cast filters must be added to post-scan filters, " +
+        "because it may only do approximate translation for this kind of filters.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal " +
       "values will be written in Apache Parquet's fixed-length byte array format, which other " +
@@ -2607,6 +2616,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
+
+  def translateFilterWithCast: Boolean = getConf(SQLConf.TRANSLATE_FILTER_WITH_CAST)
 
   /** ********************** SQLConf functionality methods ************ */
 

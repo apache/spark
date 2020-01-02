@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -177,8 +178,9 @@ object FileSourceStrategy extends Strategy with Logging {
       // Partition keys are not available in the statistics of the files.
       val dataFilters =
         normalizedFiltersWithoutSubqueries.filter(_.references.intersect(partitionSet).isEmpty)
-      logInfo(s"Pushed Filters: " +
-        s"${dataFilters.flatMap(DataSourceStrategy.translateFilter).mkString(",")}")
+      val translateCast = SQLConf.get.translateFilterWithCast
+      logInfo(s"Pushed Filters: ${dataFilters.flatMap(
+        DataSourceStrategy.translateFilter(_, translateCast)).mkString(",")}")
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)
@@ -205,7 +207,8 @@ object FileSourceStrategy extends Strategy with Logging {
           partitionKeyFilters.toSeq,
           bucketSet,
           dataFilters,
-          table.map(_.identifier))
+          table.map(_.identifier),
+          translateCast)
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
       val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)
