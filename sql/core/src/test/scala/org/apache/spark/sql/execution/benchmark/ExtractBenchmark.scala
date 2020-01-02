@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.benchmark
 import java.time.Instant
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.internal.SQLConf
 
 /**
