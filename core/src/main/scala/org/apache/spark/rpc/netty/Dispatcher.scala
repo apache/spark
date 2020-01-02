@@ -45,29 +45,6 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   private val shutdownLatch = new CountDownLatch(1)
   private lazy val sharedLoop = new SharedMessageLoop(nettyEnv.conf, this, numUsableCores)
 
-  private def assignToMessageLoop(
-      name: String,
-      endpoint: RpcEndpoint,
-      endpointRef: RpcEndpointRef): MessageLoop = {
-    // This must be done before assigning RpcEndpoint to MessageLoop, as MessageLoop sets Inbox be
-    // active when registering, and endpointRef must be put into endpointRefs before onStart is
-    // called. Refer the doc of `RpcEndpoint.self`, as well as `NettyRpcEnv.endpointRef`.
-    endpointRefs.put(endpoint, endpointRef)
-    try {
-      endpoint match {
-        case e: IsolatedRpcEndpoint =>
-          new DedicatedMessageLoop(name, e, this)
-        case _ =>
-          sharedLoop.register(name, endpoint)
-          sharedLoop
-      }
-    } catch {
-      case NonFatal(e) =>
-        endpointRefs.remove(endpoint)
-        throw e
-    }
-  }
-
   /**
    * True if the dispatcher has been stopped. Once stopped, all messages posted will be bounced
    * immediately.
@@ -82,8 +59,32 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
       if (stopped) {
         throw new IllegalStateException("RpcEnv has been stopped")
       }
-      if (endpoints.putIfAbsent(name, assignToMessageLoop(name, endpoint, endpointRef)) != null) {
+      if (endpoints.containsKey(name)) {
         throw new IllegalArgumentException(s"There is already an RpcEndpoint called $name")
+      }
+
+      // This must be done before assigning RpcEndpoint to MessageLoop, as MessageLoop sets Inbox be
+      // active when registering, and endpointRef must be put into endpointRefs before onStart is
+      // called.
+      endpointRefs.put(endpoint, endpointRef)
+
+      var messageLoop: MessageLoop = null
+      try {
+        messageLoop = endpoint match {
+          case e: IsolatedRpcEndpoint =>
+            new DedicatedMessageLoop(name, e, this)
+          case _ =>
+            sharedLoop.register(name, endpoint)
+            sharedLoop
+        }
+        endpoints.put(name, messageLoop)
+      } catch {
+        case NonFatal(e) =>
+          endpointRefs.remove(endpoint)
+          if (messageLoop != null && messageLoop.isInstanceOf[DedicatedMessageLoop]) {
+            messageLoop.asInstanceOf[DedicatedMessageLoop].stop()
+          }
+          throw e
       }
     }
     endpointRef
