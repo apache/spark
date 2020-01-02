@@ -23,9 +23,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, IsNotNull, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
@@ -173,44 +172,6 @@ case class InSubqueryExec(
 }
 
 /**
- * The physical node of non-correlated EXISTS subquery.
- */
-case class ExistsSubqueryExec(
-    plan: BaseSubqueryExec,
-    exprId: ExprId)
-  extends ExecSubqueryExpression {
-
-  @volatile private var result: Option[Boolean] = None
-
-  override def dataType: DataType = BooleanType
-  override def children: Seq[Expression] = Nil
-  override def nullable: Boolean = false
-  override def toString: String = s"EXISTS (${plan.simpleString(SQLConf.get.maxToStringFields)})"
-  override def withNewPlan(plan: BaseSubqueryExec): ExistsSubqueryExec = copy(plan = plan)
-
-  override def semanticEquals(other: Expression): Boolean = other match {
-    case in: ExistsSubqueryExec => plan.sameResult(in.plan)
-    case _ => false
-  }
-
-  def updateResult(): Unit = {
-    result = Some(plan.executeTake(1).length == 1)
-  }
-
-  def values(): Option[Boolean] = result
-
-  override def eval(input: InternalRow): Any = {
-    require(result.isDefined, s"$this has not finished")
-    result.get
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    require(result.isDefined, s"$this has not finished")
-    Literal.create(result.get, dataType).doGenCode(ctx, ev)
-  }
-}
-
-/**
  * Plans subqueries that are present in the given [[SparkPlan]].
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
@@ -233,9 +194,11 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         }
         val executedPlan = new QueryExecution(sparkSession, query).executedPlan
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
-      case expressions.Exists(sub, children, exprId) =>
-        val executedPlan = new QueryExecution(sparkSession, Project(Nil, sub)).executedPlan
-        ExistsSubqueryExec(SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
+      case exists: expressions.Exists =>
+        val executedPlan = new QueryExecution(sparkSession, exists.plan).executedPlan
+        IsNotNull(ScalarSubquery(
+          SubqueryExec(s"scalar-subquery#${exists.exprId.id}", CollectLimitExec(1, executedPlan)),
+          exists.exprId))
     }
   }
 }
