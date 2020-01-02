@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.NestedColumnAliasing.{collectRootReferenceAndExtractValue, totalFieldNum}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -90,7 +91,8 @@ object NestedColumnAliasing {
    * or `GetArrayStructField`s which on top of other `ExtractValue`s or special expressions.
    * Check `SelectedField` to see which expressions should be listed here.
    */
-  private def collectRootReferenceAndExtractValue(e: Expression): Seq[Expression] = e match {
+  private[catalyst] def collectRootReferenceAndExtractValue(
+      e: Expression): Seq[Expression] = e match {
     case _: AttributeReference => Seq(e)
     case GetStructField(_: ExtractValue | _: AttributeReference, _, _) => Seq(e)
     case GetArrayStructFields(_: MapValues |
@@ -148,7 +150,7 @@ object NestedColumnAliasing {
    * pruning. It's okay to underestimate. If the number of reference is bigger than this, the parent
    * reference is used instead of nested field references.
    */
-  private def totalFieldNum(dataType: DataType): Int = dataType match {
+  private[catalyst] def totalFieldNum(dataType: DataType): Int = dataType match {
     case _: AtomicType => 1
     case StructType(fields) => fields.map(f => totalFieldNum(f.dataType)).sum
     case ArrayType(elementType, _) => totalFieldNum(elementType)
@@ -166,48 +168,48 @@ object NestedColumnAliasing {
     case _: Inline => true
     case _ => false
   }
+}
 
-  object OverAggregate {
+object AggregateNestedColumnAliasing {
 
-    private def canPrune(child: LogicalPlan, references: AttributeSet): Boolean = child match {
-      case p: Project => !p.references.subsetOf(references)
-      case _ => !child.outputSet.subsetOf(references)
-    }
+  private def canPrune(child: LogicalPlan, references: AttributeSet): Boolean = child match {
+    case p: Project => !p.references.subsetOf(references)
+    case _ => !child.outputSet.subsetOf(references)
+  }
 
-    private def unAlias(exp: Expression): Expression = exp match {
-      case a: Alias => a.child
-      case _ => exp
-    }
+  private def unAlias(exp: Expression): Expression = exp match {
+    case a: Alias => a.child
+    case _ => exp
+  }
 
-    def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
-      case a @ Aggregate(groupingExpressions, aggregateExpressions, child)
-          if canPrune(child, a.references) =>
-        val allExpressions = (aggregateExpressions ++ groupingExpressions).map(unAlias).distinct
-        val (nestedFieldReferences, otherRootReferences) =
-          allExpressions.flatMap(collectRootReferenceAndExtractValue).partition {
-            case _: ExtractValue => true
-            case _ => false
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    case a @ Aggregate(groupingExpressions, aggregateExpressions, child)
+      if canPrune(child, a.references) =>
+      val allExpressions = (aggregateExpressions ++ groupingExpressions).map(unAlias).distinct
+      val (nestedFieldReferences, otherRootReferences) =
+        allExpressions.flatMap(collectRootReferenceAndExtractValue).partition {
+          case _: ExtractValue => true
+          case _ => false
+        }
+
+      val aliasSub = nestedFieldReferences.asInstanceOf[Seq[ExtractValue]]
+        .filter(!_.references.subsetOf(AttributeSet(otherRootReferences)))
+        .groupBy(_.references.head).flatMap {
+        case (attr, nestedFields: Seq[ExtractValue]) =>
+          val nestedFieldToAlias = nestedFields.distinct.map { f =>
+            Alias(f, f.sql)()
           }
 
-        val aliasSub = nestedFieldReferences.asInstanceOf[Seq[ExtractValue]]
-          .filter(!_.references.subsetOf(AttributeSet(otherRootReferences)))
-          .groupBy(_.references.head).flatMap {
-            case (attr, nestedFields: Seq[ExtractValue]) =>
-              val nestedFieldToAlias = nestedFields.distinct.map { f =>
-                Alias(f, f.sql)()
-              }
-
-              if (nestedFieldToAlias.nonEmpty &&
-                nestedFieldToAlias.length < totalFieldNum(attr.dataType)) {
-                Some(nestedFieldToAlias)
-              } else {
-                None
-              }
+          if (nestedFieldToAlias.nonEmpty &&
+            nestedFieldToAlias.length < totalFieldNum(attr.dataType)) {
+            Some(nestedFieldToAlias)
+          } else {
+            None
           }
-        val newProjectList: Seq[NamedExpression] =
-          aliasSub.flatten.toSeq ++ otherRootReferences.flatMap(_.references)
-        Some(a.copy(child = Project(newProjectList, child)))
-      case _ => None
-    }
+      }
+      val newProjectList: Seq[NamedExpression] =
+        aliasSub.flatten.toSeq ++ otherRootReferences.flatMap(_.references)
+      Some(a.copy(child = Project(newProjectList, child)))
+    case _ => None
   }
 }
