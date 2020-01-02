@@ -170,14 +170,12 @@ private class DedicatedMessageLoop(
     ThreadUtils.newDaemonSingleThreadExecutor(s"dispatcher-$name")
   }
 
-  def register(): Unit = {
-    (1 to endpoint.threadCount()).foreach { _ =>
-      threadpool.submit(receiveLoopRunnable)
-    }
-
-    // Mark active to handle the OnStart message.
-    setActive(inbox)
+  (1 to endpoint.threadCount()).foreach { _ =>
+    threadpool.submit(receiveLoopRunnable)
   }
+
+  // Mark active to handle the OnStart message.
+  setActive(inbox)
 
   override def post(endpointName: String, message: InboxMessage): Unit = {
     require(endpointName == name)
