@@ -664,6 +664,46 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("alter table: hive style") {
+    val sql1 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT"
+    val sql2 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT COMMENT 'new_comment'"
+    val sql3 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT AFTER other_col"
+
+    comparePlans(
+      parsePlan(sql1),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        Some(IntegerType),
+        None,
+        None))
+
+    comparePlans(
+      parsePlan(sql2),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        Some(IntegerType),
+        Some("new_comment"),
+        None))
+
+    comparePlans(
+      parsePlan(sql3),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        Some(IntegerType),
+        None,
+        Some(after("other_col"))))
+
+    // renaming column not supported in hive style ALTER COLUMN.
+    intercept("ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT",
+      "please run RENAME COLUMN instead")
+
+    // ALTER COLUMN for a partition is not supported.
+    intercept("ALTER TABLE table_name PARTITION (a='1') CHANGE COLUMN a.b.c c INT")
+  }
+
   test("alter table/view: rename table/view") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),

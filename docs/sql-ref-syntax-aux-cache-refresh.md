@@ -1,7 +1,7 @@
 ---
 layout: global
-title: ADD FILE
-displayTitle: ADD FILE
+title: REFRESH
+displayTitle: REFRESH
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -20,29 +20,35 @@ license: |
 ---
 
 ### Description
-`ADD FILE` adds a file to the list of resources. The added file can be listed using [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html).
+`REFRESH` is used to invalidate and refresh all the cached data (and the associated metadata) for
+all Datasets that contains the given data source path. Path matching is by prefix, i.e. "/" would
+invalidate everything that is cached. 
 
 ### Syntax
 {% highlight sql %}
-ADD FILE file_name
+REFRESH resource_path
 {% endhighlight %}
 
 ### Parameters
 <dl>
- <dt><code><em>file_name</em></code></dt>
- <dd>The name of the file to be added.</dd>
+ <dt><code><em>resource_path</em></code></dt>
+ <dd>The path of the resource that is to be refreshed.</dd>
 </dl>
 
 ### Examples
 {% highlight sql %}
-ADD FILE /tmp/test;
-ADD FILE "/path/to/file/abc.txt";
-ADD FILE '/another/test.txt';
-ADD FILE "/path with space/abc.txt";
+ -- The Path is resolved using the datasource's File Index.
+ 
+CREATE TABLE test(ID INT) using parquet;
+INSERT INTO test SELECT 1000;
+CACHE TABLE test;
+INSERT INTO test SELECT 100;
+REFRESH "hdfs://path/to/table";
+ 
 {% endhighlight %}
 
 ### Related Statements
- * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
- * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
- * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
-
+- [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+- [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+- [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
+- [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)

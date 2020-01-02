@@ -586,8 +586,8 @@ private class AFTAggregator(
 
     val margin = {
       var sum = 0.0
-      xi.foreachActive { (index, value) =>
-        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+      xi.foreachNonZero { (index, value) =>
+        if (localFeaturesStd(index) != 0.0) {
           sum += coefficients(index) * (value / localFeaturesStd(index))
         }
       }
@@ -601,8 +601,8 @@ private class AFTAggregator(
 
     gradientSumArray(0) += delta + multiplier * sigma * epsilon
     gradientSumArray(1) += { if (fitIntercept) multiplier else 0.0 }
-    xi.foreachActive { (index, value) =>
-      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+    xi.foreachNonZero { (index, value) =>
+      if (localFeaturesStd(index) != 0.0) {
         gradientSumArray(index + 2) += multiplier * (value / localFeaturesStd(index))
       }
     }

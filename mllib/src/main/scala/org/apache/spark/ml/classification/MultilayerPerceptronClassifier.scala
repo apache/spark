@@ -320,7 +320,8 @@ class MultilayerPerceptronClassificationModel private[ml] (
     mlpModel.raw2ProbabilityInPlace(rawPrediction)
   }
 
-  override protected def predictRaw(features: Vector): Vector = mlpModel.predictRaw(features)
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = mlpModel.predictRaw(features)
 
   override def numClasses: Int = layers.last
 

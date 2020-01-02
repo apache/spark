@@ -225,7 +225,8 @@ class DecisionTreeClassificationModel private[ml] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     Vectors.dense(rootNode.predictImpl(features).impurityStats.stats.clone())
   }
 

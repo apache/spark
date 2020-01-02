@@ -318,7 +318,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
     // Extract the number of features before deciding optimization solver.
-    val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
 
     val instances = extractInstances(dataset)
 
@@ -375,6 +375,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     instr.logNumExamples(ySummarizer.count)
     instr.logNamedValue(Instrumentation.loggerTags.meanOfLabels, yMean)
     instr.logNamedValue(Instrumentation.loggerTags.varianceOfLabels, rawYStd)
+    instr.logSumOfWeights(featuresSummarizer.weightSum)
 
     if (rawYStd == 0.0) {
       if ($(fitIntercept) || yMean == 0.0) {
