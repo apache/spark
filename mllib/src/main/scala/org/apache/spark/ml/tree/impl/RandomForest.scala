@@ -100,42 +100,23 @@ private[spark] object RandomForest extends Logging with Serializable {
     run(instances, strategy, numTrees, featureSubsetStrategy, seed, None)
   }
 
-  def buildMetadata(
-      input: RDD[Instance],
-      strategy: OldStrategy,
-      numTrees: Int,
-      featureSubsetStrategy: String): DecisionTreeMetadata = {
-    val retaggedInput = input.retag(classOf[Instance])
-    DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
-  }
-
   /**
    * Train a random forest.
    *
    * @param input Training data: RDD of `Instance`
    * @return an unweighted set of trees
    */
-  def run(
+  def runWithMetadata(
       input: RDD[Instance],
+      metadata: DecisionTreeMetadata,
       strategy: OldStrategy,
       numTrees: Int,
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
-      parentUID: Option[String] = None,
-      precomputedMetadata: Option[DecisionTreeMetadata] = None): Array[DecisionTreeModel] = {
-
+      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
-
-    timer.start("total")
-
-    timer.start("init")
-
-    val retaggedInput = input.retag(classOf[Instance])
-    val metadata = precomputedMetadata.getOrElse {
-      DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
-    }
 
     instr match {
       case Some(instrumentation) =>
@@ -149,6 +130,12 @@ private[spark] object RandomForest extends Logging with Serializable {
         logInfo("numExamples: " + metadata.numExamples)
         logInfo("weightedNumExamples: " + metadata.weightedNumExamples)
     }
+
+    timer.start("total")
+
+    timer.start("init")
+
+    val retaggedInput = input.retag(classOf[Instance])
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
@@ -225,7 +212,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
       val (nodesForGroup, treeToNodeToIndexInfo) =
-        RandomForest.selectNodesToSplit(nodeStack, maxMemoryUsage, metadata, rng)
+      RandomForest.selectNodesToSplit(nodeStack, maxMemoryUsage, metadata, rng)
       // Sanity check (should never occur):
       assert(nodesForGroup.nonEmpty,
         s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
@@ -283,6 +270,32 @@ private[spark] object RandomForest extends Logging with Serializable {
             new DecisionTreeRegressionModel(rootNode.toNode(prune), numFeatures))
         }
     }
+  }
+
+  /**
+   * Train a random forest.
+   *
+   * @param input Training data: RDD of `Instance`
+   * @return an unweighted set of trees
+   */
+  def run(
+      input: RDD[Instance],
+      strategy: OldStrategy,
+      numTrees: Int,
+      featureSubsetStrategy: String,
+      seed: Long,
+      instr: Option[Instrumentation],
+      prune: Boolean = true, // exposed for testing only, real trees are always pruned
+      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+    val timer = new TimeTracker()
+
+    timer.start("build metadata")
+    val metadata = DecisionTreeMetadata
+      .buildMetadata(input.retag(classOf[Instance]), strategy, numTrees, featureSubsetStrategy)
+    timer.stop("build metadata")
+
+    runWithMetadata(input, metadata, strategy, numTrees, featureSubsetStrategy,
+      seed, instr, prune, parentUID)
   }
 
   /**
