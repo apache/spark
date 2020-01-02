@@ -2188,7 +2188,7 @@ object SQLConf {
   }
 
   val LEGACY_ADD_DIRECTORY_USING_RECURSIVE = buildConf("spark.sql.legacy.addDirectory.recursive")
-    .doc(" When true, users can add directory by passing path of a directory to ADD FILE" +
+    .doc("When true, users can add directory by passing path of a directory to ADD FILE " +
       "command of SQL. If false, then only a single file can be added.")
     .booleanConf
     .createWithDefault(true)
