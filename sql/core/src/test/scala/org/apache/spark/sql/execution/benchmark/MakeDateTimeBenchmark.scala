@@ -40,10 +40,7 @@ object MakeDateTimeBenchmark extends SqlBasedBenchmark {
       spark
         .range(0, cardinality, 1, 1)
         .selectExpr(exprs: _*)
-        .write
-        .format("noop")
-        .mode(Overwrite)
-        .save()
+        .noop()
     }
   }
 
