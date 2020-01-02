@@ -91,14 +91,13 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                        current catalog database.
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
- * @param relationToLogicalPlanMaps The UnresolvedRelation to LogicalPlan mapping, this can ensure
- *                                  that the table is resolved only once if a table is used
- *                                  multiple times in a query.
+ * @param relationCache The UnresolvedRelation to LogicalPlan mapping, this can ensure that the
+ *                      table is resolved only once if a table is used multiple times in a query.
  */
 case class AnalysisContext(
     defaultDatabase: Option[String] = None,
     nestedViewDepth: Int = 0,
-    relationToLogicalPlanMaps: mutable.Map[UnresolvedRelation, LogicalPlan] = mutable.Map.empty)
+    relationCache: mutable.Map[String, LogicalPlan] = mutable.Map.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -113,7 +112,8 @@ object AnalysisContext {
   def withAnalysisContext[A](database: Option[String])(f: => A): A = {
     val originContext = value.get()
     val context = AnalysisContext(defaultDatabase = database,
-      nestedViewDepth = originContext.nestedViewDepth + 1)
+      nestedViewDepth = originContext.nestedViewDepth + 1,
+      relationCache = originContext.relationCache)
     set(context)
     try f finally { set(originContext) }
   }
@@ -866,10 +866,10 @@ class Analyzer(
         }
 
       case u: UnresolvedRelation =>
-        val relationToLogicalPlanMaps = AnalysisContext.get.relationToLogicalPlanMaps
-        relationToLogicalPlanMaps.getOrElse(u, {
+        val relationCache = AnalysisContext.get.relationCache
+        relationCache.getOrElse(u.tableName, {
           val relation = resolveRelation(u)
-          relationToLogicalPlanMaps.update(u, relation)
+          relationCache.update(u.tableName, relation)
           relation
         })
     }
