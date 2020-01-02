@@ -490,12 +490,11 @@ private[spark] class DAGScheduler(
 
   private[scheduler] def mergeResourceProfilesForStage(rdd: RDD[_]): ImmutableResourceProfile = {
     val stageResourceProfiles = getResourceProfilesForRDDsInStage(rdd)
-    logInfo("rdd profifiles: " + stageResourceProfiles)
+    logDebug("rdd profiles: " + stageResourceProfiles)
     val resourceProfile = if (stageResourceProfiles.size > 1) {
       if (shouldMergeResourceProfiles) {
         // need to resolve conflicts if multiple
         var mergedProfile: ImmutableResourceProfile = stageResourceProfiles.head
-        logInfo("create  stage, resource profiles: " + stageResourceProfiles)
         for (profile <- stageResourceProfiles) {
           mergedProfile = mergeResourceProfiles(mergedProfile, profile)
         }
@@ -626,7 +625,7 @@ private[spark] class DAGScheduler(
         toVisit.getImmutableResourceProfile.foreach(resourceProfiles += _)
         toVisit.dependencies.foreach {
           case _: ShuffleDependency[_, _, _] =>
-          // Not within the same stage with current rdd, do nothing.
+            // Not within the same stage with current rdd, do nothing.
           case dependency =>
             waitingForVisit.prepend(dependency.rdd)
         }
