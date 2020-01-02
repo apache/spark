@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -142,14 +140,21 @@ object ScanOperation extends OperationHelper with PredicateHelper {
       case Filter(condition, child) =>
         collectProjectsAndFilters(child) match {
           case Some((fields, filters, other, aliases)) =>
-            // Follow CombineFilters and only keep going if the collected Filters
-            // are all deterministic and this filter doesn't have common non-deterministic
+            // Follow CombineFilters and only keep going if 1) the collected Filters
+            // and this filter are all deterministic or 2) if this filter is non-deterministic,
+            // but it's the only one who doesn't have common non-deterministic
             // expressions with lower Project.
-            if (filters.forall(_.deterministic) &&
-              !hasCommonNonDeterministic(Seq(condition), aliases)) {
+            if (filters.nonEmpty && filters.forall(_.deterministic)) {
               val substitutedCondition = substitute(aliases)(condition)
-              Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
-                other, aliases))
+              if (substitutedCondition.deterministic) {
+                Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
+                  other, aliases))
+              } else {
+                None
+              }
+            } else if (filters.isEmpty && !hasCommonNonDeterministic(Seq(condition), aliases)) {
+              val substitutedCondition = substitute(aliases)(condition)
+              Some((fields, splitConjunctivePredicates(substitutedCondition), other, aliases))
             } else {
               None
             }
