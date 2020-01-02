@@ -95,6 +95,8 @@ private[spark] class TaskSetManager(
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
 
+  private val fetchFailedIndex = new HashSet[Int]
+
   // Add the tid of task into this HashSet when the task is killed by other attempt tasks.
   // This happened while we set the `spark.speculation` to true. The task killed by others
   // should not resubmit while executor lost.
@@ -723,8 +725,11 @@ private[spark] class TaskSetManager(
         interruptThread = true,
         reason = "another attempt succeeded")
     }
+
     if (!successful(index)) {
       tasksSuccessful += 1
+    }
+    if (fetchFailedIndex.contains(index) || !successful(index)) {
       logInfo(s"Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}) in" +
         s" ${info.duration} ms on ${info.host} (executor ${info.executorId})" +
         s" ($tasksSuccessful/$numTasks)")
@@ -783,6 +788,7 @@ private[spark] class TaskSetManager(
         logWarning(failureReason)
         if (!successful(index)) {
           successful(index) = true
+          fetchFailedIndex += index
           tasksSuccessful += 1
         }
         isZombie = true
