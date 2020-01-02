@@ -126,6 +126,11 @@ case class AdaptiveSparkPlanExec(
 
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
+  override def resetMetrics(): Unit = {
+    metrics.valuesIterator.foreach(_.reset())
+    executedPlan.resetMetrics()
+  }
+
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (!isFinalPlan) {
       // Subqueries do not have their own execution IDs and therefore rely on the main query to
