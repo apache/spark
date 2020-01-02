@@ -25,7 +25,7 @@ from glob import glob
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import shuffle, RDD
+from pyspark import ExecutorResourceRequests, shuffle, RDD, ResourceProfile, TaskResourceRequests
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
@@ -783,6 +783,32 @@ class RDDTests(ReusedPySparkTestCase):
         for i in range(4):
             self.assertEqual(i, next(it))
 
+    def test_resourceprofile(self):
+        rp = ResourceProfile()
+        ereqs = ExecutorResourceRequests().cores(2).memory("2g").memoryOverhead("1g")
+        ereqs.pysparkMemory("2g").resource("gpu", 2, "testGpus", "nvidia.com")
+        treqs = TaskResourceRequests().cpus(2).resource("gpu", 2)
+
+        def assert_request_contents(exec_reqs, task_reqs):
+            self.assertEqual(len(exec_reqs.requests), 5)
+            self.assertEqual(exec_reqs.requests["cores"].amount, 2)
+            self.assertEqual(exec_reqs.requests["memory"].amount, 6144)
+            self.assertEqual(exec_reqs.requests["memoryOverhead"].amount, 2048)
+            self.assertEqual(exec_reqs.requests["pyspark.memory"].amount, 2048)
+            self.assertEqual(exec_reqs.requests["gpu"].amount, 2)
+            self.assertEqual(exec_reqs.requests["gpu"].discoveryScript, "testGpus")
+            self.assertEqual(exec_reqs.requests["gpu"].resourceName, "gpu")
+            self.assertEqual(exec_reqs.requests["gpu"].vendor, "nvidia.com")
+            self.assertEqual(len(task_reqs.requests), 2)
+            self.assertEqual(task_reqs.requests["cpus"].amount, 2.0)
+            self.assertEqual(task_reqs.requests["gpu"].amount, 2.0)
+
+        assert_request_contents(ereq.requests, treq.requests)
+        rp.require(ereqs).require(treqs)
+        assert_request_contents(rp.executorResources, rp.taskResources)
+        rdd = self.sc.parallelize(range(10)).withResources(rp)
+        return_rp = rdd.getResourceProfile()
+        assert_request_contents(return_rp.executorResources, return_rp.taskResources)
 
 if __name__ == "__main__":
     import unittest

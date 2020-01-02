@@ -256,6 +256,7 @@ class RDD(object):
     def __init__(self, jrdd, ctx, jrdd_deserializer=AutoBatchedSerializer(PickleSerializer())):
         self._jrdd = jrdd
         self.is_cached = False
+        self.has_resourceProfile = False
         self.is_checkpointed = False
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
@@ -2489,6 +2490,7 @@ class RDD(object):
 
         .. versionadded:: 3.0.0
        """
+        self.has_resourceProfile = True
         self._jrdd.withResources(profile._jResourceProfile)
         return self
 
@@ -2615,6 +2617,7 @@ class PipelinedRDD(RDD):
             self._prev_jrdd = prev._prev_jrdd  # maintain the pipeline
             self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
         self.is_cached = False
+        self.has_resourceProfile = False
         self.is_checkpointed = False
         self.ctx = prev.ctx
         self.prev = prev
@@ -2657,7 +2660,7 @@ class PipelinedRDD(RDD):
         return self._id
 
     def _is_pipelinable(self):
-        return not (self.is_cached or self.is_checkpointed)
+        return not (self.is_cached or self.is_checkpointed or self.has_resourceProfile)
 
     def _is_barrier(self):
         return self.is_barrier

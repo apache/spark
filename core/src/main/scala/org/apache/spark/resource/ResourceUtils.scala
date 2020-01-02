@@ -355,7 +355,6 @@ private[spark] object ResourceUtils extends Logging {
     }
     val taskReq = ImmutableResourceProfile.getCustomTaskResources(rp)
     val execReq = ImmutableResourceProfile.getCustomExecutorResources(rp)
-    logInfo(s"cores is $cores limiting $limitingResource max $maxTaskPerExec")
 
     if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
       if ((taskCpus * maxTaskPerExec) < cores) {

@@ -50,7 +50,7 @@ class ExecutorResourceRequest(object):
     @param vendor Vendor, required for some cluster managers
     """
 
-    def __init__(self, resourceName, amount, discoveryScript=None, vendor=None):
+    def __init__(self, resourceName, amount, discoveryScript="", vendor=""):
         """Create a new ExecutorResourceRequest that wraps the underlying JVM object."""
         from pyspark.context import SparkContext
         self._javaExecutorResourceRequest = SparkContext._jvm.org.apache.spark.resource.ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
