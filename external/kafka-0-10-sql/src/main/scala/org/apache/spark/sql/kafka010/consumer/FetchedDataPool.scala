@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.kafka010.consumer
 
 import java.{util => ju}
 import java.util.concurrent.{ScheduledExecutorService, ScheduledFuture, TimeUnit}
@@ -27,7 +27,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecord
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.kafka010.KafkaDataConsumer.{CacheKey, UNKNOWN_OFFSET}
+import org.apache.spark.sql.kafka010.{FETCHED_DATA_CACHE_EVICTOR_THREAD_RUN_INTERVAL, FETCHED_DATA_CACHE_TIMEOUT}
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.{CacheKey, UNKNOWN_OFFSET}
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
@@ -39,7 +40,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * modified in same instance, this class cannot be replaced with general pool implementations
  * including Apache Commons Pool which pools KafkaConsumer.
  */
-private[kafka010] class FetchedDataPool(
+private[consumer] class FetchedDataPool(
     executorService: ScheduledExecutorService,
     clock: Clock,
     conf: SparkConf) extends Logging {
@@ -159,8 +160,8 @@ private[kafka010] class FetchedDataPool(
   }
 }
 
-private[kafka010] object FetchedDataPool {
-  private[kafka010] case class CachedFetchedData(fetchedData: FetchedData) {
+private[consumer] object FetchedDataPool {
+  private[consumer] case class CachedFetchedData(fetchedData: FetchedData) {
     var lastReleasedTimestamp: Long = Long.MaxValue
     var lastAcquiredTimestamp: Long = Long.MinValue
     var inUse: Boolean = false
@@ -179,5 +180,5 @@ private[kafka010] object FetchedDataPool {
     }
   }
 
-  private[kafka010] type CachedFetchedDataList = mutable.ListBuffer[CachedFetchedData]
+  private[consumer] type CachedFetchedDataList = mutable.ListBuffer[CachedFetchedData]
 }

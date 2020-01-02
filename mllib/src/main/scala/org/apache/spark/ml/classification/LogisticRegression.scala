@@ -721,7 +721,7 @@ class LogisticRegression @Since("1.2.0") (
               value * featuresStd(featureIndex))
           }
           if ($(fitIntercept)) {
-            optInitialModel.get.interceptVector.foreachActive { (classIndex, value) =>
+            optInitialModel.get.interceptVector.foreachNonZero { (classIndex, value) =>
               initialCoefWithInterceptMatrix.update(classIndex, numFeatures, value)
             }
           }

@@ -264,7 +264,7 @@ object SQLConf {
     .createOptional
 
   val OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID =
-    buildConf("spark.sql.optimizer.reassignLambdaVariableID")
+    buildConf("spark.sql.optimizer.reassignLambdaVariableID.enabled")
       .doc("When true, Spark optimizer reassigns per-query unique IDs to LambdaVariable, so that " +
         "it's more likely to hit codegen cache.")
     .booleanConf
@@ -2076,7 +2076,7 @@ object SQLConf {
     .createWithDefault(Int.MaxValue)
 
   val LEGACY_CAST_DATETIME_TO_STRING =
-    buildConf("spark.sql.legacy.typeCoercion.datetimeToString")
+    buildConf("spark.sql.legacy.typeCoercion.datetimeToString.enabled")
       .doc("If it is set to true, date/timestamp will cast to string in binary comparisons " +
         "with String")
     .booleanConf
