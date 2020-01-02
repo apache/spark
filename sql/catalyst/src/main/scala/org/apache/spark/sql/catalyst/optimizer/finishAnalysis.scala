@@ -21,7 +21,6 @@ import java.time.LocalDate
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -55,7 +54,7 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
 
 object ReplaceNonCorrelatedExists extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case exists: expressions.Exists
+    case exists: Exists
       if !SubqueryExpression.hasInOrCorrelatedExistsSubquery(exists) =>
       IsNotNull(
         ScalarSubquery(
