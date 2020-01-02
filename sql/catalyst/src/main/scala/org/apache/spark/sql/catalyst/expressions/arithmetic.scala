@@ -75,13 +75,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
       """})
     case _: CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      defineCodeGen(ctx, ev,
-        interval => if (checkOverflow) {
-          s"$iu.negateExact($interval)"
-        } else {
-          s"$iu.negate($interval)"
-        }
-      )
+      val method = if (checkOverflow) "negateExact" else "negate"
+      defineCodeGen(ctx, ev, c => s"$iu.$method($c)")
   }
 
   protected override def nullSafeEval(input: Any): Any = dataType match {

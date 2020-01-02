@@ -207,9 +207,10 @@ struct<divide_interval(subtracttimestamps(TIMESTAMP '2019-10-15 00:00:00', TIMES
 -- !query 25
 select interval '2 seconds' / 0
 -- !query 25 schema
-struct<divide_interval(INTERVAL '2 seconds', CAST(0 AS DOUBLE)):interval>
+struct<>
 -- !query 25 output
-NULL
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query 26
