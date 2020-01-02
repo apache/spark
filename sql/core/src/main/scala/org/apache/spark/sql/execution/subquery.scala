@@ -194,11 +194,6 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         }
         val executedPlan = new QueryExecution(sparkSession, query).executedPlan
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
-      case exists: expressions.Exists =>
-        val executedPlan = new QueryExecution(sparkSession, exists.plan).executedPlan
-        IsNotNull(ScalarSubquery(
-          SubqueryExec(s"scalar-subquery#${exists.exprId.id}", CollectLimitExec(1, executedPlan)),
-          exists.exprId))
     }
   }
 }

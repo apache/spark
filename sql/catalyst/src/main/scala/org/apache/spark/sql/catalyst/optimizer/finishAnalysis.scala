@@ -21,8 +21,10 @@ import java.time.LocalDate
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery.splitConjunctivePredicates
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -52,6 +54,16 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
   }
 }
 
+object ReplaceNonCorrelatedExists extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case exists: expressions.Exists
+      if !SubqueryExpression.hasInOrCorrelatedExistsSubquery(exists) =>
+      IsNotNull(
+        ScalarSubquery(
+          plan = Limit(Literal(1, IntegerType), exists.plan),
+          exprId = exists.exprId))
+  }
+}
 
 /**
  * Computes the current date and time to make sure we return the same result in a single query.
