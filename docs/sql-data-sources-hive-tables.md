@@ -119,7 +119,7 @@ One of the most important pieces of Spark SQL's Hive support is interaction with
 which enables Spark SQL to access metadata of Hive tables. Starting from Spark 1.4.0, a single binary
 build of Spark SQL can be used to query different versions of Hive metastores, using the configuration described below.
 Note that independent of the version of Hive that is being used to talk to the metastore, internally Spark SQL
-will compile against Hive 1.2.1 and use those classes for internal execution (serdes, UDFs, UDAFs, etc).
+will compile against built-in Hive and use those classes for internal execution (serdes, UDFs, UDAFs, etc).
 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
@@ -127,7 +127,7 @@ The following options can be used to configure the version of Hive that is used 
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
-    <td><code>1.2.1</code></td>
+    <td><code>2.3.6</code></td>
     <td>
       Version of the Hive metastore. Available
       options are <code>0.12.0</code> through <code>2.3.6</code> and <code>3.0.0</code> through <code>3.1.2</code>.
@@ -141,9 +141,9 @@ The following options can be used to configure the version of Hive that is used 
       property can be one of three options:
       <ol>
         <li><code>builtin</code></li>
-        Use Hive 1.2.1, which is bundled with the Spark assembly when <code>-Phive</code> is
+        Use Hive 2.3.6, which is bundled with the Spark assembly when <code>-Phive</code> is
         enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
-        either <code>1.2.1</code> or not defined.
+        either <code>2.3.6</code> or not defined.
         <li><code>maven</code></li>
         Use Hive jars of specified version downloaded from Maven repositories. This configuration
         is not generally recommended for production deployments.

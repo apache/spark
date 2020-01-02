@@ -145,8 +145,8 @@ class NaiveBayesModel private[spark] (
   }
 
   private def bernoulliCalculation(testData: Vector) = {
-    testData.foreachActive((_, value) =>
-      if (value != 0.0 && value != 1.0) {
+    testData.foreachNonZero((_, value) =>
+      if (value != 1.0) {
         throw new SparkException(
           s"Bernoulli naive Bayes requires 0 or 1 feature values but found $testData.")
       }

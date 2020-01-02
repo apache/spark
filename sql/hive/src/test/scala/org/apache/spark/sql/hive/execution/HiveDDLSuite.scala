@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
@@ -1505,7 +1506,8 @@ class HiveDDLSuite
         // The original source should be a VIEW with an empty path
         assert(sourceView.tableType == CatalogTableType.VIEW)
         assert(sourceView.viewText.nonEmpty)
-        assert(sourceView.viewDefaultDatabase == Some("default"))
+        assert(sourceView.viewCatalogAndNamespace ==
+          Seq(CatalogManager.SESSION_CATALOG_NAME, "default"))
         assert(sourceView.viewQueryColumnNames == Seq("a", "b", "c", "d"))
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
@@ -1525,8 +1527,8 @@ class HiveDDLSuite
       s"the created table must be a/an ${tableType.name} table")
     assert(targetTable.viewText.isEmpty,
       "the view text in the created table must be empty")
-    assert(targetTable.viewDefaultDatabase.isEmpty,
-      "the view default database in the created table must be empty")
+    assert(targetTable.viewCatalogAndNamespace.isEmpty,
+      "the view catalog and namespace in the created table must be empty")
     assert(targetTable.viewQueryColumnNames.isEmpty,
       "the view query output columns in the created table must be empty")
     assert(targetTable.comment.isEmpty,

@@ -521,6 +521,20 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("new partitions should be added to catalog after writing to catalog table") {
+    val table = "partitioned_catalog_table"
+    val numParts = 210
+    withTable(table) {
+      val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
+      val tempTable = "partitioned_catalog_temp_table"
+      df.createOrReplaceTempView(tempTable)
+      sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
+      sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
+      val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
+      assert(partitions.size == numParts)
+    }
+  }
+
   test("SPARK-20236: dynamic partition overwrite without catalog table") {
     withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       withTempPath { path =>

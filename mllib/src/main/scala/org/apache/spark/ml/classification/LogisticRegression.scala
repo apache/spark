@@ -513,6 +513,7 @@ class LogisticRegression @Since("1.2.0") (
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
+    instr.logSumOfWeights(summarizer.weightSum)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -720,7 +721,7 @@ class LogisticRegression @Since("1.2.0") (
               value * featuresStd(featureIndex))
           }
           if ($(fitIntercept)) {
-            optInitialModel.get.interceptVector.foreachActive { (classIndex, value) =>
+            optInitialModel.get.interceptVector.foreachNonZero { (classIndex, value) =>
               initialCoefWithInterceptMatrix.update(classIndex, numFeatures, value)
             }
           }
@@ -1127,7 +1128,8 @@ class LogisticRegressionModel private[spark] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     if (isMultinomial) {
       margins(features)
     } else {
