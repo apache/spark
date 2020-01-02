@@ -600,10 +600,8 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-30403: AQE should handle the InSubquery when" +
-    " building subqueyrMap in InsertAdaptiveSparkPlan ") {
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+  test("SPARK-30403: AQE should handle InSubquery") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       runAdaptiveAndVerifyResult("SELECT * FROM testData LEFT OUTER join testData2" +
         " ON key = a  AND key NOT IN (select a from testData3) where value = '1'"
       )
