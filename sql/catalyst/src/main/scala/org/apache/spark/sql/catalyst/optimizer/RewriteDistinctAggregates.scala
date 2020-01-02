@@ -107,6 +107,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     }}
     // We need at least two distinct aggregates for this rule because aggregation
     // strategy can handle a single distinct group.
+    // This check is false-positive, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
     distinctAggs.size > 1
   }
 
