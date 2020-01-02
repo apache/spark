@@ -255,9 +255,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table	                    
 View Original Text  	SELECT * FROM base_table	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 27
@@ -266,7 +266,7 @@ CREATE VIEW v1_temp AS SELECT * FROM temp_table
 struct<>
 -- !query 27 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v1_temp` by referencing a temporary view `temp_table`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `v1_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 28
@@ -311,9 +311,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table	                    
 View Original Text  	SELECT * FROM base_table	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 32
@@ -322,7 +322,7 @@ CREATE VIEW temp_view_test.v3_temp AS SELECT * FROM temp_table
 struct<>
 -- !query 32 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temp_view_test`.`v3_temp` by referencing a temporary view `temp_table`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temp_view_test`.`v3_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 33
@@ -357,9 +357,9 @@ View Text           	SELECT t1.a AS t1_a, t2.a AS t2_a
 View Original Text  	SELECT t1.a AS t1_a, t2.a AS t2_a
     FROM base_table t1, base_table2 t2
     WHERE t1.id = t2.id	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[t1_a, t2_a]        	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=t2_a, view.query.out.col.0=t1_a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=t1_a, view.query.out.numCols=2, view.query.out.col.1=t2_a, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 35
@@ -371,7 +371,7 @@ CREATE VIEW v4_temp AS
 struct<>
 -- !query 35 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v4_temp` by referencing a temporary view `temp_table`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `v4_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 36
@@ -383,7 +383,7 @@ CREATE VIEW v5_temp AS
 struct<>
 -- !query 36 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v5_temp` by referencing a temporary view `temp_table`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `v5_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 37
@@ -411,9 +411,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)	                    
 View Original Text  	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 39
@@ -441,9 +441,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2	                    
 View Original Text  	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[id, a]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=a, view.query.out.col.0=id, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=id, view.query.out.numCols=2, view.query.out.col.1=a, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 41
@@ -471,9 +471,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)	                    
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 43
@@ -501,9 +501,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)	                    
 View Original Text  	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 45
@@ -531,9 +531,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1)	                    
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1)	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 47
@@ -542,7 +542,7 @@ CREATE VIEW v6_temp AS SELECT * FROM base_table WHERE id IN (SELECT id FROM temp
 struct<>
 -- !query 47 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v6_temp` by referencing a temporary view `temp_table`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `v6_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 48
@@ -551,7 +551,7 @@ CREATE VIEW v7_temp AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM tem
 struct<>
 -- !query 48 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v7_temp` by referencing a temporary view `temp_table`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `v7_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 49
@@ -560,7 +560,7 @@ CREATE VIEW v8_temp AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM temp
 struct<>
 -- !query 49 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v8_temp` by referencing a temporary view `temp_table`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `v8_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 50
@@ -569,7 +569,7 @@ CREATE VIEW v9_temp AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM 
 struct<>
 -- !query 50 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v9_temp` by referencing a temporary view `temp_table`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `v9_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 51
@@ -667,9 +667,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 CROSS JOIN t2	                    
 View Original Text  	SELECT * FROM t1 CROSS JOIN t2	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.query.out.col.3=value, view.query.out.col.0=num, view.query.out.numCols=4, view.default.database=testviewschm2, view.query.out.col.1=name, view.query.out.col.2=num2]
+Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 61
@@ -678,7 +678,7 @@ CREATE VIEW temporal1 AS SELECT * FROM t1 CROSS JOIN tt
 struct<>
 -- !query 61 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal1` by referencing a temporary view `tt`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temporal1` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 62
@@ -708,9 +708,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2	                    
 View Original Text  	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.query.out.col.3=value, view.query.out.col.0=num, view.query.out.numCols=4, view.default.database=testviewschm2, view.query.out.col.1=name, view.query.out.col.2=num2]
+Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 64
@@ -719,7 +719,7 @@ CREATE VIEW temporal2 AS SELECT * FROM t1 INNER JOIN tt ON t1.num = tt.num2
 struct<>
 -- !query 64 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal2` by referencing a temporary view `tt`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temporal2` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 65
@@ -749,9 +749,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2	                    
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.query.out.col.3=value, view.query.out.col.0=num, view.query.out.numCols=4, view.default.database=testviewschm2, view.query.out.col.1=name, view.query.out.col.2=num2]
+Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 67
@@ -760,7 +760,7 @@ CREATE VIEW temporal3 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2
 struct<>
 -- !query 67 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal3` by referencing a temporary view `tt`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temporal3` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 68
@@ -790,9 +790,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'	                    
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.query.out.col.3=value, view.query.out.col.0=num, view.query.out.numCols=4, view.default.database=testviewschm2, view.query.out.col.1=name, view.query.out.col.2=num2]
+Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 70
@@ -801,7 +801,7 @@ CREATE VIEW temporal4 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2 AND t
 struct<>
 -- !query 70 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal4` by referencing a temporary view `tt`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temporal4` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 71
@@ -810,7 +810,7 @@ CREATE VIEW temporal5 AS SELECT * FROM t1 WHERE num IN (SELECT num FROM t1 WHERE
 struct<>
 -- !query 71 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal5` by referencing a temporary view `tt`. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temporal5` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
 -- !query 72
@@ -892,9 +892,9 @@ AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 View Original Text  	SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[a, b]              	                    
-Table Properties    	[view.default.database=testviewschm2, view.query.out.col.1=b, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 80
@@ -931,9 +931,9 @@ View Original Text  	SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[a, b]              	                    
-Table Properties    	[view.default.database=testviewschm2, view.query.out.col.1=b, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 82
