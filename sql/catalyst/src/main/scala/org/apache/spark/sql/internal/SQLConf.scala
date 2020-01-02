@@ -171,14 +171,34 @@ object SQLConf {
   }
 
   /**
-   * The map contains info about removed SQL configs. Keys are SQL config names,
-   * map values are tuples of default config value and the version in which
-   * the SQL config was removed.
+   * Holds information about keys that have been removed.
+   *
+   * @param key The removed config key.
+   * @param version Version of Spark where key was removed.
+   * @param defaultValue The default config value. It can be used to notice
+   *                     users that they set non-default value to an already removed config.
+   * @param comment Additional info regarding to the removed config.
    */
-  val removedSQLConfigs = Map[String, (String, String)](
-    "spark.sql.fromJsonForceNullableSchema" -> ("true", "3.0.0"),
-    "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation" -> ("false", "3.0.0"),
-    "spark.sql.legacy.compareDateTimestampInTimestamp" -> ("true", "3.0.0"))
+  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
+
+  /**
+   * The map contains info about removed SQL configs. Keys are SQL config names,
+   * map values contain extra information like the version in which the config was removed,
+   * config's default value and a comment.
+   */
+  val removedSQLConfigs: Map[String, RemovedConfig] = {
+    val configs = Seq(
+      RemovedConfig("spark.sql.fromJsonForceNullableSchema", "3.0.0", "true",
+        "It was removed to prevent errors like SPARK-23173 for non-default value."),
+      RemovedConfig(
+        "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "3.0.0", "false",
+        "It was removed to prevent loosing of users data for non-default value."),
+      RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
+        "It was removed to prevent errors like SPARK-23549 for non-default value.")
+    )
+
+    Map(configs.map { cfg => cfg.key -> cfg } : _*)
+  }
 
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
