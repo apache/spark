@@ -18,6 +18,7 @@
 package org.apache.spark.network.server;
 
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
@@ -117,18 +118,21 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public void connectionTerminated(Channel channel) {
+    LinkedList<StreamState> removedStates = new LinkedList<>();
     // Close all streams which have been associated with the channel.
     for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
       StreamState state = entry.getValue();
       if (state.associatedChannel == channel) {
-        streams.remove(entry.getKey());
+        removedStates.add(streams.remove(entry.getKey()));
+      }
+    }
 
-        // Release all remaining buffers.
-        while (state.buffers.hasNext()) {
-          ManagedBuffer buffer = state.buffers.next();
-          if (buffer != null) {
-            buffer.release();
-          }
+    for (StreamState state: removedStates) {
+      // Release all remaining buffers.
+      while (state.buffers.hasNext()) {
+        ManagedBuffer buffer = state.buffers.next();
+        if (buffer != null) {
+          buffer.release();
         }
       }
     }

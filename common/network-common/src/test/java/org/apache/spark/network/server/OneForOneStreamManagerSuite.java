@@ -18,6 +18,7 @@
 package org.apache.spark.network.server;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import io.netty.channel.Channel;
@@ -96,4 +97,30 @@ public class OneForOneStreamManagerSuite {
     Mockito.verify(buffer2, Mockito.times(1)).release();
     Assert.assertEquals(0, manager.numStreamStates());
   }
+
+  @Test
+  public void streamStatesAreFreedWhenConnectionIsClosedEvenIfBufferIteratorThrowsException() {
+    OneForOneStreamManager manager = new OneForOneStreamManager();
+
+    Iterator<ManagedBuffer> buffers = Mockito.mock(Iterator.class);
+    Mockito.when(buffers.hasNext()).thenReturn(true);
+    Mockito.when(buffers.next()).thenThrow(RuntimeException.class);
+
+    Channel dummyChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
+    manager.registerStream("appId", buffers, dummyChannel);
+    manager.registerStream("appId", buffers, dummyChannel);
+
+    Assert.assertEquals(2, manager.numStreamStates());
+
+    try {
+      manager.connectionTerminated(dummyChannel);
+      Assert.fail("connectionTerminated should throws RuntimeException in buffers.next()");
+    } catch (RuntimeException e) {
+      Mockito.verify(buffers, Mockito.times(1)).hasNext();
+      Mockito.verify(buffers, Mockito.times(1)).next();
+
+      Assert.assertEquals(0, manager.numStreamStates());
+    }
+  }
+
 }
