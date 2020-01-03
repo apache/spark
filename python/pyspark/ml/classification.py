@@ -2201,7 +2201,9 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model = mlp.fit(df)
     >>> model.setFeaturesCol("features")
     MultilayerPerceptronClassificationModel...
-    >>> model.layers
+    >>> model.getMaxIter()
+    100
+    >>> model.getLayers()
     [2, 2, 2]
     >>> model.weights.size
     12
@@ -2230,7 +2232,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model_path = temp_path + "/mlp_model"
     >>> model.save(model_path)
     >>> model2 = MultilayerPerceptronClassificationModel.load(model_path)
-    >>> model.layers == model2.layers
+    >>> model.getLayers() == model2.getLayers()
     True
     >>> model.weights == model2.weights
     True
@@ -2238,7 +2240,7 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model3 = mlp2.fit(df)
     >>> model3.weights != model2.weights
     True
-    >>> model3.layers == model.layers
+    >>> model3.getLayers() == model.getLayers()
     True
 
     .. versionadded:: 1.6.0
@@ -2334,21 +2336,14 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
         return self._set(solver=value)
 
 
-class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationModel, JavaMLWritable,
+class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationModel,
+                                              _MultilayerPerceptronParams, JavaMLWritable,
                                               JavaMLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
     .. versionadded:: 1.6.0
     """
-
-    @property
-    @since("1.6.0")
-    def layers(self):
-        """
-        array of layer sizes including input and output layers.
-        """
-        return self._call_java("javaLayers")
 
     @property
     @since("2.0.0")
