@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-When `spark.sql.dialect=PostgreSQL` or keep default `spark.sql.dialect=Spark` with setting `spark.sql.dialect.spark.ansi.enabled` to true, Spark SQL will use the ANSI mode parser.
+When `spark.sql.ansi.enabled` is true, Spark SQL will use the ANSI mode parser.
 In this mode, Spark SQL has two kinds of keywords:
 * Reserved keywords: Keywords that are reserved and can't be used as identifiers for table, view, column, function, alias, etc.
 * Non-reserved keywords: Keywords that have a special meaning only in particular contexts and can be used as identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK can be used as identifiers in other places.
@@ -28,7 +28,7 @@ When the ANSI mode is disabled, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Same definition as the one when the ANSI mode enabled.
 * Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
 
-By default `spark.sql.dialect.spark.ansi.enabled` is false.
+By default `spark.sql.ansi.enabled` is false.
 
 Below is a list of all the keywords in Spark SQL.
 
@@ -117,6 +117,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>FALSE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FETCH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FIELDS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>FILTER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>FILEFORMAT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FIRST</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>FIRST_VALUE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>

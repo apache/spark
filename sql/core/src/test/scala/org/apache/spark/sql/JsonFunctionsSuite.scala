@@ -39,6 +39,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("alice", "5"))
   }
 
+  test("function get_json_object - support single quotes") {
+    val df: DataFrame = Seq(("""{'name': 'fang', 'age': 5}""")).toDF("a")
+    checkAnswer(
+      df.selectExpr("get_json_object(a, '$.name')", "get_json_object(a, '$.age')"),
+      Row("fang", "5"))
+  }
+
   val tuples: Seq[(String, String)] =
     ("1", """{"f1": "value1", "f2": "value2", "f3": 3, "f5": 5.23}""") ::
     ("2", """{"f1": "value12", "f3": "value3", "f2": 2, "f4": 4.01}""") ::

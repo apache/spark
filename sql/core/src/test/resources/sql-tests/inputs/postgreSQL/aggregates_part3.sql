@@ -232,16 +232,16 @@ select max(min(unique1)) from tenk1;
 
 -- drop table bytea_test_table;
 
--- [SPARK-27986] Support Aggregate Expressions with filter
 -- FILTER tests
 
--- select min(unique1) filter (where unique1 > 100) from tenk1;
+select min(unique1) filter (where unique1 > 100) from tenk1;
 
--- select sum(1/ten) filter (where ten > 0) from tenk1;
+select sum(1/ten) filter (where ten > 0) from tenk1;
 
 -- select ten, sum(distinct four) filter (where four::text ~ '123') from onek a
 -- group by ten;
 
+-- [SPARK-30276] Support Filter expression allows simultaneous use of DISTINCT
 -- select ten, sum(distinct four) filter (where four > 10) from onek a
 -- group by ten
 -- having exists (select 1 from onek b where sum(distinct a.four) = b.four);
@@ -254,6 +254,7 @@ select max(min(unique1)) from tenk1;
 select (select count(*)
         from (values (1)) t0(inner_c))
 from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
+-- [SPARK-30219] Support Filter expression reference the outer query
 -- select (select count(*) filter (where outer_c <> 0)
 --         from (values (1)) t0(inner_c))
 -- from (values (2),(3)) t1(outer_c); -- outer query is aggregation query
@@ -265,6 +266,7 @@ from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
 --      filter (where o.unique1 < 10))
 -- from tenk1 o;					-- outer query is aggregation query
 
+-- [SPARK-30220] Support Filter expression uses IN/EXISTS predicate sub-queries
 -- subquery in FILTER clause (PostgreSQL extension)
 -- select sum(unique1) FILTER (WHERE
 --  unique1 IN (SELECT unique1 FROM onek where unique1 < 100)) FROM tenk1;

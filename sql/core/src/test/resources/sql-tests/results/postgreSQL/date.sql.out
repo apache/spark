@@ -482,93 +482,93 @@ SELECT date '5874898-01-01'
 -- !query 46
 SELECT f1 - date '2000-01-01' AS `Days From 2K` FROM DATE_TBL
 -- !query 46 schema
-struct<Days From 2K:int>
+struct<Days From 2K:interval>
 -- !query 46 output
--1035
--1036
--1037
--1400
--1401
--1402
--1403
--15542
--15607
-13977
-14343
-14710
-91
-92
-93
+-2 years -10 months
+-2 years -10 months -1 days
+-2 years -9 months -30 days
+-3 years -10 months
+-3 years -10 months -1 days
+-3 years -10 months -2 days
+-3 years -9 months -30 days
+-42 years -6 months -18 days
+-42 years -8 months -22 days
+3 months
+3 months 1 days
+3 months 2 days
+38 years 3 months 7 days
+39 years 3 months 8 days
+40 years 3 months 9 days
 
 
 -- !query 47
 SELECT f1 - date 'epoch' AS `Days From Epoch` FROM DATE_TBL
 -- !query 47 schema
-struct<Days From Epoch:int>
+struct<Days From Epoch:interval>
 -- !query 47 output
--4585
--4650
-11048
-11049
-11050
-24934
-25300
-25667
-9554
-9555
-9556
-9557
-9920
-9921
-9922
+-12 years -6 months -18 days
+-12 years -8 months -22 days
+26 years 1 months 27 days
+26 years 1 months 28 days
+26 years 2 months
+26 years 2 months 1 days
+27 years 1 months 27 days
+27 years 2 months
+27 years 2 months 1 days
+30 years 3 months
+30 years 3 months 1 days
+30 years 3 months 2 days
+68 years 3 months 7 days
+69 years 3 months 8 days
+70 years 3 months 9 days
 
 
 -- !query 48
 SELECT date 'yesterday' - date 'today' AS `One day`
 -- !query 48 schema
-struct<One day:int>
+struct<One day:interval>
 -- !query 48 output
--1
+-1 days
 
 
 -- !query 49
 SELECT date 'today' - date 'tomorrow' AS `One day`
 -- !query 49 schema
-struct<One day:int>
+struct<One day:interval>
 -- !query 49 output
--1
+-1 days
 
 
 -- !query 50
 SELECT date 'yesterday' - date 'tomorrow' AS `Two days`
 -- !query 50 schema
-struct<Two days:int>
+struct<Two days:interval>
 -- !query 50 output
--2
+-2 days
 
 
 -- !query 51
 SELECT date 'tomorrow' - date 'today' AS `One day`
 -- !query 51 schema
-struct<One day:int>
+struct<One day:interval>
 -- !query 51 output
-1
+1 days
 
 
 -- !query 52
 SELECT date 'today' - date 'yesterday' AS `One day`
 -- !query 52 schema
-struct<One day:int>
+struct<One day:interval>
 -- !query 52 output
-1
+1 days
 
 
 -- !query 53
 SELECT date 'tomorrow' - date 'yesterday' AS `Two days`
 -- !query 53 schema
-struct<Two days:int>
+struct<Two days:interval>
 -- !query 53 output
-2
+2 days
 
 
 -- !query 54

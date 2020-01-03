@@ -137,10 +137,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    * Remove keys that don't start with "spark." from `sparkProperties`.
    */
   private def ignoreNonSparkProperties(): Unit = {
-    sparkProperties.foreach { case (k, v) =>
+    sparkProperties.keys.foreach { k =>
       if (!k.startsWith("spark.")) {
         sparkProperties -= k
-        logWarning(s"Ignoring non-spark config property: $k=$v")
+        logWarning(s"Ignoring non-Spark config property: $k")
       }
     }
   }

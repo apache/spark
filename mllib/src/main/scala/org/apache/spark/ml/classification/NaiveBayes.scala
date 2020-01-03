@@ -199,6 +199,7 @@ class NaiveBayes @Since("1.5.0") (
     val numLabels = aggregated.length
     instr.logNumClasses(numLabels)
     val numDocuments = aggregated.map(_._2).sum
+    instr.logSumOfWeights(numDocuments)
 
     val labelArray = new Array[Double](numLabels)
     val piArray = new Array[Double](numLabels)
@@ -280,6 +281,7 @@ class NaiveBayes @Since("1.5.0") (
     instr.logNumClasses(numLabels)
 
     val numInstances = aggregated.map(_._2).sum
+    instr.logSumOfWeights(numInstances)
 
     // If the ratio of data variance between dimensions is too small, it
     // will cause numerical errors. To address this, we artificially
@@ -351,22 +353,12 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
     Set(Multinomial, Bernoulli, Gaussian, Complement)
 
   private[ml] def requireNonnegativeValues(v: Vector): Unit = {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-
-    require(values.forall(_ >= 0.0),
+    require(v.nonZeroIterator.forall(_._2 > 0.0),
       s"Naive Bayes requires nonnegative feature values but found $v.")
   }
 
   private[ml] def requireZeroOneBernoulliValues(v: Vector): Unit = {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-
-    require(values.forall(v => v == 0.0 || v == 1.0),
+    require(v.nonZeroIterator.forall(_._2 == 1.0),
       s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
   }
 
@@ -521,7 +513,8 @@ class NaiveBayesModel private[ml] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = predictRawFunc(features)
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = predictRawFunc(features)
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {

@@ -450,12 +450,14 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset where each record has been mapped on to the specified type. The
    * method used to map columns depend on the type of `U`:
-   *  - When `U` is a class, fields for the class will be mapped to columns of the same name
-   *    (case sensitivity is determined by `spark.sql.caseSensitive`).
-   *  - When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
-   *    be assigned to `_1`).
-   *  - When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
-   *    `DataFrame` will be used.
+   * <ul>
+   *   <li>When `U` is a class, fields for the class will be mapped to columns of the same name
+   *   (case sensitivity is determined by `spark.sql.caseSensitive`).</li>
+   *   <li>When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
+   *   be assigned to `_1`).</li>
+   *   <li>When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
+   *   `DataFrame` will be used.</li>
+   * </ul>
    *
    * If the schema of the Dataset does not match the desired `U` type, you can use `select`
    * along with `alias` or `as` to rearrange or rename as required.
@@ -522,27 +524,44 @@ class Dataset[T] private[sql](
   // scalastyle:on println
 
   /**
-   * Prints the plans (logical and physical) to the console for debugging purposes.
+   * Prints the plans (logical and physical) with a format specified by a given explain mode.
    *
+   * @param mode specifies the expected output format of plans.
+   *             <ul>
+   *               <li>`simple` Print only a physical plan.</li>
+   *               <li>`extended`: Print both logical and physical plans.</li>
+   *               <li>`codegen`: Print a physical plan and generated codes if they are
+   *                 available.</li>
+   *               <li>`cost`: Print a logical plan and statistics if they are available.</li>
+   *               <li>`formatted`: Split explain output into two sections: a physical plan outline
+   *                 and node details.</li>
+   *             </ul>
    * @group basic
-   * @since 1.6.0
+   * @since 3.0.0
    */
-  def explain(extended: Boolean): Unit = {
+  def explain(mode: String): Unit = {
     // Because temporary views are resolved during analysis when we create a Dataset, and
     // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
     // `ExplainCommand` here will probably output different query plans, compared to the results
     // of evaluation of the Dataset. So just output QueryExecution's query plans here.
-    val qe = ExplainCommandUtil.explainedQueryExecution(sparkSession, logicalPlan, queryExecution)
 
-    val outputString =
-      if (extended) {
-        qe.toString
-      } else {
-        qe.simpleString
-      }
     // scalastyle:off println
-    println(outputString)
+    println(queryExecution.explainString(ExplainMode.fromString(mode)))
     // scalastyle:on println
+  }
+
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purposes.
+   *
+   * @param extended default `false`. If `false`, prints only the physical plan.
+   *
+   * @group basic
+   * @since 1.6.0
+   */
+  def explain(extended: Boolean): Unit = if (extended) {
+    explain(ExtendedMode.name)
+  } else {
+    explain(SimpleMode.name)
   }
 
   /**
@@ -551,7 +570,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def explain(): Unit = explain(extended = false)
+  def explain(): Unit = explain(SimpleMode.name)
 
   /**
    * Returns all column names and their data types as an array.
@@ -701,11 +720,12 @@ class Dataset[T] private[sql](
    * before which we assume no more late data is going to arrive.
    *
    * Spark will use this watermark for several purposes:
-   *  - To know when a given time window aggregation can be finalized and thus can be emitted when
-   *    using output modes that do not allow updates.
-   *  - To minimize the amount of state that we need to keep for on-going aggregations,
-   *    `mapGroupsWithState` and `dropDuplicates` operators.
-   *
+   * <ul>
+   *   <li>To know when a given time window aggregation can be finalized and thus can be emitted
+   *   when using output modes that do not allow updates.</li>
+   *   <li>To minimize the amount of state that we need to keep for on-going aggregations,
+   *    `mapGroupsWithState` and `dropDuplicates` operators.</li>
+   * </ul>
    *  The current watermark is computed by looking at the `MAX(eventTime)` seen across
    *  all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
    *  of coordinating this value across partitions, the actual watermark used is only guaranteed
@@ -1851,12 +1871,14 @@ class Dataset[T] private[sql](
  /**
   * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
   * that returns the same result as the input, with the following guarantees:
-  * - It will compute the defined aggregates (metrics) on all the data that is flowing through the
-  *   Dataset at that point.
-  * - It will report the value of the defined aggregate columns as soon as we reach a completion
+  * <ul>
+  *   <li>It will compute the defined aggregates (metrics) on all the data that is flowing through
+  *   the Dataset at that point.</li>
+  *   <li>It will report the value of the defined aggregate columns as soon as we reach a completion
   *   point. A completion point is either the end of a query (batch mode) or the end of a streaming
   *   epoch. The value of the aggregates only reflects the data processed since the previous
-  *   completion point.
+  *   completion point.</li>
+  * </ul>
   * Please note that continuous execution is currently not supported.
   *
   * The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
@@ -1869,14 +1891,10 @@ class Dataset[T] private[sql](
   * [[org.apache.spark.sql.util.QueryExecutionListener]] to the spark session.
   *
   * {{{
-  *   // Observe row count (rc) and error row count (erc) in the streaming Dataset
-  *   val observed_ds = ds.observe("my_event", count(lit(1)).as("rc"), count($"error").as("erc"))
-  *   observed_ds.writeStream.format("...").start()
-  *
   *   // Monitor the metrics using a listener.
   *   spark.streams.addListener(new StreamingQueryListener() {
   *     override def onQueryProgress(event: QueryProgressEvent): Unit = {
-  *       event.progress.observedMetrics.get("my_event").foreach { row =>
+  *       event.progress.observedMetrics.asScala.get("my_event").foreach { row =>
   *         // Trigger if the number of errors exceeds 5 percent
   *         val num_rows = row.getAs[Long]("rc")
   *         val num_error_rows = row.getAs[Long]("erc")
@@ -1886,7 +1904,12 @@ class Dataset[T] private[sql](
   *         }
   *       }
   *     }
+  *     def onQueryStarted(event: QueryStartedEvent): Unit = {}
+  *     def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
   *   })
+  *   // Observe row count (rc) and error row count (erc) in the streaming Dataset
+  *   val observed_ds = ds.observe("my_event", count(lit(1)).as("rc"), count($"error").as("erc"))
+  *   observed_ds.writeStream.format("...").start()
   * }}}
   *
   * @group typedrel
@@ -2494,13 +2517,14 @@ class Dataset[T] private[sql](
 
   /**
    * Computes specified statistics for numeric and string columns. Available statistics are:
-   *
-   * - count
-   * - mean
-   * - stddev
-   * - min
-   * - max
-   * - arbitrary approximate percentiles specified as a percentage (eg, 75%)
+   * <ul>
+   *   <li>count</li>
+   *   <li>mean</li>
+   *   <li>stddev</li>
+   *   <li>min</li>
+   *   <li>max</li>
+   *   <li>arbitrary approximate percentiles specified as a percentage (e.g. 75%)</li>
+   * </ul>
    *
    * If no statistics are given, this function computes count, mean, stddev, min,
    * approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
@@ -2769,6 +2793,18 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def take(n: Int): Array[T] = head(n)
+
+  /**
+   * Returns the last `n` rows in the Dataset.
+   *
+   * Running tail requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 3.0.0
+   */
+  def tail(n: Int): Array[T] = withAction(
+    "tail", withTypedPlan(Tail(Literal(n), logicalPlan)).queryExecution)(collectFromPlan)
 
   /**
    * Returns the first `n` rows in the Dataset as a list.
@@ -3436,9 +3472,7 @@ class Dataset[T] private[sql](
    */
   private def withNewRDDExecutionId[U](body: => U): U = {
     SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
-      rddQueryExecution.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
+      rddQueryExecution.executedPlan.resetMetrics()
       body
     }
   }
@@ -3449,9 +3483,7 @@ class Dataset[T] private[sql](
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(sparkSession, qe, Some(name)) {
-      qe.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
+      qe.executedPlan.resetMetrics()
       action(qe.executedPlan)
     }
   }

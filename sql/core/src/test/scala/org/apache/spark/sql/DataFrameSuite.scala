@@ -92,9 +92,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     assert(spark.emptyDataFrame.count() === 0)
   }
 
-  test("head and take") {
+  test("head, take and tail") {
     assert(testData.take(2) === testData.collect().take(2))
     assert(testData.head(2) === testData.collect().take(2))
+    assert(testData.tail(2) === testData.collect().takeRight(2))
     assert(testData.head(2).head.schema === testData.schema)
   }
 
@@ -164,7 +165,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
 
     Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf((SQLConf.DIALECT_SPARK_ANSI_ENABLED.key, ansiEnabled.toString)) {
+      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
         if (!ansiEnabled) {
           checkAnswer(structDf, Row(null))

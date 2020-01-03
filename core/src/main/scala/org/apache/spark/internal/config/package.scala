@@ -131,7 +131,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ALLOW_EC =
-    ConfigBuilder("spark.eventLog.allowErasureCoding")
+    ConfigBuilder("spark.eventLog.erasureCoding.enabled")
       .booleanConf
       .createWithDefault(false)
 
@@ -637,6 +637,12 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val METRICS_EXECUTORMETRICS_SOURCE_ENABLED =
+    ConfigBuilder("spark.metrics.executorMetricsSource.enabled")
+      .doc("Whether to register the ExecutorMetrics source with the metrics system.")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val METRICS_STATIC_SOURCES_ENABLED =
     ConfigBuilder("spark.metrics.staticSources.enabled")
       .doc("Whether to register static sources with the metrics system.")
@@ -1089,14 +1095,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
-    ConfigBuilder("spark.shuffle.readHostLocalDisk.enabled")
-      .doc("If enabled, shuffle blocks requested from those block managers which are running on " +
-        "the same host are read from the disk directly instead of being fetched as remote blocks " +
-        "over the network.")
-      .booleanConf
-      .createWithDefault(true)
-
   private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
     ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
       .doc("The max number of executors for which the local dirs are stored. This size is " +
@@ -1141,6 +1139,14 @@ package object config {
         "version job fetching shuffle blocks from old version external shuffle service.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
+    ConfigBuilder("spark.shuffle.readHostLocalDisk.enabled")
+      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled), shuffle " +
+        "blocks requested from those block managers which are running on the same host are read " +
+        "from the disk directly instead of being fetched as remote blocks over the network.")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
     ConfigBuilder("spark.storage.memoryMapLimitForTests")
@@ -1492,6 +1498,18 @@ package object config {
     ConfigBuilder("spark.speculation.quantile")
       .doubleConf
       .createWithDefault(0.75)
+
+  private[spark] val SPECULATION_TASK_DURATION_THRESHOLD =
+    ConfigBuilder("spark.speculation.task.duration.threshold")
+      .doc("Task duration after which scheduler would try to speculative run the task. If " +
+        "provided, tasks would be speculatively run if current stage contains less tasks " +
+        "than or equal to the number of slots on a single executor and the task is taking " +
+        "longer time than the threshold. This config helps speculate stage with very few " +
+        "tasks. Regular speculation configs may also apply if the executor slots are " +
+        "large enough. E.g. tasks might be re-launched if there are enough successful runs " +
+        "even though the threshold hasn't been reached.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
 
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")

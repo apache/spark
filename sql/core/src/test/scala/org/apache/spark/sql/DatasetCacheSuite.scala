@@ -97,7 +97,7 @@ class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimit
   test("persist and then groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(_._1)
-    val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
+    val agged = grouped.mapGroups { (g, iter) => (g, iter.map(_._2).sum) }
     agged.persist()
 
     checkDataset(
@@ -158,8 +158,8 @@ class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimit
 
   test("SPARK-24596 Non-cascading Cache Invalidation") {
     val df = Seq(("a", 1), ("b", 2)).toDF("s", "i")
-    val df2 = df.filter('i > 1)
-    val df3 = df.filter('i < 2)
+    val df2 = df.filter($"i" > 1)
+    val df3 = df.filter($"i" < 2)
 
     df2.cache()
     df.cache()
@@ -178,8 +178,8 @@ class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimit
     val expensiveUDF = udf({ x: Int => Thread.sleep(5000); x })
     val df = spark.range(0, 5).toDF("a")
     val df1 = df.withColumn("b", expensiveUDF($"a"))
-    val df2 = df1.groupBy('a).agg(sum('b))
-    val df3 = df.agg(sum('a))
+    val df2 = df1.groupBy($"a").agg(sum($"b"))
+    val df3 = df.agg(sum($"a"))
 
     df1.cache()
     df2.cache()
@@ -192,16 +192,16 @@ class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimit
 
     // df1 un-cached; df2's cache plan stays the same
     assert(df1.storageLevel == StorageLevel.NONE)
-    assertCacheDependency(df1.groupBy('a).agg(sum('b)))
+    assertCacheDependency(df1.groupBy($"a").agg(sum($"b")))
 
-    val df4 = df1.groupBy('a).agg(sum('b)).agg(sum("sum(b)"))
+    val df4 = df1.groupBy($"a").agg(sum($"b")).agg(sum("sum(b)"))
     assertCached(df4)
     // reuse loaded cache
     failAfter(3.seconds) {
       checkDataset(df4, Row(10))
     }
 
-    val df5 = df.agg(sum('a)).filter($"sum(a)" > 1)
+    val df5 = df.agg(sum($"a")).filter($"sum(a)" > 1)
     assertCached(df5)
     // first time use, load cache
     checkDataset(df5, Row(10))
@@ -209,8 +209,8 @@ class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimit
 
   test("SPARK-26708 Cache data and cached plan should stay consistent") {
     val df = spark.range(0, 5).toDF("a")
-    val df1 = df.withColumn("b", 'a + 1)
-    val df2 = df.filter('a > 1)
+    val df1 = df.withColumn("b", $"a" + 1)
+    val df2 = df.filter($"a" > 1)
 
     df.cache()
     // Add df1 to the CacheManager; the buffer is currently empty.

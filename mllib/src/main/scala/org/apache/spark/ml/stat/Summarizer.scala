@@ -369,39 +369,37 @@ private[ml] object SummaryBuilderImpl extends Logging {
       val localNumNonzeros = nnz
       val localCurrMax = currMax
       val localCurrMin = currMin
-      instance.foreachActive { (index, value) =>
-        if (value != 0.0) {
-          if (localCurrMax != null && localCurrMax(index) < value) {
-            localCurrMax(index) = value
-          }
-          if (localCurrMin != null && localCurrMin(index) > value) {
-            localCurrMin(index) = value
-          }
+      instance.foreachNonZero { (index, value) =>
+        if (localCurrMax != null && localCurrMax(index) < value) {
+          localCurrMax(index) = value
+        }
+        if (localCurrMin != null && localCurrMin(index) > value) {
+          localCurrMin(index) = value
+        }
 
-          if (localCurrWeightSum != null) {
-            if (localCurrMean != null) {
-              val prevMean = localCurrMean(index)
-              val diff = value - prevMean
-              localCurrMean(index) = prevMean +
-                weight * diff / (localCurrWeightSum(index) + weight)
+        if (localCurrWeightSum != null) {
+          if (localCurrMean != null) {
+            val prevMean = localCurrMean(index)
+            val diff = value - prevMean
+            localCurrMean(index) = prevMean +
+              weight * diff / (localCurrWeightSum(index) + weight)
 
-              if (localCurrM2n != null) {
-                localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
-              }
+            if (localCurrM2n != null) {
+              localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
             }
-            localCurrWeightSum(index) += weight
           }
+          localCurrWeightSum(index) += weight
+        }
 
-          if (localCurrM2 != null) {
-            localCurrM2(index) += weight * value * value
-          }
-          if (localCurrL1 != null) {
-            localCurrL1(index) += weight * math.abs(value)
-          }
+        if (localCurrM2 != null) {
+          localCurrM2(index) += weight * value * value
+        }
+        if (localCurrL1 != null) {
+          localCurrL1(index) += weight * math.abs(value)
+        }
 
-          if (localNumNonzeros != null) {
-            localNumNonzeros(index) += 1
-          }
+        if (localNumNonzeros != null) {
+          localNumNonzeros(index) += 1
         }
       }
 
@@ -553,6 +551,11 @@ private[ml] object SummaryBuilderImpl extends Logging {
      * Sample size.
      */
     def count: Long = totalCnt
+
+    /**
+     * Sum of weights.
+     */
+    def weightSum: Double = totalWeightSum
 
     /**
      * Number of nonzero elements in each dimension.

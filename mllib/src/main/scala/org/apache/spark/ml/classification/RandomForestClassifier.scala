@@ -233,13 +233,14 @@ class RandomForestClassificationModel private[ml] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
     // Classifies using majority votes.
     // Ignore the tree weights since all are 1.0 for now.
-    val votes = Array.fill[Double](numClasses)(0.0)
+    val votes = Array.ofDim[Double](numClasses)
     _trees.view.foreach { tree =>
-      val classCounts: Array[Double] = tree.rootNode.predictImpl(features).impurityStats.stats
+      val classCounts = tree.rootNode.predictImpl(features).impurityStats.stats
       val total = classCounts.sum
       if (total != 0) {
         var i = 0
