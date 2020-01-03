@@ -167,14 +167,13 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (ARRAY, ArrayType(elementType, containsNull)) =>
         val elementWriter = newWriter(avroType.getElementType, elementType, path)
         (updater, ordinal, value) =>
-          val array = value.asInstanceOf[GenericData.Array[Any]]
+          val array = value.asInstanceOf[java.util.Collection[Any]]
           val len = array.size()
           val result = createArrayData(elementType, len)
           val elementUpdater = new ArrayDataUpdater(result)
 
           var i = 0
-          while (i < len) {
-            val element = array.get(i)
+          for (element <- array.asScala) {
             if (element == null) {
               if (!containsNull) {
                 throw new RuntimeException(s"Array value at path ${path.mkString(".")} is not " +
