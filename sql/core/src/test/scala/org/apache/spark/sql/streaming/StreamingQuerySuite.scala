@@ -39,7 +39,6 @@ import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.QuerySummary._
 import org.apache.spark.sql.execution.streaming.sources.{MemorySink, TestForeachWriter}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1105,86 +1104,6 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         "file://f oo:bar@bar/foo/bar").foreach { p =>
       assert(!StreamExecution.containsSpecialCharsInPath(new Path(p)), s"failed to check $p")
     }
-  }
-
-  test("stream query summary with mixed batch and streaming V1 sources") {
-    val streamingTriggerDF = spark.createDataset(1 to 10).toDF
-    val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
-    val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
-
-    // Trigger input has 10 rows, static input has 2 rows,
-    // therefore after the first trigger, the calculated input rows should be 10
-    val query = getStreamingQuery(streamingInputDF.join(staticInputDF, "value"))
-    assertQuerySummary(query, TOTAL_INPUT_RECORDS, -1L, 10L)
-  }
-
-  test("stream query summary with trigger having data for both of two V2 sources") {
-    val streamInput1 = MemoryStream[Int]
-    val streamInput2 = MemoryStream[Int]
-
-    testStream(streamInput1.toDF().union(streamInput2.toDF()))(
-      AddData(streamInput1, 1, 2, 3),
-      AddData(streamInput2, 4, 5, 6, 7),
-      CheckLastBatch(1, 2, 3, 4, 5, 6, 7),
-      AssertOnQuery { q =>
-        assertQuerySummary(q, TOTAL_INPUT_RECORDS, -1L, 7L)
-        true
-      },
-      AddData(streamInput2, 8, 9),
-      CheckLastBatch(8, 9),
-      AssertOnQuery { q =>
-        assertQuerySummary(q, TOTAL_INPUT_RECORDS, -1L, 9L)
-        true
-      }
-    )
-  }
-
-  test("stream query summary with trigger having data for only one of two V2 sources") {
-    val streamInput1 = MemoryStream[Int]
-    val streamInput2 = MemoryStream[Int]
-
-    testStream(streamInput1.toDF().union(streamInput2.toDF()))(
-      AddData(streamInput1, 1, 2, 3),
-      CheckLastBatch(1, 2, 3),
-      AssertOnQuery { q =>
-        assertQuerySummary(q, TOTAL_INPUT_RECORDS, -1L, 3L)
-        true
-      },
-      AddData(streamInput2, 4, 5),
-      CheckLastBatch(4, 5),
-      AssertOnQuery { q =>
-        assertQuerySummary(q, TOTAL_INPUT_RECORDS, -1L, 5L)
-        true
-      }
-    )
-  }
-
-  test("stream query summary with mixed batch and streaming V2 sources") {
-    val streamInput = MemoryStream[Int]
-    val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
-
-    testStream(streamInput.toDF().join(staticInputDF, "value"))(
-      AddData(streamInput, 1, 2, 3),
-      AssertOnQuery { q =>
-        q.processAllAvailable()
-
-        // The number of leaves in the trigger's logical plan should be same as the executed plan.
-        require(
-          q.lastExecution.logical.collectLeaves().length ==
-            q.lastExecution.executedPlan.collectLeaves().length)
-        assertQuerySummary(q, TOTAL_INPUT_RECORDS, -1L, 3L)
-        true
-      }
-    )
-  }
-
-  private def assertQuerySummary[T](
-      query: StreamingQuery,
-      metricName: String,
-      defaultValue: T,
-      targetValue: T): Unit = {
-    val querySummary = query.getQuerySummary
-    assert(querySummary.getMetric(metricName, -1L).asInstanceOf[T] == targetValue)
   }
 
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */

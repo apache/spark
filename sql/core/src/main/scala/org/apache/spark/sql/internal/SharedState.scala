@@ -119,17 +119,6 @@ private[sql] class SharedState(
   private[sql] val activeQueriesLock = new Object
 
   /**
-   * A class that holds [[StreamingQuery]] active across all sessions to manage the lifecycle
-   * of the stream.
-   */
-  @GuardedBy("activeQueriesLock")
-  private[sql] val streamQueryStore: StreamQueryStore = {
-    val store = new StreamQueryStore()
-    sparkContext.ui.foreach(new StreamingQueryTab(store, _))
-    store
-  }
-
-  /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
    * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */
@@ -140,6 +129,17 @@ private[sql] class SharedState(
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
+  }
+
+  /**
+   * A class that holds [[StreamingQuery]] active across all sessions to manage the lifecycle
+   * of the stream.
+   */
+  @GuardedBy("activeQueriesLock")
+  private[sql] val streamQueryStore: StreamQueryStore = {
+    val store = new StreamQueryStore()
+    sparkContext.ui.foreach(new StreamingQueryTab(store, _))
+    store
   }
 
   /**

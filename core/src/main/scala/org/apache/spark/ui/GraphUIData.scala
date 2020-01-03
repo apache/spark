@@ -92,14 +92,14 @@ private[spark] class GraphUIData(
 
   def generateAreaStackHtmlWithData(
       jsCollector: JsCollector,
-      values: Array[(Long, ju.Map[String, JLong])],
-      operationLabels: Seq[String]): Seq[Node] = {
-    val jsForData = values.map { case (x, y) =>
-      val s =
-        y.asScala.toSeq.sortBy(_._1).map(e => s""""${e._1}": "${e._2.toDouble}"""").mkString(",")
+      values: Array[(Long, ju.Map[String, JLong])]): Seq[Node] = {
+    val operationLabels = values.flatMap(_._2.keySet().asScala).toSet
+    val durationDataPadding = UIUtils.durationDataPadding(values)
+    val jsForData = durationDataPadding.map { case (x, y) =>
+      val s = y.toSeq.sortBy(_._1).map(e => s""""${e._1}": "${e._2}"""").mkString(",")
       s"""{x: "${UIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)}", $s}"""
     }.mkString("[", ",", "]")
-    val jsForLabels = operationLabels.mkString("[\"", "\",\"", "\"]")
+    val jsForLabels = operationLabels.toSeq.sorted.mkString("[\"", "\",\"", "\"]")
 
     val (maxX, minX, maxY, minY) = if (values != null && values.length > 0) {
       val xValues = values.map(_._1.toLong)

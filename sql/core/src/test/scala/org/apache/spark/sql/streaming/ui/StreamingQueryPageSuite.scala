@@ -24,7 +24,7 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 import scala.xml.Node
 
-import org.apache.spark.sql.execution.streaming.{QuerySummary, StreamQueryStore}
+import org.apache.spark.sql.execution.streaming.StreamQueryStore
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore}
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamingQueryProgress}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -105,9 +105,6 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(progress.batchId).thenReturn(2)
     when(progress.prettyJson).thenReturn("""{"a":1}""")
 
-    val querySummary = mock(classOf[QuerySummary], RETURNS_SMART_NULLS)
-    when(querySummary.getMetric(QuerySummary.TOTAL_INPUT_RECORDS, 0L)).thenReturn(1000)
-
     val streamQuery = mock(classOf[StreamingQuery], RETURNS_SMART_NULLS)
     when(streamQuery.isActive).thenReturn(true)
     when(streamQuery.name).thenReturn("query")
@@ -115,7 +112,6 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(streamQuery.runId).thenReturn(id)
     when(streamQuery.lastProgress).thenReturn(progress)
     when(streamQuery.recentProgress).thenReturn(Array(progress))
-    when(streamQuery.getQuerySummary).thenReturn(querySummary)
     when(streamQuery.exception).thenReturn(None)
 
     streamQuery

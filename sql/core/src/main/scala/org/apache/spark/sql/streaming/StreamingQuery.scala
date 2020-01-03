@@ -22,7 +22,6 @@ import java.util.concurrent.TimeoutException
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.QuerySummary
 
 /**
  * A handle to a query that is executing continuously in the background as new data arrives.
@@ -170,9 +169,4 @@ trait StreamingQuery {
    * @since 2.0.0
    */
   def explain(extended: Boolean): Unit
-
-  /**
-   * Returns the total input records of this streaming query.
-   */
-  def getQuerySummary: QuerySummary
 }

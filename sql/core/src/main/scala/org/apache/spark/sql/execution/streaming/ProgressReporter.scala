@@ -82,9 +82,6 @@ trait ProgressReporter extends Logging {
   /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
 
-  /** Count the total input records of this streaming query. */
-  private val querySummary = new QuerySummary()
-
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
 
@@ -114,8 +111,6 @@ trait ProgressReporter extends Logging {
   def lastProgress: StreamingQueryProgress = progressBuffer.synchronized {
     progressBuffer.lastOption.orNull
   }
-
-  def getQuerySummary: QuerySummary = querySummary
 
   /** Begins recording statistics about query progress for a given trigger. */
   protected def startTrigger(): Unit = {
@@ -165,8 +160,6 @@ trait ProgressReporter extends Logging {
 
     val sourceProgress = sources.distinct.map { source =>
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
-      querySummary.updateMetric(QuerySummary.TOTAL_INPUT_RECORDS,
-        oldValue => oldValue.asInstanceOf[Long] + numRecords)
       new SourceProgress(
         description = source.toString,
         startOffset = currentTriggerStartOffsets.get(source).orNull,
@@ -364,36 +357,4 @@ trait ProgressReporter extends Logging {
   protected def updateStatusMessage(message: String): Unit = {
     currentStatus = currentStatus.copy(message = message)
   }
-}
-
-/**
- * A summary information of the streaming query.
- */
-class QuerySummary {
-  private val summary = new mutable.HashMap[String, Any]
-
-  summary.put(QuerySummary.TOTAL_INPUT_RECORDS, 0L)
-
-  def addMetric(name: String, value: Any): Unit = {
-    summary.put(name, value)
-  }
-
-  def updateMetric(name: String, body: Any => Any): Unit = {
-    if (summary.contains(name)) {
-      val oldValue = summary(name)
-      summary.put(name, body(oldValue))
-    }
-  }
-
-  def getMetric[T](name: String, default: T): T = {
-    if (summary.contains(name)) {
-      summary(name).asInstanceOf[T]
-    } else {
-      default
-    }
-  }
-}
-
-object QuerySummary {
-  val TOTAL_INPUT_RECORDS = "TotalInputRecords"
 }

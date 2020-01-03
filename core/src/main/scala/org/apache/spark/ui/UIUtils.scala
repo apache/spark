@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui
 
+import java.{util => ju}
+import java.lang.{Long => JLong}
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
@@ -24,6 +26,7 @@ import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, Response}
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
@@ -624,5 +627,24 @@ private[spark] object UIUtils extends Logging {
 
   def buildErrorResponse(status: Response.Status, msg: String): Response = {
     Response.status(status).entity(msg).`type`(MediaType.TEXT_PLAIN).build()
+  }
+
+  /**
+   * There may be different duration labels in each batch. So we need to
+   * mark those missing duration label as '0d' to avoid UI rending error.
+   */
+  def durationDataPadding(values: Array[(Long, ju.Map[String, JLong])])
+    : Array[(Long, Map[String, Double])] = {
+    val operationLabels = values.flatMap(_._2.keySet().asScala).toSet
+    values.map { case (x, y) =>
+      val dataPadding = operationLabels.map(d =>
+        if (y.containsKey(d)) {
+          (d, y.get(d).toDouble)
+        } else {
+          (d, 0d)
+        }
+      )
+      (x, dataPadding.toMap)
+    }
   }
 }

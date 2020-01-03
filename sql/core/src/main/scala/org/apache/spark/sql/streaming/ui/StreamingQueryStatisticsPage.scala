@@ -23,12 +23,11 @@ import java.text.SimpleDateFormat
 import java.util.UUID
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
-import org.apache.spark.sql.execution.streaming.{QuerySummary, StreamQueryStore}
+import org.apache.spark.sql.execution.streaming.StreamQueryStore
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
@@ -76,9 +75,9 @@ class StreamingQueryStatisticsPage(
   }
 
   def generateVar(values: Array[(Long, ju.Map[String, JLong])]): Seq[Node] = {
-    val js = "var timeToValues = {};\n" + values.map { case (x, y) =>
-      val s =
-        y.asScala.toSeq.sortBy(_._1).map(e => s""""${e._2.toDouble}"""").mkString("[", ",", "]")
+    val durationDataPadding = SparkUIUtils.durationDataPadding(values)
+    val js = "var timeToValues = {};\n" + durationDataPadding.map { case (x, y) =>
+      val s = y.toSeq.sortBy(_._1).map(e => s""""${e._2}"""").mkString("[", ",", "]")
       s"""timeToValues["${SparkUIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)}"] = $s;"""
     }.mkString("\n")
 
@@ -99,7 +98,6 @@ class StreamingQueryStatisticsPage(
 
     val name = UIUtils.getQueryName(query)
     val numBatches = withNoProgress(query, { query.lastProgress.batchId + 1L }, 0)
-    val totalRecords = query.getQuerySummary.getMetric(QuerySummary.TOTAL_INPUT_RECORDS, 0L)
     <div>Running batches for
       <strong>
         {duration}
@@ -108,7 +106,7 @@ class StreamingQueryStatisticsPage(
       <strong>
         {SparkUIUtils.formatDate(timeSinceStart)}
       </strong>
-      (<strong>{numBatches}</strong> completed batches, <strong>{totalRecords}</strong> records)
+      (<strong>{numBatches}</strong> completed batches)
     </div>
     <br />
     <div><strong>Name: </strong>{name}</div>
@@ -153,11 +151,6 @@ class StreamingQueryStatisticsPage(
       // remove "triggerExecution" as it count the other operation duration.
       durationMs.remove("triggerExecution")
       (df.parse(p.timestamp).getTime, durationMs)}, Array.empty[(Long, ju.Map[String, JLong])])
-    val operationLabels = withNoProgress(query, {
-      val durationKeys = query.lastProgress.durationMs.keySet()
-      // remove "triggerExecution" as it count the other operation duration.
-      durationKeys.remove("triggerExecution")
-      durationKeys.asScala.toSeq.sorted}, Seq.empty[String])
 
     val jsCollector = new JsCollector
     val graphUIDataForInputRate =
@@ -271,7 +264,7 @@ class StreamingQueryStatisticsPage(
                 <div><strong>Operation Duration {SparkUIUtils.tooltip("The amount of time taken to perform various operations in milliseconds.", "right")}</strong></div>
               </div>
             </td>
-            <td class="duration-area-stack" colspan="2">{graphUIDataForDuration.generateAreaStackHtmlWithData(jsCollector, operationDurationData, operationLabels)}</td>
+            <td class="duration-area-stack" colspan="2">{graphUIDataForDuration.generateAreaStackHtmlWithData(jsCollector, operationDurationData)}</td>
           </tr>
         </tbody>
       </table>
