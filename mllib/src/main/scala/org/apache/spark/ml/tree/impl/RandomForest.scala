@@ -625,6 +625,7 @@ private[spark] object RandomForest extends Logging with Serializable {
           binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
         (nodeIndex, (split, stats))
     }.collectAsMap()
+    nodeToFeaturesBc.destroy()
 
     timer.stop("chooseSplits")
 
