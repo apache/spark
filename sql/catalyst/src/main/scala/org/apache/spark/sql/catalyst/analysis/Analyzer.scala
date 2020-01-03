@@ -99,7 +99,7 @@ object FakeV2SessionCatalog extends TableCatalog {
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
-    relationCache: mutable.Map[String, LogicalPlan] = mutable.Map.empty)
+    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -874,8 +874,9 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
+              val key = catalog.name +: ident.namespace :+ ident.name
               AnalysisContext.get.relationCache.getOrElseUpdate(
-                v1Table.v1Table.qualifiedName, v1SessionCatalog.getRelation(v1Table.v1Table))
+                key, v1SessionCatalog.getRelation(v1Table.v1Table))
             case table =>
               DataSourceV2Relation.create(table)
           }
