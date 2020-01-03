@@ -735,6 +735,7 @@ private[spark] class TaskSetManager(
         s" ($tasksSuccessful/$numTasks)")
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
+      fetchFailedIndex -= index
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
@@ -757,7 +758,10 @@ private[spark] class TaskSetManager(
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
         tasksSuccessful += 1
+      }
+      if (fetchFailedIndex.contains(index) || !successful(index)) {
         successful(index) = true
+        fetchFailedIndex -= index
         if (tasksSuccessful == numTasks) {
           isZombie = true
         }
@@ -885,11 +889,12 @@ private[spark] class TaskSetManager(
       }
     }
 
-    if (successful(index)) {
-      logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, but the task will not" +
-        s" be re-executed (either because the task failed with a shuffle data fetch failure," +
-        s" so the previous stage needs to be re-run, or because a different copy of the task" +
-        s" has already succeeded).")
+    if (fetchFailedIndex.contains(index)) {
+      logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed (because the task " +
+        s"failed with a shuffle data fetch failure, so the previous stage needs to be re-run).")
+    } else if (successful(index)) {
+      logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed (but a different copy " +
+        s"of the task has already succeeded).")
     } else {
       addPendingTask(index)
     }
