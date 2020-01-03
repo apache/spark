@@ -76,11 +76,23 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
     _liveExecutors -= executorRemoved.executorId
   }
 
-  override def createFilter(): EventFilter = new BasicEventFilter(this)
+  override def createFilter(): EventFilter = {
+    cleanupInvalidStages()
 
-  def statistics(): FilterStatistics = {
-    FilterStatistics(totalJobs, liveJobToStages.size, totalStages,
+    val stats = FilterStatistics(totalJobs, liveJobToStages.size, totalStages,
       liveJobToStages.map(_._2.size).sum, totalTasks, _stageToTasks.map(_._2.size).sum)
+
+    new BasicEventFilter(stats, liveJobToStages, stageToTasks, stageToRDDs, liveExecutors)
+  }
+
+  private def cleanupInvalidStages(): Unit = {
+    val allValidStages = liveJobToStages.flatMap { case (_, stages) => stages.toSet }.toSet
+    _stageToTasks.keySet.diff(allValidStages).foreach { stageId =>
+      _stageToTasks.remove(stageId)
+    }
+    _stageToRDDs.keySet.diff(allValidStages).foreach { stageId =>
+      _stageToRDDs.remove(stageId)
+    }
   }
 }
 
@@ -154,11 +166,6 @@ private[spark] class BasicEventFilter(
     _stageToRDDs: Map[Int, Seq[Int]],
     liveExecutors: Set[String])
   extends JobEventFilter(Some(_stats), _liveJobToStages, _stageToTasks, _stageToRDDs) with Logging {
-
-  def this(builder: BasicEventFilterBuilder) = {
-    this(builder.statistics(), builder.liveJobToStages, builder.stageToTasks, builder.stageToRDDs,
-      builder.liveExecutors)
-  }
 
   logDebug(s"live executors : $liveExecutors")
 
