@@ -47,8 +47,8 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case e: RuntimeReplaceable => e.child
     case CountIf(predicate) => Count(new NullIf(predicate, Literal.FalseLiteral))
-    case BoolOr(_, arg) => Max(arg)
-    case BoolAnd(_, arg) => Min(arg)
+    case BoolOr(arg) => Max(arg)
+    case BoolAnd(arg) => Min(arg)
   }
 }
 

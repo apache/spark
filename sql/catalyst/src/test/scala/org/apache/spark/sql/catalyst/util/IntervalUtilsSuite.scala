@@ -20,12 +20,14 @@ package org.apache.spark.sql.catalyst.util
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class IntervalUtilsSuite extends SparkFunSuite {
+class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
   private def checkFromString(input: String, expected: CalendarInterval): Unit = {
     assert(stringToInterval(UTF8String.fromString(input)) === expected)
@@ -160,43 +162,45 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
   }
 
-  test("from day-time string") {
-    assert(fromDayTimeString("5 12:40:30.999999999") ===
-      new CalendarInterval(
-        0,
-        5,
-        12 * MICROS_PER_HOUR +
-        40 * MICROS_PER_MINUTE +
-        30 * MICROS_PER_SECOND + 999999L))
-    assert(fromDayTimeString("10 0:12:0.888") ===
-      new CalendarInterval(
-        0,
-        10,
-        12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLIS))
-    assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
+  test("from day-time string - legacy") {
+    withSQLConf(SQLConf.LEGACY_FROM_DAYTIME_STRING.key -> "true") {
+      assert(fromDayTimeString("5 12:40:30.999999999") ===
+        new CalendarInterval(
+          0,
+          5,
+          12 * MICROS_PER_HOUR +
+            40 * MICROS_PER_MINUTE +
+            30 * MICROS_PER_SECOND + 999999L))
+      assert(fromDayTimeString("10 0:12:0.888") ===
+        new CalendarInterval(
+          0,
+          10,
+          12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLIS))
+      assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
 
-    try {
-      fromDayTimeString("5 30:12:20")
-      fail("Expected to throw an exception for the invalid input")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("hour 30 outside range"))
-    }
+      try {
+        fromDayTimeString("5 30:12:20")
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("hour 30 outside range"))
+      }
 
-    try {
-      fromDayTimeString("5 30-12")
-      fail("Expected to throw an exception for the invalid input")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("must match day-time format"))
-    }
+      try {
+        fromDayTimeString("5 30-12")
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("must match day-time format"))
+      }
 
-    try {
-      fromDayTimeString("5 1:12:20", HOUR, MICROSECOND)
-      fail("Expected to throw an exception for the invalid convention type")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("Cannot support (interval"))
+      try {
+        fromDayTimeString("5 1:12:20", HOUR, MICROSECOND)
+        fail("Expected to throw an exception for the invalid convention type")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("Cannot support (interval"))
+      }
     }
   }
 
@@ -235,90 +239,69 @@ class IntervalUtilsSuite extends SparkFunSuite {
   }
 
   test("negate") {
+    assert(negateExact(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
     assert(negate(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
   }
 
   test("subtract one interval by another") {
     val input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR)
     val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
-    assert(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR) === subtract(input1, input2))
     val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
     val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
-    assert(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR) === subtract(input3, input4))
+    Seq[(CalendarInterval, CalendarInterval) => CalendarInterval](subtractExact, subtract)
+      .foreach { func =>
+        assert(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR) === func(input1, input2))
+        assert(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR) === func(input3, input4))
+      }
   }
 
   test("add two intervals") {
     val input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR)
     val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
-    assert(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR) === add(input1, input2))
-
     val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
     val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
-    assert(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR) === add(input3, input4))
+    Seq[(CalendarInterval, CalendarInterval) => CalendarInterval](addExact, add).foreach { func =>
+      assert(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR) === func(input1, input2))
+      assert(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR) === func(input3, input4))
+    }
   }
 
   test("multiply by num") {
     var interval = new CalendarInterval(0, 0, 0)
-    assert(interval === multiply(interval, 0))
+    assert(interval === multiplyExact(interval, 0))
     interval = new CalendarInterval(123, 456, 789)
-    assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === multiply(interval, 42))
+    assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === multiplyExact(interval, 42))
     interval = new CalendarInterval(-123, -456, -789)
-    assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === multiply(interval, 42))
+    assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === multiplyExact(interval, 42))
     assert(new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR) ===
-      multiply(new CalendarInterval(1, 5, 0), 1.5))
+      multiplyExact(new CalendarInterval(1, 5, 0), 1.5))
     assert(new CalendarInterval(2, 14, 12 * MICROS_PER_HOUR) ===
-      multiply(new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR), 1.2))
+      multiplyExact(new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR), 1.2))
+
     try {
-      multiply(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE)
+      multiplyExact(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE)
       fail("Expected to throw an exception on months overflow")
     } catch {
-      case e: ArithmeticException =>
-        assert(e.getMessage.contains("overflow"))
+      case e: ArithmeticException => assert(e.getMessage.contains("overflow"))
     }
   }
 
   test("divide by num") {
     var interval = new CalendarInterval(0, 0, 0)
-    assert(interval === divide(interval, 10))
+    assert(interval === divideExact(interval, 10))
     interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
     assert(new CalendarInterval(0, 16, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
-      divide(interval, 2))
-    assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === divide(interval, 0.5))
+      divideExact(interval, 2))
+    assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === divideExact(interval, 0.5))
     interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
-    assert(new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND) === divide(interval, 2))
-    assert(new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE) === divide(interval, 0.5))
+    assert(new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND) === divideExact(interval, 2))
+    assert(new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE) === divideExact(interval, 0.5))
     try {
-      divide(new CalendarInterval(123, 456, 789), 0)
+      divideExact(new CalendarInterval(123, 456, 789), 0)
       fail("Expected to throw an exception on divide by zero")
     } catch {
-      case e: ArithmeticException =>
-        assert(e.getMessage.contains("divide by zero"))
+      case e: ArithmeticException => assert(e.getMessage.contains("divide by zero"))
     }
-  }
-
-  test("justify days") {
-    checkFromStringWithFunc("1 month 35 day", 2, 5, 0, justifyDays)
-    checkFromStringWithFunc("-1 month 35 day", 0, 5, 0, justifyDays)
-    checkFromStringWithFunc("1 month -35 day", 0, -5, 0, justifyDays)
-    checkFromStringWithFunc("-1 month -35 day", -2, -5, 0, justifyDays)
-    checkFromStringWithFunc("-1 month 2 day", 0, -28, 0, justifyDays)
-  }
-
-  test("justify hours") {
-    checkFromStringWithFunc("29 day 25 hour", 0, 30, 1 * MICROS_PER_HOUR, justifyHours)
-    checkFromStringWithFunc("29 day -25 hour", 0, 27, 23 * MICROS_PER_HOUR, justifyHours)
-    checkFromStringWithFunc("-29 day 25 hour", 0, -27, -23 * MICROS_PER_HOUR, justifyHours)
-    checkFromStringWithFunc("-29 day -25 hour", 0, -30, -1 * MICROS_PER_HOUR, justifyHours)
-  }
-
-  test("justify interval") {
-    checkFromStringWithFunc("1 month 29 day 25 hour", 2, 0, 1 * MICROS_PER_HOUR, justifyInterval)
-    checkFromStringWithFunc("-1 month 29 day -25 hour", 0, -2, -1 * MICROS_PER_HOUR,
-      justifyInterval)
-    checkFromStringWithFunc("1 month -29 day -25 hour", 0, 0, -1 * MICROS_PER_HOUR, justifyInterval)
-    checkFromStringWithFunc("-1 month -29 day -25 hour", -2, 0, -1 * MICROS_PER_HOUR,
-      justifyInterval)
-    intercept[ArithmeticException](justifyInterval(new CalendarInterval(2, 0, Long.MaxValue)))
   }
 
   test("to ansi sql standard string") {
@@ -383,5 +366,98 @@ class IntervalUtilsSuite extends SparkFunSuite {
       "-2 years -10 months 31 days 3 hours 13 minutes 0.000123 seconds")
     val i9 = new CalendarInterval(0, 0, -3000 * MICROS_PER_HOUR)
     assert(IntervalUtils.toMultiUnitsString(i9) === "-3000 hours")
+  }
+
+  test("from day-time string") {
+    def check(input: String, from: IntervalUnit, to: IntervalUnit, expected: String): Unit = {
+      withClue(s"from = $from, to = $to") {
+        val expectedUtf8 = UTF8String.fromString(expected)
+        assert(fromDayTimeString(input, from, to) === safeStringToInterval(expectedUtf8))
+      }
+    }
+    def checkFail(
+        input: String,
+        from: IntervalUnit,
+        to: IntervalUnit,
+        errMsg: String): Unit = {
+      try {
+        fromDayTimeString(input, from, to)
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains(errMsg))
+      }
+    }
+
+    check("12:40", HOUR, MINUTE, "12 hours 40 minutes")
+    check("+12:40", HOUR, MINUTE, "12 hours 40 minutes")
+    check("-12:40", HOUR, MINUTE, "-12 hours -40 minutes")
+    checkFail("5 12:40", HOUR, MINUTE, "must match day-time format")
+
+    check("12:40:30.999999999", HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
+    check("+12:40:30.123456789", HOUR, SECOND, "12 hours 40 minutes 30.123456 seconds")
+    check("-12:40:30.123456789", HOUR, SECOND, "-12 hours -40 minutes -30.123456 seconds")
+    checkFail("5 12:40:30", HOUR, SECOND, "must match day-time format")
+    checkFail("12:40:30.0123456789", HOUR, SECOND, "must match day-time format")
+
+    check("40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
+    check("+40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
+    check("-40:30.123456789", MINUTE, SECOND, "-40 minutes -30.123456 seconds")
+    checkFail("12:40:30", MINUTE, SECOND, "must match day-time format")
+
+    check("5 12", DAY, HOUR, "5 days 12 hours")
+    check("+5 12", DAY, HOUR, "5 days 12 hours")
+    check("-5 12", DAY, HOUR, "-5 days -12 hours")
+    checkFail("5 12:30", DAY, HOUR, "must match day-time format")
+
+    check("5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
+    check("+5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
+    check("-5 12:40", DAY, MINUTE, "-5 days -12 hours -40 minutes")
+    checkFail("5 12", DAY, MINUTE, "must match day-time format")
+
+    check("5 12:40:30.123", DAY, SECOND, "5 days 12 hours 40 minutes 30.123 seconds")
+    check("+5 12:40:30.123456", DAY, SECOND, "5 days 12 hours 40 minutes 30.123456 seconds")
+    check("-5 12:40:30.123456789", DAY, SECOND, "-5 days -12 hours -40 minutes -30.123456 seconds")
+    checkFail("5 12", DAY, SECOND, "must match day-time format")
+
+    checkFail("5 30:12:20", DAY, SECOND, "hour 30 outside range")
+    checkFail("5 30-12", DAY, SECOND, "must match day-time format")
+    checkFail("5 1:12:20", HOUR, MICROSECOND, "Cannot support (interval")
+  }
+
+  test("interval overflow check") {
+    intercept[ArithmeticException](negateExact(new CalendarInterval(Int.MinValue, 0, 0)))
+    assert(negate(new CalendarInterval(Int.MinValue, 0, 0)) ===
+      new CalendarInterval(Int.MinValue, 0, 0))
+    intercept[ArithmeticException](negateExact(CalendarInterval.MIN_VALUE))
+    assert(negate(CalendarInterval.MIN_VALUE) === CalendarInterval.MIN_VALUE)
+    intercept[ArithmeticException](addExact(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(0, 0, 1)))
+    intercept[ArithmeticException](addExact(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(0, 1, 0)))
+    intercept[ArithmeticException](addExact(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(1, 0, 0)))
+    assert(add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, 1)) ===
+      new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MinValue))
+    assert(add(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 1, 0)) ===
+      new CalendarInterval(Int.MaxValue, Int.MinValue, Long.MaxValue))
+    assert(add(CalendarInterval.MAX_VALUE, new CalendarInterval(1, 0, 0)) ===
+      new CalendarInterval(Int.MinValue, Int.MaxValue, Long.MaxValue))
+
+    intercept[ArithmeticException](subtractExact(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(0, 0, -1)))
+    intercept[ArithmeticException](subtractExact(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(0, -1, 0)))
+    intercept[ArithmeticException](subtractExact(CalendarInterval.MAX_VALUE,
+      new CalendarInterval(-1, 0, 0)))
+    assert(subtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, 0, -1)) ===
+      new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MinValue))
+    assert(subtract(CalendarInterval.MAX_VALUE, new CalendarInterval(0, -1, 0)) ===
+      new CalendarInterval(Int.MaxValue, Int.MinValue, Long.MaxValue))
+    assert(subtract(CalendarInterval.MAX_VALUE, new CalendarInterval(-1, 0, 0)) ===
+      new CalendarInterval(Int.MinValue, Int.MaxValue, Long.MaxValue))
+
+    intercept[ArithmeticException](multiplyExact(CalendarInterval.MAX_VALUE, 2))
+    intercept[ArithmeticException](divideExact(CalendarInterval.MAX_VALUE, 0.5))
   }
 }

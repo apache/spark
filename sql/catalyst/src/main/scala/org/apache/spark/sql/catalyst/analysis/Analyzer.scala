@@ -37,7 +37,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -87,13 +88,14 @@ object FakeV2SessionCatalog extends TableCatalog {
  *
  * Note this is thread local.
  *
- * @param defaultDatabase The default database used in the view resolution, this overrules the
- *                        current catalog database.
+ * @param catalogAndNamespace The catalog and namespace used in the view resolution. This overrides
+ *                            the current catalog and namespace when resolving relations inside
+ *                            views.
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
  */
 case class AnalysisContext(
-    defaultDatabase: Option[String] = None,
+    catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0)
 
 object AnalysisContext {
@@ -106,10 +108,10 @@ object AnalysisContext {
 
   private def set(context: AnalysisContext): Unit = value.set(context)
 
-  def withAnalysisContext[A](database: Option[String])(f: => A): A = {
+  def withAnalysisContext[A](catalogAndNamespace: Seq[String])(f: => A): A = {
     val originContext = value.get()
-    val context = AnalysisContext(defaultDatabase = database,
-      nestedViewDepth = originContext.nestedViewDepth + 1)
+    val context = AnalysisContext(
+      catalogAndNamespace, nestedViewDepth = originContext.nestedViewDepth + 1)
     set(context)
     try f finally { set(originContext) }
   }
@@ -196,6 +198,7 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
+      ResolveNamespace(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::
@@ -720,6 +723,16 @@ class Analyzer(
     }
   }
 
+  case class ResolveNamespace(catalogManager: CatalogManager)
+    extends Rule[LogicalPlan] with LookupCatalog {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
+        ResolvedNamespace(catalog.asNamespaceCatalog, ns)
+    }
+  }
+
+  private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
+
   /**
    * Resolve relations to temp views. This is not an actual rule, and is called by
    * [[ResolveTables]] and [[ResolveRelations]].
@@ -732,14 +745,37 @@ class Analyzer(
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
+      case u @ UnresolvedTable(ident) =>
+        lookupTempView(ident).foreach { _ =>
+          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
+        }
+        u
     }
 
-    def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] =
+    def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
+      // Permanent View can't refer to temp views, no need to lookup at all.
+      if (isResolvingView) return None
+
       identifier match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
         case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
         case _ => None
       }
+    }
+  }
+
+  // If we are resolving relations insides views, we need to expand single-part relation names with
+  // the current catalog and namespace of when the view was created.
+  private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
+    if (!isResolvingView) return nameParts
+
+    if (nameParts.length == 1) {
+      AnalysisContext.get.catalogAndNamespace :+ nameParts.head
+    } else if (catalogManager.isCatalogRegistered(nameParts.head)) {
+      nameParts
+    } else {
+      AnalysisContext.get.catalogAndNamespace.head +: nameParts
+    }
   }
 
   /**
@@ -751,6 +787,11 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
+          .getOrElse(u)
+
+      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+        CatalogV2Util.loadTable(catalog, ident)
+          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
@@ -781,7 +822,7 @@ class Analyzer(
      * Performs the lookup of DataSourceV2 Tables from v2 catalog.
      */
     private def lookupV2Relation(identifier: Seq[String]): Option[DataSourceV2Relation] =
-      identifier match {
+      expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
             case Some(table) => Some(DataSourceV2Relation.create(table))
@@ -795,45 +836,21 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-
-    // If an unresolved relation is given, it is looked up from the session catalog and either v1
-    // or v2 relation is returned. Otherwise, we look up the table from catalog
-    // and change the default database name (in AnalysisContext) if it is a view.
-    // We usually look up a table from the default database if the table identifier has an empty
-    // database part, for a view the default database should be the currentDb when the view was
-    // created. When the case comes to resolving a nested view, the view may have different default
-    // database with that the referenced view has, so we need to use
-    // `AnalysisContext.defaultDatabase` to track the current default database.
-    // When the relation we resolve is a view, we fetch the view.desc(which is a CatalogTable), and
-    // then set the value of `CatalogTable.viewDefaultDatabase` to
-    // `AnalysisContext.defaultDatabase`, we look up the relations that the view references using
-    // the default database.
-    // For example:
-    // |- view1 (defaultDatabase = db1)
-    //   |- operator
-    //     |- table2 (defaultDatabase = db1)
-    //     |- view2 (defaultDatabase = db2)
-    //        |- view3 (defaultDatabase = db3)
-    //   |- view4 (defaultDatabase = db4)
-    // In this case, the view `view1` is a nested view, it directly references `table2`, `view2`
-    // and `view4`, the view `view2` references `view3`. On resolving the table, we look up the
-    // relations `table2`, `view2`, `view4` using the default database `db1`, and look up the
-    // relation `view3` using the default database `db2`.
-    //
-    // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
-    // have empty defaultDatabase and all the relations in viewText have database part defined.
-    def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
-      case u @ UnresolvedRelation(SessionCatalogAndIdentifier(catalog, ident)) =>
-        lookupRelation(catalog, ident, recurse = true).getOrElse(u)
-
+    // The current catalog and namespace may be different from when the view was created, we must
+    // resolve the view logical plan here, with the catalog and namespace stored in view metadata.
+    // This is done by keeping the catalog and namespace in `AnalysisContext`, and analyzer will
+    // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
+    // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
+    // with it, instead of current catalog and namespace.
+    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
       case view @ View(desc, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(desc.viewDefaultDatabase) {
+        val newChild = AnalysisContext.withAnalysisContext(desc.viewCatalogAndNamespace) {
           if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
-            view.failAnalysis(s"The depth of view ${view.desc.identifier} exceeds the maximum " +
+            view.failAnalysis(s"The depth of view ${desc.identifier} exceeds the maximum " +
               s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
               s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
               "around this.")
@@ -842,16 +859,15 @@ class Analyzer(
         }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
-        val newChild = resolveRelation(view)
-        p.copy(child = newChild)
+        p.copy(child = resolveViews(view))
       case _ => plan
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
         val relation = table match {
-          case u @ UnresolvedRelation(SessionCatalogAndIdentifier(catalog, ident)) =>
-            lookupRelation(catalog, ident, recurse = false).getOrElse(u)
+          case u: UnresolvedRelation =>
+            lookupRelation(u.multipartIdentifier).getOrElse(u)
           case other => other
         }
 
@@ -861,50 +877,36 @@ class Analyzer(
           case other => i.copy(table = other)
         }
 
-      case u: UnresolvedRelation => resolveRelation(u)
-    }
+      case u: UnresolvedRelation =>
+        lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
 
-    // Look up a relation from the given session catalog with the following logic:
-    // 1) If a relation is not found in the catalog, return None.
-    // 2) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
-    // If recurse is set to true, it will call `resolveRelation` recursively to resolve
-    // relations with the correct database scope.
-    private def lookupRelation(
-        catalog: CatalogPlugin,
-        ident: Identifier,
-        recurse: Boolean): Option[LogicalPlan] = {
-      val newIdent = withNewNamespace(ident)
-      assert(newIdent.namespace.size == 1)
-
-      CatalogV2Util.loadTable(catalog, newIdent) match {
-        case Some(v1Table: V1Table) =>
-          val tableIdent = TableIdentifier(newIdent.name, newIdent.namespace.headOption)
-          val relation = v1SessionCatalog.getRelation(v1Table.v1Table)
-          if (recurse) {
-            Some(resolveRelation(relation))
-          } else {
-            Some(relation)
-          }
-        case Some(table) =>
-          Some(DataSourceV2Relation.create(table))
-        case None => None
-      }
-    }
-
-    // The namespace used for lookup is decided by the following precedence:
-    // 1. Use the existing namespace if it is defined.
-    // 2. Use defaultDatabase fom AnalysisContext, if it is defined. In this case, no temporary
-    //    objects can be used, and the default database is only used to look up a view.
-    // 3. Use the current namespace of the session catalog.
-    private def withNewNamespace(ident: Identifier): Identifier = {
-      if (ident.namespace.nonEmpty) {
-        ident
-      } else {
-        val defaultNamespace = AnalysisContext.get.defaultDatabase match {
-          case Some(db) => Array(db)
-          case None => Array(v1SessionCatalog.getCurrentDatabase)
+      case u @ UnresolvedTable(identifier: Seq[String]) =>
+        expandRelationName(identifier) match {
+          case SessionCatalogAndIdentifier(catalog, ident) =>
+            CatalogV2Util.loadTable(catalog, ident) match {
+              case Some(v1Table: V1Table) if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+                u.failAnalysis(s"$ident is a view not table.")
+              case Some(table) => ResolvedTable(catalog.asTableCatalog, ident, table)
+              case None => u
+            }
+          case _ => u
         }
-        Identifier.of(defaultNamespace, ident.name)
+    }
+
+    // Look up a relation from the session catalog with the following logic:
+    // 1) If the resolved catalog is not session catalog, return None.
+    // 2) If a relation is not found in the catalog, return None.
+    // 3) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
+    private def lookupRelation(identifier: Seq[String]): Option[LogicalPlan] = {
+      expandRelationName(identifier) match {
+        case SessionCatalogAndIdentifier(catalog, ident) =>
+          CatalogV2Util.loadTable(catalog, ident).map {
+            case v1Table: V1Table =>
+              v1SessionCatalog.getRelation(v1Table.v1Table)
+            case table =>
+              DataSourceV2Relation.create(table)
+          }
+        case _ => None
       }
     }
   }
@@ -1381,8 +1383,8 @@ class Analyzer(
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
-        case f1: UnresolvedFunction if containsStar(f1.children) =>
-          f1.copy(children = f1.children.flatMap {
+        case f1: UnresolvedFunction if containsStar(f1.arguments) =>
+          f1.copy(arguments = f1.arguments.flatMap {
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
           })
@@ -1734,26 +1736,37 @@ class Analyzer(
                     s"its class is ${other.getClass.getCanonicalName}, which is not a generator.")
               }
             }
-          case u @ UnresolvedFunction(funcId, children, isDistinct) =>
+          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
             withPosition(u) {
-              v1SessionCatalog.lookupFunction(funcId, children) match {
+              v1SessionCatalog.lookupFunction(funcId, arguments) match {
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
                 case wf: AggregateWindowFunction =>
-                  if (isDistinct) {
-                    failAnalysis(
-                      s"DISTINCT specified, but ${wf.prettyName} is not an aggregate function")
+                  if (isDistinct || filter.isDefined) {
+                    failAnalysis("DISTINCT or FILTER specified, " +
+                      s"but ${wf.prettyName} is not an aggregate function")
                   } else {
                     wf
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
+                case agg: AggregateFunction =>
+                  // TODO: SPARK-30276 Support Filter expression allows simultaneous use of DISTINCT
+                  if (filter.isDefined) {
+                    if (isDistinct) {
+                      failAnalysis("DISTINCT and FILTER cannot be used in aggregate functions " +
+                        "at the same time")
+                    } else if (!filter.get.deterministic) {
+                      failAnalysis("FILTER expression is non-deterministic, " +
+                        "it cannot be used in aggregate functions")
+                    }
+                  }
+                  AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
-                  if (isDistinct) {
-                    failAnalysis(
-                      s"DISTINCT specified, but ${other.prettyName} is not an aggregate function")
+                  if (isDistinct || filter.isDefined) {
+                    failAnalysis("DISTINCT or FILTER specified, " +
+                      s"but ${other.prettyName} is not an aggregate function")
                   } else {
                     other
                   }
@@ -2351,7 +2364,7 @@ class Analyzer(
 
           // Extract Windowed AggregateExpression
           case we @ WindowExpression(
-              ae @ AggregateExpression(function, _, _, _),
+              ae @ AggregateExpression(function, _, _, _, _),
               spec: WindowSpecDefinition) =>
             val newChildren = function.children.map(extractExpr)
             val newFunction = function.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
@@ -2359,7 +2372,7 @@ class Analyzer(
             seenWindowAggregates += newAgg
             WindowExpression(newAgg, spec)
 
-          case AggregateExpression(aggFunc, _, _, _) if hasWindowFunction(aggFunc.children) =>
+          case AggregateExpression(aggFunc, _, _, _, _) if hasWindowFunction(aggFunc.children) =>
             failAnalysis("It is not allowed to use a window function inside an aggregate " +
               "function. Please use the inner window function in a sub-query.")
 

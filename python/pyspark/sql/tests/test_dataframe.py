@@ -547,6 +547,73 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEquals(types[1], np.object)
         self.assertEquals(types[2], np.float64)
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_to_pandas_from_empty_dataframe(self):
+        # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
+        import numpy as np
+        sql = """
+        SELECT CAST(1 AS TINYINT) AS tinyint,
+        CAST(1 AS SMALLINT) AS smallint,
+        CAST(1 AS INT) AS int,
+        CAST(1 AS BIGINT) AS bigint,
+        CAST(0 AS FLOAT) AS float,
+        CAST(0 AS DOUBLE) AS double,
+        CAST(1 AS BOOLEAN) AS boolean,
+        CAST('foo' AS STRING) AS string,
+        CAST('2019-01-01' AS TIMESTAMP) AS timestamp
+        """
+        dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
+        dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
+        self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_to_pandas_from_null_dataframe(self):
+        # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
+        import numpy as np
+        sql = """
+        SELECT CAST(NULL AS TINYINT) AS tinyint,
+        CAST(NULL AS SMALLINT) AS smallint,
+        CAST(NULL AS INT) AS int,
+        CAST(NULL AS BIGINT) AS bigint,
+        CAST(NULL AS FLOAT) AS float,
+        CAST(NULL AS DOUBLE) AS double,
+        CAST(NULL AS BOOLEAN) AS boolean,
+        CAST(NULL AS STRING) AS string,
+        CAST(NULL AS TIMESTAMP) AS timestamp
+        """
+        pdf = self.spark.sql(sql).toPandas()
+        types = pdf.dtypes
+        self.assertEqual(types[0], np.float64)
+        self.assertEqual(types[1], np.float64)
+        self.assertEqual(types[2], np.float64)
+        self.assertEqual(types[3], np.float64)
+        self.assertEqual(types[4], np.float32)
+        self.assertEqual(types[5], np.float64)
+        self.assertEqual(types[6], np.object)
+        self.assertEqual(types[7], np.object)
+        self.assertTrue(np.can_cast(np.datetime64, types[8]))
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_to_pandas_from_mixed_dataframe(self):
+        # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
+        import numpy as np
+        sql = """
+        SELECT CAST(col1 AS TINYINT) AS tinyint,
+        CAST(col2 AS SMALLINT) AS smallint,
+        CAST(col3 AS INT) AS int,
+        CAST(col4 AS BIGINT) AS bigint,
+        CAST(col5 AS FLOAT) AS float,
+        CAST(col6 AS DOUBLE) AS double,
+        CAST(col7 AS BOOLEAN) AS boolean,
+        CAST(col8 AS STRING) AS string,
+        CAST(col9 AS TIMESTAMP) AS timestamp
+        FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
+                    (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+        """
+        pdf_with_some_nulls = self.spark.sql(sql).toPandas()
+        pdf_with_only_nulls = self.spark.sql(sql).filter('tinyint is null').toPandas()
+        self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
+
     def test_create_dataframe_from_array_of_long(self):
         import array
         data = [Row(longarray=array.array('l', [-9223372036854775808, 0, 9223372036854775807]))]

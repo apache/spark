@@ -444,7 +444,7 @@ The third section has the SQL statistics of the submitted operations.
 	* _Canceled_, final state when the execution is canceled.
 	* _Finished_ processing and waiting to fetch results.
 	* _Closed_, final state when client closed the statement.
-* **Detail** of the execution plan with parsed logical plan, analyzed logical plan, optimized logical plan and physical plan or errors in the the SQL statement.
+* **Detail** of the execution plan with parsed logical plan, analyzed logical plan, optimized logical plan and physical plan or errors in the SQL statement.
 
 <p style="text-align: center;">
   <img src="img/JDBCServer3.png" title="JDBC/ODBC SQL Statistics" alt="JDBC/ODBC SQL Statistics">

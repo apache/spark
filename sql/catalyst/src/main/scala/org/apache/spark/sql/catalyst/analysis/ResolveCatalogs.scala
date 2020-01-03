@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
+import org.apache.spark.sql.connector.catalog._
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -38,19 +35,32 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case AlterTableAddColumnsStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
       val changes = cols.map { col =>
-        TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
+        TableChange.addColumn(
+          col.name.toArray,
+          col.dataType,
+          true,
+          col.comment.orNull,
+          col.position.orNull)
       }
       createAlterTable(nameParts, catalog, tbl, changes)
 
     case AlterTableAlterColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), colName, dataType, comment) =>
+         nameParts @ NonSessionCatalogAndTable(catalog, tbl), colName, dataType, comment, pos) =>
+      val colNameArray = colName.toArray
       val typeChange = dataType.map { newDataType =>
-        TableChange.updateColumnType(colName.toArray, newDataType, true)
+        TableChange.updateColumnType(colNameArray, newDataType, true)
       }
       val commentChange = comment.map { newComment =>
-        TableChange.updateColumnComment(colName.toArray, newComment)
+        TableChange.updateColumnComment(colNameArray, newComment)
       }
-      createAlterTable(nameParts, catalog, tbl, typeChange.toSeq ++ commentChange)
+      val positionChange = pos.map { newPosition =>
+        TableChange.updateColumnPosition(colNameArray, newPosition)
+      }
+      createAlterTable(
+        nameParts,
+        catalog,
+        tbl,
+        typeChange.toSeq ++ commentChange ++ positionChange)
 
     case AlterTableRenameColumnStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
@@ -98,22 +108,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case AlterNamespaceSetPropertiesStatement(
         NonSessionCatalogAndNamespace(catalog, ns), properties) =>
-      if (properties.keySet.intersect(RESERVED_PROPERTIES.asScala.toSet).nonEmpty) {
-        throw new AnalysisException("Cannot directly modify the reserved properties" +
-          s" ${RESERVED_PROPERTIES.asScala.mkString("[", ",", "]")}.")
-      }
       AlterNamespaceSetProperties(catalog.asNamespaceCatalog, ns, properties)
 
     case AlterNamespaceSetLocationStatement(
         NonSessionCatalogAndNamespace(catalog, ns), location) =>
       AlterNamespaceSetProperties(catalog.asNamespaceCatalog, ns,
-        Map(PROP_LOCATION -> location))
-
-    case AlterNamespaceSetOwner(CatalogAndNamespace(catalog, parts), name, typ) =>
-      AlterNamespaceSetProperties(
-        catalog.asNamespaceCatalog,
-        parts,
-        Map(PROP_OWNER_NAME -> name, PROP_OWNER_TYPE -> typ))
+        Map(SupportsNamespaces.PROP_LOCATION -> location))
 
     case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>
       if (isView) {
@@ -192,9 +192,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case CreateNamespaceStatement(
         NonSessionCatalogAndNamespace(catalog, nameParts), ifNotExists, properties) =>
-      if (properties.keySet.intersect(OWNERSHIPS.asScala.toSet).nonEmpty) {
-        throw new AnalysisException("Cannot specify the ownership in CREATE NAMESPACE.")
-      }
       CreateNamespace(catalog.asNamespaceCatalog, nameParts, ifNotExists, properties)
 
     case DropNamespaceStatement(NonSessionCatalogAndNamespace(catalog, ns), ifExists, cascade) =>
@@ -236,7 +233,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   object NonSessionCatalogAndTable {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndIdentifier(catalog, ident) if !isSessionCatalog(catalog) =>
+      case NonSessionCatalogAndIdentifier(catalog, ident) =>
         Some(catalog -> ident.asMultipartIdentifier)
       case _ => None
     }

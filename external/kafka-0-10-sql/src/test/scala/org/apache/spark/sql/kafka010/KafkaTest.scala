@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.kafka010.producer.InternalKafkaProducerPool
 
 /** A trait to clean cached Kafka producers in `afterAll` */
 trait KafkaTest extends BeforeAndAfterAll {
@@ -27,6 +28,6 @@ trait KafkaTest extends BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    CachedKafkaProducer.clear()
+    InternalKafkaProducerPool.reset()
   }
 }

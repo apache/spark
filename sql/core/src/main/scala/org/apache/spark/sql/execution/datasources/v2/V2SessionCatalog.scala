@@ -124,9 +124,11 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
+    val comment = properties.get(TableCatalog.PROP_COMMENT)
 
     try {
-      catalog.alterTable(catalogTable.copy(properties = properties, schema = schema))
+      catalog.alterTable(
+        catalogTable.copy(properties = properties, schema = schema, comment = comment))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)

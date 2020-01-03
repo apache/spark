@@ -368,7 +368,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     // in the expression with the value they would return for zero input tuples.
     // Also replace attribute refs (for example, for grouping columns) with NULL.
     val rewrittenExpr = expr transform {
-      case a @ AggregateExpression(aggFunc, _, _, resultId) =>
+      case a @ AggregateExpression(aggFunc, _, _, resultId, _) =>
         aggFunc.defaultResult.getOrElse(Literal.default(NullType))
 
       case _: AttributeReference => Literal.default(NullType)

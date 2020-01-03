@@ -27,6 +27,7 @@ import org.apache.kafka.common.header.internals.RecordHeader
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, UnsafeProjection}
+import org.apache.spark.sql.kafka010.producer.{CachedKafkaProducer, InternalKafkaProducerPool}
 import org.apache.spark.sql.types.BinaryType
 
 /**
@@ -39,25 +40,30 @@ private[kafka010] class KafkaWriteTask(
     inputSchema: Seq[Attribute],
     topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
   // used to synchronize with Kafka callbacks
-  private var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
+  private var producer: Option[CachedKafkaProducer] = None
 
   /**
    * Writes key value data out to topics.
    */
   def execute(iterator: Iterator[InternalRow]): Unit = {
-    producer = CachedKafkaProducer.getOrCreate(producerConfiguration)
+    producer = Some(InternalKafkaProducerPool.acquire(producerConfiguration))
+    val internalProducer = producer.get.producer
     while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
-      sendRow(currentRow, producer)
+      sendRow(currentRow, internalProducer)
     }
   }
 
   def close(): Unit = {
-    checkForErrors()
-    if (producer != null) {
-      producer.flush()
+    try {
       checkForErrors()
-      producer = null
+      producer.foreach { p =>
+        p.producer.flush()
+        checkForErrors()
+      }
+    } finally {
+      producer.foreach(InternalKafkaProducerPool.release)
+      producer = None
     }
   }
 }

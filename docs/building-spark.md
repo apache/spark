@@ -66,7 +66,7 @@ with Maven profile settings and so on like the direct Maven build. Example:
 
     ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pmesos -Pyarn -Pkubernetes
 
-This will build Spark distribution along with Python pip and R packages. (Note that build with Python pip package requires Python 3.6). For more information on usage, run `./dev/make-distribution.sh --help`
+This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
 
 ## Specifying the Hadoop Version and Enabling YARN
 
@@ -83,13 +83,10 @@ Example:
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `-Phive-thriftserver` profiles to your existing build options.
-By default, Spark will use Hive 1.2.1 with the `hadoop-2.7` profile, and Hive 2.3.6 with the `hadoop-3.2` profile.
-
-    # With Hive 1.2.1 support
-    ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
+By default Spark will build with Hive 2.3.6.
 
     # With Hive 2.3.6 support
-    ./build/mvn -Pyarn -Phive -Phive-thriftserver -Phadoop-3.2 -DskipTests clean package
+    ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN
 

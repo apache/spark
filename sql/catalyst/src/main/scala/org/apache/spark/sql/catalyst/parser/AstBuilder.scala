@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1599,8 +1600,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case expressions =>
         expressions
     }
+    val filter = Option(ctx.where).map(expression(_))
     val function = UnresolvedFunction(
-      getFunctionIdentifier(ctx.functionName), arguments, isDistinct)
+      getFunctionIdentifier(ctx.functionName), arguments, isDistinct, filter)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1865,7 +1867,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * {{{
    *   [TYPE] '[VALUE]'
    * }}}
-   * Currently Date, Timestamp, Interval, Binary and INTEGER typed literals are supported.
+   * Currently Date, Timestamp, Interval and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
@@ -1896,16 +1898,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
-        case "INTEGER" =>
-          val i = try {
-            value.toInt
-          } catch {
-            case e: NumberFormatException =>
-              val ex = new ParseException(s"Cannot parse the Int value: $value, $e", ctx)
-              ex.setStackTrace(e.getStackTrace)
-              throw ex
-          }
-          Literal(i, IntegerType)
         case other =>
           throw new ParseException(s"Literals of type '$other' are currently not" +
             " supported.", ctx)
@@ -2572,9 +2564,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
+      val props = visitPropertyKeyValues(ctx.tablePropertyList)
+      if (props.keySet.intersect(SupportsNamespaces.RESERVED_PROPERTIES.asScala.toSet).nonEmpty) {
+        throw new AnalysisException("Cannot directly modify the reserved properties" +
+          s" ${SupportsNamespaces.RESERVED_PROPERTIES.asScala.mkString("[", ",", "]")}.")
+      }
       AlterNamespaceSetPropertiesStatement(
         visitMultipartIdentifier(ctx.multipartIdentifier),
-        visitPropertyKeyValues(ctx.tablePropertyList))
+        props)
     }
   }
 
@@ -2604,8 +2601,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSetNamespaceOwner(ctx: SetNamespaceOwnerContext): LogicalPlan = {
     withOrigin(ctx) {
+      val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
       AlterNamespaceSetOwner(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+        UnresolvedNamespace(nameParts),
         ctx.identifier.getText,
         ctx.ownerType.getText)
     }
@@ -2815,9 +2813,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
     ShowTableStatement(
-      Option(ctx.namespace).map(visitMultipartIdentifier),
+      Option(ctx.ns).map(visitMultipartIdentifier),
       string(ctx.pattern),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+  }
+
+  override def visitColPosition(ctx: ColPositionContext): ColumnPosition = {
+    ctx.position.getType match {
+      case SqlBaseParser.FIRST => ColumnPosition.first()
+      case SqlBaseParser.AFTER => ColumnPosition.after(ctx.afterCol.getText)
+    }
   }
 
   /**
@@ -2825,14 +2830,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
-    if (ctx.colPosition != null) {
-      operationNotAllowed("ALTER TABLE table ADD COLUMN ... FIRST | AFTER otherCol", ctx)
-    }
-
     QualifiedColType(
       typedVisit[Seq[String]](ctx.name),
       typedVisit[DataType](ctx.dataType),
-      Option(ctx.comment).map(string))
+      Option(ctx.comment).map(string),
+      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
   /**
@@ -2880,19 +2882,45 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitAlterTableColumn(
       ctx: AlterTableColumnContext): LogicalPlan = withOrigin(ctx) {
     val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
-    if (ctx.colPosition != null) {
-      operationNotAllowed(s"ALTER TABLE table $verb COLUMN ... FIRST | AFTER otherCol", ctx)
-    }
-
-    if (ctx.dataType == null && ctx.comment == null) {
-      operationNotAllowed(s"ALTER TABLE table $verb COLUMN requires a TYPE or a COMMENT", ctx)
+    if (ctx.dataType == null && ctx.comment == null && ctx.colPosition == null) {
+      operationNotAllowed(
+        s"ALTER TABLE table $verb COLUMN requires a TYPE or a COMMENT or a FIRST/AFTER", ctx)
     }
 
     AlterTableAlterColumnStatement(
       visitMultipartIdentifier(ctx.table),
       typedVisit[Seq[String]](ctx.column),
       Option(ctx.dataType).map(typedVisit[DataType]),
-      Option(ctx.comment).map(string))
+      Option(ctx.comment).map(string),
+      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+  }
+
+  /**
+   * Parse a [[AlterTableAlterColumnStatement]] command. This is Hive SQL syntax.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION partition_spec]
+   *   CHANGE [COLUMN] column_old_name column_new_name column_dataType [COMMENT column_comment]
+   *   [FIRST | AFTER column_name];
+   * }}}
+   */
+  override def visitHiveChangeColumn(ctx: HiveChangeColumnContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed("ALTER TABLE table PARTITION partition_spec CHANGE COLUMN", ctx)
+    }
+    val columnNameParts = typedVisit[Seq[String]](ctx.colName)
+    if (!conf.resolver(columnNameParts.last, ctx.colType().colName.getText)) {
+      throw new AnalysisException("Renaming column is not supported in Hive-style ALTER COLUMN, " +
+        "please run RENAME COLUMN instead.")
+    }
+
+    AlterTableAlterColumnStatement(
+      typedVisit[Seq[String]](ctx.table),
+      columnNameParts,
+      Option(ctx.colType().dataType()).map(typedVisit[DataType]),
+      Option(ctx.colType().STRING()).map(string),
+      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
   /**
@@ -3172,7 +3200,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
     val table = visitMultipartIdentifier(ctx.table)
-    val namespace = Option(ctx.namespace).map(visitMultipartIdentifier)
+    val namespace = Option(ctx.ns).map(visitMultipartIdentifier)
     ShowColumnsStatement(table, namespace)
   }
 
@@ -3378,6 +3406,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a plan for a DESCRIBE FUNCTION statement.
+   */
+  override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    val functionName =
+      if (describeFuncName.STRING() != null) {
+        Seq(string(describeFuncName.STRING()))
+      } else if (describeFuncName.qualifiedName() != null) {
+        visitQualifiedName(describeFuncName.qualifiedName)
+      } else {
+        Seq(describeFuncName.getText)
+      }
+    DescribeFunctionStatement(functionName, EXTENDED != null)
+  }
+
+  /**
    * Create a plan for a SHOW FUNCTIONS command.
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
@@ -3391,5 +3435,39 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val pattern = Option(ctx.pattern).map(string(_))
     val functionName = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     ShowFunctionsStatement(userScope, systemScope, pattern, functionName)
+  }
+
+  /**
+   * Create a DROP FUNCTION statement.
+   *
+   * For example:
+   * {{{
+   *   DROP [TEMPORARY] FUNCTION [IF EXISTS] function;
+   * }}}
+   */
+  override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
+    DropFunctionStatement(
+      functionName,
+      ctx.EXISTS != null,
+      ctx.TEMPORARY != null)
+  }
+
+  override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    val comment = ctx.commennt.getType match {
+      case SqlBaseParser.NULL => ""
+      case _ => string(ctx.STRING)
+    }
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    CommentOnNamespace(UnresolvedNamespace(nameParts), comment)
+  }
+
+  override def visitCommentTable(ctx: CommentTableContext): LogicalPlan = withOrigin(ctx) {
+    val comment = ctx.commennt.getType match {
+      case SqlBaseParser.NULL => ""
+      case _ => string(ctx.STRING)
+    }
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    CommentOnTable(UnresolvedTable(nameParts), comment)
   }
 }

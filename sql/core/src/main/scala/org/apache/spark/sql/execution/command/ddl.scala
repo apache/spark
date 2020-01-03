@@ -476,14 +476,26 @@ case class AlterTableAddPartitionCommand(
       CatalogTablePartition(normalizedSpec, table.storage.copy(
         locationUri = location.map(CatalogUtils.stringToURI)))
     }
-    catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
+
+    // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
+    // Also the request to metastore times out when adding lot of partitions in one shot.
+    // we should split them into smaller batches
+    val batchSize = 100
+    parts.toIterator.grouped(batchSize).foreach { batch =>
+      catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
+    }
 
     if (table.stats.nonEmpty) {
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
-        val addedSize = parts.map { part =>
-          CommandUtils.calculateLocationSize(sparkSession.sessionState, table.identifier,
-            part.storage.locationUri)
-        }.sum
+        def calculatePartSize(part: CatalogTablePartition) = CommandUtils.calculateLocationSize(
+          sparkSession.sessionState, table.identifier, part.storage.locationUri)
+        val threshold = sparkSession.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
+        val partSizes = if (parts.length > threshold) {
+            ThreadUtils.parmap(parts, "gatheringNewPartitionStats", 8)(calculatePartSize)
+          } else {
+            parts.map(calculatePartSize)
+          }
+        val addedSize = partSizes.sum
         if (addedSize > 0) {
           val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
           catalog.alterTableStats(table.identifier, Some(newStats))

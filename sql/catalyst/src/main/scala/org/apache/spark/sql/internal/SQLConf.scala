@@ -170,6 +170,36 @@ object SQLConf {
     }
   }
 
+  /**
+   * Holds information about keys that have been removed.
+   *
+   * @param key The removed config key.
+   * @param version Version of Spark where key was removed.
+   * @param defaultValue The default config value. It can be used to notice
+   *                     users that they set non-default value to an already removed config.
+   * @param comment Additional info regarding to the removed config.
+   */
+  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
+
+  /**
+   * The map contains info about removed SQL configs. Keys are SQL config names,
+   * map values contain extra information like the version in which the config was removed,
+   * config's default value and a comment.
+   */
+  val removedSQLConfigs: Map[String, RemovedConfig] = {
+    val configs = Seq(
+      RemovedConfig("spark.sql.fromJsonForceNullableSchema", "3.0.0", "true",
+        "It was removed to prevent errors like SPARK-23173 for non-default value."),
+      RemovedConfig(
+        "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "3.0.0", "false",
+        "It was removed to prevent loosing of users data for non-default value."),
+      RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
+        "It was removed to prevent errors like SPARK-23549 for non-default value.")
+    )
+
+    Map(configs.map { cfg => cfg.key -> cfg } : _*)
+  }
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
@@ -234,7 +264,7 @@ object SQLConf {
     .createOptional
 
   val OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID =
-    buildConf("spark.sql.optimizer.reassignLambdaVariableID")
+    buildConf("spark.sql.optimizer.reassignLambdaVariableID.enabled")
       .doc("When true, Spark optimizer reassigns per-query unique IDs to LambdaVariable, so that " +
         "it's more likely to hit codegen cache.")
     .booleanConf
@@ -1076,7 +1106,7 @@ object SQLConf {
     .createOptional
 
   val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
-    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
+    buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation.enabled")
       .doc("When true, enable temporary checkpoint locations force delete.")
       .booleanConf
       .createWithDefault(false)
@@ -1297,6 +1327,13 @@ object SQLConf {
       .doc("How long to delay polling new data when no data is available")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
+
+  val STREAMING_STOP_TIMEOUT =
+    buildConf("spark.sql.streaming.stopTimeout")
+      .doc("How long to wait for the streaming execution thread to stop when calling the " +
+        "streaming query's stop() method in milliseconds. 0 or negative values wait indefinitely.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(0L)
 
   val STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL =
     buildConf("spark.sql.streaming.noDataProgressEventInterval")
@@ -2039,7 +2076,7 @@ object SQLConf {
     .createWithDefault(Int.MaxValue)
 
   val LEGACY_CAST_DATETIME_TO_STRING =
-    buildConf("spark.sql.legacy.typeCoercion.datetimeToString")
+    buildConf("spark.sql.legacy.typeCoercion.datetimeToString.enabled")
       .doc("If it is set to true, date/timestamp will cast to string in binary comparisons " +
         "with String")
     .booleanConf
@@ -2087,6 +2124,17 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+
+  val LEGACY_FROM_DAYTIME_STRING =
+    buildConf("spark.sql.legacy.fromDayTimeString.enabled")
+      .internal()
+      .doc("When true, the `from` bound is not taken into account in conversion of " +
+        "a day-time string to an interval, and the `to` bound is used to skip" +
+        "all interval units out of the specified range. If it is set to `false`, " +
+        "`ParseException` is thrown if the input does not match to the pattern " +
+        "defined by `from` and `to`.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**

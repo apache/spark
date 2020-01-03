@@ -77,37 +77,28 @@ select cast('-     1 second' as interval);
 select cast('- -1 second' as interval);
 select cast('- +1 second' as interval);
 
--- justify intervals
-select justify_days(cast(null as interval));
-select justify_hours(cast(null as interval));
-select justify_interval(cast(null as interval));
-select justify_days(interval '1 month 59 day 25 hour');
-select justify_hours(interval '1 month 59 day 25 hour');
-select justify_interval(interval '1 month 59 day 25 hour');
-select justify_days(interval '1 month -59 day 25 hour');
-select justify_hours(interval '1 month -59 day 25 hour');
-select justify_interval(interval '1 month -59 day 25 hour');
-select justify_days(interval '1 month 59 day -25 hour');
-select justify_hours(interval '1 month 59 day -25 hour');
-select justify_interval(interval '1 month 59 day -25 hour');
-
 -- interval literal
 select interval 13.123456789 seconds, interval -13.123456789 second;
 select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond;
 select interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second;
 select interval '0 0:0:0.1' day to second;
 select interval '10-9' year to month;
-select interval '20 15:40:32.99899999' day to hour;
-select interval '20 15:40:32.99899999' day to minute;
+select interval '20 15' day to hour;
+select interval '20 15:40' day to minute;
 select interval '20 15:40:32.99899999' day to second;
-select interval '15:40:32.99899999' hour to minute;
-select interval '15:40.99899999' hour to second;
-select interval '15:40' hour to second;
+select interval '15:40' hour to minute;
 select interval '15:40:32.99899999' hour to second;
-select interval '20 40:32.99899999' minute to second;
 select interval '40:32.99899999' minute to second;
 select interval '40:32' minute to second;
 select interval 30 day day;
+
+-- invalid day-time string intervals
+select interval '20 15:40:32.99899999' day to hour;
+select interval '20 15:40:32.99899999' day to minute;
+select interval '15:40:32.99899999' hour to minute;
+select interval '15:40.99899999' hour to second;
+select interval '15:40' hour to second;
+select interval '20 40:32.99899999' minute to second;
 
 -- ns is not supported
 select interval 10 nanoseconds;
@@ -264,3 +255,10 @@ select interval 'interval \t 1\tday';
 select interval 'interval\t1\tday';
 select interval '1\t' day;
 select interval '1 ' day;
+
+-- interval overflow if (ansi) exception else NULL
+select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+select a - b from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+select b + interval '1 month' from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
+select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);

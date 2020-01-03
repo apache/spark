@@ -95,17 +95,17 @@ statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE NAMESPACE? multipartIdentifier                               #use
-    | CREATE (database | NAMESPACE) (IF NOT EXISTS)? multipartIdentifier
+    | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
          (WITH (DBPROPERTIES | PROPERTIES) tablePropertyList))*        #createNamespace
-    | ALTER (database | NAMESPACE) multipartIdentifier
+    | ALTER namespace multipartIdentifier
         SET (DBPROPERTIES | PROPERTIES) tablePropertyList              #setNamespaceProperties
-    | ALTER (database | NAMESPACE) multipartIdentifier
+    | ALTER namespace multipartIdentifier
         SET locationSpec                                               #setNamespaceLocation
-    | ALTER (database | NAMESPACE) multipartIdentifier
+    | ALTER namespace multipartIdentifier
         SET OWNER ownerType=(USER | ROLE | GROUP) identifier           #setNamespaceOwner
-    | DROP (database | NAMESPACE) (IF EXISTS)? multipartIdentifier
+    | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
@@ -163,6 +163,9 @@ statement
     | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
         (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
+    | ALTER TABLE table=multipartIdentifier partitionSpec?
+        CHANGE COLUMN?
+        colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
     | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE multipartIdentifier (partitionSpec)?
@@ -197,23 +200,26 @@ statement
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
-    | SHOW TABLE EXTENDED ((FROM | IN) namespace=multipartIdentifier)?
+    | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
     | SHOW TBLPROPERTIES table=multipartIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
-        ((FROM | IN) namespace=multipartIdentifier)?                   #showColumns
+        ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) (database | NAMESPACE) EXTENDED?
+    | (DESC | DESCRIBE) namespace EXTENDED?
         multipartIdentifier                                            #describeNamespace
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         multipartIdentifier partitionSpec? describeColName?            #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
+    | COMMENT ON namespace multipartIdentifier IS
+        commennt=(STRING | NULL)                                       #commentNamespace
+    | COMMENT ON TABLE multipartIdentifier IS commennt=(STRING | NULL) #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier
@@ -224,7 +230,7 @@ statement
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
@@ -325,8 +331,9 @@ partitionVal
     : identifier (EQ constant)?
     ;
 
-database
-    : DATABASE
+namespace
+    : NAMESPACE
+    | DATABASE
     | SCHEMA
     ;
 
@@ -768,7 +775,7 @@ primaryExpression
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
     | functionName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
-       (OVER windowSpec)?                                                                      #functionCall
+       (FILTER '(' WHERE where=booleanExpression ')')? (OVER windowSpec)?                      #functionCall
     | identifier '->' expression                                                               #lambda
     | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -857,7 +864,7 @@ intervalUnit
     ;
 
 colPosition
-    : FIRST | AFTER multipartIdentifier
+    : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
     ;
 
 dataType
@@ -933,6 +940,7 @@ qualifiedNameList
 
 functionName
     : qualifiedName
+    | FILTER
     | LEFT
     | RIGHT
     ;
@@ -1288,6 +1296,7 @@ nonReserved
     | EXTRACT
     | FALSE
     | FETCH
+    | FILTER
     | FIELDS
     | FILEFORMAT
     | FIRST
@@ -1552,6 +1561,7 @@ EXTRACT: 'EXTRACT';
 FALSE: 'FALSE';
 FETCH: 'FETCH';
 FIELDS: 'FIELDS';
+FILTER: 'FILTER';
 FILEFORMAT: 'FILEFORMAT';
 FIRST: 'FIRST';
 FIRST_VALUE: 'FIRST_VALUE';

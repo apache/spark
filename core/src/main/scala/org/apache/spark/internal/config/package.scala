@@ -131,7 +131,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ALLOW_EC =
-    ConfigBuilder("spark.eventLog.allowErasureCoding")
+    ConfigBuilder("spark.eventLog.erasureCoding.enabled")
       .booleanConf
       .createWithDefault(false)
 
@@ -1095,14 +1095,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
-    ConfigBuilder("spark.shuffle.readHostLocalDisk.enabled")
-      .doc("If enabled, shuffle blocks requested from those block managers which are running on " +
-        "the same host are read from the disk directly instead of being fetched as remote blocks " +
-        "over the network.")
-      .booleanConf
-      .createWithDefault(true)
-
   private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
     ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
       .doc("The max number of executors for which the local dirs are stored. This size is " +
@@ -1147,6 +1139,14 @@ package object config {
         "version job fetching shuffle blocks from old version external shuffle service.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
+    ConfigBuilder("spark.shuffle.readHostLocalDisk.enabled")
+      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled), shuffle " +
+        "blocks requested from those block managers which are running on the same host are read " +
+        "from the disk directly instead of being fetched as remote blocks over the network.")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
     ConfigBuilder("spark.storage.memoryMapLimitForTests")

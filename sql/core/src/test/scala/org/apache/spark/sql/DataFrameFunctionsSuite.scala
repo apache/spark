@@ -850,7 +850,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val errorMsg1 =
       s"""
          |Input to function array_contains should have been array followed by a
-         |value with same element type, but it's [array<int>, decimal(29,29)].
+         |value with same element type, but it's [array<int>, decimal(38,29)].
        """.stripMargin.replace("\n", " ").trim()
     assert(e1.message.contains(errorMsg1))
 
@@ -863,6 +863,23 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
          |value with same element type, but it's [array<int>, string].
        """.stripMargin.replace("\n", " ").trim()
     assert(e2.message.contains(errorMsg2))
+  }
+
+  test("SPARK-29600: ArrayContains function may return incorrect result for DecimalType") {
+    checkAnswer(
+      sql("select array_contains(array(1.10), 1.1)"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      sql("SELECT array_contains(array(1.1), 1.10)"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      sql("SELECT array_contains(array(1.11), 1.1)"),
+      Seq(Row(false))
+    )
   }
 
   test("arrays_overlap function") {
