@@ -549,7 +549,7 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
         return self._call_java("totalIterations")
 
 
-class _IsotonicRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol):
+class _IsotonicRegressionParams(_JavaPredictorParams, HasWeightCol):
     """
     Params for :py:class:`IsotonicRegression` and :py:class:`IsotonicRegressionModel`.
 
@@ -579,7 +579,7 @@ class _IsotonicRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol, H
 
 
 @inherit_doc
-class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
+class IsotonicRegression(JavaPredictor, _IsotonicRegressionParams, HasWeightCol,
                          JavaMLWritable, JavaMLReadable):
     """
     Currently implemented using parallelized pool adjacent violators algorithm.
@@ -654,27 +654,6 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
         return self._set(featureIndex=value)
 
     @since("1.6.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("1.6.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
-
-    @since("1.6.0")
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
-
-    @since("1.6.0")
     def setWeightCol(self, value):
         """
         Sets the value of :py:attr:`weightCol`.
@@ -682,27 +661,13 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
         return self._set(weightCol=value)
 
 
-class IsotonicRegressionModel(JavaModel, _IsotonicRegressionParams, JavaMLWritable,
+class IsotonicRegressionModel(JavaPredictionModel, _IsotonicRegressionParams, JavaMLWritable,
                               JavaMLReadable):
     """
     Model fitted by :class:`IsotonicRegression`.
 
     .. versionadded:: 1.6.0
     """
-
-    @since("3.0.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("3.0.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
 
     def setFeatureIndex(self, value):
         """

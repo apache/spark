@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -39,8 +39,8 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Params for isotonic regression.
  */
-private[regression] trait IsotonicRegressionBase extends Params with HasFeaturesCol
-  with HasLabelCol with HasPredictionCol with HasWeightCol with Logging {
+private[regression] trait IsotonicRegressionBase extends PredictorParams
+  with HasWeightCol with Logging {
 
   /**
    * Param for whether the output sequence should be isotonic/increasing (true) or
@@ -128,23 +128,11 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
  */
 @Since("1.5.0")
 class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: String)
-  extends Estimator[IsotonicRegressionModel]
+  extends Regressor[Double, IsotonicRegression, IsotonicRegressionModel]
   with IsotonicRegressionBase with DefaultParamsWritable {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("isoReg"))
-
-  /** @group setParam */
-  @Since("1.5.0")
-  def setLabelCol(value: String): this.type = set(labelCol, value)
-
-  /** @group setParam */
-  @Since("1.5.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-
-  /** @group setParam */
-  @Since("1.5.0")
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
   @Since("1.5.0")
@@ -162,8 +150,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   override def copy(extra: ParamMap): IsotonicRegression = defaultCopy(extra)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): IsotonicRegressionModel = instrumented { instr =>
-    transformSchema(dataset.schema, logging = true)
+  override def train(dataset: Dataset[_]): IsotonicRegressionModel = instrumented { instr =>
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val instances = extractWeightedLabeledPoints(dataset)
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
@@ -208,15 +195,8 @@ object IsotonicRegression extends DefaultParamsReadable[IsotonicRegression] {
 class IsotonicRegressionModel private[ml] (
     override val uid: String,
     private val oldModel: MLlibIsotonicRegressionModel)
-  extends Model[IsotonicRegressionModel] with IsotonicRegressionBase with MLWritable {
-
-  /** @group setParam */
-  @Since("1.5.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-
-  /** @group setParam */
-  @Since("1.5.0")
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+  extends RegressionModel[Double, IsotonicRegressionModel] with IsotonicRegressionBase
+    with MLWritable {
 
   /** @group setParam */
   @Since("1.5.0")
@@ -253,7 +233,7 @@ class IsotonicRegressionModel private[ml] (
   }
 
   @Since("3.0.0")
-  def predict(value: Double): Double = oldModel.predict(value)
+  override def predict(features: Double): Double = oldModel.predict(features)
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
@@ -269,7 +249,7 @@ class IsotonicRegressionModel private[ml] (
     new IsotonicRegressionModelWriter(this)
 
   @Since("3.0.0")
-  val numFeatures: Int = 1
+  override val numFeatures: Int = 1
 
   @Since("3.0.0")
   override def toString: String = {
