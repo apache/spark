@@ -531,7 +531,7 @@ case class ScalaAggregator[IN, BUF, OUT](
   }
 
   override def toString: String =
-    s"""${agg.getClass.getSimpleName}(${children.mkString(",")})"""
+    s"""${nodeName}(${children.mkString(",")})"""
 
   override def nodeName: String = agg.getClass.getSimpleName
 }
