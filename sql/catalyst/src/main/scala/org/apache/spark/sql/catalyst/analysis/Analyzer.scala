@@ -92,8 +92,9 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                            views.
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
- * @param relationCache The UnresolvedRelation to LogicalPlan mapping, this can ensure that the
- *                      table is resolved only once if a table is used multiple times in a query.
+ * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
+ *                      that the table is resolved only once if a table is used multiple times
+ *                      in a query.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
@@ -861,12 +862,7 @@ class Analyzer(
         }
 
       case u: UnresolvedRelation =>
-        val relationCache = AnalysisContext.get.relationCache
-        relationCache.getOrElse(u.tableName, {
-          val relation = lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
-          relationCache.update(u.tableName, relation)
-          relation
-        })
+        lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
     }
 
     // Look up a relation from the session catalog with the following logic:
@@ -878,7 +874,8 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
-              v1SessionCatalog.getRelation(v1Table.v1Table)
+              AnalysisContext.get.relationCache.getOrElseUpdate(
+                v1Table.v1Table.qualifiedName, v1SessionCatalog.getRelation(v1Table.v1Table))
             case table =>
               DataSourceV2Relation.create(table)
           }
