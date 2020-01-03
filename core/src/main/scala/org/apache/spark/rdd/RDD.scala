@@ -1726,6 +1726,7 @@ abstract class RDD[T: ClassTag](
   def withResources(rp: ResourceProfile): this.type = {
     // copy it in case the user changes it after calling this
     resourceProfile = Some(rp.clone())
+    // TODO - we don't want to create a new profile if its the same as an existing one!!
     immutableResourceProfile =
       Some(new ImmutableResourceProfile(rp.executorResources, rp.taskResources))
     sc.resourceProfileManager.addResourceProfile(immutableResourceProfile.get)
