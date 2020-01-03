@@ -197,8 +197,6 @@ package object config {
 
   private[spark] val EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN =
     ConfigBuilder("spark.eventLog.rolling.maxFilesToRetain")
-      // TODO: remove this when integrating compactor with FsHistoryProvider
-      .internal()
       .doc("The maximum number of event log files which will be retained as non-compacted. " +
         "By default, all event log files will be retained. Please set the configuration " +
         s"and ${EVENT_LOG_ROLLING_MAX_FILE_SIZE.key} accordingly if you want to control " +
