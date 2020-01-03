@@ -1786,15 +1786,16 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       numTasks: Int,
       numSlots: Int): (TaskSetManager, ManualClock) = {
     val taskCpus = 1
-    sc = new SparkContext("local", "test")
-    sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
+    val conf = new SparkConf()
+    conf.set(config.SPECULATION_ENABLED, true)
+    conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
     // Set the number of slots per executor
-    sc.conf.set(config.EXECUTOR_CORES.key, numSlots.toString)
-    sc.conf.set(config.CPUS_PER_TASK.key, taskCpus.toString)
+    conf.set(config.EXECUTOR_CORES.key, numSlots.toString)
+    conf.set(config.CPUS_PER_TASK.key, taskCpus.toString)
     if (speculationThresholdOpt.isDefined) {
-      sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
+      conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
     }
+    sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     // Create a task set with the given number of tasks
     val taskSet = FakeTask.createTaskSet(numTasks)

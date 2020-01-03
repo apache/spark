@@ -19,6 +19,7 @@ package org.apache.spark.resource
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 
 class ImmutableResourceProfileSuite extends SparkFunSuite {
 
@@ -41,6 +42,10 @@ class ImmutableResourceProfileSuite extends SparkFunSuite {
       s"Executor resources should have 1 core")
     assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 1024,
       s"Executor resources should have 1024 memory")
+    assert(rprof.executorResources.get(ResourceProfile.PYSPARK_MEM) == None,
+      s"pyspark memory empty if not specified")
+    assert(rprof.executorResources.get(ResourceProfile.OVERHEAD_MEM) == None,
+      s"overhead memory empty if not specified")
     assert(rprof.taskResources.size === 1,
       "Task resources should just contain cpus by default")
     assert(rprof.taskResources(ResourceProfile.CPUS).amount === 1,
@@ -51,17 +56,31 @@ class ImmutableResourceProfileSuite extends SparkFunSuite {
 
   test("Default ImmutableResourceProfile with app level resources specified") {
     val conf = new SparkConf
+    conf.set(PYSPARK_EXECUTOR_MEMORY.key, "2g")
+    conf.set(EXECUTOR_MEMORY_OVERHEAD.key, "1g")
+    conf.set(EXECUTOR_MEMORY.key, "4g")
+    conf.set(EXECUTOR_CORES.key, "4")
     conf.set("spark.task.resource.gpu.amount", "1")
     conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.amount", "1")
     conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.discoveryScript", "nameOfScript")
     val rprof = ImmutableResourceProfile.getOrCreateDefaultProfile(conf)
     assert(rprof.id === ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val execResources = rprof.executorResources
-    assert(execResources.size === 3,
+    assert(execResources.size === 5,
       "Executor resources should contain cores, memory, and gpu " + execResources)
+    assert(execResources.contains("gpu"), "Executor resources should have gpu")
+    assert(rprof.executorResources(ResourceProfile.CORES).amount === 4,
+      s"Executor resources should have 4 core")
+    assert(rprof.getExecutorCores.get === 4,
+      s"Executor resources should have 4 core")
+    assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
+      s"Executor resources should have 1024 memory")
+    assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount == 2048,
+      s"pyspark memory empty if not specified")
+    assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount == 1024,
+      s"overhead memory empty if not specified")
     assert(rprof.taskResources.size === 2,
       "Task resources should just contain cpus and gpu")
-    assert(execResources.contains("gpu"), "Executor resources should have gpu")
     assert(rprof.taskResources.contains("gpu"), "Task resources should have gpu")
   }
 
@@ -76,7 +95,7 @@ class ImmutableResourceProfileSuite extends SparkFunSuite {
   test("Internal confs") {
     val rprof = new ResourceProfile()
     val gpuExecReq =
-      new ExecutorResourceRequests().cores(2).resource("gpu", 2, "someScript")
+      new ExecutorResourceRequests().cores(2).pysparkMemory("2g").resource("gpu", 2, "someScript")
     rprof.require(gpuExecReq)
     val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
     val internalResourceConfs =
@@ -84,12 +103,15 @@ class ImmutableResourceProfileSuite extends SparkFunSuite {
     val sparkConf = new SparkConf
     internalResourceConfs.foreach { case(key, value) => sparkConf.set(key, value) }
     val resourceReq =
-      ImmutableResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, immrprof.id)
+      ImmutableResourceProfile.getCustomResourceRequestsFromInternalConfs(sparkConf, immrprof.id)
+    val pysparkmemory =
+      ImmutableResourceProfile.getPysparkMemoryFromInternalConfs(sparkConf, immrprof.id)
 
     assert(resourceReq.size === 1, "ResourceRequest should have 1 item")
     assert(resourceReq(0).id.resourceName === "gpu")
     assert(resourceReq(0).amount === 2)
     assert(resourceReq(0).discoveryScript === Some("someScript"))
+    assert(pysparkmemory.get === 2048)
   }
 
   test("maxTasksPerExecutor cpus") {

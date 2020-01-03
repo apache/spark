@@ -25,6 +25,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 
 /**
  * Internal immutable version of Resource profile to associate with an RDD. This is an
@@ -187,24 +188,28 @@ private[spark] object ImmutableResourceProfile extends Logging {
 
   val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
 
-  private def resourceProfileIntConfPrefix(rpId: Int): String = {
-    s"$SPARK_RP_EXEC_PREFIX.$rpId.resource."
+  private[spark] def resourceProfileIntConfPrefix(rpId: Int): String = {
+    s"$SPARK_RP_EXEC_PREFIX.$rpId."
+  }
+
+  private[spark] def resourceProfileCustomResourceIntConfPrefix(rpId: Int): String = {
+    s"${resourceProfileIntConfPrefix(rpId)}resource."
   }
 
   // Helper class for constructing the resource profile internal configs used to pass to
   // executors. The configs look like:
   // spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
-  // Note custom resources have name like resource.gpu.
-  case class ResourceProfileInternalConf(id: Int, resourceName: String) {
-    def resourceNameConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceName"
+  // Note the prefix is passed in because custom resource configs have an extra "resource."
+  // in the name to differentiate them from the standard spark configs.
+  case class ResourceProfileInternalConf(prefix: String, resourceName: String) {
+    def resourceNameConf: String = s"$prefix$resourceName"
     def resourceNameAndAmount: String = s"$resourceName.${ResourceUtils.AMOUNT}"
     def resourceNameAndDiscovery: String = s"$resourceName.${ResourceUtils.DISCOVERY_SCRIPT}"
     def resourceNameAndVendor: String = s"$resourceName.${ResourceUtils.VENDOR}"
 
-    def amountConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceNameAndAmount"
-    def discoveryScriptConf: String =
-      s"${resourceProfileIntConfPrefix(id)}$resourceNameAndDiscovery"
-    def vendorConf: String = s"${resourceProfileIntConfPrefix(id)}$resourceNameAndVendor"
+    def amountConf: String = s"$prefix$resourceNameAndAmount"
+    def discoveryScriptConf: String = s"$prefix$resourceNameAndDiscovery"
+    def vendorConf: String = s"$prefix$resourceNameAndVendor"
   }
 
   private lazy val nextProfileId = new AtomicInteger(0)
@@ -247,6 +252,8 @@ private[spark] object ImmutableResourceProfile extends Logging {
     val ereqs = new ExecutorResourceRequests()
     ereqs.cores(conf.get(EXECUTOR_CORES))
     ereqs.memory(conf.get(EXECUTOR_MEMORY).toString)
+    conf.get(EXECUTOR_MEMORY_OVERHEAD).map(mem => ereqs.memoryOverhead(mem.toString))
+    conf.get(PYSPARK_EXECUTOR_MEMORY).map(mem => ereqs.pysparkMemory(mem.toString))
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
     execReq.foreach { req =>
       val name = req.id.resourceName
@@ -279,20 +286,27 @@ private[spark] object ImmutableResourceProfile extends Logging {
 
   /**
    * Create the ResourceProfile internal confs that are used to pass between Driver and Executors.
-   * It pulls any custom resources from the ResourceProfile and returns a Map of key
-   * to value where the keys get formatted as:
+   * It pulls any custom resources from the ResourceProfile and the pyspark.memory and
+   * returns a Map of key to value where the keys get formatted as:
    *
-   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
+   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
+   * Note that for custom resources the resourceName looks like: resource.gpu.
    */
   def createResourceProfileInternalConfs(rp: ImmutableResourceProfile): Map[String, String] = {
     val ret = new mutable.HashMap[String, String]()
-
     val customResource = getCustomExecutorResources(rp)
     customResource.foreach { case (name, req) =>
-      val execIntConf = ResourceProfileInternalConf(rp.id, name)
+      val execIntConf =
+        ResourceProfileInternalConf(resourceProfileCustomResourceIntConfPrefix(rp.id), name)
       ret(execIntConf.amountConf) = req.amount.toString
       if (req.vendor.nonEmpty) ret(execIntConf.vendorConf) = req.vendor
       if (req.discoveryScript.nonEmpty) ret(execIntConf.discoveryScriptConf) = req.discoveryScript
+    }
+    // output pyspark memory config
+    val pysparkMemIntConf =
+      ResourceProfileInternalConf(resourceProfileIntConfPrefix(rp.id), ResourceProfile.PYSPARK_MEM)
+    rp.executorResources.get(ResourceProfile.PYSPARK_MEM).map { pysparkMem =>
+      ret(pysparkMemIntConf.amountConf) = pysparkMem.amount.toString
     }
     ret.toMap
   }
@@ -309,18 +323,19 @@ private[spark] object ImmutableResourceProfile extends Logging {
   }
 
   /**
-   * Get the executor ResourceRequests from the internal resource confs
+   * Get the executor custom ResourceRequests(GPUs, FPGAs, etc) from the internal resource confs
    * The configs looks like:
-   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
+   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
    */
-  def getResourceRequestsFromInternalConfs(
+  def getCustomResourceRequestsFromInternalConfs(
       sparkConf: SparkConf,
       rpId: Int): Seq[ResourceRequest] = {
-    val execRpIdConfPrefix = resourceProfileIntConfPrefix(rpId)
+    val execRpIdConfPrefix = resourceProfileCustomResourceIntConfPrefix(rpId)
     val execConfs = sparkConf.getAllWithPrefix(execRpIdConfPrefix).toMap
     val execResourceNames = listResourceNames(execConfs)
     val resourceReqs = execResourceNames.map { rName =>
-      val intConf = ResourceProfileInternalConf(rpId, rName)
+      val intConf =
+        ResourceProfileInternalConf(execRpIdConfPrefix, rName)
       val amount = execConfs.get(intConf.resourceNameAndAmount).get.toInt
       val vendor = execConfs.get(intConf.resourceNameAndVendor)
       val discoveryScript = execConfs.get(intConf.resourceNameAndDiscovery)
@@ -328,5 +343,17 @@ private[spark] object ImmutableResourceProfile extends Logging {
       ResourceRequest(resourceId, amount, discoveryScript, vendor)
     }
     resourceReqs
+  }
+
+  /**
+   * Get the pyspark memory from internal resource confs
+   * The config looks like: spark.resourceProfile.executor.[rpId].pyspark.memory.amount
+   */
+  def getPysparkMemoryFromInternalConfs(
+      sparkConf: SparkConf,
+      rpId: Int): Option[Long] = {
+    val rName = ResourceProfile.PYSPARK_MEM
+    val intConf = ResourceProfileInternalConf(resourceProfileIntConfPrefix(rpId), rName)
+    sparkConf.getOption(intConf.amountConf).map(_.toLong)
   }
 }

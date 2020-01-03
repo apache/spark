@@ -26,6 +26,7 @@ import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.InputFileBlockHolder
+import org.apache.spark.resource.ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util._
 
@@ -65,7 +66,8 @@ private[spark] abstract class Task[T](
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
     val appAttemptId: Option[String] = None,
-    val isBarrier: Boolean = false) extends Serializable {
+    val isBarrier: Boolean = false,
+    val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
@@ -96,7 +98,8 @@ private[spark] abstract class Task[T](
       localProperties,
       metricsSystem,
       metrics,
-      resources)
+      resources,
+      resourceProfileId)
 
     context = if (isBarrier) {
       new BarrierTaskContext(taskContext)

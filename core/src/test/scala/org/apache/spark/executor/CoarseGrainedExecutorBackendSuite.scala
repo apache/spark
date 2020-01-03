@@ -33,7 +33,8 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TestUtils._
-import org.apache.spark.resource.{ImmutableResourceProfile, ResourceAllocation, ResourceInformation}
+import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
+import org.apache.spark.resource.ImmutableResourceProfile._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEnv
@@ -49,12 +50,12 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("parsing no resources Resource Profile Id") {
     val conf = new SparkConf
-    testNoResources(conf, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    testNoResources(conf, DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   test("parsing no resources") {
     val conf = new SparkConf
-    testNoResources(conf, ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+    testNoResources(conf, UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
   def testNoResources(conf: SparkConf, rpid: Int): Unit = {
@@ -84,7 +85,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1", "host1",
-      4, Seq.empty[URL], env, None, ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+      4, Seq.empty[URL], env, None, UNKNOWN_RESOURCE_PROFILE_ID)
     withTempDir { tmpDir =>
       val ra = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
       val ja = Extraction.decompose(Seq(ra))
@@ -99,17 +100,17 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   }
 
   test("parsing multiple resources resource profile") {
-    val gpuExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
-    val fpgaExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
+    val customResourceConfPrefix =
+      resourceProfileCustomResourceIntConfPrefix(DEFAULT_RESOURCE_PROFILE_ID)
+    val gpuExecInternalConf = ResourceProfileInternalConf(customResourceConfPrefix, GPU)
+    val fpgaExecInternalConf = ResourceProfileInternalConf(customResourceConfPrefix, FPGA)
     testParsingMultipleResources(gpuExecInternalConf.amountConf,
-      fpgaExecInternalConf.amountConf, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      fpgaExecInternalConf.amountConf, DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   test("parsing multiple resources") {
     testParsingMultipleResources(EXECUTOR_GPU_ID.amountConf,
-      EXECUTOR_FPGA_ID.amountConf, ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+      EXECUTOR_FPGA_ID.amountConf, UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
   def testParsingMultipleResources(
@@ -151,7 +152,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
-      4, Seq.empty[URL], env, None, ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+      4, Seq.empty[URL], env, None, UNKNOWN_RESOURCE_PROFILE_ID)
 
     // not enough gpu's on the executor
     withTempDir { tmpDir =>
@@ -183,15 +184,16 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   }
 
   test("executor resource found less than required resource profile") {
-    val gpuExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, GPU)
+    val customResourceConfPrefix =
+      resourceProfileCustomResourceIntConfPrefix(DEFAULT_RESOURCE_PROFILE_ID)
+    val gpuExecInternalConf = ResourceProfileInternalConf(customResourceConfPrefix, GPU)
     testExecutorResourceFoundLessThanRequired(gpuExecInternalConf.amountConf,
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   test("executor resource found less than required") {
     testExecutorResourceFoundLessThanRequired(EXECUTOR_GPU_ID.amountConf,
-      ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+      UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
   private def testExecutorResourceFoundLessThanRequired(execAmountconf: String, rpId: Int) = {
@@ -232,7 +234,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       // we don't really use this, just need it to get at the parser function
       val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1", "host1",
-        4, Seq.empty[URL], env, None, ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+        4, Seq.empty[URL], env, None, UNKNOWN_RESOURCE_PROFILE_ID)
 
       val parsedResources = backend.parseOrFindResources(None)
 
@@ -244,17 +246,17 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   }
 
   test("use resource discovery and allocated file option with resource profile") {
-    val fpgaExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
+    val customResourceConfPrefix =
+      resourceProfileCustomResourceIntConfPrefix(DEFAULT_RESOURCE_PROFILE_ID)
+    val fpgaExecInternalConf = ResourceProfileInternalConf(customResourceConfPrefix, FPGA)
     allocatedFileAndConfigsResourceDiscoveryTestFpga(fpgaExecInternalConf.amountConf,
-      fpgaExecInternalConf.discoveryScriptConf,
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      fpgaExecInternalConf.discoveryScriptConf, DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   test("use resource discovery and allocated file option") {
     allocatedFileAndConfigsResourceDiscoveryTestFpga(EXECUTOR_FPGA_ID.amountConf,
       EXECUTOR_FPGA_ID.discoveryScriptConf,
-      ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+      UNKNOWN_RESOURCE_PROFILE_ID)
   }
 
   private def allocatedFileAndConfigsResourceDiscoveryTestFpga(
@@ -291,8 +293,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   }
 
   test("resource profile id missing from confs") {
-    val fpgaExecInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, FPGA)
+    val customResourceConfPrefix =
+      resourceProfileCustomResourceIntConfPrefix(DEFAULT_RESOURCE_PROFILE_ID)
+    val fpgaExecInternalConf = ResourceProfileInternalConf(customResourceConfPrefix, FPGA)
     val conf = new SparkConf
     conf.set(fpgaExecInternalConf.amountConf, "3")
     assume(!(Utils.isWindows))
@@ -324,7 +327,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val env = createMockEnv(conf, serializer, Some(rpcEnv))
         backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
         "host1", "host1", 4, Seq.empty[URL], env, None,
-          ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+          DEFAULT_RESOURCE_PROFILE_ID)
       assert(backend.taskResources.isEmpty)
 
       val taskId = 1000000

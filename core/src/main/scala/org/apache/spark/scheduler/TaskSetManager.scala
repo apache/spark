@@ -86,8 +86,18 @@ private[spark] class TaskSetManager(
   // SPARK-29976: Only when the total number of tasks in the stage is less than or equal to the
   // number of slots on a single executor, would the task manager speculative run the tasks if
   // their duration is longer than the given threshold. In this way, we wouldn't speculate too
-  // aggressively but still handle basic cases.
-  val speculationTasksLessEqToSlots = numTasks <= (conf.get(EXECUTOR_CORES) / sched.CPUS_PER_TASK)
+  // aggressively but still handle basic cases. Note that in standalone and mesos coarse grained
+  // mode executor cores is not set properly by default so we make sure it works for 1 task.
+  val speculationTasksLessEqToSlots = {
+    val rpId = taskSet.resourceProfileId
+    val resourceProfile = sched.sc.resourceProfileManager.resourceProfileFromId(rpId)
+    val slots = if (!resourceProfile.isCoresLimitKnown) {
+      1
+    } else {
+      resourceProfile.maxTasksPerExecutor(conf)
+    }
+    numTasks <= slots
+  }
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not

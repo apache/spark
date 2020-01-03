@@ -233,6 +233,8 @@ package object config {
     ConfigBuilder("spark.executor.userClassPathFirst").booleanConf.createWithDefault(false)
 
   private[spark] val EXECUTOR_CORES = ConfigBuilder(SparkLauncher.EXECUTOR_CORES)
+    .doc("The number of cores to use on each executor. In standalone and Mesos " +
+      "coarse-grained modes this config may not be correct if not explicitly set.")
     .intConf
     .createWithDefault(1)
 

@@ -42,6 +42,7 @@ class ResourceProfile(object):
             self._jResourceProfile.require(resourceRequest._javaTaskResourceRequests)
         else:
             self._jResourceProfile.require(resourceRequest._javaExecutorResourceRequests)
+        return self
 
     @property
     def taskResources(self):

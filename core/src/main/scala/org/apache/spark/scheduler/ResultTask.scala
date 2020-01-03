@@ -25,6 +25,7 @@ import java.util.Properties
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
 /**
  * A task that sends back the output to the driver application.
@@ -63,9 +64,10 @@ private[spark] class ResultTask[T, U](
     jobId: Option[Int] = None,
     appId: Option[String] = None,
     appAttemptId: Option[String] = None,
-    isBarrier: Boolean = false)
+    isBarrier: Boolean = false,
+    resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
   extends Task[U](stageId, stageAttemptId, partition.index, localProperties, serializedTaskMetrics,
-    jobId, appId, appAttemptId, isBarrier)
+    jobId, appId, appAttemptId, isBarrier, resourceProfileId)
   with Serializable {
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {
