@@ -204,7 +204,8 @@ private[parquet] class ParquetRowConverter(
 
   override def start(): Unit = {
     var i = 0
-    while (i < currentRow.numFields) {
+    val numFields = currentRow.numFields
+    while (i < numFields) {
       currentRow.setNullAt(i)
       i += 1
     }
