@@ -22,7 +22,6 @@ import java.nio.ByteOrder
 import java.util.TimeZone
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
@@ -42,7 +41,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
  * corresponding parent container. For example, a converter for a `StructType` field may set
  * converted values to a [[InternalRow]]; or a converter for array elements may append converted
- * values to an [[ArrayBuffer]].
+ * values to a [[java.util.ArrayList]].
  */
 private[parquet] trait ParentContainerUpdater {
   /** Called before a record field is being converted */
@@ -468,7 +467,7 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
 
-    private var currentArray: ArrayBuffer[Any] = _
+    private[this] val currentArray = new java.util.ArrayList[Any]()
 
     private[this] val elementConverter: Converter = {
       val repeatedType = parquetSchema.getType(0)
@@ -507,7 +506,7 @@ private[parquet] class ParquetRowConverter(
         // If the repeated field corresponds to the element type, creates a new converter using the
         // type of the repeated field.
         newConverter(repeatedType, elementType, new ParentContainerUpdater {
-          override def set(value: Any): Unit = currentArray += value
+          override def set(value: Any): Unit = currentArray.add(value)
         })
       } else {
         // If the repeated field corresponds to the syntactic group in the standard 3-level Parquet
@@ -521,10 +520,7 @@ private[parquet] class ParquetRowConverter(
 
     override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
 
-    // NOTE: We can't reuse the mutable `ArrayBuffer` here and must instantiate a new buffer for the
-    // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored
-    // in row cells.
-    override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
+    override def start(): Unit = currentArray.clear()
 
     /** Array element converter */
     private final class ElementConverter(parquetType: Type, catalystType: DataType)
@@ -539,7 +535,7 @@ private[parquet] class ParquetRowConverter(
 
       override def getConverter(fieldIndex: Int): Converter = converter
 
-      override def end(): Unit = currentArray += currentElement
+      override def end(): Unit = currentArray.add(currentElement)
 
       override def start(): Unit = currentElement = null
     }
@@ -552,8 +548,8 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
 
-    private var currentKeys: ArrayBuffer[Any] = _
-    private var currentValues: ArrayBuffer[Any] = _
+    private[this] val currentKeys = new java.util.ArrayList[Any]()
+    private[this] val currentValues = new java.util.ArrayList[Any]()
 
     private[this] val keyValueConverter = {
       val repeatedType = parquetType.getType(0).asGroupType()
@@ -573,12 +569,9 @@ private[parquet] class ParquetRowConverter(
       updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
     }
 
-    // NOTE: We can't reuse the mutable Map here and must instantiate a new `Map` for the next
-    // value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored in row
-    // cells.
     override def start(): Unit = {
-      currentKeys = ArrayBuffer.empty[Any]
-      currentValues = ArrayBuffer.empty[Any]
+      currentKeys.clear()
+      currentValues.clear()
     }
 
     /** Parquet converter for key-value pairs within the map. */
@@ -607,8 +600,8 @@ private[parquet] class ParquetRowConverter(
       override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
       override def end(): Unit = {
-        currentKeys += currentKey
-        currentValues += currentValue
+        currentKeys.add(currentKey)
+        currentValues.add(currentValue)
       }
 
       override def start(): Unit = {
@@ -619,12 +612,12 @@ private[parquet] class ParquetRowConverter(
   }
 
   private trait RepeatedConverter {
-    private var currentArray: ArrayBuffer[Any] = _
+    private[this] val currentArray = new java.util.ArrayList[Any]()
 
     protected def newArrayUpdater(updater: ParentContainerUpdater) = new ParentContainerUpdater {
-      override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
+      override def start(): Unit = currentArray.clear()
       override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
-      override def set(value: Any): Unit = currentArray += value
+      override def set(value: Any): Unit = currentArray.add(value)
     }
   }
 
