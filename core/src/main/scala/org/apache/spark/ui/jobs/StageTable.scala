@@ -183,7 +183,9 @@ private[ui] class StagePagedTable(
       Seq(("Stage Id", null, true)) ++
       {if (isFairScheduler) {Seq(("Pool Name", null, true))} else Seq.empty} ++
       Seq(
-        ("Description", null, true), ("Submitted", null, true), ("Duration", null, true),
+        ("Description", null, true),
+        ("Submitted", null, true),
+        ("Duration", ToolTips.DURATION, true),
         ("Tasks: Succeeded/Total", null, false),
         ("Input", ToolTips.INPUT, true),
         ("Output", ToolTips.OUTPUT, true),

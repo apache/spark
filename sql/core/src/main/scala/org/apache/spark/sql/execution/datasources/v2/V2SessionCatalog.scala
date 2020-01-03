@@ -83,7 +83,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       properties: util.Map[String, String]): Table = {
 
     val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
-    val provider = properties.getOrDefault("provider", conf.defaultDataSourceName)
+    val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
@@ -124,9 +124,11 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
+    val comment = properties.get(TableCatalog.PROP_COMMENT)
 
     try {
-      catalog.alterTable(catalogTable.copy(properties = properties, schema = schema))
+      catalog.alterTable(
+        catalogTable.copy(properties = properties, schema = schema, comment = comment))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)

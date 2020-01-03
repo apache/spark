@@ -21,18 +21,22 @@ import java.util.{Properties, Random}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.FileAlreadyExistsException
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.Assertions._
+import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ManualClock}
@@ -179,7 +183,12 @@ class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
   override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
 }
 
-class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logging {
+class TaskSetManagerSuite
+  extends SparkFunSuite
+  with LocalSparkContext
+  with PrivateMethodTester
+  with Eventually
+  with Logging {
   import TaskLocality.{ANY, PROCESS_LOCAL, NO_PREF, NODE_LOCAL, RACK_LOCAL}
 
   private val conf = new SparkConf
@@ -1778,6 +1787,104 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
   }
 
+  private def testSpeculationDurationSetup(
+      speculationThresholdOpt: Option[String],
+      speculationQuantile: Double,
+      numTasks: Int,
+      numSlots: Int): (TaskSetManager, ManualClock) = {
+    sc = new SparkContext("local", "test")
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+    sc.conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
+    // Set the number of slots per executor
+    sc.conf.set(config.EXECUTOR_CORES.key, numSlots.toString)
+    sc.conf.set(config.CPUS_PER_TASK.key, "1")
+    if (speculationThresholdOpt.isDefined) {
+      sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
+    }
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    // Create a task set with the given number of tasks
+    val taskSet = FakeTask.createTaskSet(numTasks)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    manager.isZombie = false
+
+    // Offer resources for the task to start
+    for (i <- 1 to numTasks) {
+      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF)
+    }
+    (manager, clock)
+  }
+
+  private def testSpeculationDurationThreshold(
+      speculationThresholdProvided: Boolean,
+      numTasks: Int,
+      numSlots: Int): Unit = {
+    val (manager, clock) = testSpeculationDurationSetup(
+      // Set the threshold to be 60 minutes
+      if (speculationThresholdProvided) Some("60min") else None,
+      // Set the quantile to be 1.0 so that regular speculation would not be triggered
+      1.0,
+      numTasks,
+      numSlots
+    )
+
+    // if the time threshold has not been exceeded, no speculative run should be triggered
+    clock.advance(1000*60*60)
+    assert(!manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.size == 0)
+
+    // Now the task should have been running for 60 minutes and 1 second
+    clock.advance(1)
+    if (speculationThresholdProvided && numSlots >= numTasks) {
+      assert(manager.checkSpeculatableTasks(0))
+      assert(sched.speculativeTasks.size == numTasks)
+      // Should not submit duplicated tasks
+      assert(!manager.checkSpeculatableTasks(0))
+      assert(sched.speculativeTasks.size == numTasks)
+    } else {
+      // If the feature flag is turned off, or the stage contains too many tasks
+      assert(!manager.checkSpeculatableTasks(0))
+      assert(sched.speculativeTasks.size == 0)
+    }
+  }
+
+  Seq(1, 2).foreach { numTasks =>
+    test("SPARK-29976 when a speculation time threshold is provided, should speculative " +
+      s"run the task even if there are not enough successful runs, total tasks: $numTasks") {
+      testSpeculationDurationThreshold(true, numTasks, numTasks)
+    }
+
+    test("SPARK-29976: when the speculation time threshold is not provided," +
+      s"don't speculative run if there are not enough successful runs, total tasks: $numTasks") {
+      testSpeculationDurationThreshold(false, numTasks, numTasks)
+    }
+  }
+
+  test("SPARK-29976 when a speculation time threshold is provided, should not speculative " +
+      "if there are too many tasks in the stage even though time threshold is provided") {
+    testSpeculationDurationThreshold(true, 2, 1)
+  }
+
+  test("SPARK-29976 Regular speculation configs should still take effect even when a " +
+      "threshold is provided") {
+    val (manager, clock) = testSpeculationDurationSetup(
+      Some("60min"),
+      speculationQuantile = 0.5,
+      numTasks = 2,
+      numSlots = 2
+    )
+
+    // Task duration can't be 0, advance 1 sec
+    clock.advance(1000)
+    // Mark one of the task succeeded, which should satisfy the quantile
+    manager.handleSuccessfulTask(0, createTaskResult(0))
+    // Advance 1 more second so the remaining task takes longer than medium but doesn't satisfy the
+    // duration threshold yet
+    clock.advance(1000)
+    assert(manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.size == 1)
+  }
+
   test("TaskOutputFileAlreadyExistException lead to task set abortion") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -1795,5 +1902,59 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       Seq.empty[AccumulableInfo])
     manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
     assert(sched.taskSetsFailed.contains(taskSet.id))
+  }
+
+  test("SPARK-30359: don't clean executorsPendingToRemove " +
+    "at the beginning of CoarseGrainedSchedulerBackend.reset") {
+    val conf = new SparkConf()
+      // use local-cluster mode in order to get CoarseGrainedSchedulerBackend
+      .setMaster("local-cluster[2, 1, 2048]")
+      // allow to set up at most two executors
+      .set("spark.cores.max", "2")
+      .setAppName("CoarseGrainedSchedulerBackend.reset")
+    sc = new SparkContext(conf)
+    val sched = sc.taskScheduler
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+    val Seq(exec0, exec1) = backend.getExecutorIds()
+
+    val taskSet = FakeTask.createTaskSet(2)
+    val stageId = taskSet.stageId
+    val stageAttemptId = taskSet.stageAttemptId
+    sched.submitTasks(taskSet)
+    val taskSetManagers = PrivateMethod[mutable.HashMap[Int, mutable.HashMap[Int, TaskSetManager]]](
+      Symbol("taskSetsByStageIdAndAttempt"))
+    // get the TaskSetManager
+    val manager = sched.invokePrivate(taskSetManagers()).get(stageId).get(stageAttemptId)
+
+    val task0 = manager.resourceOffer(exec0, "localhost", TaskLocality.NO_PREF)
+    val task1 = manager.resourceOffer(exec1, "localhost", TaskLocality.NO_PREF)
+    assert(task0.isDefined && task1.isDefined)
+    val (taskId0, index0) = (task0.get.taskId, task0.get.index)
+    val (taskId1, index1) = (task1.get.taskId, task1.get.index)
+    // set up two running tasks
+    assert(manager.taskInfos(taskId0).running)
+    assert(manager.taskInfos(taskId0).executorId === exec0)
+    assert(manager.taskInfos(taskId1).running)
+    assert(manager.taskInfos(taskId1).executorId === exec1)
+
+    val numFailures = PrivateMethod[Array[Int]](Symbol("numFailures"))
+    // no task failures yet
+    assert(manager.invokePrivate(numFailures())(index0) === 0)
+    assert(manager.invokePrivate(numFailures())(index1) === 0)
+
+    // let exec1 count task failures but exec0 doesn't
+    backend.executorsPendingToRemove(exec0) = true
+    backend.executorsPendingToRemove(exec1) = false
+
+    backend.reset()
+
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      // executorsPendingToRemove should eventually be empty after reset()
+      assert(backend.executorsPendingToRemove.isEmpty)
+      assert(manager.invokePrivate(numFailures())(index0) === 0)
+      assert(manager.invokePrivate(numFailures())(index1) === 1)
+    }
   }
 }

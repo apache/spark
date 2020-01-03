@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def defaultNumPreShufflePartitions: Int =
-    if (conf.adaptiveExecutionEnabled) {
+    if (conf.adaptiveExecutionEnabled && conf.reducePostShufflePartitionsEnabled) {
       conf.maxNumPostShufflePartitions
     } else {
       conf.numShufflePartitions
@@ -55,6 +55,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         child
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
+      case (ShuffleExchangeExec(partitioning, child, _), distribution: OrderedDistribution) =>
+        ShuffleExchangeExec(distribution.createPartitioning(partitioning.numPartitions), child)
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(defaultNumPreShufflePartitions)

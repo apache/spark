@@ -128,7 +128,7 @@ NULL	1
 SELECT SKEWNESS(udf(a)), udf(KURTOSIS(a)), udf(MIN(a)), MAX(udf(a)), udf(AVG(udf(a))), udf(VARIANCE(a)), STDDEV(udf(a)), udf(SUM(a)), udf(COUNT(a))
 FROM testData
 -- !query 13 schema
-struct<skewness(CAST(CAST(udf(cast(a as string)) AS INT) AS DOUBLE)):double,CAST(udf(cast(kurtosis(cast(a as double)) as string)) AS DOUBLE):double,CAST(udf(cast(min(a) as string)) AS INT):int,max(CAST(udf(cast(a as string)) AS INT)):int,CAST(udf(cast(avg(cast(cast(udf(cast(a as string)) as int) as bigint)) as string)) AS DOUBLE):double,CAST(udf(cast(var_samp(cast(a as double)) as string)) AS DOUBLE):double,stddev_samp(CAST(CAST(udf(cast(a as string)) AS INT) AS DOUBLE)):double,CAST(udf(cast(sum(cast(a as bigint)) as string)) AS BIGINT):bigint,CAST(udf(cast(count(a) as string)) AS BIGINT):bigint>
+struct<skewness(CAST(CAST(udf(cast(a as string)) AS INT) AS DOUBLE)):double,CAST(udf(cast(kurtosis(cast(a as double)) as string)) AS DOUBLE):double,CAST(udf(cast(min(a) as string)) AS INT):int,max(CAST(udf(cast(a as string)) AS INT)):int,CAST(udf(cast(avg(cast(cast(udf(cast(a as string)) as int) as bigint)) as string)) AS DOUBLE):double,CAST(udf(cast(variance(cast(a as double)) as string)) AS DOUBLE):double,stddev(CAST(CAST(udf(cast(a as string)) AS INT) AS DOUBLE)):double,CAST(udf(cast(sum(cast(a as bigint)) as string)) AS BIGINT):bigint,CAST(udf(cast(count(a) as string)) AS BIGINT):bigint>
 -- !query 13 output
 -0.2723801058145729	-1.5069204152249134	1	3	2.142857142857143	0.8095238095238094	0.8997354108424372	15	7
 
@@ -293,7 +293,7 @@ struct<>
 -- !query 31
 SELECT udf(every(v)), udf(some(v)), any(v) FROM test_agg WHERE 1 = 0
 -- !query 31 schema
-struct<CAST(udf(cast(bool_and(v) as string)) AS BOOLEAN):boolean,CAST(udf(cast(bool_or(v) as string)) AS BOOLEAN):boolean,bool_or(v):boolean>
+struct<CAST(udf(cast(every(v) as string)) AS BOOLEAN):boolean,CAST(udf(cast(some(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
 -- !query 31 output
 NULL	NULL	NULL
 
@@ -301,7 +301,7 @@ NULL	NULL	NULL
 -- !query 32
 SELECT udf(every(udf(v))), some(v), any(v) FROM test_agg WHERE k = 4
 -- !query 32 schema
-struct<CAST(udf(cast(bool_and(cast(udf(cast(v as string)) as boolean)) as string)) AS BOOLEAN):boolean,bool_or(v):boolean,bool_or(v):boolean>
+struct<CAST(udf(cast(every(cast(udf(cast(v as string)) as boolean)) as string)) AS BOOLEAN):boolean,some(v):boolean,any(v):boolean>
 -- !query 32 output
 NULL	NULL	NULL
 
@@ -309,7 +309,7 @@ NULL	NULL	NULL
 -- !query 33
 SELECT every(v), udf(some(v)), any(v) FROM test_agg WHERE k = 5
 -- !query 33 schema
-struct<bool_and(v):boolean,CAST(udf(cast(bool_or(v) as string)) AS BOOLEAN):boolean,bool_or(v):boolean>
+struct<every(v):boolean,CAST(udf(cast(some(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
 -- !query 33 output
 false	true	true
 
@@ -317,7 +317,7 @@ false	true	true
 -- !query 34
 SELECT udf(k), every(v), udf(some(v)), any(v) FROM test_agg GROUP BY udf(k)
 -- !query 34 schema
-struct<CAST(udf(cast(k as string)) AS INT):int,bool_and(v):boolean,CAST(udf(cast(bool_or(v) as string)) AS BOOLEAN):boolean,bool_or(v):boolean>
+struct<CAST(udf(cast(k as string)) AS INT):int,every(v):boolean,CAST(udf(cast(some(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
 -- !query 34 output
 1	false	true	true
 2	true	true	true
@@ -329,7 +329,7 @@ struct<CAST(udf(cast(k as string)) AS INT):int,bool_and(v):boolean,CAST(udf(cast
 -- !query 35
 SELECT udf(k), every(v) FROM test_agg GROUP BY k HAVING every(v) = false
 -- !query 35 schema
-struct<CAST(udf(cast(k as string)) AS INT):int,bool_and(v):boolean>
+struct<CAST(udf(cast(k as string)) AS INT):int,every(v):boolean>
 -- !query 35 output
 1	false
 3	false
@@ -339,7 +339,7 @@ struct<CAST(udf(cast(k as string)) AS INT):int,bool_and(v):boolean>
 -- !query 36
 SELECT udf(k), udf(every(v)) FROM test_agg GROUP BY udf(k) HAVING every(v) IS NULL
 -- !query 36 schema
-struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(bool_and(v) as string)) AS BOOLEAN):boolean>
+struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(every(v) as string)) AS BOOLEAN):boolean>
 -- !query 36 output
 4	NULL
 
@@ -380,7 +380,7 @@ SELECT every(udf(1))
 struct<>
 -- !query 39 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_and(CAST(udf(cast(1 as string)) AS INT))' due to data type mismatch: Input to function 'bool_and' should have been boolean, but it's [int].; line 1 pos 7
+cannot resolve 'every(CAST(udf(cast(1 as string)) AS INT))' due to data type mismatch: Input to function 'every' should have been boolean, but it's [int].; line 1 pos 7
 
 
 -- !query 40
@@ -389,7 +389,7 @@ SELECT some(udf(1S))
 struct<>
 -- !query 40 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_or(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: Input to function 'bool_or' should have been boolean, but it's [smallint].; line 1 pos 7
+cannot resolve 'some(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: Input to function 'some' should have been boolean, but it's [smallint].; line 1 pos 7
 
 
 -- !query 41
@@ -398,7 +398,7 @@ SELECT any(udf(1L))
 struct<>
 -- !query 41 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_or(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mismatch: Input to function 'bool_or' should have been boolean, but it's [bigint].; line 1 pos 7
+cannot resolve 'any(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mismatch: Input to function 'any' should have been boolean, but it's [bigint].; line 1 pos 7
 
 
 -- !query 42
@@ -407,13 +407,13 @@ SELECT udf(every("true"))
 struct<>
 -- !query 42 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_and('true')' due to data type mismatch: Input to function 'bool_and' should have been boolean, but it's [string].; line 1 pos 11
+cannot resolve 'every('true')' due to data type mismatch: Input to function 'every' should have been boolean, but it's [string].; line 1 pos 11
 
 
 -- !query 43
 SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query 43 schema
-struct<k:int,v:boolean,bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query 43 output
 1	false	false
 1	true	false
@@ -430,7 +430,7 @@ struct<k:int,v:boolean,bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIR
 -- !query 44
 SELECT k, udf(udf(v)), some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query 44 schema
-struct<k:int,CAST(udf(cast(cast(udf(cast(v as string)) as boolean) as string)) AS BOOLEAN):boolean,bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,CAST(udf(cast(cast(udf(cast(v as string)) as boolean) as string)) AS BOOLEAN):boolean,some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query 44 output
 1	false	false
 1	true	true
@@ -447,7 +447,7 @@ struct<k:int,CAST(udf(cast(cast(udf(cast(v as string)) as boolean) as string)) A
 -- !query 45
 SELECT udf(udf(k)), v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query 45 schema
-struct<CAST(udf(cast(cast(udf(cast(k as string)) as int) as string)) AS INT):int,v:boolean,bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<CAST(udf(cast(cast(udf(cast(k as string)) as int) as string)) AS INT):int,v:boolean,any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query 45 output
 1	false	false
 1	true	true

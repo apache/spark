@@ -111,6 +111,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.currentCatalog).thenReturn(testCat)
+    when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
@@ -141,7 +142,8 @@ class PlanResolutionSuite extends AnalysisTest {
       CTESubstitution,
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
-      analyzer.ResolveTables)
+      analyzer.ResolveTables,
+      analyzer.ResolveRelations)
     rules.foldLeft(parsePlan(query)) {
       case (plan, rule) => rule.apply(plan)
     }
@@ -382,7 +384,7 @@ class PlanResolutionSuite extends AnalysisTest {
       assert(desc.schema.isEmpty) // will be populated later when the table is actually created
       assert(desc.comment.contains("This is the staging page view table"))
       assert(desc.viewText.isEmpty)
-      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewCatalogAndNamespace.isEmpty)
       assert(desc.viewQueryColumnNames.isEmpty)
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.provider.contains("parquet"))

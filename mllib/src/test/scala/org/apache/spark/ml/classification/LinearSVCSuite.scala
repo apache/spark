@@ -59,9 +59,9 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     // Dataset for testing SparseVector
     val toSparse: Vector => SparseVector = _.asInstanceOf[DenseVector].toSparse
     val sparse = udf(toSparse)
-    smallSparseBinaryDataset = smallBinaryDataset.withColumn("features", sparse('features))
-    smallSparseValidationDataset = smallValidationDataset.withColumn("features", sparse('features))
-
+    smallSparseBinaryDataset = smallBinaryDataset.withColumn("features", sparse($"features"))
+    smallSparseValidationDataset =
+      smallValidationDataset.withColumn("features", sparse($"features"))
   }
 
   /**
@@ -112,8 +112,13 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     assert(lsvc.getFeaturesCol === "features")
     assert(lsvc.getPredictionCol === "prediction")
     assert(lsvc.getRawPredictionCol === "rawPrediction")
+
     val model = lsvc.setMaxIter(5).fit(smallBinaryDataset)
-    model.transform(smallBinaryDataset)
+    val transformed = model.transform(smallBinaryDataset)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+
+    transformed
       .select("label", "prediction", "rawPrediction")
       .collect()
     assert(model.getThreshold === 0.0)
@@ -206,6 +211,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     val trainer = new LinearSVC()
     val model = trainer.fit(smallBinaryDataset)
     testPredictionModelSinglePrediction(model, smallBinaryDataset)
+    testClassificationModelSingleRawPrediction(model, smallBinaryDataset)
   }
 
   test("linearSVC comparison with R e1071 and scikit-learn") {

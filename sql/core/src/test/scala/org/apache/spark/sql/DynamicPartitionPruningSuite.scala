@@ -97,7 +97,8 @@ class DynamicPartitionPruningSuite
       (6, 60)
     )
 
-    spark.range(1000).select('id as 'product_id, ('id % 10) as 'store_id, ('id + 1) as 'code)
+    spark.range(1000)
+      .select($"id" as "product_id", ($"id" % 10) as "store_id", ($"id" + 1) as "code")
       .write
       .format(tableFormat)
       .mode("overwrite")
@@ -423,7 +424,7 @@ class DynamicPartitionPruningSuite
           """
             |SELECT * FROM fact_sk f
             |JOIN dim_store s
-            |ON f.date_id = s.store_id
+            |ON f.store_id = s.store_id
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, false, false)
@@ -1037,7 +1038,7 @@ class DynamicPartitionPruningSuite
   test("no partition pruning when the build side is a stream") {
     withTable("fact") {
       val input = MemoryStream[Int]
-      val stream = input.toDF.select('value as "one", ('value * 3) as "code")
+      val stream = input.toDF.select($"value" as "one", ($"value" * 3) as "code")
       spark.range(100).select(
         $"id",
         ($"id" + 1).as("one"),

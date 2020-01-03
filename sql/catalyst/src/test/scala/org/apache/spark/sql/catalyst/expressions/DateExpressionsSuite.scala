@@ -333,6 +333,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("date_add") {
     checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1.toByte)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1.toShort)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkEvaluation(
       DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
     checkEvaluation(
@@ -347,10 +353,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateAdd(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 49627)
     checkEvaluation(
       DateAdd(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
+    checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ByteType)
+    checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ShortType)
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
   }
 
   test("date_sub") {
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1.toByte)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1.toShort)),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
     checkEvaluation(
       DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2014-12-31")))
@@ -366,6 +380,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateSub(Literal(Date.valueOf("2016-02-28")), positiveIntLit), -15909)
     checkEvaluation(
       DateSub(Literal(Date.valueOf("2016-02-28")), negativeIntLit), 49628)
+    checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, ByteType)
+    checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, ShortType)
     checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, IntegerType)
   }
 

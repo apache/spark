@@ -20,6 +20,7 @@ package org.apache.spark.sql.util
 import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.complex.MapVector
 import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
@@ -88,6 +89,16 @@ object ArrowUtils {
           fields.map { field =>
             toArrowField(field.name, field.dataType, field.nullable, timeZoneId)
           }.toSeq.asJava)
+      case MapType(keyType, valueType, valueContainsNull) =>
+        val mapType = new FieldType(nullable, new ArrowType.Map(false), null)
+        // Note: Map Type struct can not be null, Struct Type key field can not be null
+        new Field(name, mapType,
+          Seq(toArrowField(MapVector.DATA_VECTOR_NAME,
+            new StructType()
+              .add(MapVector.KEY_NAME, keyType, nullable = false)
+              .add(MapVector.VALUE_NAME, valueType, nullable = valueContainsNull),
+            nullable = false,
+            timeZoneId)).asJava)
       case dataType =>
         val fieldType = new FieldType(nullable, toArrowType(dataType, timeZoneId), null)
         new Field(name, fieldType, Seq.empty[Field].asJava)
@@ -96,6 +107,11 @@ object ArrowUtils {
 
   def fromArrowField(field: Field): DataType = {
     field.getType match {
+      case _: ArrowType.Map =>
+        val elementField = field.getChildren.get(0)
+        val keyType = fromArrowField(elementField.getChildren.get(0))
+        val valueType = fromArrowField(elementField.getChildren.get(1))
+        MapType(keyType, valueType, elementField.getChildren.get(1).isNullable)
       case ArrowType.List.INSTANCE =>
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)

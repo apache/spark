@@ -14,8 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.catalyst.analysis
+
+import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -65,20 +66,20 @@ trait CheckAnalysis extends PredicateHelper {
     case _ => None
   }
 
-  private def checkLimitClause(limitExpr: Expression): Unit = {
+  private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => failAnalysis(
-        "The limit expression must evaluate to a constant value, but got " +
+        s"The $name expression must evaluate to a constant value, but got " +
           limitExpr.sql)
       case e if e.dataType != IntegerType => failAnalysis(
-        s"The limit expression must be integer type, but got " +
+        s"The $name expression must be integer type, but got " +
           e.dataType.catalogString)
       case e =>
         e.eval() match {
           case null => failAnalysis(
-            s"The evaluated limit expression must not be null, but got ${limitExpr.sql}")
+            s"The evaluated $name expression must not be null, but got ${limitExpr.sql}")
           case v: Int if v < 0 => failAnalysis(
-            s"The limit expression must be equal to or greater than 0, but got $v")
+            s"The $name expression must be equal to or greater than 0, but got $v")
           case _ => // OK
         }
     }
@@ -90,6 +91,12 @@ trait CheckAnalysis extends PredicateHelper {
     plan.foreachUp {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
+
+      case u: UnresolvedNamespace =>
+        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedTable =>
+        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
@@ -154,7 +161,7 @@ trait CheckAnalysis extends PredicateHelper {
           case g: GroupingID =>
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
-          case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
+          case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
           case w @ WindowExpression(_: OffsetWindowFunction,
@@ -280,6 +287,41 @@ trait CheckAnalysis extends PredicateHelper {
             groupingExprs.foreach(checkValidGroupingExprs)
             aggregateExprs.foreach(checkValidAggregateExpression)
 
+          case CollectMetrics(name, metrics, _) =>
+            if (name == null || name.isEmpty) {
+              operator.failAnalysis(s"observed metrics should be named: $operator")
+            }
+            // Check if an expression is a valid metric. A metric must meet the following criteria:
+            // - Is not a window function;
+            // - Is not nested aggregate function;
+            // - Is not a distinct aggregate function;
+            // - Has only non-deterministic functions that are nested inside an aggregate function;
+            // - Has only attributes that are nested inside an aggregate function.
+            def checkMetric(s: Expression, e: Expression, seenAggregate: Boolean = false): Unit = {
+              e match {
+                case _: WindowExpression =>
+                  e.failAnalysis(
+                    "window expressions are not allowed in observed metrics, but found: " + s.sql)
+                case _ if !e.deterministic && !seenAggregate =>
+                  e.failAnalysis(s"non-deterministic expression ${s.sql} can only be used " +
+                    "as an argument to an aggregate function.")
+                case a: AggregateExpression if seenAggregate =>
+                  e.failAnalysis(
+                    "nested aggregates are not allowed in observed metrics, but found: " + s.sql)
+                case a: AggregateExpression if a.isDistinct =>
+                  e.failAnalysis(
+                    "distinct aggregates are not allowed in observed metrics, but found: " + s.sql)
+                case _: Attribute if !seenAggregate =>
+                  e.failAnalysis (s"attribute ${s.sql} can only be used as an argument to an " +
+                    "aggregate function.")
+                case _: AggregateExpression =>
+                  e.children.foreach(checkMetric (s, _, seenAggregate = true))
+                case _ =>
+                  e.children.foreach(checkMetric (s, _, seenAggregate))
+              }
+            }
+            metrics.foreach(m => checkMetric(m, m))
+
           case Sort(orders, _, _) =>
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
@@ -288,9 +330,11 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+          case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
-          case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+          case LocalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
+
+          case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
@@ -534,6 +578,7 @@ trait CheckAnalysis extends PredicateHelper {
           case _ => // Analysis successful!
         }
     }
+    checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -625,6 +670,38 @@ trait CheckAnalysis extends PredicateHelper {
     // Validate to make sure the correlations appearing in the query are valid and
     // allowed by spark.
     checkCorrelationsInSubquery(expr.plan)
+  }
+
+  /**
+   * Validate that collected metrics names are unique. The same name cannot be used for metrics
+   * with different results. However multiple instances of metrics with with same result and name
+   * are allowed (e.g. self-joins).
+   */
+  private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
+    val metricsMap = mutable.Map.empty[String, LogicalPlan]
+    def check(plan: LogicalPlan): Unit = plan.foreach { node =>
+      node match {
+        case metrics @ CollectMetrics(name, _, _) =>
+          metricsMap.get(name) match {
+            case Some(other) =>
+              // Exact duplicates are allowed. They can be the result
+              // of a CTE that is used multiple times or a self join.
+              if (!metrics.sameResult(other)) {
+                failAnalysis(
+                  s"Multiple definitions of observed metrics named '$name': $plan")
+              }
+            case None =>
+              metricsMap.put(name, metrics)
+          }
+        case _ =>
+      }
+      node.expressions.foreach(_.foreach {
+        case subquery: SubqueryExpression =>
+          check(subquery.plan)
+        case _ =>
+      })
+    }
+    check(plan)
   }
 
   /**

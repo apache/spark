@@ -657,6 +657,23 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Return correct results when data columns overlap with partition columns (nested data)") {
+    Seq("parquet", "orc", "json").foreach { format =>
+      withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+        withTempPath { path =>
+          val tablePath = new File(s"${path.getCanonicalPath}/c3=c/c1=a/c5=e")
+
+          val inputDF = sql("SELECT 1 c1, 2 c2, 3 c3, named_struct('c4_1', 2, 'c4_2', 3) c4, 5 c5")
+          inputDF.write.format(format).save(tablePath.getCanonicalPath)
+
+          val resultDF = spark.read.format(format).load(path.getCanonicalPath)
+            .select("c1", "c4.c4_1", "c5", "c3")
+          checkAnswer(resultDF, Row("a", 2, "e", "c"))
+        }
+      }
+    }
+  }
+
   test("sizeInBytes should be the total size of all files") {
     Seq("orc", "").foreach { useV1SourceReaderList =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {

@@ -198,6 +198,7 @@
               <sources>
                 <source>v${hive.version.short}/src/main/scala</source>
                 <source>v${hive.version.short}/src/main/java</source>
+                <source>src/main/scala-${scala.binary.version}</source>
               </sources>
             </configuration>
           </execution>

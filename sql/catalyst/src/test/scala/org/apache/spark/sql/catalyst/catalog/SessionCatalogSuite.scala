@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -207,8 +209,9 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       // Note: alter properties here because Hive does not support altering other fields
       catalog.alterDatabase(db1.copy(properties = Map("k" -> "v3", "good" -> "true")))
       val newDb1 = catalog.getDatabaseMetadata("db1")
-      assert(db1.properties.isEmpty)
-      assert(newDb1.properties.size == 2)
+      val reversedProperties = Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)
+      assert((db1.properties -- reversedProperties).isEmpty)
+      assert((newDb1.properties -- reversedProperties).size == 2)
       assert(newDb1.properties.get("k") == Some("v3"))
       assert(newDb1.properties.get("good") == Some("true"))
     }
@@ -620,10 +623,16 @@ abstract class SessionCatalogSuite extends AnalysisTest {
 
   test("look up view relation") {
     withBasicCatalog { catalog =>
+      val props = CatalogTable.catalogAndNamespaceToProps("cat1", Seq("ns1"))
+      catalog.createTable(
+        newView("db3", "view1", props),
+        ignoreIfExists = false)
       val metadata = catalog.externalCatalog.getTable("db3", "view1")
-      catalog.setCurrentDatabase("default")
-      // Look up a view.
       assert(metadata.viewText.isDefined)
+      assert(metadata.viewCatalogAndNamespace == Seq("cat1", "ns1"))
+
+      // Look up a view.
+      catalog.setCurrentDatabase("default")
       val view = View(desc = metadata, output = metadata.schema.toAttributes,
         child = CatalystSqlParser.parsePlan(metadata.viewText.get))
       comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
@@ -632,6 +641,22 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       catalog.setCurrentDatabase("db3")
       comparePlans(catalog.lookupRelation(TableIdentifier("view1")),
         SubqueryAlias("view1", "db3", view))
+    }
+  }
+
+  test("look up view created before Spark 3.0") {
+    withBasicCatalog { catalog =>
+      val oldView = newView("db3", "view2", Map(CatalogTable.VIEW_DEFAULT_DATABASE -> "db2"))
+      catalog.createTable(oldView, ignoreIfExists = false)
+
+      val metadata = catalog.externalCatalog.getTable("db3", "view2")
+      assert(metadata.viewText.isDefined)
+      assert(metadata.viewCatalogAndNamespace == Seq(CatalogManager.SESSION_CATALOG_NAME, "db2"))
+
+      val view = View(desc = metadata, output = metadata.schema.toAttributes,
+        child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+      comparePlans(catalog.lookupRelation(TableIdentifier("view2", Some("db3"))),
+        SubqueryAlias("view2", "db3", view))
     }
   }
 

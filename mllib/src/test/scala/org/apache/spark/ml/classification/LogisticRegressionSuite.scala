@@ -155,8 +155,14 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(!lr.isDefined(lr.weightCol))
     assert(lr.getFitIntercept)
     assert(lr.getStandardization)
+
     val model = lr.fit(smallBinaryDataset)
-    model.transform(smallBinaryDataset)
+    val transformed = model.transform(smallBinaryDataset)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
+
+    transformed
       .select("label", "probability", "prediction", "rawPrediction")
       .collect()
     assert(model.getThreshold === 0.5)
@@ -506,9 +512,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val blor = new LogisticRegression().setFamily("binomial")
     val blorModel = blor.fit(smallBinaryDataset)
     testPredictionModelSinglePrediction(blorModel, smallBinaryDataset)
+    testClassificationModelSingleRawPrediction(blorModel, smallBinaryDataset)
+    testProbClassificationModelSingleProbPrediction(blorModel, smallBinaryDataset)
     val mlor = new LogisticRegression().setFamily("multinomial")
     val mlorModel = mlor.fit(smallMultinomialDataset)
     testPredictionModelSinglePrediction(mlorModel, smallMultinomialDataset)
+    testClassificationModelSingleRawPrediction(mlorModel, smallMultinomialDataset)
+    testProbClassificationModelSingleProbPrediction(mlorModel, smallMultinomialDataset)
   }
 
   test("coefficients and intercept methods") {

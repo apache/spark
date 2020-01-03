@@ -25,25 +25,37 @@ The `INSERT INTO` statement inserts new rows into a table. The inserted rows can
 
 ### Syntax
 {% highlight sql %}
-INSERT INTO [ TABLE ] table_name
-    [ PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] ) ]
+INSERT INTO [ TABLE ] table_identifier [ partition_spec ]
     { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
 {% endhighlight %}
 
 ### Parameters
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>The name of an existing table.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 <dl>
-  <dt><code><em>PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )</em></code></dt>
-  <dd>Specifies one or more partition column and value pairs. The partition value is optional.</dd>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    An optional parameter that specifies a comma separated list of key and value pairs
+    for partitions.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION (partition_col_name  = partition_col_val [ , ... ])
+      </code>
+  </dd>
 </dl>
 
 <dl>
   <dt><code><em>VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]</em></code></dt>
-  <dd>Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.</dd>
+  <dd>Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to separate each value in the clause. More than one set of values can be specified to insert multiple rows.</dd>
 </dl>
 
 <dl>
