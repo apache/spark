@@ -21,7 +21,7 @@ import java.util.Properties
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 
 class FakeTask(
     stageId: Int,
@@ -44,7 +44,7 @@ object FakeTask {
    */
   def createTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
     createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
   }
 
   def createTaskSet(numTasks: Int, rpId: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
@@ -57,7 +57,7 @@ object FakeTask {
       stageAttemptId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
     createTaskSet(numTasks, stageId, stageAttemptId, priority = 0,
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
   }
 
   def createTaskSet(
@@ -100,12 +100,12 @@ object FakeTask {
         SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array())
     }
     new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null,
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   def createBarrierTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
     createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
-      rpId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+      rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
   }
 
   def createBarrierTaskSet(

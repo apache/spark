@@ -136,8 +136,8 @@ class ResourceUtilsSuite extends SparkFunSuite
       val expectedFpgaInfo = new ResourceInformation(FPGA, fpgaAddrs.toArray)
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
-      val prefix = ImmutableResourceProfile.resourceProfileCustomResourceIntConfPrefix(rpId)
-      val gpuInternalConf = ImmutableResourceProfile.ResourceProfileInternalConf(prefix, GPU)
+      val prefix = ResourceProfile.resourceProfileCustomResourceIntConfPrefix(rpId)
+      val gpuInternalConf = ResourceProfile.ResourceProfileInternalConf(prefix, GPU)
       val gpuDiscovery = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript",
         """{"name": "gpu", "addresses": ["0", "1"]}""")
@@ -294,7 +294,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     // this should pass as default case with just 1 core
     var rpmanager = new ResourceProfileManager(conf)
 
-    ImmutableResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile
     conf.set(EXECUTOR_CORES, 4)
     conf.set("spark.executor.resource.gpu.amount", "1")
     conf.set("spark.task.resource.gpu.amount", "1")
@@ -307,7 +307,7 @@ class ResourceUtilsSuite extends SparkFunSuite
         "wasted resources due to resource gpu limiting the number of runnable tasks per " +
         "executor to: 1. Please adjust your configuration."))
 
-    ImmutableResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile
     conf.set(EXECUTOR_CORES, 1)
     conf.set("spark.executor.resource.gpu.amount", "4")
     conf.set("spark.task.resource.gpu.amount", "1")
@@ -320,7 +320,7 @@ class ResourceUtilsSuite extends SparkFunSuite
         "result in wasted resources due to resource cpus limiting the number of runnable " +
         "tasks per executor to: 1. Please adjust your configuration."))
 
-    ImmutableResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile
     // multiple resources
     conf.set("spark.executor.resource.fpga.amount", "6")
     conf.set("spark.task.resource.fpga.amount", "1")
@@ -354,13 +354,13 @@ class ResourceUtilsSuite extends SparkFunSuite
     // cores only resource
     warnOnWastedResources(rpmanager.defaultResourceProfile, conf, Some(4))
 
-    ImmutableResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile
     conf.set("spark.executor.resource.gpu.amount", "4")
     conf.set("spark.task.resource.gpu.amount", "1")
     // doesn't error because cores unknown
     rpmanager = new ResourceProfileManager(conf)
 
-    ImmutableResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile
     conf.set("spark.executor.resource.gpu.amount", "1")
     conf.set("spark.task.resource.gpu.amount", "1")
     rpmanager = new ResourceProfileManager(conf)
@@ -374,7 +374,7 @@ class ResourceUtilsSuite extends SparkFunSuite
         "in wasted resources due to resource gpu limiting the number of runnable tasks per " +
         "executor to: 1. Please adjust your configuration."))
 
-    ImmutableResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile
     conf.set("spark.executor.resource.gpu.amount", "4")
     conf.set("spark.task.resource.gpu.amount", "1")
     rpmanager = new ResourceProfileManager(conf)
@@ -388,14 +388,14 @@ class ResourceUtilsSuite extends SparkFunSuite
         "result in wasted resources due to resource cpus limiting the number of runnable " +
         "tasks per executor to: 1. Please adjust your configuration."))
 
-    ImmutableResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile
     conf.set("spark.executor.resource.gpu.amount", "4")
     conf.set("spark.task.resource.gpu.amount", "1")
     // specify cores should work
     conf.set(EXECUTOR_CORES, 4)
     rpmanager = new ResourceProfileManager(conf)
 
-    ImmutableResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile
     conf.set("spark.executor.resource.gpu.amount", "2")
     conf.set("spark.task.resource.gpu.amount", "1")
     // specify cores that has extra

@@ -24,7 +24,7 @@ import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.ui.TestFilter
@@ -63,7 +63,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     val yarnSchedulerBackendExtended = new TestYarnSchedulerBackend(sched, sc)
     yarnSchedulerBackend = yarnSchedulerBackendExtended
     val ser = new JavaSerializer(sc.conf).newInstance()
-    val defaultResourceProf = ImmutableResourceProfile.getOrCreateDefaultProfile(sc.getConf)
+    val defaultResourceProf = ResourceProfile.getOrCreateDefaultProfile(sc.getConf)
     for {
       blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
       numRequested <- 0 until 10
@@ -79,7 +79,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       assert(req.resourceProfileToTotalExecs(defaultResourceProf) === numRequested)
       assert(req.nodeBlacklist === blacklist)
       val hosts =
-        req.hostToLocalTaskCount(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID).keySet
+        req.hostToLocalTaskCount(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID).keySet
       assert(hosts.intersect(blacklist).isEmpty)
       // Serialize to make sure serialization doesn't throw an error
       ser.serialize(req)

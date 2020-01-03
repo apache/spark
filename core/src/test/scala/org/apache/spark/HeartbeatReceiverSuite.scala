@@ -30,7 +30,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.DYN_ALLOCATION_TESTING
-import org.apache.spark.resource.{ImmutableResourceProfile, ResourceProfileManager}
+import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -179,10 +179,10 @@ class HeartbeatReceiverSuite
     val dummyExecutorEndpointRef2 = rpcEnv.setupEndpoint("fake-executor-2", dummyExecutorEndpoint2)
     fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
       RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 0, Map.empty, Map.empty,
-        Map.empty, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
       RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "1.2.3.5", 0, Map.empty, Map.empty,
-        Map.empty, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
     addExecutorAndVerify(executorId2)
@@ -288,7 +288,7 @@ private class FakeSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
 
   protected override def doRequestTotalExecutors(
-      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int]): Future[Boolean] = {
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
     clusterManagerEndpoint.ask[Boolean](
       RequestExecutors(numLocalityAwareTasksPerResourceProfileId,
         rpHostToLocalTaskCount, Set.empty, resourceProfileToTotalExecs))
@@ -312,7 +312,7 @@ private class FakeClusterManager(override val rpcEnv: RpcEnv, conf: SparkConf) e
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RequestExecutors(_, _, _, resourceProfileToTotalExecs) =>
       targetNumExecutors =
-        resourceProfileToTotalExecs(ImmutableResourceProfile.getOrCreateDefaultProfile(conf))
+        resourceProfileToTotalExecs(ResourceProfile.getOrCreateDefaultProfile(conf))
       context.reply(true)
     case KillExecutors(executorIds) =>
       executorIdsToKill ++= executorIds

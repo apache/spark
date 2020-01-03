@@ -34,7 +34,7 @@ import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.{ExecutorResourceRequests, ImmutableResourceProfile, ResourceInformation, TaskResourceRequests}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceInformation, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
@@ -72,7 +72,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       // Ensure all executors have been launched.
       assert(sc.getExecutorIds().length == 4)
     }
-    assert(sc.maxNumConcurrentTasks(ImmutableResourceProfile.getOrCreateDefaultProfile(conf)) == 12)
+    assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 12)
   }
 
   test("compute max number of concurrent tasks can be launched when spark.task.cpus > 1") {
@@ -86,7 +86,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       assert(sc.getExecutorIds().length == 4)
     }
     // Each executor can only launch one task since `spark.task.cpus` is 2.
-    assert(sc.maxNumConcurrentTasks(ImmutableResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
+    assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
   }
 
   test("compute max number of concurrent tasks can be launched when some executors are busy") {
@@ -127,7 +127,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         assert(taskEnded.get() == false)
         // Assert we count in slots on both busy and free executors.
         assert(
-          sc.maxNumConcurrentTasks(ImmutableResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
+          sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
       }
     } finally {
       sc.removeSparkListener(listener)
@@ -175,13 +175,13 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, logUrls, attributes,
-        Map.empty, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, logUrls, attributes,
-        Map.empty, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes,
-        Map.empty, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(executorAddedCount === 3)
@@ -204,9 +204,9 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     sc = new SparkContext(conf)
     val execGpu = new ExecutorResourceRequests().cores(1).resource(GPU, 3)
     val taskGpu = new TaskResourceRequests().cpus(1).resource(GPU, 1)
-    val rp = new ImmutableResourceProfile(execGpu.requests, taskGpu.requests)
+    val rp = new ResourceProfile(execGpu.requests, taskGpu.requests)
     sc.resourceProfileManager.addResourceProfile(rp)
-    assert(rp.id > ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(rp.id > ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val backend = sc.schedulerBackend.asInstanceOf[TestCoarseGrainedSchedulerBackend]
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
@@ -225,10 +225,10 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
-        ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
-        ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
         rp.id))

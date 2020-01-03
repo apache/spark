@@ -59,6 +59,7 @@ from pyspark.taskresourcerequest import TaskResourceRequest
 from pyspark.executorresourcerequest import ExecutorResourceRequest
 from pyspark.taskresourcerequests import TaskResourceRequests
 from pyspark.executorresourcerequests import ExecutorResourceRequests
+from pyspark.resourceprofilebuilder import ResourceProfileBuilder
 from pyspark.resourceprofile import ResourceProfile
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.status import *

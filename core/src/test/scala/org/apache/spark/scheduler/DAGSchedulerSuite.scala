@@ -34,7 +34,7 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
-import org.apache.spark.resource.{ExecutorResourceRequests, ImmutableResourceProfile, ResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
@@ -3103,13 +3103,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   test("test 1 resource profiles") {
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfile().require(ereqs).require(treqs)
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
 
     val rdd = sc.parallelize(1 to 10).map(x => (x, x)).withResources(rp1)
     val rpMerged = scheduler.mergeResourceProfilesForStage(rdd)
-    val expectedid = rdd.getImmutableResourceProfile.map(_.id)
+    val expectedid = Option(rdd.getResourceProfile).map(_.id)
     assert(expectedid.isDefined)
-    assert(expectedid.get != ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(expectedid.get != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assert(rpMerged.id == expectedid.get)
   }
 
@@ -3117,11 +3117,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     import org.apache.spark.resource._
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfile().require(ereqs).require(treqs)
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
 
     val ereqs2 = new ExecutorResourceRequests().cores(2)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfile().require(ereqs2).require(treqs2)
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val error = intercept[IllegalArgumentException] {
@@ -3139,11 +3139,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfile().require(ereqs).require(treqs)
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
 
     val ereqs2 = new ExecutorResourceRequests().cores(2)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfile().require(ereqs2).require(treqs2)
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val mergedRp = scheduler.mergeResourceProfilesForStage(rdd)
@@ -3154,11 +3154,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   test("test merge 2 resource profiles") {
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ImmutableResourceProfile(ereqs.requests, treqs.requests)
+    val rp1 = new ResourceProfile(ereqs.requests, treqs.requests)
 
     val ereqs2 = new ExecutorResourceRequests().cores(2)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ImmutableResourceProfile(ereqs2.requests, treqs2.requests)
+    val rp2 = new ResourceProfile(ereqs2.requests, treqs2.requests)
 
     var mergedRp = scheduler.mergeResourceProfiles(rp1, rp2)
 
@@ -3167,11 +3167,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     val ereqs3 = new ExecutorResourceRequests().cores(1).resource(GPU, 1, "disc")
     val treqs3 = new TaskResourceRequests().cpus(1).resource(GPU, 1)
-    val rp3 = new ImmutableResourceProfile(ereqs3.requests, treqs3.requests)
+    val rp3 = new ResourceProfile(ereqs3.requests, treqs3.requests)
 
     val ereqs4 = new ExecutorResourceRequests().cores(2)
     val treqs4 = new TaskResourceRequests().cpus(2)
-    val rp4 = new ImmutableResourceProfile(ereqs4.requests, treqs4.requests)
+    val rp4 = new ResourceProfile(ereqs4.requests, treqs4.requests)
 
     mergedRp = scheduler.mergeResourceProfiles(rp3, rp4)
 
@@ -3186,11 +3186,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val ereqs5 = new ExecutorResourceRequests().cores(1).memory("3g")
       .memoryOverhead("1g").pysparkMemory("2g").resource(GPU, 1, "disc")
     val treqs5 = new TaskResourceRequests().cpus(1).resource(GPU, 1)
-    val rp5 = new ImmutableResourceProfile(ereqs5.requests, treqs5.requests)
+    val rp5 = new ResourceProfile(ereqs5.requests, treqs5.requests)
 
     val ereqs6 = new ExecutorResourceRequests().cores(8).resource(FPGA, 2, "fdisc")
     val treqs6 = new TaskResourceRequests().cpus(2).resource(FPGA, 1)
-    val rp6 = new ImmutableResourceProfile(ereqs6.requests, treqs6.requests)
+    val rp6 = new ResourceProfile(ereqs6.requests, treqs6.requests)
 
     mergedRp = scheduler.mergeResourceProfiles(rp5, rp6)
 

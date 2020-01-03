@@ -34,14 +34,14 @@ import org.apache.spark.util.Utils.isTesting
 @Evolving
 private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Logging {
   private val resourceProfileIdToResourceProfile =
-    new ConcurrentHashMap[Int, ImmutableResourceProfile]()
+    new ConcurrentHashMap[Int, ResourceProfile]()
 
   private val master = sparkConf.getOption("spark.master")
 
-  private val defaultProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
   addResourceProfile(defaultProfile)
 
-  def defaultResourceProfile: ImmutableResourceProfile = defaultProfile
+  def defaultResourceProfile: ResourceProfile = defaultProfile
 
   private val taskCpusDefaultProfile = defaultProfile.getTaskCpus.get
   private val dynamicEnabled = sparkConf.get(DYN_ALLOCATION_ENABLED)
@@ -49,10 +49,10 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
 
   // If we use anything except the default profile, its only supported on YARN right now.
   // Throw an exception if not supported.
-  private[spark] def isSupported(rp: ImmutableResourceProfile): Boolean = {
+  private[spark] def isSupported(rp: ResourceProfile): Boolean = {
     // if the master isn't defined we go ahead and allow it for testing purposes
     val shouldError = !isTesting || sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
-    val isNotDefaultProfile = rp.id != ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     val notYarnAndNotDefaultProfile = isNotDefaultProfile && isNotYarn
     val YarnNotDynAllocAndNotDefaultProfile = isNotDefaultProfile && !isNotYarn && !dynamicEnabled
     if (shouldError && (notYarnAndNotDefaultProfile || YarnNotDynAllocAndNotDefaultProfile)) {
@@ -62,7 +62,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
     true
   }
 
-  def addResourceProfile(rp: ImmutableResourceProfile): Unit = {
+  def addResourceProfile(rp: ResourceProfile): Unit = {
     isSupported(rp)
     // force the computation of maxTasks and limitingResource now so we don't have cost later
     rp.limitingResource(sparkConf)
@@ -74,7 +74,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
    * Gets the ResourceProfile associated with the id, if a profile doesn't exist
    * it returns the default ResourceProfile created from the application level configs.
    */
-  def resourceProfileFromId(rpId: Int): ImmutableResourceProfile = {
+  def resourceProfileFromId(rpId: Int): ResourceProfile = {
     val rp = resourceProfileIdToResourceProfile.get(rpId)
     if (rp == null) {
       throw new SparkException(s"ResourceProfileId $rpId not found!")

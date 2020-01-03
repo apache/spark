@@ -27,7 +27,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -72,13 +72,13 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
         if (expectedRequestedTotalExecs.nonEmpty) {
           require(expectedRequestedTotalExecs.get > 0)
           verify(allocationClient, times(1)).requestTotalExecutors(
-            meq(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)), meq(Map.empty),
-            meq(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+            meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)), meq(Map.empty),
+            meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
               expectedRequestedTotalExecs.get)))
         } else {
           verify(allocationClient, never).requestTotalExecutors(
-            Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0), Map.empty,
-            Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0))}
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0), Map.empty,
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0))}
       }
 
       /** Verify that a particular executor was killed */
@@ -143,7 +143,7 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       reset(allocationClient)
       when(allocationClient.getExecutorIds()).thenReturn((1 to numExecs).map(_.toString))
       requestExecutors(allocationManager, numNewExecs)
-      val defaultProfId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+      val defaultProfId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
       verify(allocationClient, times(1)).requestTotalExecutors(
         meq(Map(defaultProfId -> 0)), meq(Map.empty),
         meq(Map(defaultProfId -> expectedRequestedTotalExecs)))

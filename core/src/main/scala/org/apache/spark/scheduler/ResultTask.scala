@@ -25,7 +25,7 @@ import java.util.Properties
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
 /**
  * A task that sends back the output to the driver application.

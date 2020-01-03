@@ -23,14 +23,14 @@ class ResourceProfileSuite extends SparkFunSuite {
 
   override def afterEach() {
     try {
-      ImmutableResourceProfile.reInitDefaultProfile(new SparkConf)
+      ResourceProfile.reInitDefaultProfile(new SparkConf)
     } finally {
       super.afterEach()
     }
   }
 
   test("Create ResourceProfile") {
-    val rprof = new ResourceProfile()
+    val rprof = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val eReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(eReq)
@@ -74,7 +74,7 @@ class ResourceProfileSuite extends SparkFunSuite {
   }
 
   test("Test ExecutorResourceRequests memory helpers") {
-    val rprof = new ResourceProfile()
+    val rprof = new ResourceProfileBuilder()
     val ereqs = new ExecutorResourceRequests()
     ereqs.memory("4g")
     ereqs.memoryOverhead("2000m").pysparkMemory("512000k")
@@ -89,7 +89,7 @@ class ResourceProfileSuite extends SparkFunSuite {
   }
 
   test("Test TaskResourceRequest fractional") {
-    val rprof = new ResourceProfile()
+    val rprof = new ResourceProfileBuilder()
     val treqs = new TaskResourceRequests().resource("gpu", 0.33)
     rprof.require(treqs)
 

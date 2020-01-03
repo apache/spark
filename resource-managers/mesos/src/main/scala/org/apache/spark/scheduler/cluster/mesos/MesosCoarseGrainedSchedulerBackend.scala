@@ -38,7 +38,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -597,7 +597,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private def satisfiesLocality(offerHostname: String): Boolean = {
     val hostToLocalTaskCount =
-      rpHostToLocalTaskCount.getOrElse(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+      rpHostToLocalTaskCount.getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
         Map.empty)
     if (!Utils.isDynamicAllocationEnabled(conf) || hostToLocalTaskCount.isEmpty) {
       return true
@@ -765,7 +765,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
 
   override def doRequestTotalExecutors(
-      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int]
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]
   ): Future[Boolean] = Future.successful {
     // We don't truly know if we can fulfill the full amount of executors
     // since at coarse grain it depends on the amount of slaves available.

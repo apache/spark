@@ -115,6 +115,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
    */
   private def createThroughDaemon(): Socket = {
 
+    logInfo("createing through daemon")
     def createSocket(): Socket = {
       val socket = new Socket(daemonHost, daemonPort)
       val pid = new DataInputStream(socket.getInputStream).readInt()
@@ -150,6 +151,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
    */
   private def createSimpleWorker(): Socket = {
     var serverSocket: ServerSocket = null
+    logInfo("createing through simple worker")
+
     try {
       serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
 

@@ -35,7 +35,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.{ExecutorResourceRequests, ImmutableResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{AMOUNT, GPU}
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
@@ -72,8 +72,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   // priority has to be 0 to match default profile id
   val RM_REQUEST_PRIORITY = Priority.newInstance(0)
-  val defaultRPId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-  val defaultRP = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  val defaultRPId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+  val defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -175,10 +175,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG)
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
-    val defaultRProf = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     val execReq = new ExecutorResourceRequests().resource("gpu", 6)
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
-    val rprof = new ImmutableResourceProfile(execReq.requests, taskReq.requests)
+    val rprof = new ResourceProfile(execReq.requests, taskReq.requests)
     // request a single container and receive it
     val (handler, _) = createAllocator(0)
 
@@ -202,7 +202,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
 
-    ImmutableResourceProfile.reInitDefaultProfile(sparkConf)
+    ResourceProfile.reInitDefaultProfile(sparkConf)
   }
 
   test("multiple containers allocated with ResourceProfiles") {
@@ -210,14 +210,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG)
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
-    val defaultRProf = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     val execReq = new ExecutorResourceRequests().resource("gpu", 6)
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
-    val rprof = new ImmutableResourceProfile(execReq.requests, taskReq.requests)
+    val rprof = new ResourceProfile(execReq.requests, taskReq.requests)
 
     val execReq2 = new ExecutorResourceRequests().memory("8g").resource("fpga", 2)
     val taskReq2 = new TaskResourceRequests().resource("fpga", 1)
-    val rprof2 = new ImmutableResourceProfile(execReq2.requests, taskReq2.requests)
+    val rprof2 = new ResourceProfile(execReq2.requests, taskReq2.requests)
 
 
     // request a single container and receive it
@@ -254,7 +254,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
 
-    ImmutableResourceProfile.reInitDefaultProfile(sparkConf)
+    ResourceProfile.reInitDefaultProfile(sparkConf)
   }
 
   test("custom resource requested from yarn") {

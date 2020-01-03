@@ -23,7 +23,7 @@ import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 
 class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
 
@@ -42,7 +42,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
   }
 
   val resource = yarnAllocatorSuite.containerResource
-  val defaultResourceProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+  val defaultResourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
   test("allocate locality preferred containers with enough resource and no matched existed " +
     "containers") {
@@ -53,8 +53,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     handler.updateResourceRequests()
     handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
 
-    ImmutableResourceProfile.clearDefaultProfile
-    val rp = ImmutableResourceProfile.getOrCreateDefaultProfile(allocatorConf)
+    ResourceProfile.clearDefaultProfile
+    val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host3" -> 15, "host4" -> 15, "host5" -> 10),
       handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
@@ -79,8 +79,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host2")
     ))
 
-    ImmutableResourceProfile.clearDefaultProfile
-    val rp = ImmutableResourceProfile.getOrCreateDefaultProfile(allocatorConf)
+    ResourceProfile.clearDefaultProfile
+    val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
 
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
@@ -104,8 +104,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host2")
     ))
 
-    ImmutableResourceProfile.clearDefaultProfile
-    val rp = ImmutableResourceProfile.getOrCreateDefaultProfile(allocatorConf)
+    ResourceProfile.clearDefaultProfile
+    val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
       handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
@@ -127,8 +127,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host3")
     ))
 
-    ImmutableResourceProfile.clearDefaultProfile
-    val rp = ImmutableResourceProfile.getOrCreateDefaultProfile(allocatorConf)
+    ResourceProfile.clearDefaultProfile
+    val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
       handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
@@ -144,8 +144,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
     handler.updateResourceRequests()
     handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
 
-    ImmutableResourceProfile.clearDefaultProfile
-    val rp = ImmutableResourceProfile.getOrCreateDefaultProfile(allocatorConf)
+    ResourceProfile.clearDefaultProfile
+    val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 0, Map.empty,
       handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId), Seq.empty,
@@ -167,8 +167,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainerRequest(Array("host2", "host3")),
       createContainerRequest(Array("host1", "host4")))
 
-    ImmutableResourceProfile.clearDefaultProfile
-    val rp = ImmutableResourceProfile.getOrCreateDefaultProfile(allocatorConf)
+    ResourceProfile.clearDefaultProfile
+    val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
       handler.allocatedHostToContainersMapPerRPId(defaultResourceProfileId),

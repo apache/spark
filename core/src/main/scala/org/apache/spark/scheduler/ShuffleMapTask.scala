@@ -25,7 +25,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
 /**
  * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner

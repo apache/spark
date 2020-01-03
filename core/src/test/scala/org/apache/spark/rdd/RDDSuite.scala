@@ -172,13 +172,13 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   }
 
   test("withResources raises exception in local mode") {
-    val rp = new ResourceProfile()
+    val rp = new ResourceProfileBuilder()
     val ereqs = new ExecutorResourceRequests().resource("gpu", 1)
     val treqs = new TaskResourceRequests().resource("gpu", 1)
     rp.require(ereqs).require(treqs)
     sc.conf.set(RESOURCE_PROFILE_MANAGER_TESTING, true)
     val error = intercept[SparkException] {
-      val rdd = sc.parallelize(Seq(1 -> true)).withResources(rp)
+      val rdd = sc.parallelize(Seq(1 -> true)).withResources(rp.build)
     }.getMessage()
 
     assert(error.contains("ResourceProfiles are only supported on YARN with dynamic " +

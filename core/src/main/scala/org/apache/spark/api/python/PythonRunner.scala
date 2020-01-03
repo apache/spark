@@ -30,7 +30,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.resource.ImmutableResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, getPysparkMemoryFromInternalConfs}
+import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, getPysparkMemoryFromInternalConfs}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
@@ -117,8 +117,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to this executor
       // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
       // see https://github.com/numpy/numpy/issues/10455
+      // TODO - we have to update this to limit it based on limiting resource
       conf.getOption("spark.executor.cores").foreach(envVars.put("OMP_NUM_THREADS", _))
     }
+    logInfo("omp num threads is: " + envVars.get("OMP_NUM_THREADS"))
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")

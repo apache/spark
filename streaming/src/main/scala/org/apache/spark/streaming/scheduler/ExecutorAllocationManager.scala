@@ -23,7 +23,7 @@ import scala.util.Random
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Streaming._
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, Utils}
 
@@ -113,9 +113,9 @@ private[streaming] class ExecutorAllocationManager(
     val targetTotalExecutors =
       math.max(math.min(maxNumExecutors, allExecIds.size + numNewExecutors), minNumExecutors)
     // Just map the targetTotalExecutors to the default ResourceProfile
-    client.requestTotalExecutors(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+    client.requestTotalExecutors(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
       Map.empty,
-      Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> targetTotalExecutors))
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> targetTotalExecutors))
     logInfo(s"Requested total $targetTotalExecutors executors")
   }
 

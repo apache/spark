@@ -29,7 +29,7 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.resource.ImmutableResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
+import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.dynalloc.ExecutorMonitor

@@ -38,7 +38,7 @@ import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -443,7 +443,7 @@ private[spark] class DAGScheduler(
    * the check fails consecutively beyond a configured number for a job, then fail current job
    * submission.
    */
-  private def checkBarrierStageWithNumSlots(rdd: RDD[_], rp: ImmutableResourceProfile): Unit = {
+  private def checkBarrierStageWithNumSlots(rdd: RDD[_], rp: ResourceProfile): Unit = {
     val numPartitions = rdd.getNumPartitions
     val maxNumConcurrentTasks = sc.maxNumConcurrentTasks(rp)
     if (rdd.isBarrier() && numPartitions > maxNumConcurrentTasks) {
@@ -455,8 +455,8 @@ private[spark] class DAGScheduler(
   // value of the profiles. We may want to make this more complex in the future as
   // you may want to sum some resources (like memory).
   private[scheduler] def mergeResourceProfiles(
-      r1: ImmutableResourceProfile,
-      r2: ImmutableResourceProfile): ImmutableResourceProfile = {
+      r1: ResourceProfile,
+      r2: ResourceProfile): ResourceProfile = {
     val mergedExecKeys = r1.executorResources.keySet ++ r2.executorResources.keySet
     val mergedExecReq = mergedExecKeys.map { rName =>
       // For now we just choose the max resource value - eventually we may want to
@@ -485,16 +485,16 @@ private[spark] class DAGScheduler(
         (rName, r1ri.get)
       }
     }.toMap
-    new ImmutableResourceProfile(mergedExecReq, mergedTaskReq)
+    new ResourceProfile(mergedExecReq, mergedTaskReq)
   }
 
-  private[scheduler] def mergeResourceProfilesForStage(rdd: RDD[_]): ImmutableResourceProfile = {
+  private[scheduler] def mergeResourceProfilesForStage(rdd: RDD[_]): ResourceProfile = {
     val stageResourceProfiles = getResourceProfilesForRDDsInStage(rdd)
     logDebug("rdd profiles: " + stageResourceProfiles)
     val resourceProfile = if (stageResourceProfiles.size > 1) {
       if (shouldMergeResourceProfiles) {
         // need to resolve conflicts if multiple
-        var mergedProfile: ImmutableResourceProfile = stageResourceProfiles.head
+        var mergedProfile: ResourceProfile = stageResourceProfiles.head
         for (profile <- stageResourceProfiles) {
           mergedProfile = mergeResourceProfiles(mergedProfile, profile)
         }
@@ -613,8 +613,8 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler] def getResourceProfilesForRDDsInStage(
-      rdd: RDD[_]): HashSet[ImmutableResourceProfile] = {
-    val resourceProfiles = new HashSet[ImmutableResourceProfile]
+      rdd: RDD[_]): HashSet[ResourceProfile] = {
+    val resourceProfiles = new HashSet[ResourceProfile]
     val visited = new HashSet[RDD[_]]
     val waitingForVisit = new ListBuffer[RDD[_]]
     waitingForVisit += rdd
@@ -622,7 +622,7 @@ private[spark] class DAGScheduler(
       val toVisit = waitingForVisit.remove(0)
       if (!visited(toVisit)) {
         visited += toVisit
-        toVisit.getImmutableResourceProfile.foreach(resourceProfiles += _)
+        Option(toVisit.getResourceProfile).foreach(resourceProfiles += _)
         toVisit.dependencies.foreach {
           case _: ShuffleDependency[_, _, _] =>
             // Not within the same stage with current rdd, do nothing.

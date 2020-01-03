@@ -31,7 +31,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.resource.{ExecutorResourceRequests, ImmutableResourceProfile, ResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.ManualClock
@@ -41,7 +41,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def stop(): Unit = {}
   def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
-  def maxNumConcurrentTasks(rp: ImmutableResourceProfile): Int = 0
+  def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
@@ -204,7 +204,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val numFreeCores = 1
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
-      0, 0, 0, null, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val multiCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", taskCpus),
       new WorkerOffer("executor1", "host1", numFreeCores))
     taskScheduler.submitTasks(taskSet)
@@ -219,7 +219,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
     val taskSet2 = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
-      1, 0, 0, null, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      1, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     taskScheduler.submitTasks(taskSet2)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
@@ -1189,7 +1189,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
     val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
     val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
-    val rp = new ImmutableResourceProfile(execReqs.requests, taskReqs.requests)
+    val rp = new ResourceProfile(execReqs.requests, taskReqs.requests)
     taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
 
     val numFreeCores = 2
@@ -1213,7 +1213,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
     val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
     val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
-    val rp = new ImmutableResourceProfile(execReqs.requests, taskReqs.requests)
+    val rp = new ResourceProfile(execReqs.requests, taskReqs.requests)
     taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
 
     val numFreeCores = 2
@@ -1262,9 +1262,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
       new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
     val barrier = FakeTask.createBarrierTaskSet(3, stageId = 0, stageAttemptId = 0, priority = 1,
-      ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val highPrio = FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0, priority = 0,
-      rpId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     // submit highPrio and barrier taskSet
     taskScheduler.submitTasks(highPrio)
@@ -1401,7 +1401,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val ereqs = new ExecutorResourceRequests().cores(6).resource(GPU, 6)
     val treqs = new TaskResourceRequests().cpus(2).resource(GPU, 2)
-    val rp = new ImmutableResourceProfile(ereqs.requests, treqs.requests)
+    val rp = new ResourceProfile(ereqs.requests, treqs.requests)
     taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
     val taskSet = FakeTask.createTaskSet(3)
     val rpTaskSet = FakeTask.createTaskSet(5, stageId = 1, stageAttemptId = 0,

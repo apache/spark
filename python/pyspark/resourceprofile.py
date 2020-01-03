@@ -17,7 +17,6 @@
 
 from pyspark.executorresourcerequest import ExecutorResourceRequest
 from pyspark.taskresourcerequest import TaskResourceRequest
-from pyspark.taskresourcerequests import TaskResourceRequests
 
 class ResourceProfile(object):
 
@@ -27,22 +26,11 @@ class ResourceProfile(object):
     Resource profile to associate with an RDD. A ResourceProfile allows the user to
     specify executor and task requirements for an RDD that will get applied during a
     stage. This allows the user to change the resource requirements between stages.
+    This is meant to be immutable so user doesn't change it after building.
     """
 
-    def __init__(self, _jResourceProfile = None):
-        """Create a new ResourceProfile that wraps the underlying JVM object."""
-        if _jResourceProfile is None:
-            from pyspark.context import SparkContext
-            self._jResourceProfile = SparkContext._jvm.org.apache.spark.resource.ResourceProfile()
-        else:
-            self._jResourceProfile = _jResourceProfile
-
-    def require(self, resourceRequest):
-        if isinstance(resourceRequest, TaskResourceRequests):
-            self._jResourceProfile.require(resourceRequest._javaTaskResourceRequests)
-        else:
-            self._jResourceProfile.require(resourceRequest._javaExecutorResourceRequests)
-        return self
+    def __init__(self, _jResourceProfile):
+        self._jResourceProfile = _jResourceProfile
 
     @property
     def taskResources(self):

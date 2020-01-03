@@ -30,7 +30,7 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -87,7 +87,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       rddInfos = Nil,
       parentIds = Nil,
       details = "",
-      resourceProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   private def createTaskInfo(

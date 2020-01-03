@@ -1625,7 +1625,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param rp ResourceProfile which to use to calculate max concurrent tasks.
    * @return The max number of tasks that can be concurrent launched currently.
    */
-  private[spark] def maxNumConcurrentTasks(rp: ImmutableResourceProfile): Int = {
+  private[spark] def maxNumConcurrentTasks(rp: ResourceProfile): Int = {
     schedulerBackend.maxNumConcurrentTasks(rp)
   }
 

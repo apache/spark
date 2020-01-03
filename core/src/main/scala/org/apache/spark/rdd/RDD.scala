@@ -42,7 +42,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
-import org.apache.spark.resource.{ImmutableResourceProfile, ResourceProfile}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
@@ -1724,17 +1724,9 @@ abstract class RDD[T: ClassTag](
   @Experimental
   @Since("3.0.0")
   def withResources(rp: ResourceProfile): this.type = {
-    // copy it in case the user changes it after calling this
-    resourceProfile = Some(rp.clone())
-    // TODO - we don't want to create a new profile if its the same as an existing one!!
-    immutableResourceProfile =
-      Some(new ImmutableResourceProfile(rp.executorResources, rp.taskResources))
-    sc.resourceProfileManager.addResourceProfile(immutableResourceProfile.get)
+    resourceProfile = Some(rp)
+    sc.resourceProfileManager.addResourceProfile(resourceProfile.get)
     this
-  }
-
-  private[spark] def getImmutableResourceProfile: Option[ImmutableResourceProfile] = {
-    immutableResourceProfile
   }
 
   /**
@@ -1752,10 +1744,7 @@ abstract class RDD[T: ClassTag](
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
-  // used to return to user
   private var resourceProfile: Option[ResourceProfile] = None
-  // used internally to Spark as an immutable version
-  private var immutableResourceProfile: Option[ImmutableResourceProfile] = None
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = sc.getCallSite()

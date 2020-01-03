@@ -36,7 +36,7 @@ import org.apache.spark.TaskState._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_REVIVE_INTERVAL
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
 /**
@@ -386,7 +386,7 @@ private[spark] abstract class MockBackend(
     }.toIndexedSeq
   }
 
-  override def maxNumConcurrentTasks(rp: ImmutableResourceProfile): Int = 0
+  override def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 
   /**
    * This is called by the scheduler whenever it has tasks it would like to schedule, when a tasks

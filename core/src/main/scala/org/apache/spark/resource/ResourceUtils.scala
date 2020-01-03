@@ -273,7 +273,7 @@ private[spark] object ResourceUtils extends Logging {
       resourcesFileOpt: Option[String],
       componentName: String): Map[String, ResourceInformation] = {
     val requests =
-      ImmutableResourceProfile.getCustomResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
+      ResourceProfile.getCustomResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
     val resourceIdToRequest = requests.map(req => (req.id, req)).toMap
     val requestResourceIds = resourceIdToRequest.keySet.toSeq
     val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt,
@@ -324,7 +324,7 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   def warnOnWastedResources(
-      rp: ImmutableResourceProfile,
+      rp: ResourceProfile,
       sparkConf: SparkConf,
       execCores: Option[Int] = None): Unit = {
     // There have been checks on the ResourceProfile to make sure the executor resources were
@@ -353,8 +353,8 @@ private[spark] object ResourceUtils extends Logging {
         maxTaskPerExec = numTasksPerExecCores
       }
     }
-    val taskReq = ImmutableResourceProfile.getCustomTaskResources(rp)
-    val execReq = ImmutableResourceProfile.getCustomExecutorResources(rp)
+    val taskReq = ResourceProfile.getCustomTaskResources(rp)
+    val execReq = ResourceProfile.getCustomExecutorResources(rp)
 
     if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
       if ((taskCpus * maxTaskPerExec) < cores) {

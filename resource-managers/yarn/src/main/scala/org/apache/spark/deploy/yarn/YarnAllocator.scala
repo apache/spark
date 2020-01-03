@@ -38,8 +38,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.resource.{ImmutableResourceProfile, ResourceProfile}
-import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
@@ -78,7 +77,7 @@ private[yarn] class YarnAllocator(
   // Visible for testing.
   val allocatedHostToContainersMapPerRPId =
     new HashMap[Int, HashMap[String, collection.mutable.Set[ContainerId]]]
-  allocatedHostToContainersMapPerRPId(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
+  allocatedHostToContainersMapPerRPId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     new HashMap[String, mutable.Set[ContainerId]]()
 
   val allocatedContainerToHostMap = new HashMap[ContainerId, String]
@@ -91,11 +90,11 @@ private[yarn] class YarnAllocator(
 
   private val runningExecutorsPerResourceProfileId =
     new ConcurrentHashMap[Int, java.util.Set[String]]()
-  runningExecutorsPerResourceProfileId.put(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+  runningExecutorsPerResourceProfileId.put(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
     Collections.newSetFromMap[String](new ConcurrentHashMap[String, java.lang.Boolean]()))
 
   private val numExecutorsStartingPerResourceProfileId = new HashMap[Int, AtomicInteger]
-  numExecutorsStartingPerResourceProfileId(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
+  numExecutorsStartingPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     new AtomicInteger(0)
 
   /**
@@ -120,7 +119,7 @@ private[yarn] class YarnAllocator(
     new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
 
   private val targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]
-  targetNumExecutorsPerResourceProfileId(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
+  targetNumExecutorsPerResourceProfileId(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
     SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
 
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
@@ -170,12 +169,12 @@ private[yarn] class YarnAllocator(
   }
 
   private[yarn] val rpIdToYarnResource = new mutable.HashMap[Int, Resource]
-  rpIdToYarnResource(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = resource
+  rpIdToYarnResource(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = resource
 
   // note currently we don't remove ResourceProfiles
-  private[yarn] val rpIdToResourceProfile = new mutable.HashMap[Int, ImmutableResourceProfile]
-  rpIdToResourceProfile(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
-    ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  private[yarn] val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
+  rpIdToResourceProfile(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
+    ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
@@ -188,11 +187,11 @@ private[yarn] class YarnAllocator(
   // A map of ResourceProfile id to a map of preferred hostname and possible
   // task numbers running on it.
   private var hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]] =
-    Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> Map.empty)
+    Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> Map.empty)
 
   // ResourceProfile Id to number of tasks that have locality preferences in active stages
   private[yarn] var numLocalityAwareTasksPerResourceProfileId: Map[Int, Int] =
-    Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)
+    Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)
 
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
@@ -277,7 +276,7 @@ private[yarn] class YarnAllocator(
 
   // if a ResourceProfile hasn't been seen yet, create the corresponding YARN Resource for it
   private def createYarnResourceForResourceProfile(
-      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int]): Unit = {
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
     resourceProfileToTotalExecs.foreach { case (rp, num) =>
       if (!rpIdToYarnResource.contains(rp.id)) {
         // Start with the application or default settings
@@ -336,7 +335,7 @@ private[yarn] class YarnAllocator(
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
-      resourceProfileToTotalExecs: Map[ImmutableResourceProfile, Int],
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int],
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
       hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]],
       nodeBlacklist: Set[String]): Boolean = synchronized {
@@ -752,7 +751,7 @@ private[yarn] class YarnAllocator(
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val rpId = containerIdToResourceProfileId.getOrElse(containerId,
-        ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       val alreadyReleased = releasedContainers.remove(containerId)
       val hostOpt = allocatedContainerToHostMap.get(containerId)
       val onHostStr = hostOpt.map(host => s" on host: $host").getOrElse("")

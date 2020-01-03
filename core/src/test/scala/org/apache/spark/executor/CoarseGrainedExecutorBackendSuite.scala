@@ -34,7 +34,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.TestUtils._
 import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
-import org.apache.spark.resource.ImmutableResourceProfile._
+import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEnv

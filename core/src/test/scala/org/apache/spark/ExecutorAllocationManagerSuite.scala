@@ -29,8 +29,8 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.resource.{ExecutorResourceRequests, ImmutableResourceProfile, ResourceProfile, ResourceProfileManager, TaskResourceRequests}
-import org.apache.spark.resource.ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, ResourceProfileManager, TaskResourceRequests}
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{Clock, ManualClock, SystemClock}
@@ -122,7 +122,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     // Keep adding until the limit is reached
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
@@ -175,16 +175,16 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   test("add executors multiple profiles") {
     val manager = createManager(createConf(1, 10, 1))
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000, rp = defaultProfile)))
-    val rp1 = new ResourceProfile()
+    val rp1 = new ResourceProfileBuilder()
     val execReqs = new ExecutorResourceRequests().cores(4).resource("gpu", 4)
     val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
     rp1.require(execReqs).require(taskReqs)
 
-    val rprof1 = new ImmutableResourceProfile(rp1.executorResources, rp1.taskResources)
+    val rprof1 = rp1.build
     rpManager.addResourceProfile(rprof1)
     post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     // Keep adding until the limit is reached
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
@@ -268,11 +268,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   def  testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
     val conf = createConf(3, 15)
       .set(config.DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO, divisor)
       .set(config.EXECUTOR_CORES, cores)
-    ImmutableResourceProfile.reInitDefaultProfile(conf)
+    ResourceProfile.reInitDefaultProfile(conf)
     val manager = createManager(conf)
     post(SparkListenerStageSubmitted(createStageInfo(0, 20)))
     for (i <- 0 to 5) {
@@ -299,7 +299,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(createStageInfo(0, 5)))
 
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     // Verify that we're capped at number of tasks in the stage
     assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
@@ -361,7 +361,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val manager = createManager(createConf(0, 10, 0))
 
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
     // Verify that we're capped at number of tasks including the speculative ones in the stage
@@ -441,7 +441,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(createStageInfo(2, 5)))
 
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
@@ -571,7 +571,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(createStageInfo(0, 8)))
 
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     // Remove when numExecutorsTargetForDefaultProfileId is the same as the current
     // number of executors
@@ -618,7 +618,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     // Add a few executors
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
@@ -886,7 +886,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(stage1))
 
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
@@ -1012,7 +1012,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
 
     val updatesNeeded =
-      new mutable.HashMap[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
     // Allocation manager is reset when adding executor requests are sent without reporting back
     // executor added.
@@ -1185,7 +1185,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
       .set(TEST_SCHEDULE_INTERVAL, 10000L)
-    ImmutableResourceProfile.reInitDefaultProfile(sparkConf)
+    ResourceProfile.reInitDefaultProfile(sparkConf)
     sparkConf
   }
 
@@ -1212,7 +1212,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private def onExecutorAdded(
       manager: ExecutorAllocationManager,
       id: String,
-      rp: ImmutableResourceProfile): Unit = {
+      rp: ResourceProfile): Unit = {
     val cores = rp.getExecutorCores.getOrElse(1)
     val execInfo = new ExecutorInfo("host1", cores, Map.empty, Map.empty, Map.empty, rp.id)
     post(SparkListenerExecutorAdded(0L, id, execInfo))
@@ -1257,7 +1257,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       numTasks: Int,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty,
       attemptId: Int = 0,
-      rp: ImmutableResourceProfile = defaultProfile
+      rp: ResourceProfile = defaultProfile
     ): StageInfo = {
     new StageInfo(stageId, attemptId, "name", numTasks, Seq.empty, Seq.empty, "no details",
       taskLocalityPreferences = taskLocalityPreferences, resourceProfileId = rp.id)
@@ -1301,7 +1301,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _totalRunningTasksPerResourceProfile =
     PrivateMethod[Int](Symbol("totalRunningTasksPerResourceProfile"))
 
-  private val defaultProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(new SparkConf)
+  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
   private def numExecutorsToAddForDefaultProfile(manager: ExecutorAllocationManager): Int = {
     numExecutorsToAdd(manager, defaultProfile)
@@ -1309,7 +1309,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def numExecutorsToAdd(
       manager: ExecutorAllocationManager,
-      rp: ImmutableResourceProfile): Int = {
+      rp: ResourceProfile): Int = {
     val nmap = manager invokePrivate _numExecutorsToAddPerResourceProfileId()
     nmap(rp.id)
   }
@@ -1333,7 +1333,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def addExecutorsToTargetForDefaultProfile(
       manager: ExecutorAllocationManager,
-      updatesNeeded: mutable.HashMap[ImmutableResourceProfile,
+      updatesNeeded: mutable.HashMap[ResourceProfile,
         ExecutorAllocationManager.TargetNumUpdates]
   ): Int = {
     addExecutorsToTarget(manager, updatesNeeded, defaultProfile)
@@ -1341,9 +1341,9 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def addExecutorsToTarget(
       manager: ExecutorAllocationManager,
-      updatesNeeded: mutable.HashMap[ImmutableResourceProfile,
+      updatesNeeded: mutable.HashMap[ResourceProfile,
         ExecutorAllocationManager.TargetNumUpdates],
-      rp: ImmutableResourceProfile
+      rp: ResourceProfile
   ): Int = {
     val maxNumExecutorsNeeded =
       manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
@@ -1357,7 +1357,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def doUpdateRequest(
       manager: ExecutorAllocationManager,
-      updates: Map[ImmutableResourceProfile, ExecutorAllocationManager.TargetNumUpdates],
+      updates: Map[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates],
       now: Long): Unit = {
     manager invokePrivate _doUpdateRequest(updates, now)
   }
@@ -1368,7 +1368,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def maxNumExecutorsNeededPerResourceProfile(
       manager: ExecutorAllocationManager,
-      rp: ImmutableResourceProfile): Int = {
+      rp: ResourceProfile): Int = {
     manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
   }
 

@@ -31,7 +31,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.{ImmutableResourceProfile, ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality

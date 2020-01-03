@@ -34,7 +34,7 @@ import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkCon
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
-import org.apache.spark.resource.ImmutableResourceProfile
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor}
@@ -71,9 +71,9 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     offerResources(offers)
     verifyTaskLaunched(driver, "o1")
 
-    val totalExecs = Map(ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf) -> 0)
+    val totalExecs = Map(ResourceProfile.getOrCreateDefaultProfile(sparkConf) -> 0)
     // kills executors
-    val defaultResourceProfile = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val defaultResourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     assert(backend.doRequestTotalExecutors(Map(defaultResourceProfile -> 0)).futureValue)
     assert(backend.doKillExecutors(Seq("0")).futureValue)
     val taskID0 = createTaskId("0")
@@ -637,8 +637,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     assert(backend.getExecutorIds().isEmpty)
 
-    val defaultProfileId = ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    val defaultProf = ImmutableResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val defaultProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    val defaultProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     backend.requestTotalExecutors(Map(defaultProfileId -> 2),
       Map(defaultProfileId -> Map("hosts10" -> 1, "hosts11" -> 1)),
       Map(defaultProfileId -> 2))
@@ -657,10 +657,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     offerResourcesAndVerify(1, true)
 
     // Update total executors
-    backend.requestTotalExecutors(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
-      Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+    backend.requestTotalExecutors(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
         Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1)),
-      Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 3))
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 3))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
@@ -669,10 +669,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     Thread.sleep(2000)
 
     // Update total executors
-    backend.requestTotalExecutors(Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
-      Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+    backend.requestTotalExecutors(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
         Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1, "hosts13" -> 1)),
-      Map(ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4))
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
@@ -728,7 +728,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
     val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty,
-      Map.empty, Map.empty, ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     backend.driverEndpoint.askSync[Boolean](message)
   }

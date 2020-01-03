@@ -24,7 +24,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
 
   override def afterEach() {
     try {
-      ImmutableResourceProfile.clearDefaultProfile
+      ResourceProfile.clearDefaultProfile
     } finally {
       super.afterEach()
     }
@@ -34,7 +34,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val conf = new SparkConf().set(EXECUTOR_CORES, 4)
     val rpmanager = new ResourceProfileManager(conf)
     val defaultProf = rpmanager.defaultResourceProfile
-    assert(defaultProf.id === ImmutableResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(defaultProf.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assert(defaultProf.executorResources.size === 2,
       "Executor resources should contain cores and memory by default")
     assert(defaultProf.executorResources(ResourceProfile.CORES).amount === 4,
@@ -47,11 +47,10 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rpmanager = new ResourceProfileManager(conf)
     // default profile should always work
     val defaultProf = rpmanager.defaultResourceProfile
-    val rprof = new ResourceProfile()
+    val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    rprof.require(gpuExecReq)
-    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    val immrprof = rprof.require(gpuExecReq).build
     var error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
@@ -66,11 +65,10 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rpmanager = new ResourceProfileManager(conf)
     // default profile should always work
     val defaultProf = rpmanager.defaultResourceProfile
-    val rprof = new ResourceProfile()
+    val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    rprof.require(gpuExecReq)
-    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    val immrprof = rprof.require(gpuExecReq).build
     assert(rpmanager.isSupported(immrprof) == true)
   }
 
@@ -80,11 +78,10 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rpmanager = new ResourceProfileManager(conf)
     // default profile should always work
     val defaultProf = rpmanager.defaultResourceProfile
-    val rprof = new ResourceProfile()
+    val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    rprof.require(gpuExecReq)
-    val immrprof = new ImmutableResourceProfile(rprof.executorResources, rprof.taskResources)
+    val immrprof = rprof.require(gpuExecReq).build
     var error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
