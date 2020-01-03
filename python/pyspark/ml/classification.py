@@ -1387,6 +1387,8 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
     >>> td = si_model.transform(df)
     >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42,
     ...     leafCol="leafId")
+    >>> rf.getMinWeightFractionPerNode()
+    0.0
     >>> model = rf.fit(td)
     >>> model.getLabelCol()
     'indexed'
@@ -1441,14 +1443,14 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0,
-                 leafCol="", minWeightFractionPerNode=0.0):
+                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0, \
-                 leafCol="", minWeightFractionPerNode=0.0)
+                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None)
         """
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1467,14 +1469,14 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0,
-                  leafCol="", minWeightFractionPerNode=0.0):
+                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0, \
-                  leafCol="", minWeightFractionPerNode=0.0)
+                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None)
         Sets params for linear classification.
         """
         kwargs = self._input_kwargs
@@ -1558,6 +1560,20 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
         Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("3.0.0")
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
 
 
 class RandomForestClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,

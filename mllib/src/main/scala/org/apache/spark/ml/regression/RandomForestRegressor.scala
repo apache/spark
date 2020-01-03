@@ -65,6 +65,10 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group setParam */
+  @Since("3.0.0")
+  def setMinWeightFractionPerNode(value: Double): this.type = set(minWeightFractionPerNode, value)
+
+  /** @group setParam */
   @Since("1.4.0")
   def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
@@ -113,20 +117,31 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   def setFeatureSubsetStrategy(value: String): this.type =
     set(featureSubsetStrategy, value)
 
+  /**
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * By default the weightCol is not set, so all instances have weight 1.0.
+   *
+   * @group setParam
+   */
+  @Since("3.0.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
   override protected def train(
       dataset: Dataset[_]): RandomForestRegressionModel = instrumented { instr =>
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
 
-    val instances = extractLabeledPoints(dataset).map(_.toInstance)
+    val instances = extractInstances(dataset)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
 
     instr.logPipelineStage(this)
     instr.logDataset(instances)
-    instr.logParams(this, labelCol, featuresCol, predictionCol, leafCol, impurity, numTrees,
-      featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
-      minInstancesPerNode, seed, subsamplingRate, cacheNodeIds, checkpointInterval)
+    instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, leafCol, impurity,
+      numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
+      minInstancesPerNode, minWeightFractionPerNode, seed, subsamplingRate, cacheNodeIds,
+      checkpointInterval)
 
     val trees = RandomForest
       .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
