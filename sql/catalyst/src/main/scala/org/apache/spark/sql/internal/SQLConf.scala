@@ -200,6 +200,38 @@ object SQLConf {
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
   }
 
+  /**
+   * Holds information about keys that have been deprecated.
+   *
+   * @param key The deprecated key.
+   * @param version Version of Spark where key was deprecated.
+   * @param comment Additional info regarding to the removed config. For example,
+   *                reasons of config deprecation, what users should use instead of it.
+   */
+  case class DeprecatedConfig(key: String, version: String, comment: String)
+
+  /**
+   * Maps deprecated SQL config keys to information about the deprecation.
+   *
+   * The extra information is logged as a warning when the SQL config is present
+   * in the user's configuration.
+   */
+  val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
+    val configs = Seq(
+      DeprecatedConfig("spark.sql.hive.verifyPartitionPath", "3.0.0",
+        "This config will be replaced by spark.files.ignoreMissingFiles."),
+      DeprecatedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "2.3",
+        "Behavior for `false` config value is considered as a bug, and " +
+        "it will be prohibited in the future releases."),
+      DeprecatedConfig(
+        "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "2.4",
+        "The config allows to switch to the behaviour before Spark 2.4 " +
+        "and will be removed in the future releases.")
+    )
+
+    Map(configs.map { cfg => cfg.key -> cfg } : _*)
+  }
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
