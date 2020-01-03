@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.kafka010.consumer
 
 import java.{util => ju}
 
@@ -26,7 +26,8 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
+import org.apache.spark.sql.kafka010.{CONSUMER_CACHE_CAPACITY, CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL, CONSUMER_CACHE_TIMEOUT}
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
 
 class InternalKafkaConsumerPoolSuite extends SharedSparkSession {

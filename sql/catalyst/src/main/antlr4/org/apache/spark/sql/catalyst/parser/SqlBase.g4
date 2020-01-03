@@ -161,6 +161,9 @@ statement
     | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
         (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
+    | ALTER TABLE table=multipartIdentifier partitionSpec?
+        CHANGE COLUMN?
+        colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
     | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE multipartIdentifier (partitionSpec)?

@@ -25,7 +25,6 @@ import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
 
 class SQLConfSuite extends QueryTest with SharedSparkSession {
-  import testImplicits._
 
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
@@ -320,4 +319,15 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(e2.getMessage.contains("spark.sql.shuffle.partitions"))
   }
 
+  test("set removed config to non-default value") {
+    val config = "spark.sql.fromJsonForceNullableSchema"
+    val defaultValue = true
+
+    spark.conf.set(config, defaultValue)
+
+    val e = intercept[AnalysisException] {
+      spark.conf.set(config, !defaultValue)
+    }
+    assert(e.getMessage.contains(config))
+  }
 }

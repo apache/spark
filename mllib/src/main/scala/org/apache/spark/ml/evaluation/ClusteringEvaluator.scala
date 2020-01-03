@@ -627,10 +627,8 @@ private[evaluation] object CosineSilhouette extends Silhouette {
     val normalizeFeatureUDF = udf {
       features: Vector => {
         val norm = Vectors.norm(features, 2.0)
-        features match {
-          case d: DenseVector => Vectors.dense(d.values.map(_ / norm))
-          case s: SparseVector => Vectors.sparse(s.size, s.indices, s.values.map(_ / norm))
-        }
+        BLAS.scal(1.0 / norm, features)
+        features
       }
     }
     val dfWithNormalizedFeatures = dataset.withColumn(normalizedFeaturesColName,

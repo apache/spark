@@ -197,8 +197,8 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       avroStructDF.select(
         functions.from_avro(
           'avro,
-          evolvedAvroSchema,
-          Map("actualSchema" -> actualAvroSchema).asJava)),
+          actualAvroSchema,
+          Map("avroSchema" -> evolvedAvroSchema).asJava)),
       expected)
   }
 }

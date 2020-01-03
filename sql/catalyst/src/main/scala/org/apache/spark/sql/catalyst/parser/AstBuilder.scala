@@ -2873,6 +2873,34 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Parse a [[AlterTableAlterColumnStatement]] command. This is Hive SQL syntax.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION partition_spec]
+   *   CHANGE [COLUMN] column_old_name column_new_name column_dataType [COMMENT column_comment]
+   *   [FIRST | AFTER column_name];
+   * }}}
+   */
+  override def visitHiveChangeColumn(ctx: HiveChangeColumnContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed("ALTER TABLE table PARTITION partition_spec CHANGE COLUMN", ctx)
+    }
+    val columnNameParts = typedVisit[Seq[String]](ctx.colName)
+    if (!conf.resolver(columnNameParts.last, ctx.colType().colName.getText)) {
+      throw new AnalysisException("Renaming column is not supported in Hive-style ALTER COLUMN, " +
+        "please run RENAME COLUMN instead.")
+    }
+
+    AlterTableAlterColumnStatement(
+      typedVisit[Seq[String]](ctx.table),
+      columnNameParts,
+      Option(ctx.colType().dataType()).map(typedVisit[DataType]),
+      Option(ctx.colType().STRING()).map(string),
+      Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+  }
+
+  /**
    * Parse a [[AlterTableDropColumnsStatement]] command.
    *
    * For example:

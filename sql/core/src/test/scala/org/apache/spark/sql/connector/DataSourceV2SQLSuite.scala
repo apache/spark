@@ -1929,6 +1929,36 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-30284: CREATE VIEW should track the current catalog and namespace") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
+
+    sql("USE testcat.ns1.ns2")
+    sql("CREATE TABLE t USING foo AS SELECT 1 col")
+    checkAnswer(spark.table("t"), Row(1))
+
+    withTempView("t") {
+      spark.range(10).createTempView("t")
+      withView(s"$sessionCatalogName.v") {
+        val e = intercept[AnalysisException] {
+          sql(s"CREATE VIEW $sessionCatalogName.v AS SELECT * FROM t")
+        }
+        assert(e.message.contains("referencing a temporary view"))
+      }
+    }
+
+    withTempView("t") {
+      withView(s"$sessionCatalogName.v") {
+        sql(s"CREATE VIEW $sessionCatalogName.v AS SELECT t1.col FROM t t1 JOIN ns1.ns2.t t2")
+        sql(s"USE $sessionCatalogName")
+        // The view should read data from table `testcat.ns1.ns2.t` not the temp view.
+        spark.range(10).createTempView("t")
+        checkAnswer(spark.table("v"), Row(1))
+      }
+    }
+  }
+
   test("COMMENT ON NAMESPACE") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)

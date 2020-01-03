@@ -181,6 +181,7 @@ class LinearSVC @Since("2.2.0") (
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
+    instr.logSumOfWeights(summarizer.weightSum)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -309,7 +310,8 @@ class LinearSVCModel private[classification] (
     if (margin(features) > $(threshold)) 1.0 else 0.0
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     val m = margin(features)
     Vectors.dense(-m, m)
   }
