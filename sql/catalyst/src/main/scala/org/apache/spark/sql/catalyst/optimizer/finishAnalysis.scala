@@ -54,9 +54,9 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
 
 /**
  * Rewrite non correlated exists subquery to use ScalarSubquery
- *   WHERE EXISTS ( SELECT A FROM TABLE B WHERE COL1 > 10)
+ *   WHERE EXISTS (SELECT A FROM TABLE B WHERE COL1 > 10)
  * will be rewrite to
- *   WHERE (SELECT A FROM TABLE B WHERE COL1 > 1 LIMIT 1) IS NOT NULL
+ *   WHERE (SELECT 1 FROM (SELECT A FROM TABLE B WHERE COL1 > 1) LIMIT 1) IS NOT NULL
  */
 object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
