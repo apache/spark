@@ -32,6 +32,8 @@ import org.apache.spark.unsafe.types.UTF8String
 class DDLParserSuite extends AnalysisTest {
   import CatalystSqlParser._
 
+  private val unresolvedNamespace = UnresolvedNamespace(Seq("a", "b", "c"))
+
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
     val e = intercept[ParseException] {
       parsePlan(sql)
@@ -1144,8 +1146,8 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
-    val expected = CreateNamespaceStatement(
-      Seq("a", "b", "c"),
+    val expected = CreateNamespace(
+      unresolvedNamespace,
       ifNotExists = true,
       Map(
         "a" -> "a",
@@ -1217,8 +1219,8 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     comparePlans(
       parsePlan(sql),
-      CreateNamespaceStatement(
-        Seq("a", "b", "c"),
+      CreateNamespace(
+        unresolvedNamespace,
         ifNotExists = false,
         Map(
           "a" -> "1",
@@ -1986,15 +1988,15 @@ class DDLParserSuite extends AnalysisTest {
   test("comment on") {
     comparePlans(
       parsePlan("COMMENT ON DATABASE a.b.c IS NULL"),
-      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
+      CommentOnNamespace(unresolvedNamespace, ""))
 
     comparePlans(
       parsePlan("COMMENT ON DATABASE a.b.c IS 'NULL'"),
-      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), "NULL"))
+      CommentOnNamespace(unresolvedNamespace, "NULL"))
 
     comparePlans(
       parsePlan("COMMENT ON NAMESPACE a.b.c IS ''"),
-      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
+      CommentOnNamespace(unresolvedNamespace, ""))
 
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),

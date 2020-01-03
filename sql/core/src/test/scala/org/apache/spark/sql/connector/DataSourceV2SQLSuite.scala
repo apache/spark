@@ -866,9 +866,9 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateNameSpace: reserved properties") {
-    withNamespace("testcat.ns1") {
+    SupportsNamespaces.RESERVED_PROPERTIES.asScala.foreach { key =>
       val exception = intercept[ParseException] {
-        sql("CREATE NAMESPACE testcat.ns1 WITH DBPROPERTIES('location'='/dummy/path')")
+        sql(s"CREATE NAMESPACE testcat.ns1 WITH DBPROPERTIES('$key'='dummyVal')")
       }
       assert(exception.getMessage.contains("Disallow to specify reserved properties"))
     }

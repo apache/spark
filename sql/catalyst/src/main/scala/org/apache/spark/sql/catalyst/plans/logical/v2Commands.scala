@@ -241,10 +241,11 @@ case class ReplaceTableAsSelect(
  * The logical plan of the CREATE NAMESPACE command that works for v2 catalogs.
  */
 case class CreateNamespace(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
+    child: LogicalPlan,
     ifNotExists: Boolean,
-    properties: Map[String, String]) extends Command
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
  * The logical plan of the DROP NAMESPACE command that works for v2 catalogs.
