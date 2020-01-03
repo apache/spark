@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -55,12 +55,13 @@ object CommandUtils extends Logging {
 
   def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
     val sessionState = spark.sessionState
+    var partitions = Seq.empty[CatalogTablePartition]
     val startTime = System.nanoTime()
     val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
       calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
-      val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
+      partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       if (spark.sessionState.conf.parallelFileListingInStatsComputation) {
         val paths = partitions.map(x => new Path(x.storage.locationUri.get))
@@ -77,8 +78,9 @@ object CommandUtils extends Logging {
         }.sum
       }
     }
-    logInfo(s"It took ${(System.nanoTime() - startTime) / 1e6} ms to calculate the total size" +
-      s" for table ${catalogTable.identifier}.")
+    val partInfo = if (partitions.nonEmpty) s" with ${partitions.length} partitions" else ""
+    logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
+      s" the total size for table ${catalogTable.identifier}$partInfo.")
     totalSize
   }
 
@@ -128,7 +130,7 @@ object CommandUtils extends Logging {
           0L
       }
     }.getOrElse(0L)
-    val durationInMs = (System.nanoTime() - startTime) / 1e6
+    val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
     logDebug(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
 
     size

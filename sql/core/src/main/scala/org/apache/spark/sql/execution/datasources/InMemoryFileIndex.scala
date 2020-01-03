@@ -132,7 +132,7 @@ class InMemoryFileIndex(
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
       output ++= leafFiles
     }
-    logInfo(s"It took ${(System.nanoTime() - startTime) / 1e6} ms to list leaf files" +
+    logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to list leaf files" +
       s" for ${paths.length} paths.")
     output
   }
