@@ -37,7 +37,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode with CodegenSupport with AliasAwareOutputPartitioning {
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -80,21 +80,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def outputPartitioning: Partitioning = {
-    child.outputPartitioning match {
-      case HashPartitioning(expressions, numPartitions) =>
-        // Replace aliases in projectList with its child expressions for any matching
-        // expressions in HashPartitioning. This is to ensure that outputPartitioning
-        // correctly matches witch requiredChildDistribution.
-        val newExpressions = expressions.map {
-          case a: AttributeReference =>
-            removeAlias(a).getOrElse(a)
-          case other => other
-        }
-        HashPartitioning(newExpressions, numPartitions)
-      case other => other
-    }
-  }
+  override protected def outputExpressions: Seq[NamedExpression] = projectList
 
   override def verboseStringWithOperatorId(): String = {
     s"""
@@ -102,13 +88,6 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
        |Output    : ${projectList.mkString("[", ", ", "]")}
        |Input     : ${child.output.mkString("[", ", ", "]")}
      """.stripMargin
-  }
-
-  private def removeAlias(attr: AttributeReference): Option[Attribute] = {
-    projectList.collectFirst {
-      case a @ Alias(child @ AttributeReference(_, _, _, _), _) if child.semanticEquals(attr) =>
-        a.toAttribute
-    }
   }
 }
 

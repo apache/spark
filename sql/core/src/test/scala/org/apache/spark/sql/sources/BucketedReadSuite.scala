@@ -604,7 +604,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-30298: bucket join should work with SubqueryAlias plan") {
+  test("bucket join should work with SubqueryAlias plan") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       withTable("t") {
         withView("v") {

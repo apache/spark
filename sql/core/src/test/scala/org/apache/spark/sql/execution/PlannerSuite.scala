@@ -926,6 +926,35 @@ class PlannerSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("aliases in the project should not introduce extra shuffle.") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df1")
+      spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
+      val planned = sql("""
+        SELECT * FROM
+          (SELECT key AS k from df1) t1
+        INNER JOIN
+         (SELECT key AS k from df2) t2
+        ON t1.k = t2.k
+      """).queryExecution.executedPlan
+      val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+      assert(exchanges.size == 1)
+    }
+  }
+
+  test("aliases in the aggregate expressions should not introduce extra shuffle.") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
+      val t2 = spark.range(10).selectExpr("floor(id/4) as k2")
+
+      val agg1 = t1.groupBy("k1").agg(count(lit("1")).as("cnt1"))
+      val agg2 = t2.groupBy("k2").agg(count(lit("1")).as("cnt2")).withColumnRenamed("k2", "k3")
+      val planned = agg1.join(agg2, $"k1" === $"k3").queryExecution.executedPlan
+      val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+      assert(exchanges.size == 2)
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements
