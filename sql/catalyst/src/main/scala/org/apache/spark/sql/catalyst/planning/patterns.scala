@@ -34,7 +34,7 @@ trait OperationHelper {
 
   protected def substitute(aliases: AttributeMap[Expression])(expr: Expression): Expression = {
     // use transformUp instead of transformDown to avoid dead loop
-    // in case of there's Alias which recursively alias itself.
+    // in case of there's Alias whose exprId is the same as its child attribute.
     expr.transformUp {
       case a @ Alias(ref: AttributeReference, name) =>
         aliases.get(ref)
@@ -146,9 +146,9 @@ object ScanOperation extends OperationHelper with PredicateHelper {
             // and this filter are all deterministic or 2) if this filter is the first
             // collected filter and doesn't have common non-deterministic expressions
             // with lower Project.
-            lazy val substitutedCondition = substitute(aliases)(condition)
-            val canCombineFilters = filters.isEmpty || (filters.nonEmpty &&
-              filters.forall(_.deterministic) && substitutedCondition.deterministic)
+            val substitutedCondition = substitute(aliases)(condition)
+            val canCombineFilters = (filters.nonEmpty && filters.forall(_.deterministic) &&
+              substitutedCondition.deterministic) || filters.isEmpty
             if (canCombineFilters && !hasCommonNonDeterministic(Seq(condition), aliases)) {
               Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
                 other, aliases))
