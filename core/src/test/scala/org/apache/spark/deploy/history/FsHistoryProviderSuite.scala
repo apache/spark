@@ -37,9 +37,11 @@ import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
+import org.apache.spark.{JobExecutionStatus, SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
+import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, EVENT_LOG_COMPACTION_SCORE_THRESHOLD, EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
@@ -50,10 +52,10 @@ import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
+import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
 class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
-
   private var testDir: File = null
 
   override def beforeEach(): Unit = {
@@ -164,8 +166,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       override private[history] def doMergeApplicationListing(
           reader: EventLogFileReader,
           lastSeen: Long,
-          enableSkipToEnd: Boolean): Unit = {
-        super.doMergeApplicationListing(reader, lastSeen, enableSkipToEnd)
+          enableSkipToEnd: Boolean,
+          lastCompactionIndex: Option[Long]): Unit = {
+        super.doMergeApplicationListing(reader, lastSeen, enableSkipToEnd, lastCompactionIndex)
         doMergeApplicationListingCall += 1
       }
     }
@@ -1167,7 +1170,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     var fileStatus = new FileStatus(200, false, 0, 0, 0, path)
     when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
     var logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, None, false)
+      Some("attemptId"), 100, None, None, false)
     var reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(mockedProvider.shouldReloadLog(logInfo, reader.get))
@@ -1177,14 +1180,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     when(mockedFs.getFileStatus(path)).thenReturn(fileStatus)
     // DFSInputStream.getFileLength is more than logInfo fileSize
     logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, None, false)
+      Some("attemptId"), 100, None, None, false)
     reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(mockedProvider.shouldReloadLog(logInfo, reader.get))
 
     // DFSInputStream.getFileLength is equal to logInfo fileSize
     logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 200, None, false)
+      Some("attemptId"), 200, None, None, false)
     reader = EventLogFileReader(mockedFs, path)
     assert(reader.isDefined)
     assert(!mockedProvider.shouldReloadLog(logInfo, reader.get))
@@ -1292,11 +1295,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
     val serializer = new KVStoreScalaSerializer()
     val logInfoWithIndexAsNone = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, None, false)
+      Some("attemptId"), 100, None, None, false)
     assertSerDe(serializer, logInfoWithIndexAsNone)
 
     val logInfoWithIndex = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
-      Some("attemptId"), 100, Some(3), false)
+      Some("attemptId"), 100, Some(3), None, false)
     assertSerDe(serializer, logInfoWithIndex)
   }
 
@@ -1359,6 +1362,71 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       // doesn't trigger unboxing and passes even without SPARK-29755, so don't remove
       // `.toLong` below. Please refer SPARK-29755 for more details.
       assert(opt.get.toLong === expected.get.toLong)
+    }
+  }
+
+  test("compact event log files when replaying to rebuild app") {
+    withTempDir { dir =>
+      val conf = createTestConf()
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN, 1)
+      conf.set(EVENT_LOG_COMPACTION_SCORE_THRESHOLD, 0.0d)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, conf, hadoopConf)
+      writer.start()
+
+      // 1, 2 will be compacted into one file, 3 is the dummy file to ensure max files to retain
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = true)
+
+      writeEventsToRollingWriter(writer, Seq(SparkListenerUnpersistRDD(1),
+        SparkListenerJobEnd(1, 1, JobSucceeded)), rollFile = true)
+
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerExecutorAdded(3, "exec1", new ExecutorInfo("host1", 1, Map.empty)),
+        SparkListenerJobStart(2, 4, Seq.empty),
+        SparkListenerJobEnd(2, 5, JobSucceeded)), rollFile = false)
+
+      writer.stop()
+
+      val provider = new FsHistoryProvider(conf)
+      updateAndCheck(provider) { _ =>
+        val reader = EventLogFileReader(fs, new Path(writer.logPath)).get
+        val logFiles = reader.listEventLogFiles
+        // compacted file + retained file
+        assert(logFiles.size === 2)
+        assert(RollingEventLogFilesWriter.isEventLogFile(logFiles.head))
+        assert(EventLogFileWriter.isCompacted(logFiles.head.getPath))
+        assert(2 == RollingEventLogFilesWriter.getEventLogFileIndex(logFiles.head.getPath.getName))
+
+        assert(RollingEventLogFilesWriter.isEventLogFile(logFiles(1)))
+        assert(!EventLogFileWriter.isCompacted(logFiles(1).getPath))
+        assert(3 == RollingEventLogFilesWriter.getEventLogFileIndex(logFiles(1).getPath.getName))
+
+        val store = new InMemoryStore
+        val appStore = new AppStatusStore(store)
+
+        provider.rebuildAppStore(store, reader, 0L)
+
+        // replayed store doesn't have any job, as events for job are removed while compacting
+        intercept[NoSuchElementException] {
+          appStore.job(1)
+        }
+
+        // but other events should be available even they were in original files to compact
+        val appInfo = appStore.applicationInfo()
+        assert(appInfo.id === "app")
+        assert(appInfo.name === "app")
+
+        // all events in retained file should be available, even they're related to finished jobs
+        val exec1 = appStore.executorSummary("exec1")
+        assert(exec1.hostPort === "host1")
+        val job2 = appStore.job(2)
+        assert(job2.status === JobExecutionStatus.SUCCEEDED)
+      }
     }
   }
 
