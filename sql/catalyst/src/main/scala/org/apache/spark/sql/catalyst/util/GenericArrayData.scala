@@ -23,16 +23,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-private object GenericArrayData {
-
-  // SPARK-16634: Workaround for JVM bug present in some 1.7 versions.
-  def anyToSeq(seqOrArray: Any): Seq[Any] = seqOrArray match {
-    case seq: Seq[Any] => seq
-    case array: Array[_] => array.toSeq
-  }
-
-}
-
 class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
   def this(seq: Seq[Any]) = this(seq.toArray)
@@ -47,7 +37,10 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   def this(primitiveArray: Array[Byte]) = this(primitiveArray.toSeq)
   def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toSeq)
 
-  def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
+  def this(seqOrArray: Any) = this(seqOrArray match {
+    case seq: Seq[Any] => seq
+    case array: Array[_] => array.toSeq
+  })
 
   override def copy(): ArrayData = {
     val newValues = new Array[Any](array.length)
