@@ -511,10 +511,6 @@ case class ScalaAggregator[IN, BUF, OUT](
 
   def merge(buffer: BUF, input: BUF): BUF = agg.merge(buffer, input)
 
-  private[this] lazy val outputToCatalystConverter: Any => Any = {
-    CatalystTypeConverters.createToCatalystConverter(dataType)
-  }
-
   def eval(buffer: BUF): Any = {
     val row = outputEncoder.toRow(agg.finish(buffer))
     if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
