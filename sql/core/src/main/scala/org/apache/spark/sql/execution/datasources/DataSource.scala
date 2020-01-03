@@ -382,11 +382,9 @@ case class DataSource(
           catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
           catalogTable.get.partitionColumnNames.nonEmpty
         val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
-          val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
           val index = new CatalogFileIndex(
             sparkSession,
-            catalogTable.get,
-            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
+            catalogTable.get)
           (index, catalogTable.get.dataSchema, catalogTable.get.partitionSchema)
         } else {
           val globbedPaths = checkAndGlobPathIfNecessary(

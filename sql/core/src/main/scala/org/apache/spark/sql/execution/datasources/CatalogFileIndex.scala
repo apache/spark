@@ -33,12 +33,10 @@ import org.apache.spark.sql.types.StructType
  *
  * @param sparkSession a [[SparkSession]]
  * @param table the metadata of the table
- * @param sizeInBytes the table's data size in bytes
  */
 class CatalogFileIndex(
     sparkSession: SparkSession,
-    val table: CatalogTable,
-    override val sizeInBytes: Long) extends FileIndex {
+    val table: CatalogTable) extends FileIndex {
 
   protected val hadoopConf: Configuration = sparkSession.sessionState.newHadoopConf()
 
@@ -60,6 +58,12 @@ class CatalogFileIndex(
   }
 
   override def refresh(): Unit = fileStatusCache.invalidateAll()
+
+  override def sizeInBytes: Long = {
+    table.stats.map(_.sizeInBytes.toLong).getOrElse{
+      filterPartitions(Nil).sizeInBytes
+    }
+  }
 
   /**
    * Returns a [[InMemoryFileIndex]] for this table restricted to the subset of partitions

@@ -51,7 +51,7 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
             |LOCATION '${dir.toURI}'""".stripMargin)
 
         val tableMeta = spark.sharedState.externalCatalog.getTable("default", "test")
-        val catalogFileIndex = new CatalogFileIndex(spark, tableMeta, 0)
+        val catalogFileIndex = new CatalogFileIndex(spark, tableMeta)
 
         val dataSchema = StructType(tableMeta.schema.filterNot { f =>
           tableMeta.partitionColumnNames.contains(f.name)
