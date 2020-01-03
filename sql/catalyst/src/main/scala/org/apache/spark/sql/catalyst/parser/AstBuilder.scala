@@ -3429,4 +3429,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx.EXISTS != null,
       ctx.TEMPORARY != null)
   }
+
+  override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    val comment = ctx.commennt.getType match {
+      case SqlBaseParser.NULL => ""
+      case _ => string(ctx.STRING)
+    }
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    CommentOnNamespace(UnresolvedNamespace(nameParts), comment)
+  }
+
+  override def visitCommentTable(ctx: CommentTableContext): LogicalPlan = withOrigin(ctx) {
+    val comment = ctx.commennt.getType match {
+      case SqlBaseParser.NULL => ""
+      case _ => string(ctx.STRING)
+    }
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    CommentOnTable(UnresolvedTable(nameParts), comment)
+  }
 }
