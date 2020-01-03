@@ -29,36 +29,50 @@ import org.apache.spark.scheduler._
  * and dead executors.
  */
 private[spark] class BasicEventFilterBuilder extends SparkListener with EventFilterBuilder {
-  private val _liveJobToStages = new mutable.HashMap[Int, Seq[Int]]
+  private val _liveJobToStages = new mutable.HashMap[Int, Set[Int]]
   private val _stageToTasks = new mutable.HashMap[Int, mutable.Set[Long]]
-  private val _stageToRDDs = new mutable.HashMap[Int, Seq[Int]]
+  private val _stageToRDDs = new mutable.HashMap[Int, Set[Int]]
   private val _liveExecutors = new mutable.HashSet[String]
 
   private var totalJobs: Long = 0L
   private var totalStages: Long = 0L
   private var totalTasks: Long = 0L
 
-  def liveJobToStages: Map[Int, Seq[Int]] = _liveJobToStages.toMap
-  def stageToTasks: Map[Int, Set[Long]] = _stageToTasks.mapValues(_.toSet).toMap
-  def stageToRDDs: Map[Int, Seq[Int]] = _stageToRDDs.toMap
+  def liveJobs: Set[Int] = _liveJobToStages.keySet.toSet
+  def liveStages: Set[Int] = _stageToRDDs.keySet.toSet
+  def liveTasks: Set[Long] = _stageToTasks.values.flatten.toSet
+  def liveRDDs: Set[Int] = _stageToRDDs.values.flatten.toSet
   def liveExecutors: Set[String] = _liveExecutors.toSet
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     totalJobs += 1
-    totalStages += jobStart.stageIds.length
-    _liveJobToStages += jobStart.jobId -> jobStart.stageIds
+    jobStart.stageIds.foreach { stageId =>
+      if (_stageToRDDs.get(stageId).isEmpty) {
+        // stage submit event is not received yet
+        totalStages += 1
+        _stageToRDDs.put(stageId, Set.empty[Int])
+      }
+    }
+    _liveJobToStages += jobStart.jobId -> jobStart.stageIds.toSet
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
     val stages = _liveJobToStages.getOrElse(jobEnd.jobId, Seq.empty[Int])
     _liveJobToStages -= jobEnd.jobId
+    // This might leave some stages and tasks if job end event comes earlier than stage submitted
+    // or task start event; it's not accurate but safer than dropping wrong events which cannot be
+    // restored.
     _stageToTasks --= stages
     _stageToRDDs --= stages
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
-    _stageToRDDs.getOrElseUpdate(stageSubmitted.stageInfo.stageId,
-      stageSubmitted.stageInfo.rddInfos.map(_.id))
+    val stageId = stageSubmitted.stageInfo.stageId
+    if (_stageToRDDs.get(stageId).isEmpty) {
+      // job start event is not received yet
+      totalStages += 1
+    }
+    _stageToRDDs.put(stageId, stageSubmitted.stageInfo.rddInfos.map(_.id).toSet)
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
@@ -77,22 +91,10 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
   }
 
   override def createFilter(): EventFilter = {
-    cleanupInvalidStages()
+    val stats = FilterStatistics(totalJobs, liveJobs.size, totalStages,
+      liveStages.size, totalTasks, liveTasks.size)
 
-    val stats = FilterStatistics(totalJobs, liveJobToStages.size, totalStages,
-      liveJobToStages.map(_._2.size).sum, totalTasks, _stageToTasks.map(_._2.size).sum)
-
-    new BasicEventFilter(stats, liveJobToStages, stageToTasks, stageToRDDs, liveExecutors)
-  }
-
-  private def cleanupInvalidStages(): Unit = {
-    val allValidStages = liveJobToStages.flatMap { case (_, stages) => stages.toSet }.toSet
-    _stageToTasks.keySet.diff(allValidStages).foreach { stageId =>
-      _stageToTasks.remove(stageId)
-    }
-    _stageToRDDs.keySet.diff(allValidStages).foreach { stageId =>
-      _stageToRDDs.remove(stageId)
-    }
+    new BasicEventFilter(stats, liveJobs, liveStages, liveTasks, liveRDDs, liveExecutors)
   }
 }
 
@@ -104,53 +106,39 @@ private[spark] class BasicEventFilterBuilder extends SparkListener with EventFil
  */
 private[spark] abstract class JobEventFilter(
     stats: Option[FilterStatistics],
-    jobToStages: Map[Int, Seq[Int]],
-    stageToTasks: Map[Int, Set[Long]],
-    stageToRDDs: Map[Int, Seq[Int]]) extends EventFilter with Logging {
+    liveJobs: Set[Int],
+    liveStages: Set[Int],
+    liveTasks: Set[Long],
+    liveRDDs: Set[Int]) extends EventFilter with Logging {
 
-  private val liveTasks: Set[Long] = stageToTasks.values.flatten.toSet
-  private val liveRDDs: Set[Int] = stageToRDDs.values.flatten.toSet
-
-  logDebug(s"jobs : ${jobToStages.keySet}")
-  logDebug(s"stages in jobs : ${jobToStages.values.flatten}")
-  logDebug(s"stages : ${stageToTasks.keySet}")
-  logDebug(s"tasks in stages : ${stageToTasks.values.flatten}")
-  logDebug(s"RDDs in stages : ${stageToRDDs.values.flatten}")
+  logDebug(s"jobs : $liveJobs")
+  logDebug(s"stages : $liveStages")
+  logDebug(s"tasks : $liveTasks")
+  logDebug(s"RDDs : $liveRDDs")
 
   override def statistics(): Option[FilterStatistics] = stats
 
   protected val acceptFnForJobEvents: PartialFunction[SparkListenerEvent, Boolean] = {
     case e: SparkListenerStageCompleted =>
-      stageToTasks.contains(e.stageInfo.stageId)
-
+      liveStages.contains(e.stageInfo.stageId)
     case e: SparkListenerStageSubmitted =>
-      stageToTasks.contains(e.stageInfo.stageId)
-
+      liveStages.contains(e.stageInfo.stageId)
     case e: SparkListenerTaskStart =>
       liveTasks.contains(e.taskInfo.taskId)
-
     case e: SparkListenerTaskGettingResult =>
       liveTasks.contains(e.taskInfo.taskId)
-
     case e: SparkListenerTaskEnd =>
       liveTasks.contains(e.taskInfo.taskId)
-
     case e: SparkListenerJobStart =>
-      jobToStages.contains(e.jobId)
-
+      liveJobs.contains(e.jobId)
     case e: SparkListenerJobEnd =>
-      jobToStages.contains(e.jobId)
-
+      liveJobs.contains(e.jobId)
     case e: SparkListenerUnpersistRDD =>
       liveRDDs.contains(e.rddId)
-
     case e: SparkListenerExecutorMetricsUpdate =>
-      e.accumUpdates.exists { case (_, stageId, _, _) =>
-        stageToTasks.contains(stageId)
-      }
-
+      e.accumUpdates.exists { case (_, stageId, _, _) => liveStages.contains(stageId) }
     case e: SparkListenerSpeculativeTaskSubmitted =>
-      stageToTasks.contains(e.stageId)
+      liveStages.contains(e.stageId)
   }
 }
 
@@ -161,11 +149,17 @@ private[spark] abstract class JobEventFilter(
  */
 private[spark] class BasicEventFilter(
     _stats: FilterStatistics,
-    _liveJobToStages: Map[Int, Seq[Int]],
-    _stageToTasks: Map[Int, Set[Long]],
-    _stageToRDDs: Map[Int, Seq[Int]],
+    _liveJobs: Set[Int],
+    _liveStages: Set[Int],
+    _liveTasks: Set[Long],
+    _liveRDDs: Set[Int],
     liveExecutors: Set[String])
-  extends JobEventFilter(Some(_stats), _liveJobToStages, _stageToTasks, _stageToRDDs) with Logging {
+  extends JobEventFilter(
+    Some(_stats),
+    _liveJobs,
+    _liveStages,
+    _liveTasks,
+    _liveRDDs) with Logging {
 
   logDebug(s"live executors : $liveExecutors")
 

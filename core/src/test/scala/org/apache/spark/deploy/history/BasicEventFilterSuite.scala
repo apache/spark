@@ -30,13 +30,14 @@ class BasicEventFilterSuite extends SparkFunSuite {
   test("filter out events for finished jobs") {
     // assume finished job 1 with stage 1, tasks (1, 2), rdds (1, 2)
     // live job 2 with stages 2, tasks (3, 4), rdds (3, 4)
-    val liveJobToStages: Map[Int, Seq[Int]] = Map(2 -> Seq(2, 3))
-    val stageToTasks: Map[Int, Set[Long]] = Map(2 -> Set(3, 4), 3 -> Set(5, 6))
-    val stageToRDDs: Map[Int, Seq[Int]] = Map(2 -> Seq(3, 4), 3 -> Seq(5, 6))
+    val liveJobs = Set(2)
+    val liveStages = Set(2, 3)
+    val liveTasks = Set(3L, 4L, 5L, 6L)
+    val liveRDDs = Set(3, 4, 5, 6)
     val liveExecutors: Set[String] = Set("1", "2")
     val filterStats = FilterStatistics(2, 1, 2, 1, 4, 2)
 
-    val filter = new BasicEventFilter(filterStats, liveJobToStages, stageToTasks, stageToRDDs,
+    val filter = new BasicEventFilter(filterStats, liveJobs, liveStages, liveTasks, liveRDDs,
       liveExecutors)
     val acceptFn = filter.acceptFn().lift
 
@@ -99,7 +100,7 @@ class BasicEventFilterSuite extends SparkFunSuite {
     // assume executor 1 was dead, and live executor 2 is available
     val liveExecutors: Set[String] = Set("2")
 
-    val filter = new BasicEventFilter(EMPTY_STATS, Map.empty, Map.empty, Map.empty,
+    val filter = new BasicEventFilter(EMPTY_STATS, Set.empty, Set.empty, Set.empty, Set.empty,
       liveExecutors)
     val acceptFn = filter.acceptFn().lift
 
@@ -133,7 +134,8 @@ class BasicEventFilterSuite extends SparkFunSuite {
       assert(predicate === None)
     }
 
-    val filter = new BasicEventFilter(EMPTY_STATS, Map.empty, Map.empty, Map.empty, Set.empty)
+    val filter = new BasicEventFilter(EMPTY_STATS, Set.empty, Set.empty, Set.empty, Set.empty,
+      Set.empty)
     val acceptFn = filter.acceptFn().lift
 
     assertNone(acceptFn(SparkListenerEnvironmentUpdate(Map.empty)))
