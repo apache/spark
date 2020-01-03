@@ -93,10 +93,14 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                            views.
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
+ * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
+ *                      that the table is resolved only once if a table is used multiple times
+ *                      in a query.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
-    nestedViewDepth: Int = 0)
+    nestedViewDepth: Int = 0,
+    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -111,7 +115,7 @@ object AnalysisContext {
   def withAnalysisContext[A](catalogAndNamespace: Seq[String])(f: => A): A = {
     val originContext = value.get()
     val context = AnalysisContext(
-      catalogAndNamespace, nestedViewDepth = originContext.nestedViewDepth + 1)
+      catalogAndNamespace, originContext.nestedViewDepth + 1, originContext.relationCache)
     set(context)
     try f finally { set(originContext) }
   }
@@ -902,7 +906,9 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
-              v1SessionCatalog.getRelation(v1Table.v1Table)
+              val key = catalog.name +: ident.namespace :+ ident.name
+              AnalysisContext.get.relationCache.getOrElseUpdate(
+                key, v1SessionCatalog.getRelation(v1Table.v1Table))
             case table =>
               DataSourceV2Relation.create(table)
           }
