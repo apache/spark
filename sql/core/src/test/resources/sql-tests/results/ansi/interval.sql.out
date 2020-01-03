@@ -480,9 +480,15 @@ struct<INTERVAL '40 minutes 32 seconds':interval>
 -- !query 59
 select interval 30 day day
 -- !query 59 schema
-struct<day:interval>
+struct<>
 -- !query 59 output
-30 days
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'day'(line 1, pos 23)
+
+== SQL ==
+select interval 30 day day
+-----------------------^^^
 
 
 -- !query 60
@@ -766,8 +772,13 @@ select interval (-30) day
 -- !query 81 schema
 struct<>
 -- !query 81 output
-org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'day'(line 1, pos 22)
+
+== SQL ==
+select interval (-30) day
+----------------------^^^
 
 
 -- !query 82
@@ -775,8 +786,13 @@ select interval (a + 1) day
 -- !query 82 schema
 struct<>
 -- !query 82 output
-org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'day'(line 1, pos 24)
+
+== SQL ==
+select interval (a + 1) day
+------------------------^^^
 
 
 -- !query 83
@@ -786,11 +802,11 @@ struct<>
 -- !query 83 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'day' expecting <EOF>(line 1, pos 27)
+no viable alternative at input 'day'(line 1, pos 23)
 
 == SQL ==
 select interval 30 day day day
----------------------------^^^
+-----------------------^^^
 
 
 -- !query 84

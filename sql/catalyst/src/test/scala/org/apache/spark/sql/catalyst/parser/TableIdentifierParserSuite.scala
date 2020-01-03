@@ -554,6 +554,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "current_time",
     "current_timestamp",
     "current_user",
+    "day",
     "distinct",
     "else",
     "end",
@@ -569,6 +570,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "grant",
     "group",
     "having",
+    "hour",
     "in",
     "inner",
     "intersect",
@@ -578,6 +580,8 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "last_value",
     "leading",
     "left",
+    "minute",
+    "month",
     "natural",
     "not",
     "null",
@@ -594,6 +598,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "semi",
     "session_user",
     "minus",
+    "second",
     "some",
     "table",
     "then",
@@ -606,7 +611,8 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "using",
     "when",
     "where",
-    "with")
+    "with",
+    "year")
 
   val nonReservedKeywordsInAnsiMode = allCandidateKeywords -- reservedKeywordsInAnsiMode
 

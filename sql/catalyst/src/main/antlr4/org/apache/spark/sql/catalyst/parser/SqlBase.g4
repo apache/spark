@@ -820,7 +820,7 @@ errorCapturingMultiUnitsInterval
     ;
 
 multiUnitsInterval
-    : (intervalValue identifier)+
+    : (intervalValue intervalUnit)+
     ;
 
 errorCapturingUnitToUnitInterval
@@ -828,12 +828,22 @@ errorCapturingUnitToUnitInterval
     ;
 
 unitToUnitInterval
-    : value=intervalValue from=identifier TO to=identifier
+    : value=intervalValue from=intervalUnit TO to=intervalUnit
     ;
 
 intervalValue
     : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
     | STRING
+    ;
+
+intervalUnit
+    : DAY
+    | HOUR
+    | MINUTE
+    | MONTH
+    | SECOND
+    | YEAR
+    | identifier
     ;
 
 colPosition
@@ -1007,7 +1017,6 @@ ansiNonReserved
     | DATA
     | DATABASE
     | DATABASES
-    | DAY
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1038,7 +1047,6 @@ ansiNonReserved
     | FUNCTIONS
     | GLOBAL
     | GROUPING
-    | HOUR
     | IF
     | IGNORE
     | IMPORT
@@ -1067,8 +1075,6 @@ ansiNonReserved
     | MAP
     | MATCHED
     | MERGE
-    | MINUTE
-    | MONTH
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1115,7 +1121,6 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
-    | SECOND
     | SEPARATED
     | SERDE
     | SERDEPROPERTIES
@@ -1154,7 +1159,6 @@ ansiNonReserved
     | VALUES
     | VIEW
     | WINDOW
-    | YEAR
     ;
 
 // When `SQL_standard_keyword_behavior=false`, there are 2 kinds of keywords in Spark SQL.
