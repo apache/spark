@@ -154,7 +154,7 @@ private[parquet] class ParquetRowConverter(
        |${catalystType.prettyJson}
      """.stripMargin)
 
-  private val UTC = DateTimeUtils.TimeZoneUTC
+  private[this] val UTC = DateTimeUtils.TimeZoneUTC
 
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
@@ -171,7 +171,7 @@ private[parquet] class ParquetRowConverter(
     override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
   }
 
-  private val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
+  private[this] val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
   /**
    * The [[InternalRow]] converted from an entire Parquet record.
@@ -179,7 +179,7 @@ private[parquet] class ParquetRowConverter(
   def currentRecord: InternalRow = currentRow
 
   // Converters for each field.
-  private val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
+  private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
     parquetType.getFields.asScala.map { parquetField =>
       val fieldIndex = catalystType.fieldIndex(parquetField.getName)
       val catalystField = catalystType(fieldIndex)
@@ -466,7 +466,7 @@ private[parquet] class ParquetRowConverter(
 
     private var currentArray: ArrayBuffer[Any] = _
 
-    private val elementConverter: Converter = {
+    private[this] val elementConverter: Converter = {
       val repeatedType = parquetSchema.getType(0)
       val elementType = catalystSchema.elementType
 
@@ -528,9 +528,10 @@ private[parquet] class ParquetRowConverter(
 
       private var currentElement: Any = _
 
-      private val converter = newConverter(parquetType, catalystType, new ParentContainerUpdater {
-        override def set(value: Any): Unit = currentElement = value
-      })
+      private[this] val converter =
+        newConverter(parquetType, catalystType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentElement = value
+        })
 
       override def getConverter(fieldIndex: Int): Converter = converter
 
@@ -550,7 +551,7 @@ private[parquet] class ParquetRowConverter(
     private var currentKeys: ArrayBuffer[Any] = _
     private var currentValues: ArrayBuffer[Any] = _
 
-    private val keyValueConverter = {
+    private[this] val keyValueConverter = {
       val repeatedType = parquetType.getType(0).asGroupType()
       new KeyValueConverter(
         repeatedType.getType(0),
@@ -588,7 +589,7 @@ private[parquet] class ParquetRowConverter(
 
       private var currentValue: Any = _
 
-      private val converters = Array(
+      private[this] val converters = Array(
         // Converter for keys
         newConverter(parquetKeyType, catalystKeyType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentKey = value
@@ -635,7 +636,7 @@ private[parquet] class ParquetRowConverter(
 
     val updater: ParentContainerUpdater = newArrayUpdater(parentUpdater)
 
-    private val elementConverter: PrimitiveConverter =
+    private[this] val elementConverter: PrimitiveConverter =
       newConverter(parquetType, catalystType, updater).asPrimitiveConverter()
 
     override def addBoolean(value: Boolean): Unit = elementConverter.addBoolean(value)
@@ -662,7 +663,7 @@ private[parquet] class ParquetRowConverter(
 
     val updater: ParentContainerUpdater = newArrayUpdater(parentUpdater)
 
-    private val elementConverter: GroupConverter =
+    private[this] val elementConverter: GroupConverter =
       newConverter(parquetType, catalystType, updater).asGroupConverter()
 
     override def getConverter(field: Int): Converter = elementConverter.getConverter(field)
