@@ -101,9 +101,11 @@ private[spark] object RandomForest extends Logging with Serializable {
   }
 
   /**
-   * Train a random forest.
+   * Train a random forest with metadata. This method is mainly for GBT, in which metadata can
+   * be reused among trees.
    *
    * @param input Training data: RDD of `Instance`
+   * @param metadata Learning and dataset metadata for DecisionTree.
    * @return an unweighted set of trees
    */
   def runWithMetadata(
@@ -590,7 +592,7 @@ private[spark] object RandomForest extends Logging with Serializable {
 
         // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
-        nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
+        nodeStatsAggregators.iterator.zipWithIndex.map(_.swap)
       }
     } else {
       input.mapPartitions { points =>
@@ -608,7 +610,7 @@ private[spark] object RandomForest extends Logging with Serializable {
 
         // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
-        nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
+        nodeStatsAggregators.iterator.zipWithIndex.map(_.swap)
       }
     }
 
