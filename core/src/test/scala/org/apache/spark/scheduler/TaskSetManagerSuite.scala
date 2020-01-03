@@ -1944,9 +1944,8 @@ class TaskSetManagerSuite
     assert(manager.invokePrivate(numFailures())(index0) === 0)
     assert(manager.invokePrivate(numFailures())(index1) === 0)
 
-    // task0 on exec0 should not count failures
+    // let exec1 count task failures but exec0 doesn't
     backend.executorsPendingToRemove(exec0) = true
-    // task1 on exec1 should count failures
     backend.executorsPendingToRemove(exec1) = false
 
     backend.reset()
