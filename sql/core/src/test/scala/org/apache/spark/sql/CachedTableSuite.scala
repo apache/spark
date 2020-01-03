@@ -785,7 +785,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
       assert(getNumInMemoryRelations(ds) == 2)
 
       val cachedDs = sql(sqlText).cache()
-      assert(getNumInMemoryTablesRecursively(cachedDs.queryExecution.sparkPlan) == 3)
+      assert(getNumInMemoryTablesRecursively(cachedDs.queryExecution.sparkPlan) == 2)
     }
   }
 

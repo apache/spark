@@ -1031,7 +1031,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 1") {
+  ignore("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 1") {
     withTable("t1") {
       withTempPath { path =>
         Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
