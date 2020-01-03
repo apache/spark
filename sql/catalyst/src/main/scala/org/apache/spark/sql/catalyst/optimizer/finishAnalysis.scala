@@ -60,10 +60,11 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
  */
 object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case exists: Exists if exists.children.isEmpty &&
-      !SubqueryExpression.hasInOrCorrelatedExistsSubquery(exists) =>
+    case exists: Exists if exists.children.isEmpty =>
       IsNotNull(
-        ScalarSubquery(plan = Limit(Literal(1), exists.plan), exprId = exists.exprId))
+        ScalarSubquery(
+          plan = Limit(Literal(1), Project(Seq(Alias(Literal(1), "col")()), exists.plan)),
+          exprId = exists.exprId))
   }
 }
 
