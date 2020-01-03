@@ -116,7 +116,10 @@ class SparkEnv (
   def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
     synchronized {
       val key = (pythonExec, envVars)
-      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
+      pythonWorkers.getOrElseUpdate(key, {
+        // TODO - remove log
+        logInfo("creating new worker factory: " + envVars)
+        new PythonWorkerFactory(pythonExec, envVars) }).create()
     }
   }
 
