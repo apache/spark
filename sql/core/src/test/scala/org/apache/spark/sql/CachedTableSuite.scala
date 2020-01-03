@@ -382,6 +382,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
     assert(!spark.catalog.isCached("t2"))
   }
 
+  test("SPARK-27545 Drop Temporary View when uncaching the table") {
+    sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
+    assert(spark.catalog.isCached("testCachetable"))
+    sql("UNCACHE TABLE testCacheTable")
+    sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
+  }
+
   test("Clear all cache") {
     sql("SELECT key FROM testData LIMIT 10").createOrReplaceTempView("t1")
     sql("SELECT key FROM testData LIMIT 5").createOrReplaceTempView("t2")

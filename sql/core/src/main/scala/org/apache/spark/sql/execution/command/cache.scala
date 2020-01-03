@@ -75,6 +75,7 @@ case class UncacheTableCommand(
     val tableId = tableIdent.quotedString
     if (!ifExists || sparkSession.catalog.tableExists(tableId)) {
       sparkSession.catalog.uncacheTable(tableId)
+      sparkSession.sessionState.catalog.dropTempView(tableIdent.table)
     }
     Seq.empty[Row]
   }
