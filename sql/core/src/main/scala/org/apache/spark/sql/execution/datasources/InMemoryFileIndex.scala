@@ -52,7 +52,7 @@ class InMemoryFileIndex(
     userSpecifiedSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache,
     userSpecifiedPartitionSpec: Option[PartitionSpec] = None,
-    _metadataOpsTimeNs: Option[Long] = None)
+    override val metadataOpsTimeNs: Option[Long] = super.metadataOpsTimeNs)
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
 
@@ -68,14 +68,6 @@ class InMemoryFileIndex(
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
   refresh0()
-
-  override def metadataOpsTimeNs: Option[Long] = {
-    if (_metadataOpsTimeNs.isDefined) {
-      _metadataOpsTimeNs
-    } else {
-      super.metadataOpsTimeNs
-    }
-  }
 
   override def partitionSpec(): PartitionSpec = {
     if (userSpecifiedPartitionSpec.isDefined) {

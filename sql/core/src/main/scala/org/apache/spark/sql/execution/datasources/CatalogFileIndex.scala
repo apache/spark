@@ -81,11 +81,15 @@ class CatalogFileIndex(
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val timeNs = System.nanoTime() - startTime
-      new InMemoryFileIndex(sparkSession, partitionSpec.partitions.map(_.path), Map.empty,
-        Some(partitionSpec.partitionColumns), fileStatusCache,
-        Some(partitionSpec), Some(timeNs))
+      new InMemoryFileIndex(sparkSession,
+        rootPathsSpecified = partitionSpec.partitions.map(_.path),
+        parameters = Map.empty,
+        userSpecifiedSchema = Some(partitionSpec.partitionColumns),
+        fileStatusCache = fileStatusCache,
+        userSpecifiedPartitionSpec = Some(partitionSpec),
+        metadataOpsTimeNs = Some(timeNs))
     } else {
-      new InMemoryFileIndex(sparkSession, rootPaths, table.storage.properties,
+      new InMemoryFileIndex(sparkSession, rootPaths, parameters = table.storage.properties,
         userSpecifiedSchema = None, fileStatusCache = fileStatusCache)
     }
   }
