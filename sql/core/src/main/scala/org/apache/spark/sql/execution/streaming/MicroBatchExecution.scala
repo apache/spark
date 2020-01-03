@@ -150,8 +150,7 @@ class MicroBatchExecution(
     state.set(TERMINATED)
     if (queryExecutionThread.isAlive) {
       sparkSession.sparkContext.cancelJobGroup(runId.toString)
-      queryExecutionThread.interrupt()
-      queryExecutionThread.join()
+      interruptAndAwaitExecutionThreadTermination()
       // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
       sparkSession.sparkContext.cancelJobGroup(runId.toString)
     }

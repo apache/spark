@@ -37,7 +37,8 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'IsotonicRegression', 'IsotonicRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
-           'RandomForestRegressor', 'RandomForestRegressionModel']
+           'RandomForestRegressor', 'RandomForestRegressionModel',
+           'FMRegressor', 'FMRegressionModel']
 
 
 class _LinearRegressionParams(_JavaPredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
@@ -1226,6 +1227,8 @@ class GBTRegressor(JavaPredictor, _GBTRegressorParams, JavaMLWritable, JavaMLRea
     >>> gbt = GBTRegressor(maxDepth=2, seed=42, leafCol="leafId")
     >>> gbt.setMaxIter(5)
     GBTRegressor...
+    >>> gbt.setMinWeightFractionPerNode(0.049)
+    GBTRegressor...
     >>> gbt.getMaxIter()
     5
     >>> print(gbt.getImpurity())
@@ -1285,14 +1288,16 @@ class GBTRegressor(JavaPredictor, _GBTRegressorParams, JavaMLWritable, JavaMLRea
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0):
+                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
+                 weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0)
+                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
+                 weightCol=None)
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
@@ -1311,14 +1316,16 @@ class GBTRegressor(JavaPredictor, _GBTRegressorParams, JavaMLWritable, JavaMLRea
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
                   impuriy="variance", featureSubsetStrategy="all", validationTol=0.01,
-                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0):
+                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
+                  weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0)
+                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
+                  weightCol=None)
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self._input_kwargs
@@ -1431,6 +1438,20 @@ class GBTRegressor(JavaPredictor, _GBTRegressorParams, JavaMLWritable, JavaMLRea
         Sets the value of :py:attr:`stepSize`.
         """
         return self._set(stepSize=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("3.0.0")
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
 
 
 class GBTRegressionModel(_TreeEnsembleModel, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
@@ -2274,6 +2295,276 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
 
     def __repr__(self):
         return self._call_java("toString")
+
+
+class _FactorizationMachinesParams(_JavaPredictorParams, HasMaxIter, HasStepSize, HasTol,
+                                   HasSolver, HasSeed, HasFitIntercept, HasRegParam):
+    """
+    Params for :py:class:`FMRegressor`, :py:class:`FMRegressionModel`, :py:class:`FMClassifier`
+    and :py:class:`FMClassifierModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    factorSize = Param(Params._dummy(), "factorSize", "Dimensionality of the factor vectors, " +
+                       "which are used to get pairwise interactions between variables",
+                       typeConverter=TypeConverters.toInt)
+
+    fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
+                      typeConverter=TypeConverters.toBoolean)
+
+    miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
+                              "set that should be used for one iteration of gradient descent",
+                              typeConverter=TypeConverters.toFloat)
+
+    initStd = Param(Params._dummy(), "initStd", "standard deviation of initial coefficients",
+                    typeConverter=TypeConverters.toFloat)
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
+
+    @since("3.0.0")
+    def getFactorSize(self):
+        """
+        Gets the value of factorSize or its default value.
+        """
+        return self.getOrDefault(self.factorSize)
+
+    @since("3.0.0")
+    def getFitLinear(self):
+        """
+        Gets the value of fitLinear or its default value.
+        """
+        return self.getOrDefault(self.fitLinear)
+
+    @since("3.0.0")
+    def getMiniBatchFraction(self):
+        """
+        Gets the value of miniBatchFraction or its default value.
+        """
+        return self.getOrDefault(self.miniBatchFraction)
+
+    @since("3.0.0")
+    def getInitStd(self):
+        """
+        Gets the value of initStd or its default value.
+        """
+        return self.getOrDefault(self.initStd)
+
+
+@inherit_doc
+class FMRegressor(JavaPredictor, _FactorizationMachinesParams, JavaMLWritable, JavaMLReadable):
+    """
+    Factorization Machines learning algorithm for regression.
+
+    solver Supports:
+
+    * gd (normal mini-batch gradient descent)
+    * adamW (default)
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml.regression import FMRegressor
+    >>> df = spark.createDataFrame([
+    ...     (2.0, Vectors.dense(2.0)),
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    >>>
+    >>> fm = FMRegressor(factorSize=2)
+    >>> fm.setSeed(16)
+    FMRegressor...
+    >>> model = fm.fit(df)
+    >>> model.getMaxIter()
+    100
+    >>> test0 = spark.createDataFrame([
+    ...     (Vectors.dense(-2.0),),
+    ...     (Vectors.dense(0.5),),
+    ...     (Vectors.dense(1.0),),
+    ...     (Vectors.dense(4.0),)], ["features"])
+    >>> model.transform(test0).show(10, False)
+    +--------+-------------------+
+    |features|prediction         |
+    +--------+-------------------+
+    |[-2.0]  |-1.9989237712341565|
+    |[0.5]   |0.4956682219523814 |
+    |[1.0]   |0.994586620589689  |
+    |[4.0]   |3.9880970124135344 |
+    +--------+-------------------+
+    ...
+    >>> model.intercept
+    -0.0032501766849261557
+    >>> model.linear
+    DenseVector([0.9978])
+    >>> model.factors
+    DenseMatrix(1, 2, [0.0173, 0.0021], 1)
+
+    .. versionadded:: 3.0.0
+    """
+
+    factorSize = Param(Params._dummy(), "factorSize", "Dimensionality of the factor vectors, " +
+                       "which are used to get pairwise interactions between variables",
+                       typeConverter=TypeConverters.toInt)
+
+    fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
+                      typeConverter=TypeConverters.toBoolean)
+
+    miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
+                              "set that should be used for one iteration of gradient descent",
+                              typeConverter=TypeConverters.toFloat)
+
+    initStd = Param(Params._dummy(), "initStd", "standard deviation of initial coefficients",
+                    typeConverter=TypeConverters.toFloat)
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                 tol=1e-6, solver="adamW", seed=None):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                 tol=1e-6, solver="adamW", seed=None)
+        """
+        super(FMRegressor, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.FMRegressor", self.uid)
+        self._setDefault(factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                         miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                         tol=1e-6, solver="adamW")
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                  tol=1e-6, solver="adamW", seed=None):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                  tol=1e-6, solver="adamW", seed=None)
+        Sets Params for FMRegressor.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return FMRegressionModel(java_model)
+
+    @since("3.0.0")
+    def setFactorSize(self, value):
+        """
+        Sets the value of :py:attr:`factorSize`.
+        """
+        return self._set(factorSize=value)
+
+    @since("3.0.0")
+    def setFitLinear(self, value):
+        """
+        Sets the value of :py:attr:`fitLinear`.
+        """
+        return self._set(fitLinear=value)
+
+    @since("3.0.0")
+    def setMiniBatchFraction(self, value):
+        """
+        Sets the value of :py:attr:`miniBatchFraction`.
+        """
+        return self._set(miniBatchFraction=value)
+
+    @since("3.0.0")
+    def setInitStd(self, value):
+        """
+        Sets the value of :py:attr:`initStd`.
+        """
+        return self._set(initStd=value)
+
+    @since("3.0.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("3.0.0")
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
+
+    @since("3.0.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    @since("3.0.0")
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    @since("3.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("3.0.0")
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    @since("3.0.0")
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+
+class FMRegressionModel(JavaPredictionModel, _FactorizationMachinesParams, JavaMLWritable,
+                        JavaMLReadable):
+    """
+    Model fitted by :class:`FMRegressor`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("3.0.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
+
+    @property
+    @since("3.0.0")
+    def linear(self):
+        """
+        Model linear term.
+        """
+        return self._call_java("linear")
+
+    @property
+    @since("3.0.0")
+    def factors(self):
+        """
+        Model factor term.
+        """
+        return self._call_java("factors")
 
 
 if __name__ == "__main__":

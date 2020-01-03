@@ -63,7 +63,7 @@ case class AdaptiveSparkPlanExec(
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient subqueryCache: TrieMap[SparkPlan, BaseSubqueryExec],
     @transient stageCache: TrieMap[SparkPlan, QueryStageExec],
-    @transient queryExecution: QueryExecution)
+    @transient isSubquery: Boolean)
   extends LeafExecNode {
 
   @transient private val lock = new Object()
@@ -126,16 +126,19 @@ case class AdaptiveSparkPlanExec(
 
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
+  override def resetMetrics(): Unit = {
+    metrics.valuesIterator.foreach(_.reset())
+    executedPlan.resetMetrics()
+  }
+
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (!isFinalPlan) {
-      // Make sure we only update Spark UI if this plan's `QueryExecution` object matches the one
-      // retrieved by the `sparkContext`'s current execution ID. Note that sub-queries do not have
-      // their own execution IDs and therefore rely on the main query to update UI.
-      val executionId = Option(
-        session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).flatMap { idStr =>
-        val id = idStr.toLong
-        val qe = SQLExecution.getQueryExecution(id)
-        if (qe.eq(queryExecution)) Some(id) else None
+      // Subqueries do not have their own execution IDs and therefore rely on the main query to
+      // update UI.
+      val executionId = if (isSubquery) {
+        None
+      } else {
+        Option(session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
       }
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
@@ -150,13 +153,17 @@ case class AdaptiveSparkPlanExec(
 
           // Start materialization of all new stages.
           result.newStages.foreach { stage =>
-            stage.materialize().onComplete { res =>
-              if (res.isSuccess) {
-                events.offer(StageSuccess(stage, res.get))
-              } else {
-                events.offer(StageFailure(stage, res.failed.get))
-              }
-            }(AdaptiveSparkPlanExec.executionContext)
+            try {
+              stage.materialize().onComplete { res =>
+                if (res.isSuccess) {
+                  events.offer(StageSuccess(stage, res.get))
+                } else {
+                  events.offer(StageFailure(stage, res.failed.get))
+                }
+              }(AdaptiveSparkPlanExec.executionContext)
+            } catch {
+              case e: Throwable => events.offer(StageFailure(stage, e))
+            }
           }
         }
 
@@ -208,6 +215,7 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       isFinalPlan = true
+      executionId.foreach(onUpdatePlan)
       logDebug(s"Final plan: $currentPhysicalPlan")
     }
     currentPhysicalPlan
@@ -219,6 +227,10 @@ case class AdaptiveSparkPlanExec(
 
   override def executeTake(n: Int): Array[InternalRow] = {
     getFinalPhysicalPlan().executeTake(n)
+  }
+
+  override def executeTail(n: Int): Array[InternalRow] = {
+    getFinalPhysicalPlan().executeTail(n)
   }
 
   override def doExecute(): RDD[InternalRow] = {
@@ -283,11 +295,12 @@ case class AdaptiveSparkPlanExec(
       // First have a quick check in the `stageCache` without having to traverse down the node.
       stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
-          val reusedStage = reuseQueryStage(existingStage, e)
-          // When reusing a stage, we treat it a new stage regardless of whether the existing stage
-          // has been materialized or not. Thus we won't skip re-optimization for a reused stage.
-          CreateStageResult(newPlan = reusedStage,
-            allChildStagesMaterialized = false, newStages = Seq(reusedStage))
+          val stage = reuseQueryStage(existingStage, e)
+          // This is a leaf stage and is not materialized yet even if the reused exchange may has
+          // been completed. It will trigger re-optimization later and stage materialization will
+          // finish in instant if the underlying exchange is already completed.
+          CreateStageResult(
+            newPlan = stage, allChildStagesMaterialized = false, newStages = Seq(stage))
 
         case _ =>
           val result = createQueryStages(e.child)
@@ -343,10 +356,10 @@ case class AdaptiveSparkPlanExec(
     queryStage
   }
 
-  private def reuseQueryStage(s: QueryStageExec, e: Exchange): QueryStageExec = {
-    val queryStage = ReusedQueryStageExec(currentStageId, s, e.output)
+  private def reuseQueryStage(existing: QueryStageExec, exchange: Exchange): QueryStageExec = {
+    val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
     currentStageId += 1
-    setLogicalLinkForNewQueryStage(queryStage, e)
+    setLogicalLinkForNewQueryStage(queryStage, exchange)
     queryStage
   }
 

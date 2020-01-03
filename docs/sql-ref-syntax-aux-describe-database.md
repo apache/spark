@@ -27,7 +27,7 @@ interchangeable.
 
 ### Syntax
 {% highlight sql %}
-{DESC | DESCRIBE} DATABASE [EXTENDED] db_name
+{ DESC | DESCRIBE } DATABASE [ EXTENDED ] db_name
 {% endhighlight %}
 
 ### Parameters

@@ -49,9 +49,9 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
-    intercept[Exception] { testData.select('nonExistentName) }
+    intercept[Exception] { testData.select("nonExistentName") }
     intercept[Exception] {
-      testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
+      testData.groupBy("key").agg(Map("nonExistentName" -> "sum"))
     }
     intercept[Exception] {
       testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
@@ -92,9 +92,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     assert(spark.emptyDataFrame.count() === 0)
   }
 
-  test("head and take") {
+  test("head, take and tail") {
     assert(testData.take(2) === testData.collect().take(2))
     assert(testData.head(2) === testData.collect().take(2))
+    assert(testData.tail(2) === testData.collect().takeRight(2))
     assert(testData.head(2).head.schema === testData.schema)
   }
 
@@ -164,7 +165,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
 
     Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf((SQLConf.DIALECT_SPARK_ANSI_ENABLED.key, ansiEnabled.toString)) {
+      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
         if (!ansiEnabled) {
           checkAnswer(structDf, Row(null))
@@ -248,12 +249,12 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("repartition") {
     intercept[IllegalArgumentException] {
-      testData.select('key).repartition(0)
+      testData.select("key").repartition(0)
     }
 
     checkAnswer(
-      testData.select('key).repartition(10).select('key),
-      testData.select('key).collect().toSeq)
+      testData.select("key").repartition(10).select("key"),
+      testData.select("key").collect().toSeq)
   }
 
   test("repartition with SortOrder") {
@@ -315,14 +316,14 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("coalesce") {
     intercept[IllegalArgumentException] {
-      testData.select('key).coalesce(0)
+      testData.select("key").coalesce(0)
     }
 
-    assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
+    assert(testData.select("key").coalesce(1).rdd.partitions.size === 1)
 
     checkAnswer(
-      testData.select('key).coalesce(1).select('key),
-      testData.select('key).collect().toSeq)
+      testData.select("key").coalesce(1).select("key"),
+      testData.select("key").collect().toSeq)
 
     assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 1)
   }
@@ -335,7 +336,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("convert Scala Symbol 'attrname into unresolved attribute") {
     checkAnswer(
-      testData.where('key === lit(1)).select('value),
+      testData.where($"key" === lit(1)).select("value"),
       Row("1"))
   }
 
@@ -347,17 +348,17 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("simple select") {
     checkAnswer(
-      testData.where('key === lit(1)).select('value),
+      testData.where($"key" === lit(1)).select("value"),
       Row("1"))
   }
 
   test("select with functions") {
     checkAnswer(
-      testData.select(sum('value), avg('value), count(lit(1))),
+      testData.select(sum("value"), avg("value"), count(lit(1))),
       Row(5050.0, 50.5, 100))
 
     checkAnswer(
-      testData2.select('a + 'b, 'a < 'b),
+      testData2.select($"a" + $"b", $"a" < $"b"),
       Seq(
         Row(2, false),
         Row(3, true),
@@ -367,31 +368,31 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         Row(5, false)))
 
     checkAnswer(
-      testData2.select(sumDistinct('a)),
+      testData2.select(sumDistinct($"a")),
       Row(6))
   }
 
   test("sorting with null ordering") {
     val data = Seq[java.lang.Integer](2, 1, null).toDF("key")
 
-    checkAnswer(data.orderBy('key.asc), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy($"key".asc), Row(null) :: Row(1) :: Row(2) :: Nil)
     checkAnswer(data.orderBy(asc("key")), Row(null) :: Row(1) :: Row(2) :: Nil)
-    checkAnswer(data.orderBy('key.asc_nulls_first), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy($"key".asc_nulls_first), Row(null) :: Row(1) :: Row(2) :: Nil)
     checkAnswer(data.orderBy(asc_nulls_first("key")), Row(null) :: Row(1) :: Row(2) :: Nil)
-    checkAnswer(data.orderBy('key.asc_nulls_last), Row(1) :: Row(2) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy($"key".asc_nulls_last), Row(1) :: Row(2) :: Row(null) :: Nil)
     checkAnswer(data.orderBy(asc_nulls_last("key")), Row(1) :: Row(2) :: Row(null) :: Nil)
 
-    checkAnswer(data.orderBy('key.desc), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy($"key".desc), Row(2) :: Row(1) :: Row(null) :: Nil)
     checkAnswer(data.orderBy(desc("key")), Row(2) :: Row(1) :: Row(null) :: Nil)
-    checkAnswer(data.orderBy('key.desc_nulls_first), Row(null) :: Row(2) :: Row(1) :: Nil)
+    checkAnswer(data.orderBy($"key".desc_nulls_first), Row(null) :: Row(2) :: Row(1) :: Nil)
     checkAnswer(data.orderBy(desc_nulls_first("key")), Row(null) :: Row(2) :: Row(1) :: Nil)
-    checkAnswer(data.orderBy('key.desc_nulls_last), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy($"key".desc_nulls_last), Row(2) :: Row(1) :: Row(null) :: Nil)
     checkAnswer(data.orderBy(desc_nulls_last("key")), Row(2) :: Row(1) :: Row(null) :: Nil)
   }
 
   test("global sorting") {
     checkAnswer(
-      testData2.orderBy('a.asc, 'b.asc),
+      testData2.orderBy($"a".asc, $"b".asc),
       Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
 
     checkAnswer(
@@ -399,31 +400,31 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, 2), Row(1, 1), Row(2, 2), Row(2, 1), Row(3, 2), Row(3, 1)))
 
     checkAnswer(
-      testData2.orderBy('a.asc, 'b.desc),
+      testData2.orderBy($"a".asc, $"b".desc),
       Seq(Row(1, 2), Row(1, 1), Row(2, 2), Row(2, 1), Row(3, 2), Row(3, 1)))
 
     checkAnswer(
-      testData2.orderBy('a.desc, 'b.desc),
+      testData2.orderBy($"a".desc, $"b".desc),
       Seq(Row(3, 2), Row(3, 1), Row(2, 2), Row(2, 1), Row(1, 2), Row(1, 1)))
 
     checkAnswer(
-      testData2.orderBy('a.desc, 'b.asc),
+      testData2.orderBy($"a".desc, $"b".asc),
       Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2)))
 
     checkAnswer(
-      arrayData.toDF().orderBy('data.getItem(0).asc),
+      arrayData.toDF().orderBy($"data".getItem(0).asc),
       arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
-      arrayData.toDF().orderBy('data.getItem(0).desc),
+      arrayData.toDF().orderBy($"data".getItem(0).desc),
       arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
-      arrayData.toDF().orderBy('data.getItem(1).asc),
+      arrayData.toDF().orderBy($"data".getItem(1).asc),
       arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
 
     checkAnswer(
-      arrayData.toDF().orderBy('data.getItem(1).desc),
+      arrayData.toDF().orderBy($"data".getItem(1).desc),
       arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
@@ -452,7 +453,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       // SELECT *, foo(key, value) FROM testData
-      testData.select($"*", foo('key, 'value)).limit(3),
+      testData.select($"*", foo($"key", $"value")).limit(3),
       Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
   }
@@ -796,7 +797,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("apply on query results (SPARK-5462)") {
     val df = testData.sparkSession.sql("select key from testData")
-    checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
+    checkAnswer(df.select(df("key")), testData.select("key").collect().toSeq)
   }
 
   test("inputFiles") {
@@ -1199,7 +1200,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-6899: type should match when using codegen") {
-    checkAnswer(decimalData.agg(avg('a)), Row(new java.math.BigDecimal(2)))
+    checkAnswer(decimalData.agg(avg("a")), Row(new java.math.BigDecimal(2)))
   }
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
@@ -1401,7 +1402,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("Sorting columns are not in Filter and Project") {
     checkAnswer(
-      upperCaseData.filter('N > 1).select('N).filter('N < 6).orderBy('L.asc),
+      upperCaseData.filter($"N" > 1).select("N").filter($"N" < 6).orderBy($"L".asc),
       Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil)
   }
 
@@ -1444,17 +1445,17 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("Alias uses internally generated names 'aggOrder' and 'havingCondition'") {
     val df = Seq(1 -> 2).toDF("i", "j")
-    val query1 = df.groupBy('i)
-      .agg(max('j).as("aggOrder"))
-      .orderBy(sum('j))
+    val query1 = df.groupBy("i")
+      .agg(max("j").as("aggOrder"))
+      .orderBy(sum("j"))
     checkAnswer(query1, Row(1, 2))
 
     // In the plan, there are two attributes having the same name 'havingCondition'
     // One is a user-provided alias name; another is an internally generated one.
-    val query2 = df.groupBy('i)
-      .agg(max('j).as("havingCondition"))
-      .where(sum('j) > 0)
-      .orderBy('havingCondition.asc)
+    val query2 = df.groupBy("i")
+      .agg(max("j").as("havingCondition"))
+      .where(sum("j") > 0)
+      .orderBy($"havingCondition".asc)
     checkAnswer(query2, Row(1, 2))
   }
 
@@ -1463,7 +1464,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       (1 to 10).toDF("id").write.mode(SaveMode.Overwrite).json(dir.getCanonicalPath)
       val input = spark.read.json(dir.getCanonicalPath)
 
-      val df = input.select($"id", rand(0).as('r))
+      val df = input.select($"id", rand(0).as("r"))
       df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
         assert(row.getDouble(1) - row.getDouble(3) === 0.0 +- 0.001)
       }
@@ -1751,7 +1752,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("assertAnalyzed shouldn't replace original stack trace") {
     val e = intercept[AnalysisException] {
-      spark.range(1).select('id as 'a, 'id as 'b).groupBy('a).agg('b)
+      spark.range(1).select($"id" as "a", $"id" as "b").groupBy("a").agg($"b")
     }
 
     assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
@@ -1984,14 +1985,14 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("order-by ordinal.") {
     checkAnswer(
-      testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
+      testData2.select(lit(7), $"a", $"b").orderBy(lit(1), lit(2), lit(3)),
       Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
   }
 
   test("SPARK-22271: mean overflows and returns null for some decimal variables") {
     val d = 0.034567890
     val df = Seq(d, d, d, d, d, d, d, d, d, d).toDF("DecimalCol")
-    val result = df.select('DecimalCol cast DecimalType(38, 33))
+    val result = df.select($"DecimalCol" cast DecimalType(38, 33))
       .select(col("DecimalCol")).describe()
     val mean = result.select("DecimalCol").where($"summary" === "mean")
     assert(mean.collect().toSet === Set(Row("0.0345678900000000000000000000000000000")))
@@ -2027,24 +2028,25 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     val sourceDF = spark.createDataFrame(rows, schema)
 
     def structWhenDF: DataFrame = sourceDF
-      .select(when('cond, struct(lit("a").as("val1"), lit(10).as("val2"))).otherwise('s) as "res")
-      .select('res.getField("val1"))
+      .select(when($"cond",
+        struct(lit("a").as("val1"), lit(10).as("val2"))).otherwise($"s") as "res")
+      .select($"res".getField("val1"))
     def arrayWhenDF: DataFrame = sourceDF
-      .select(when('cond, array(lit("a"), lit("b"))).otherwise('a) as "res")
-      .select('res.getItem(0))
+      .select(when($"cond", array(lit("a"), lit("b"))).otherwise($"a") as "res")
+      .select($"res".getItem(0))
     def mapWhenDF: DataFrame = sourceDF
-      .select(when('cond, map(lit(0), lit("a"))).otherwise('m) as "res")
-      .select('res.getItem(0))
+      .select(when($"cond", map(lit(0), lit("a"))).otherwise($"m") as "res")
+      .select($"res".getItem(0))
 
     def structIfDF: DataFrame = sourceDF
       .select(expr("if(cond, struct('a' as val1, 10 as val2), s)") as "res")
-      .select('res.getField("val1"))
+      .select($"res".getField("val1"))
     def arrayIfDF: DataFrame = sourceDF
       .select(expr("if(cond, array('a', 'b'), a)") as "res")
-      .select('res.getItem(0))
+      .select($"res".getItem(0))
     def mapIfDF: DataFrame = sourceDF
       .select(expr("if(cond, map(0, 'a'), m)") as "res")
-      .select('res.getItem(0))
+      .select($"res".getItem(0))
 
     def checkResult(): Unit = {
       checkAnswer(structWhenDF, Seq(Row("a"), Row(null)))

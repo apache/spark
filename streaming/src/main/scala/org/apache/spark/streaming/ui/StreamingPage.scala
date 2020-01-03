@@ -23,8 +23,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui._
-import org.apache.spark.ui.{UIUtils => SparkUIUtils}
+import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
 /**
  * A helper class for "scheduling delay", "processing time" and "total delay" to generate data that

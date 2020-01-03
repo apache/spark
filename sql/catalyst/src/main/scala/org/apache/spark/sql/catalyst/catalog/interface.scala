@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -282,10 +283,26 @@ case class CatalogTable(
   def qualifiedName: String = identifier.unquotedString
 
   /**
-   * Return the default database name we use to resolve a view, should be None if the CatalogTable
-   * is not a View or created by older versions of Spark(before 2.2.0).
+   * Return the current catalog and namespace (concatenated as a Seq[String]) of when the view was
+   * created.
    */
-  def viewDefaultDatabase: Option[String] = properties.get(VIEW_DEFAULT_DATABASE)
+  def viewCatalogAndNamespace: Seq[String] = {
+    if (properties.contains(VIEW_CATALOG_AND_NAMESPACE)) {
+      val numParts = properties(VIEW_CATALOG_AND_NAMESPACE).toInt
+      (0 until numParts).map { index =>
+        properties.getOrElse(
+          s"$VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX$index",
+          throw new AnalysisException("Corrupted table name context in catalog: " +
+            s"$numParts parts expected, but part $index is missing.")
+        )
+      }
+    } else if (properties.contains(VIEW_DEFAULT_DATABASE)) {
+      // Views created before Spark 3.0 can only access tables in the session catalog.
+      Seq(CatalogManager.SESSION_CATALOG_NAME, properties(VIEW_DEFAULT_DATABASE))
+    } else {
+      Nil
+    }
+  }
 
   /**
    * Return the output column names of the query that creates a view, the column names are used to
@@ -337,7 +354,10 @@ case class CatalogTable(
     if (tableType == CatalogTableType.VIEW) {
       viewText.foreach(map.put("View Text", _))
       viewOriginalText.foreach(map.put("View Original Text", _))
-      viewDefaultDatabase.foreach(map.put("View Default Database", _))
+      if (viewCatalogAndNamespace.nonEmpty) {
+        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+        map.put("View Catalog and Namespace", viewCatalogAndNamespace.quoted)
+      }
       if (viewQueryColumnNames.nonEmpty) {
         map.put("View Query Output Columns", viewQueryColumnNames.mkString("[", ", ", "]"))
       }
@@ -368,7 +388,27 @@ case class CatalogTable(
 }
 
 object CatalogTable {
+  // Starting from Spark 3.0, we don't use this property any more. `VIEW_CATALOG_AND_NAMESPACE` is
+  // used instead.
   val VIEW_DEFAULT_DATABASE = "view.default.database"
+
+  val VIEW_CATALOG_AND_NAMESPACE = "view.catalogAndNamespace.numParts"
+  val VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX = "view.catalogAndNamespace.part."
+  // Convert the current catalog and namespace to properties.
+  def catalogAndNamespaceToProps(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Map[String, String] = {
+    val props = new mutable.HashMap[String, String]
+    val parts = currentCatalog +: currentNamespace
+    if (parts.nonEmpty) {
+      props.put(VIEW_CATALOG_AND_NAMESPACE, parts.length.toString)
+      parts.zipWithIndex.foreach { case (name, index) =>
+        props.put(s"$VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX$index", name)
+      }
+    }
+    props.toMap
+  }
+
   val VIEW_QUERY_OUTPUT_PREFIX = "view.query.out."
   val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
   val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."

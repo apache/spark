@@ -326,7 +326,7 @@ class LocalLDAModel private[spark] (
         val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
         // E[log p(doc | theta, beta)]
-        termCounts.foreachActive { case (idx, count) =>
+        termCounts.foreachNonZero { case (idx, count) =>
           docBound += count * LDAUtils.logSumExp(Elogthetad + localElogbeta(idx, ::).t)
         }
         // E[log p(theta | alpha) - log q(theta | gamma)]

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatisti
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
@@ -214,7 +214,9 @@ object CommandUtils extends Logging {
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
-          new ApproximatePercentile(attr, Literal(percentiles), Literal(conf.percentileAccuracy))
+          new ApproximatePercentile(attr,
+            Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)),
+            Literal(conf.percentileAccuracy))
         val expr = aggFunc.toAggregateExpression()
         Alias(expr, expr.toString)()
       }
