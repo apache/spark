@@ -458,7 +458,7 @@ case class ScalaUDAF(
 case class ScalaAggregator[IN, BUF, OUT](
     children: Seq[Expression],
     agg: Aggregator[IN, BUF, OUT],
-    inputEncoder: ExpressionEncoder[IN],
+    inputEncoderNR: ExpressionEncoder[IN],
     isNullable: Boolean = true,
     isDeterministic: Boolean = true,
     mutableAggBufferOffset: Int = 0,
@@ -469,6 +469,7 @@ case class ScalaAggregator[IN, BUF, OUT](
   with ImplicitCastInputTypes
   with Logging {
 
+  private[this] lazy val inputEncoder = inputEncoderNR.resolveAndBind()
   private[this] lazy val bufferEncoder = agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
 
