@@ -188,12 +188,15 @@ private[parquet] class ParquetRowConverter(
     }.toArray
   }
 
+  // Updaters for each field.
+  private[this] val fieldUpdaters: Array[ParentContainerUpdater] = fieldConverters.map(_.updater)
+
   override def getConverter(fieldIndex: Int): Converter = fieldConverters(fieldIndex)
 
   override def end(): Unit = {
     var i = 0
-    while (i < fieldConverters.length) {
-      fieldConverters(i).updater.end()
+    while (i < fieldUpdaters.length) {
+      fieldUpdaters(i).end()
       i += 1
     }
     updater.set(currentRow)
@@ -206,8 +209,8 @@ private[parquet] class ParquetRowConverter(
       i += 1
     }
     i = 0
-    while (i < fieldConverters.length) {
-      fieldConverters(i).updater.start()
+    while (i < fieldUpdaters.length) {
+      fieldUpdaters(i).start()
       i += 1
     }
   }
