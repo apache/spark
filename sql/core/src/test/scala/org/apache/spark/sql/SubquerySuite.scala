@@ -1034,16 +1034,14 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
   test("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 1") {
     withTable("t1") {
       withTempPath { path =>
-        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath + "/t1")
-        Seq(2 -> "b").toDF("i", "j").write.parquet(path.getCanonicalPath + "/t2")
-        sql(s"CREATE TABLE t1 USING parquet LOCATION '${path.toURI}/t1'")
-        sql(s"CREATE TABLE t2 USING parquet LOCATION '${path.toURI}/t2'")
+        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
+        sql(s"CREATE TABLE t1 USING parquet LOCATION '${path.toURI}'")
 
         val sqlText =
           """
-            |SELECT * FROM t1
+            |SELECT * FROM t1 a
             |WHERE
-            |NOT EXISTS (SELECT * FROM t2 WHERE t1.i = t2.i)
+            |NOT EXISTS (SELECT * FROM t1 b WHERE a.i = b.i)
           """.stripMargin
         val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
         val join = optimizedPlan.collectFirst { case j: Join => j }.get
