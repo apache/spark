@@ -518,7 +518,7 @@ private[parquet] class ParquetRowConverter(
 
     override def getConverter(fieldIndex: Int): Converter = elementConverter
 
-    override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
+    override def end(): Unit = updater.set(ParquetRowConverter.arrayListToArrayData(currentArray))
 
     override def start(): Unit = currentArray.clear()
 
@@ -566,7 +566,10 @@ private[parquet] class ParquetRowConverter(
       // The parquet map may contains null or duplicated map keys. When it happens, the behavior is
       // undefined.
       // TODO (SPARK-26174): disallow it with a config.
-      updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
+      updater.set(
+        new ArrayBasedMapData(
+          ParquetRowConverter.arrayListToArrayData(currentKeys),
+          ParquetRowConverter.arrayListToArrayData(currentValues)))
     }
 
     override def start(): Unit = {
@@ -616,7 +619,7 @@ private[parquet] class ParquetRowConverter(
 
     protected def newArrayUpdater(updater: ParentContainerUpdater) = new ParentContainerUpdater {
       override def start(): Unit = currentArray.clear()
-      override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
+      override def end(): Unit = updater.set(ParquetRowConverter.arrayListToArrayData(currentArray))
       override def set(value: Any): Unit = currentArray.add(value)
     }
   }
@@ -699,5 +702,10 @@ private[parquet] object ParquetRowConverter {
     val timeOfDayNanos = buffer.getLong
     val julianDay = buffer.getInt
     DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+  }
+
+  def arrayListToArrayData(arrayList: java.util.ArrayList[Any]): GenericArrayData = {
+    // Cast to force use of primary constructor; see SPARK-30413
+    new GenericArrayData(arrayList.toArray.asInstanceOf[Array[Any]])
   }
 }
