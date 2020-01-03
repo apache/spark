@@ -245,20 +245,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <repository>
-      <id>parquet-1.11.0</id>
-      <!-- This is a temporary repository to use parquet-mr 1.11.0 release candidate -->
-      <name>Parquet 1.11.0 RC4</name>
-      <url>https://repository.apache.org/content/groups/staging/</url>
-      <releases>
-        <enabled>true</enabled>
-        <updatePolicy>always</updatePolicy>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-        <updatePolicy>always</updatePolicy>
-      </snapshots>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
