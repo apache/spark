@@ -18,64 +18,40 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.sql.{DriverManager, SQLException, Statement, Timestamp}
+import java.sql.{SQLException, Statement, Timestamp}
 import java.util.{Locale, MissingFormatArgumentException}
 
-import scala.util.{Random, Try}
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
- * Note that this TestSuite does not support maven.
+ *
+ * To run the entire test suite:
+ * {{{
+ *   build/sbt "hive-thriftserver/test-only *ThriftServerQueryTestSuite" -Phive-thriftserver
+ * }}}
+ *
+ * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ * }}}
  *
  * TODO:
  *   1. Support UDF testing.
  *   2. Support DESC command.
  *   3. Support SHOW command.
  */
-class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
-
-  private var hiveServer2: HiveThriftServer2 = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    // Chooses a random port between 10000 and 19999
-    var listeningPort = 10000 + Random.nextInt(10000)
-
-    // Retries up to 3 times with different port numbers if the server fails to start
-    (1 to 3).foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
-      started.orElse {
-        listeningPort += 1
-        Try(startThriftServer(listeningPort, attempt))
-      }
-    }.recover {
-      case cause: Throwable =>
-        throw cause
-    }.get
-    logInfo("HiveThriftServer2 started successfully")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      hiveServer2.stop()
-    } finally {
-      super.afterAll()
-    }
-  }
-
-  override val isTestWithConfigSets = false
+class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
 
   /** List of test cases to ignore, in lower cases. */
   override def blackList: Set[String] = super.blackList ++ Set(
@@ -100,19 +76,21 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   override def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Option[Seq[(String, String)]]): Unit = {
+      configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
     withJdbcStatement { statement =>
 
       loadTestData(statement)
 
+      configSet.foreach { case (k, v) =>
+        statement.execute(s"SET $k = $v")
+      }
+
       testCase match {
-        case _: PgSQLTest =>
-          // PostgreSQL enabled cartesian product by default.
-          statement.execute(s"SET ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
+        case _: PgSQLTest | _: AnsiTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
-          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
         case _ =>
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
       }
 
       // Run the SQL queries preparing them for comparison.
@@ -231,7 +209,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  override def listTestCases(): Seq[TestCase] = {
+  override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
@@ -241,6 +219,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
         Seq.empty
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
+        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
@@ -279,29 +259,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
       ("", answer.sorted)
     } else {
       ("", answer)
-    }
-  }
-
-  private def startThriftServer(port: Int, attempt: Int): Unit = {
-    logInfo(s"Trying to start HiveThriftServer2: port=$port, attempt=$attempt")
-    val sqlContext = spark.newSession().sqlContext
-    sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, port.toString)
-    hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
-  }
-
-  private def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
-    val user = System.getProperty("user.name")
-
-    val serverPort = hiveServer2.getHiveConf.get(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname)
-    val connections =
-      fs.map { _ => DriverManager.getConnection(s"jdbc:hive2://localhost:$serverPort", user, "") }
-    val statements = connections.map(_.createStatement())
-
-    try {
-      statements.zip(fs).foreach { case (s, f) => f(s) }
-    } finally {
-      statements.foreach(_.close())
-      connections.foreach(_.close())
     }
   }
 

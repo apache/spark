@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, Strategy}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTables}
-import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, TableCapability}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterNamespaceSetProperties, AlterTable, AppendData, CommentOnNamespace, CommentOnTable, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeNamespace, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, RenameTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowCurrentNamespace, ShowNamespaces, ShowTableProperties, ShowTables}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -33,6 +34,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
   import DataSourceV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
@@ -157,19 +159,25 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       OverwritePartitionsDynamicExec(
         r.table.asWritable, writeOptions.asOptions, planLater(query)) :: Nil
 
-    case DeleteFromTable(DataSourceV2ScanRelation(table, _, output), condition) =>
-      if (condition.exists(SubqueryExpression.hasSubquery)) {
-        throw new AnalysisException(
-          s"Delete by condition with subquery is not supported: $condition")
+    case DeleteFromTable(relation, condition) =>
+      relation match {
+        case DataSourceV2ScanRelation(table, _, output) =>
+          if (condition.exists(SubqueryExpression.hasSubquery)) {
+            throw new AnalysisException(
+              s"Delete by condition with subquery is not supported: $condition")
+          }
+          // fail if any filter cannot be converted.
+          // correctness depends on removing all matching data.
+          val filters = DataSourceStrategy.normalizeExprs(condition.toSeq, output)
+              .flatMap(splitConjunctivePredicates(_).map {
+                f => DataSourceStrategy.translateFilter(f).getOrElse(
+                  throw new AnalysisException(s"Exec update failed:" +
+                      s" cannot translate expression to source filter: $f"))
+              }).toArray
+          DeleteFromTableExec(table.asDeletable, filters) :: Nil
+        case _ =>
+          throw new AnalysisException("DELETE is only supported with v2 tables.")
       }
-      // fail if any filter cannot be converted. correctness depends on removing all matching data.
-      val filters = DataSourceStrategy.normalizeFilters(condition.toSeq, output)
-          .flatMap(splitConjunctivePredicates(_).map {
-            f => DataSourceStrategy.translateFilter(f).getOrElse(
-              throw new AnalysisException(s"Exec update failed:" +
-                  s" cannot translate expression to source filter: $f"))
-          }).toArray
-      DeleteFromTableExec(table.asDeletable, filters) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
@@ -186,6 +194,9 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         Nil
       }
 
+    case desc @ DescribeNamespace(catalog, namespace, extended) =>
+      DescribeNamespaceExec(desc.output, catalog, namespace, extended) :: Nil
+
     case desc @ DescribeTable(DataSourceV2Relation(table, _, _), isExtended) =>
       DescribeTableExec(desc.output, table, isExtended) :: Nil
 
@@ -194,6 +205,22 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
+
+    case RenameTable(catalog, oldIdent, newIdent) =>
+      RenameTableExec(catalog, oldIdent, newIdent) :: Nil
+
+    case AlterNamespaceSetProperties(catalog, namespace, properties) =>
+      AlterNamespaceSetPropertiesExec(catalog, namespace, properties) :: Nil
+
+    case CommentOnNamespace(ResolvedNamespace(catalog, namespace), comment) =>
+      AlterNamespaceSetPropertiesExec(
+        catalog,
+        namespace,
+        Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
+
+    case CommentOnTable(ResolvedTable(catalog, identifier, _), comment) =>
+      val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
+      AlterTableExec(catalog, identifier, Seq(changes)) :: Nil
 
     case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
       CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil
@@ -212,6 +239,9 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case r: ShowCurrentNamespace =>
       ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
+
+    case r @ ShowTableProperties(DataSourceV2Relation(table, _, _), propertyKey) =>
+      ShowTablePropertiesExec(r.output, table, propertyKey) :: Nil
 
     case _ => Nil
   }

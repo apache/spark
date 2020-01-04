@@ -150,6 +150,11 @@ private[spark] object UI {
     .stringConf
     .createWithDefault("org.apache.spark.security.ShellBasedGroupsMappingProvider")
 
+  val PROXY_REDIRECT_URI = ConfigBuilder("spark.ui.proxyRedirectUri")
+    .doc("Proxy address to use when responding with HTTP redirects.")
+    .stringConf
+    .createOptional
+
   val CUSTOM_EXECUTOR_LOG_URL = ConfigBuilder("spark.ui.custom.executor.log.url")
     .doc("Specifies custom spark executor log url for supporting external log service instead of " +
       "using cluster managers' application log urls in the Spark UI. Spark will support " +

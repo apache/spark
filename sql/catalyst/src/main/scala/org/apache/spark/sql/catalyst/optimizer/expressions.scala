@@ -484,27 +484,27 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Like(input, Literal(pattern, StringType)) =>
+    case Like(input, Literal(pattern, StringType), escapeChar) =>
       if (pattern == null) {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
       } else {
+        val escapeStr = String.valueOf(escapeChar)
         pattern.toString match {
-          case startsWith(prefix) if !prefix.endsWith("\\") =>
+          case startsWith(prefix) if !prefix.endsWith(escapeStr) =>
             StartsWith(input, Literal(prefix))
           case endsWith(postfix) =>
             EndsWith(input, Literal(postfix))
           // 'a%a' pattern is basically same with 'a%' && '%a'.
           // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-          case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
+          case startsAndEndsWith(prefix, postfix) if !prefix.endsWith(escapeStr) =>
             And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
               And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
-          case contains(infix) if !infix.endsWith("\\") =>
+          case contains(infix) if !infix.endsWith(escapeStr) =>
             Contains(input, Literal(infix))
           case equalTo(str) =>
             EqualTo(input, Literal(str))
-          case _ =>
-            Like(input, Literal.create(pattern, StringType))
+          case _ => Like(input, Literal.create(pattern, StringType), escapeChar)
         }
       }
   }
@@ -526,9 +526,9 @@ object NullPropagation extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
         Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
-      case e @ AggregateExpression(Count(exprs), _, _, _) if exprs.forall(isNullLiteral) =>
+      case e @ AggregateExpression(Count(exprs), _, _, _, _) if exprs.forall(isNullLiteral) =>
         Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
-      case ae @ AggregateExpression(Count(exprs), _, false, _) if !exprs.exists(_.nullable) =>
+      case ae @ AggregateExpression(Count(exprs), _, false, _, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))
 

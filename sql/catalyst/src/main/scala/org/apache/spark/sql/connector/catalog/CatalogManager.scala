@@ -53,15 +53,12 @@ class CatalogManager(
     }
   }
 
-  private def defaultCatalog: Option[CatalogPlugin] = {
-    conf.defaultV2Catalog.flatMap { catalogName =>
-      try {
-        Some(catalog(catalogName))
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Cannot load default v2 catalog: $catalogName", e)
-          None
-      }
+  def isCatalogRegistered(name: String): Boolean = {
+    try {
+      catalog(name)
+      true
+    } catch {
+      case _: CatalogNotFoundException => false
     }
   }
 
@@ -83,7 +80,7 @@ class CatalogManager(
    * This happens when the source implementation extends the v2 TableProvider API and is not listed
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
-  private def v2SessionCatalog: CatalogPlugin = {
+  private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
         catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
@@ -127,9 +124,7 @@ class CatalogManager(
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {
-    _currentCatalogName.map(catalogName => catalog(catalogName))
-      .orElse(defaultCatalog)
-      .getOrElse(v2SessionCatalog)
+    catalog(_currentCatalogName.getOrElse(conf.getConf(SQLConf.DEFAULT_CATALOG)))
   }
 
   def setCurrentCatalog(catalogName: String): Unit = synchronized {

@@ -64,6 +64,38 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       .map { case (id, error) => error }.sum()
   }
 
+  def convergenceIterations[VD, ED](graph: Graph[VD, ED], resetProb: Double,
+                                    tol: Double, errorTol: Double): (Int, Int) = {
+    val dynamicRanks = graph.ops.pageRank(tol, resetProb).vertices.cache()
+
+    // Compute how many iterations it takes to converge
+    var iter = 1
+    var staticGraphRank = graph.ops.staticPageRank(iter, resetProb).vertices.cache()
+    while (!(compareRanks(staticGraphRank, dynamicRanks) < errorTol)) {
+      iter += 1
+      staticGraphRank = graph.ops.staticPageRank(iter, resetProb).vertices.cache()
+    }
+    val convergenceIter = iter
+    val checkPointIter = convergenceIter / 2
+
+    // CheckPoint the graph computed at half of these iterations
+    val staticGraphRankPartial = graph.ops.staticPageRank(checkPointIter, resetProb)
+
+    // Compute how many iterations it takes to converge when a checkPoint is provided
+    var iterWithCheckPoint = 1
+    var staticGraphRankWithCheckPoint = graph.ops.staticPageRank(iterWithCheckPoint,
+      resetProb, staticGraphRankPartial).vertices.cache()
+    while (compareRanks(staticGraphRankWithCheckPoint, dynamicRanks) >= errorTol) {
+      iterWithCheckPoint += 1
+      staticGraphRankWithCheckPoint = graph.ops.staticPageRank(iterWithCheckPoint,
+        resetProb, staticGraphRankPartial).vertices.cache()
+    }
+
+    val convergenceIterWithCheckPoint = iterWithCheckPoint
+
+    (convergenceIterWithCheckPoint, convergenceIter)
+  }
+
   test("Star PageRank") {
     withSpark { sc =>
       val nVertices = 100
@@ -184,6 +216,25 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
     }
   } // end of Grid PageRank
 
+  test("Grid PageRank with checkpoint") {
+    withSpark { sc =>
+      // Check that checkPointing helps the static PageRank to converge in less iterations
+      val rows = 10
+      val cols = 10
+      val resetProb = 0.15
+      val errorTol = 1.0e-5
+      val tol = 0.0001
+      val gridGraph = GraphGenerators.gridGraph(sc, rows, cols).cache()
+
+      val (iterAfterHalfCheckPoint, totalIters) =
+        convergenceIterations(gridGraph, resetProb, tol, errorTol)
+
+      // In this case checkPoint does not help much
+      assert(totalIters == 19)
+      assert(iterAfterHalfCheckPoint == 18)
+    }
+  } // end of Grid PageRank
+
   test("Chain PageRank") {
     withSpark { sc =>
       val chain1 = (0 until 9).map(x => (x, x + 1))
@@ -200,6 +251,24 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
     }
   }
+
+  test("Chain PageRank with checkpoint") {
+    withSpark { sc =>
+      val chain1 = (0 until 9).map(x => (x, x + 1))
+      val rawEdges = sc.parallelize(chain1, 1).map { case (s, d) => (s.toLong, d.toLong) }
+      val chain = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
+      val resetProb = 0.15
+      val errorTol = 1.0e-5
+      val tol = 0.0001
+
+      val (iterAfterHalfCheckPoint, totalIters) =
+        convergenceIterations(chain, resetProb, tol, errorTol)
+
+      // In this case checkPoint does not help but it does not take more iterations
+      assert(totalIters == 10)
+      assert(iterAfterHalfCheckPoint == 10)
+    }
+  } // end of Grid PageRank
 
   test("Chain PersonalizedPageRank") {
     withSpark { sc =>
@@ -264,7 +333,23 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val ranks = VertexRDD(sc.parallelize(1L to 4L zip igraphPR))
       assert(compareRanks(staticRanks, ranks) < errorTol)
       assert(compareRanks(dynamicRanks, ranks) < errorTol)
+    }
+  }
 
+  test("Loop with source PageRank with checkpoint") {
+    withSpark { sc =>
+      val edges = sc.parallelize((1L, 2L) :: (2L, 3L) :: (3L, 4L) :: (4L, 2L) :: Nil)
+      val g = Graph.fromEdgeTuples(edges, 1)
+      val resetProb = 0.15
+      val tol = 0.0001
+      val errorTol = 1.0e-5
+
+      val (iterAfterHalfCheckPoint, totalIters) =
+        convergenceIterations(g, resetProb, tol, errorTol)
+
+      // In this case checkPoint helps a lot
+      assert(totalIters == 34)
+      assert(iterAfterHalfCheckPoint == 17)
     }
   }
 
@@ -311,6 +396,23 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       assert(compareRanks(p1dynamicRanks, ranks2) < errorTol)
       assert(compareRanks(p1parallelDynamicRanks, ranks2) < errorTol)
 
+    }
+  }
+
+  test("Loop with sink PageRank with checkpoint") {
+    withSpark { sc =>
+      val edges = sc.parallelize((1L, 2L) :: (2L, 3L) :: (3L, 1L) :: (1L, 4L) :: Nil)
+      val g = Graph.fromEdgeTuples(edges, 1)
+      val resetProb = 0.15
+      val tol = 0.0001
+      val errorTol = 1.0e-5
+
+      val (iterAfterHalfCheckPoint, totalIters) =
+        convergenceIterations(g, resetProb, tol, errorTol)
+
+      // In this case checkPoint helps a lot
+      assert(totalIters == 15)
+      assert(iterAfterHalfCheckPoint == 9)
     }
   }
 }

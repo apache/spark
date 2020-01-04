@@ -141,8 +141,8 @@ class LogisticRegressionModel @Since("1.3.0") (
       val withBias = dataMatrix.size + 1 == dataWithBiasSize
       (0 until numClasses - 1).foreach { i =>
         var margin = 0.0
-        dataMatrix.foreachActive { (index, value) =>
-          if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
+        dataMatrix.foreachNonZero { (index, value) =>
+          margin += value * weightsArray((i * dataWithBiasSize) + index)
         }
         // Intercept is required to be added into margin.
         if (withBias) {

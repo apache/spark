@@ -32,7 +32,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
-import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.internal.config.UI
 import org.apache.spark.util.Utils
 
 class UISuite extends SparkFunSuite {
@@ -45,7 +45,7 @@ class UISuite extends SparkFunSuite {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
-      .set(UI_ENABLED, true)
+      .set(UI.UI_ENABLED, true)
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
@@ -273,7 +273,6 @@ class UISuite extends SparkFunSuite {
 
       val (_, testContext) = newContext("/test2")
       serverInfo.addHandler(testContext, securityMgr)
-      testContext.start()
 
       val httpPort = serverInfo.boundPort
 
@@ -315,6 +314,54 @@ class UISuite extends SparkFunSuite {
     } finally {
       stopServer(serverInfo)
       closeSocket(socket)
+    }
+  }
+
+  test("redirect with proxy server support") {
+    val proxyRoot = "https://proxy.example.com:443/prefix"
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    conf.set(UI.PROXY_REDIRECT_URI, proxyRoot)
+
+    val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    try {
+      val serverAddr = s"http://localhost:${serverInfo.boundPort}"
+
+      val (_, ctx) = newContext("/ctx1")
+      serverInfo.addHandler(ctx, securityMgr)
+
+      val redirect = JettyUtils.createRedirectHandler("/src", "/dst")
+      serverInfo.addHandler(redirect, securityMgr)
+
+      // Test Jetty's built-in redirect to add the trailing slash to the context path.
+      TestUtils.withHttpConnection(new URL(s"$serverAddr/ctx1")) { conn =>
+        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
+        val location = Option(conn.getHeaderFields().get("Location"))
+          .map(_.get(0)).orNull
+        assert(location === s"$proxyRoot/ctx1/")
+      }
+
+      // Test with a URL handled by the added redirect handler, and also including a path prefix.
+      val headers = Seq("X-Forwarded-Context" -> "/prefix")
+      TestUtils.withHttpConnection(
+          new URL(s"$serverAddr/src/"),
+          headers = headers) { conn =>
+        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
+        val location = Option(conn.getHeaderFields().get("Location"))
+          .map(_.get(0)).orNull
+        assert(location === s"$proxyRoot/prefix/dst")
+      }
+
+      // Not really used by Spark, but test with a relative redirect.
+      val relative = JettyUtils.createRedirectHandler("/rel", "root")
+      serverInfo.addHandler(relative, securityMgr)
+      TestUtils.withHttpConnection(new URL(s"$serverAddr/rel/")) { conn =>
+        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
+        val location = Option(conn.getHeaderFields().get("Location"))
+          .map(_.get(0)).orNull
+        assert(location === s"$proxyRoot/rel/root")
+      }
+    } finally {
+      stopServer(serverInfo)
     }
   }
 

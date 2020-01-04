@@ -36,6 +36,9 @@ ADD FILE file_name
 ### Examples
 {% highlight sql %}
 ADD FILE /tmp/test;
+ADD FILE "/path/to/file/abc.txt";
+ADD FILE '/another/test.txt';
+ADD FILE "/path with space/abc.txt";
 {% endhighlight %}
 
 ### Related Statements

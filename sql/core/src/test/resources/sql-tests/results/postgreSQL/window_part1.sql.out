@@ -387,7 +387,7 @@ struct<total:bigint,fourcount:bigint,twosum:bigint>
 -- !query 23
 SELECT avg(four) OVER (PARTITION BY four ORDER BY thousand / 100) FROM tenk1 WHERE unique2 < 10
 -- !query 23 schema
-struct<avg(CAST(four AS BIGINT)) OVER (PARTITION BY four ORDER BY (thousand div 100) ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double>
+struct<avg(CAST(four AS BIGINT)) OVER (PARTITION BY four ORDER BY (CAST(thousand AS DOUBLE) / CAST(100 AS DOUBLE)) ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double>
 -- !query 23 output
 0.0
 0.0

@@ -7,11 +7,13 @@
 
 CREATE TABLE FLOAT4_TBL (f1  float) USING parquet;
 
-INSERT INTO FLOAT4_TBL VALUES ('    0.0');
-INSERT INTO FLOAT4_TBL VALUES ('1004.30   ');
-INSERT INTO FLOAT4_TBL VALUES ('     -34.84    ');
-INSERT INTO FLOAT4_TBL VALUES ('1.2345678901234e+20');
-INSERT INTO FLOAT4_TBL VALUES ('1.2345678901234e-20');
+-- PostgreSQL implicitly casts string literals to data with floating point types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO FLOAT4_TBL VALUES (float('    0.0'));
+INSERT INTO FLOAT4_TBL VALUES (float('1004.30   '));
+INSERT INTO FLOAT4_TBL VALUES (float('     -34.84    '));
+INSERT INTO FLOAT4_TBL VALUES (float('1.2345678901234e+20'));
+INSERT INTO FLOAT4_TBL VALUES (float('1.2345678901234e-20'));
 
 -- [SPARK-28024] Incorrect numeric values when out of range
 -- test for over and under flow

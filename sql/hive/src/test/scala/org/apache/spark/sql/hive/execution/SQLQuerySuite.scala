@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -775,7 +776,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("CREATE TABLE test2 (key INT, value STRING)")
       testData.write.mode(SaveMode.Append).insertInto("test2")
       testData.write.mode(SaveMode.Append).insertInto("test2")
-      sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
+      sql("CREATE TABLE test USING hive AS " +
+        "SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
       checkAnswer(
         table("test"),
         sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
@@ -936,7 +938,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     read.json(ds).createOrReplaceTempView("data")
 
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
-      sql("CREATE TABLE explodeTest (key bigInt)")
+      sql("CREATE TABLE explodeTest (key bigInt) USING hive")
       table("explodeTest").queryExecution.analyzed match {
         case SubqueryAlias(_, r: HiveTableRelation) => // OK
         case _ =>
@@ -1890,7 +1892,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
 
       withTable("load_t") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/*part-r*' INTO TABLE load_t")
         checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1"), Row("2"), Row("3")))
 
@@ -1910,7 +1912,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8)
       }
       withTable("load_t") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000 1' INTO TABLE load_t")
         checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1")))
       }
@@ -1925,7 +1927,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t_folder_wildcard") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '${
           path.substring(0, path.length - 1)
             .concat("*")
@@ -1949,7 +1951,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t1") {
-        sql("CREATE TABLE load_t1 (a STRING)")
+        sql("CREATE TABLE load_t1 (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000?' INTO TABLE load_t1")
         checkAnswer(sql("SELECT * FROM load_t1"), Seq(Row("1"), Row("2"), Row("3")))
       }
@@ -1964,7 +1966,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t2") {
-        sql("CREATE TABLE load_t2 (a STRING)")
+        sql("CREATE TABLE load_t2 (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/?art-r-00001' INTO TABLE load_t2")
         checkAnswer(sql("SELECT * FROM load_t2"), Seq(Row("1")))
       }
@@ -2090,7 +2092,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       withTable("t") {
         df.createTempView("tempView")
         val e = intercept[AnalysisException] {
-          sql("CREATE TABLE t AS SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
+          sql("CREATE TABLE t USING hive AS " +
+            "SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
         }.getMessage
         assert(e.contains(expectedMsg))
       }
@@ -2375,7 +2378,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         })
         spark
           .range(5)
-          .select(badUDF('id).as("a"))
+          .select(badUDF($"id").as("a"))
           .createOrReplaceTempView("test")
         val scriptFilePath = getTestResourcePath("data")
         val e = intercept[SparkException] {
@@ -2468,6 +2471,71 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
               Array(Row(2)))
           }
         }
+      }
+    }
+  }
+
+  test("partition pruning should handle date correctly") {
+    withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "2") {
+      withTable("t") {
+        sql("CREATE TABLE t (i INT) PARTITIONED BY (j DATE)")
+        sql("INSERT INTO t PARTITION(j='1990-11-11') SELECT 1")
+        checkAnswer(sql("SELECT i, CAST(j AS STRING) FROM t"), Row(1, "1990-11-11"))
+        checkAnswer(
+          sql(
+            """
+              |SELECT i, CAST(j AS STRING)
+              |FROM t
+              |WHERE j IN (DATE'1990-11-10', DATE'1990-11-11', DATE'1990-11-12')
+              |""".stripMargin),
+          Row(1, "1990-11-11"))
+      }
+    }
+  }
+
+  test("SPARK-26560 Spark should be able to run Hive UDF using jar regardless of " +
+    "current thread context classloader") {
+    // force to use Spark classloader as other test (even in other test suites) may change the
+    // current thread's context classloader to jar classloader
+    Utils.withContextClassLoader(Utils.getSparkClassLoader) {
+      withUserDefinedFunction("udtf_count3" -> false) {
+        val sparkClassLoader = Thread.currentThread().getContextClassLoader
+
+        // This jar file should not be placed to the classpath; GenericUDTFCount3 is slightly
+        // modified version of GenericUDTFCount2 in hive/contrib, which emits the count for
+        // three times.
+        val jarPath = "src/test/noclasspath/TestUDTF-spark-26560.jar"
+        val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+
+        sql(
+          s"""
+             |CREATE FUNCTION udtf_count3
+             |AS 'org.apache.hadoop.hive.contrib.udtf.example.GenericUDTFCount3'
+             |USING JAR '$jarURL'
+          """.stripMargin)
+
+        assert(Thread.currentThread().getContextClassLoader eq sparkClassLoader)
+
+        // JAR will be loaded at first usage, and it will change the current thread's
+        // context classloader to jar classloader in sharedState.
+        // See SessionState.addJar for details.
+        checkAnswer(
+          sql("SELECT udtf_count3(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+          Row(3) :: Row(3) :: Row(3) :: Nil)
+
+        assert(Thread.currentThread().getContextClassLoader ne sparkClassLoader)
+        assert(Thread.currentThread().getContextClassLoader eq
+          spark.sqlContext.sharedState.jarClassLoader)
+
+        // Roll back to the original classloader and run query again. Without this line, the test
+        // would pass, as thread's context classloader is changed to jar classloader. But thread
+        // context classloader can be changed from others as well which would fail the query; one
+        // example is spark-shell, which thread context classloader rolls back automatically. This
+        // mimics the behavior of spark-shell.
+        Thread.currentThread().setContextClassLoader(sparkClassLoader)
+        checkAnswer(
+          sql("SELECT udtf_count3(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+          Row(3) :: Row(3) :: Row(3) :: Nil)
       }
     }
   }

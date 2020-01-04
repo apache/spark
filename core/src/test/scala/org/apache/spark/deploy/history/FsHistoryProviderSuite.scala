@@ -160,13 +160,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     assume(!Utils.isWindows)
 
     class TestFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
-      var mergeApplicationListingCall = 0
-      override protected def mergeApplicationListing(
+      var doMergeApplicationListingCall = 0
+      override private[history] def doMergeApplicationListing(
           reader: EventLogFileReader,
           lastSeen: Long,
           enableSkipToEnd: Boolean): Unit = {
-        super.mergeApplicationListing(reader, lastSeen, enableSkipToEnd)
-        mergeApplicationListingCall += 1
+        super.doMergeApplicationListing(reader, lastSeen, enableSkipToEnd)
+        doMergeApplicationListingCall += 1
       }
     }
     val provider = new TestFsHistoryProvider
@@ -187,7 +187,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       list.size should be (1)
     }
 
-    provider.mergeApplicationListingCall should be (1)
+    provider.doMergeApplicationListingCall should be (1)
   }
 
   test("history file is renamed from inprogress to completed") {
@@ -1281,6 +1281,85 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     // but the value will be corrected once checkForLogs is called.
     assert(deserializedOldObj.lastIndex === None)
     assert(deserializedOldObj.isComplete === false)
+  }
+
+  test("SPARK-29755 LogInfo should be serialized/deserialized by jackson properly") {
+    def assertSerDe(serializer: KVStoreScalaSerializer, info: LogInfo): Unit = {
+      val infoAfterSerDe = serializer.deserialize(serializer.serialize(info), classOf[LogInfo])
+      assert(infoAfterSerDe === info)
+      assertOptionAfterSerde(infoAfterSerDe.lastIndex, info.lastIndex)
+    }
+
+    val serializer = new KVStoreScalaSerializer()
+    val logInfoWithIndexAsNone = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100, None, false)
+    assertSerDe(serializer, logInfoWithIndexAsNone)
+
+    val logInfoWithIndex = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100, Some(3), false)
+    assertSerDe(serializer, logInfoWithIndex)
+  }
+
+  test("SPARK-29755 AttemptInfoWrapper should be serialized/deserialized by jackson properly") {
+    def assertSerDe(serializer: KVStoreScalaSerializer, attempt: AttemptInfoWrapper): Unit = {
+      val attemptAfterSerDe = serializer.deserialize(serializer.serialize(attempt),
+        classOf[AttemptInfoWrapper])
+      assert(attemptAfterSerDe.info === attempt.info)
+      // skip comparing some fields, as they've not triggered SPARK-29755
+      assertOptionAfterSerde(attemptAfterSerDe.lastIndex, attempt.lastIndex)
+    }
+
+    val serializer = new KVStoreScalaSerializer()
+    val appInfo = new ApplicationAttemptInfo(None, new Date(1), new Date(1), new Date(1),
+      10, "spark", false, "dummy")
+    val attemptInfoWithIndexAsNone = new AttemptInfoWrapper(appInfo, "dummyPath", 10, None,
+      None, None, None, None)
+    assertSerDe(serializer, attemptInfoWithIndexAsNone)
+
+    val attemptInfoWithIndex = new AttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1),
+      None, None, None, None)
+    assertSerDe(serializer, attemptInfoWithIndex)
+  }
+
+  test("SPARK-29043: clean up specified event log") {
+    val clock = new ManualClock()
+    val conf = createTestConf().set(MAX_LOG_AGE_S, 0L).set(CLEANER_ENABLED, true)
+    val provider = new FsHistoryProvider(conf, clock)
+
+    // create an invalid application log file
+    val inValidLogFile = newLogFile("inValidLogFile", None, inProgress = true)
+    inValidLogFile.createNewFile()
+    writeFile(inValidLogFile, None,
+      SparkListenerApplicationStart(inValidLogFile.getName, None, 1L, "test", None))
+    inValidLogFile.setLastModified(clock.getTimeMillis())
+
+    // create a valid application log file
+    val validLogFile = newLogFile("validLogFile", None, inProgress = true)
+    validLogFile.createNewFile()
+    writeFile(validLogFile, None,
+      SparkListenerApplicationStart(validLogFile.getName, Some("local_123"), 1L, "test", None))
+    validLogFile.setLastModified(clock.getTimeMillis())
+
+    provider.checkForLogs()
+    // The invalid application log file would be cleaned by checkAndCleanLog().
+    assert(new File(testDir.toURI).listFiles().size === 1)
+
+    clock.advance(1)
+    // cleanLogs() would clean the valid application log file.
+    provider.cleanLogs()
+    assert(new File(testDir.toURI).listFiles().size === 0)
+  }
+
+  private def assertOptionAfterSerde(opt: Option[Long], expected: Option[Long]): Unit = {
+    if (expected.isEmpty) {
+      assert(opt.isEmpty)
+    } else {
+      // The issue happens only when the value in Option is being unboxed. Here we ensure unboxing
+      // to Long succeeds: even though IDE suggests `.toLong` is redundant, direct comparison
+      // doesn't trigger unboxing and passes even without SPARK-29755, so don't remove
+      // `.toLong` below. Please refer SPARK-29755 for more details.
+      assert(opt.get.toLong === expected.get.toLong)
+    }
   }
 
   /**
