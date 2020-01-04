@@ -184,8 +184,7 @@ class ResolveSessionCatalog(
       }
       DescribeDatabaseCommand(ns.head, d.extended)
 
-    case AlterNamespaceSetPropertiesStatement(
-        SessionCatalogAndNamespace(_, ns), properties) =>
+    case AlterNamespaceSetPropertiesStatement(SessionCatalogAndNamespace(_, ns), properties) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
@@ -333,6 +332,9 @@ class ResolveSessionCatalog(
           s"The database name is not valid: ${ns.quoted}")
       }
       DropDatabaseCommand(ns.head, d.ifExists, d.cascade)
+
+    case ShowNamespacesStatement(SessionCatalogAndNamespace(catalog, ns), pattern) =>
+      ShowNamespaces(catalog, ns, pattern)
 
     case ShowTablesStatement(Some(CatalogAndNamespace(catalog, ns)), pattern)
         if isSessionCatalog(catalog) =>
@@ -590,11 +592,12 @@ class ResolveSessionCatalog(
   }
 
   object SessionCatalogAndNamespace {
-    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
-      case CatalogAndNamespace(catalog, ns) if isSessionCatalog(catalog) =>
-        Some(catalog -> ns)
-      case _ => None
-    }
+    def unapply(resolved: ResolvedNamespace): Option[(SupportsNamespaces, Seq[String])] =
+      if (isSessionCatalog(resolved.catalog)) {
+        Some(resolved.catalog -> resolved.namespace)
+      } else {
+        None
+      }
   }
 
   private def assertTopLevelColumn(colName: Seq[String], command: String): Unit = {
