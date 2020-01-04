@@ -25,9 +25,9 @@ import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
-import org.apache.spark.sql.execution.{RDDScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan}
+import org.apache.spark.sql.execution.{RDDScanExec, ScalarSubquery, SparkPlan}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
@@ -90,7 +90,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
   private def getExpressionSubqueryInMemoryTables(plan: SparkPlan): Int = {
     var inMemoryTableNum = 0
     plan.transformExpressions {
-      case sub: ExecScalarSubquery =>
+      case sub: ScalarSubquery =>
         inMemoryTableNum = inMemoryTableNum + getNumInMemoryTablesRecursively(sub.plan)
         sub
       case e => e
