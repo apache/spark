@@ -34,7 +34,7 @@ import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.stat.SummaryBuilderImpl._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
@@ -501,7 +501,7 @@ class LogisticRegression @Since("1.2.0") (
       fitIntercept)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(
-      (createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
+      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
       seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
       combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
