@@ -602,8 +602,13 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-30403: AQE should handle InSubquery") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      // If the subquery does not contain the shuffle node,
+      // it may get the "SubqueryAdaptiveNotSupportedException"
+      // and the main sql will also not be inserted the "AdaptiveSparkPlanExec" node.
+      // Here change the subquery to contain the exchange node.
       runAdaptiveAndVerifyResult("SELECT * FROM testData LEFT OUTER join testData2" +
-        " ON key = a  AND key NOT IN (select a from testData3) where value = '1'"
+        " ON key = a  AND key NOT IN (SELECT  value v from testData join" +
+        " testData3 ON key = a ) where value = '1'"
       )
     }
   }
