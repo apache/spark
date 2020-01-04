@@ -1138,7 +1138,7 @@ class CastSuite extends CastSuiteBase {
     assert(Cast.canCast(set.dataType, ArrayType(StringType, false)))
   }
 
-  test("Cast should output null when ANSI is not enabled.") {
+  test("Cast should output null for invalid strings when ANSI is not enabled.") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(cast("abdef", DecimalType.USER_DEFAULT), null)
       checkEvaluation(cast("2012-12-11", DoubleType), null)
@@ -1272,27 +1272,27 @@ class AnsiCastSuite extends CastSuiteBase {
     }
   }
 
-  test("cast from invalid string to numeric should throw IllegalArgumentException") {
+  test("cast from invalid string to numeric should throw NumberFormatException") {
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
       val array = Literal.create(Seq("123", "true", "f", null),
         ArrayType(StringType, containsNull = true))
-      checkExceptionInExpression[IllegalArgumentException](
+      checkExceptionInExpression[NumberFormatException](
         cast(array, ArrayType(dataType, containsNull = true)), "invalid input")
-      checkExceptionInExpression[IllegalArgumentException](
+      checkExceptionInExpression[NumberFormatException](
         cast("string", dataType), "invalid input")
-      checkExceptionInExpression[IllegalArgumentException](
+      checkExceptionInExpression[NumberFormatException](
         cast("123-string", dataType), "invalid input")
-      checkExceptionInExpression[IllegalArgumentException](
+      checkExceptionInExpression[NumberFormatException](
         cast("2020-07-19", dataType), "invalid input")
     }
 
-    Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
-      checkExceptionInExpression[IllegalArgumentException](
+    Seq(DecimalType.USER_DEFAULT).foreach { dataType =>
+      checkExceptionInExpression[NumberFormatException](
         cast("string", dataType), "invalid input")
-      checkExceptionInExpression[IllegalArgumentException](
+      checkExceptionInExpression[NumberFormatException](
         cast("123.000.00", dataType), "invalid input")
-      checkExceptionInExpression[IllegalArgumentException](
+      checkExceptionInExpression[NumberFormatException](
         cast("abc.com", dataType), "invalid input")
     }
   }

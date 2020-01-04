@@ -484,8 +484,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
       val result = new LongWrapper()
-      buildCast[UTF8String](_, s => if (s.toLong(result)) result.value
-      else throw new IllegalArgumentException(s"invalid input syntax for type numeric: $s"))
+      buildCast[UTF8String](_, s => {
+        if (s.toLong(result)) {
+          result.value
+        } else {
+          throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
+        }
+      })
     case StringType =>
       val result = new LongWrapper()
       buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
@@ -505,8 +510,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value
-      else throw new IllegalArgumentException(s"invalid input syntax for type numeric: $s"))
+      buildCast[UTF8String](_, s => {
+        if (s.toInt(result)) {
+          result.value
+        } else {
+          throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
+        }
+      })
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
@@ -532,7 +542,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         result.value.toShort
       } else {
         if (ansiEnabled) {
-          throw new IllegalArgumentException(s"invalid input syntax for type numeric: $s")
+          throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
         } else {
           null
         }
@@ -577,7 +587,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         result.value.toByte
       } else {
         if (ansiEnabled) {
-          throw new IllegalArgumentException(s"invalid input syntax for type numeric: $s")
+          throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
         } else {
           null
         }
@@ -654,7 +664,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       } catch {
         case _: NumberFormatException =>
           if (ansiEnabled) {
-            throw new IllegalArgumentException(s"invalid input syntax for type numeric: $s")
+            throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
           } else {
             null
           }
@@ -687,7 +697,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           case _: NumberFormatException =>
             val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
             if(d == null) {
-              throw new IllegalArgumentException(s"invalid input syntax for type numeric: $s")
+              throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
             } else {
               d.asInstanceOf[Double].doubleValue()
             }
@@ -720,7 +730,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           case _: NumberFormatException =>
             val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
             if (f == null) {
-              throw new IllegalArgumentException(s"invalid input syntax for type numeric: $s")
+              throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
             } else {
               f.asInstanceOf[Float].floatValue()
             }
@@ -1181,7 +1191,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
               ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
             } catch (java.lang.NumberFormatException e) {
               if ($ansiEnabled) {
-                throw new IllegalArgumentException("invalid input syntax for type numeric: $c");
+                throw new NumberFormatException("invalid input syntax for type numeric: $c");
               } else {
                 $evNull =true;
               }
@@ -1417,7 +1427,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             $evPrim = (byte) $wrapper.value;
           } else {
             if ($ansiEnabled) {
-              throw new IllegalArgumentException("invalid input syntax for type numeric: $c");
+              throw new NumberFormatException("invalid input syntax for type numeric: $c");
             } else {
               $evNull = true;
             }
@@ -1452,7 +1462,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             $evPrim = (short) $wrapper.value;
           } else {
             if ($ansiEnabled) {
-              throw new IllegalArgumentException("invalid input syntax for type numeric: $c");
+              throw new NumberFormatException("invalid input syntax for type numeric: $c");
             } else {
               $evNull = true;
             }
@@ -1486,7 +1496,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           if ($c.toInt($wrapper)) {
             $evPrim = $wrapper.value;
           } else {
-            throw new IllegalArgumentException("invalid input syntax for type numeric: $c");
+            throw new NumberFormatException("invalid input syntax for type numeric: $c");
           }
           $wrapper = null;
         """
@@ -1530,7 +1540,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             $evPrim = $wrapper.value;
           } else {
             if ($ansiEnabled) {
-              throw new IllegalArgumentException("invalid input syntax for type numeric: $c");
+              throw new NumberFormatException("invalid input syntax for type numeric: $c");
             } else {
               $evNull = true;
             }
@@ -1564,7 +1574,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           } catch (java.lang.NumberFormatException e) {
             final Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
             if (f == null) {
-              throw new IllegalArgumentException("invalid input syntax for type numeric: $c");
+              throw new NumberFormatException("invalid input syntax for type numeric: $c");
             } else {
               $evPrim = f.floatValue();
             }
@@ -1611,7 +1621,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           } catch (java.lang.NumberFormatException e) {
             final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
             if (d == null) {
-              throw new IllegalArgumentException("invalid input syntax for type numeric: $c");
+              throw new NumberFormatException("invalid input syntax for type numeric: $c");
             } else {
               $evPrim = d.doubleValue();
             }
