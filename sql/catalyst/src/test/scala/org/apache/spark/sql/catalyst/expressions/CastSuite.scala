@@ -1287,7 +1287,7 @@ class AnsiCastSuite extends CastSuiteBase {
         cast("2020-07-19", dataType), "invalid input")
     }
 
-    Seq(DecimalType.USER_DEFAULT).foreach { dataType =>
+    Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](
         cast("string", dataType), "invalid input")
       checkExceptionInExpression[NumberFormatException](

@@ -1294,6 +1294,19 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
+  public boolean toIntExact(IntWrapper intWrapper, boolean ansiEnabled, String integralType, UTF8String c) {
+      if ((integralType.equals("short") && toShort(intWrapper)) ||
+              (integralType.equals("byte") && toByte(intWrapper)) ||
+              (integralType.equals("int") && toInt(intWrapper)) ) {
+        return true;
+      }
+      if (ansiEnabled) {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + c);
+      } else {
+        return false;
+      }
+  }
+
   @Override
   public String toString() {
     return new String(getBytes(), StandardCharsets.UTF_8);

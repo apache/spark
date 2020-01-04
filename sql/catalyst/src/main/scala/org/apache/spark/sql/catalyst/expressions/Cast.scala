@@ -508,18 +508,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
-    case StringType if ansiEnabled =>
-      val result = new IntWrapper()
-      buildCast[UTF8String](_, s => {
-        if (s.toInt(result)) {
-          result.value
-        } else {
-          throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
-        }
-      })
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
+      buildCast[UTF8String](_, s => {
+        if (s.toIntExact(result, ansiEnabled, "int", s)) {
+          result.value
+        } else {
+          null
+        }
+      })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
@@ -538,14 +535,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toShort(result)) {
+      buildCast[UTF8String](_, s => if (s.toIntExact(result, ansiEnabled, "short", s)) {
         result.value.toShort
       } else {
-        if (ansiEnabled) {
-          throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
-        } else {
-          null
-        }
+        null
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1.toShort else 0.toShort)
@@ -583,14 +576,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toByte(result)) {
+      buildCast[UTF8String](_, s => if (s.toIntExact(result, ansiEnabled, "byte", s)) {
         result.value.toByte
       } else {
-        if (ansiEnabled) {
-          throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
-        } else {
-          null
-        }
+        null
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1.toByte else 0.toByte)
@@ -1423,14 +1412,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toByte($wrapper)) {
+          if ($c.toIntExact($wrapper, $ansiEnabled, "byte", $c)) {
             $evPrim = (byte) $wrapper.value;
           } else {
-            if ($ansiEnabled) {
-              throw new NumberFormatException("invalid input syntax for type numeric: $c");
-            } else {
-              $evNull = true;
-            }
+            $evNull = true;
           }
           $wrapper = null;
         """
@@ -1458,14 +1443,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toShort($wrapper)) {
+          if ($c.toIntExact($wrapper, $ansiEnabled, "short", $c)) {
             $evPrim = (short) $wrapper.value;
           } else {
-            if ($ansiEnabled) {
-              throw new NumberFormatException("invalid input syntax for type numeric: $c");
-            } else {
-              $evNull = true;
-            }
+            $evNull = true;
           }
           $wrapper = null;
         """
@@ -1488,24 +1469,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToIntCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
-    case StringType if ansiEnabled =>
-      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
-      (c, evPrim, evNull) =>
-        code"""
-          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toInt($wrapper)) {
-            $evPrim = $wrapper.value;
-          } else {
-            throw new NumberFormatException("invalid input syntax for type numeric: $c");
-          }
-          $wrapper = null;
-        """
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toInt($wrapper)) {
+          if ($c.toIntExact($wrapper, $ansiEnabled, "int", $c)) {
             $evPrim = $wrapper.value;
           } else {
             $evNull = true;
@@ -1532,7 +1501,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
-
       (c, evPrim, evNull) =>
         code"""
           UTF8String.LongWrapper $wrapper = new UTF8String.LongWrapper();
