@@ -81,9 +81,6 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
       } catch {
         case NonFatal(e) =>
           endpointRefs.remove(endpoint)
-          if (messageLoop != null && messageLoop.isInstanceOf[DedicatedMessageLoop]) {
-            messageLoop.asInstanceOf[DedicatedMessageLoop].stop()
-          }
           throw e
       }
     }
