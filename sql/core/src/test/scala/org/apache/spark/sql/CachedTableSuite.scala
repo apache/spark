@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.execution.{RDDScanExec, ScalarSubquery, SparkPlan}
+import org.apache.spark.sql.execution.{ExecSubqueryExpression, RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
@@ -89,24 +89,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
     sum
   }
 
-  private def getExpressionSubqueryInMemoryTables(plan: SparkPlan): Int = {
-    var inMemoryTableNum = 0
-    plan.transformExpressions {
-      case sub: ScalarSubquery =>
-        inMemoryTableNum = inMemoryTableNum + getNumInMemoryTablesRecursively(sub.plan)
-        sub
-      case e => e
-    }
-    inMemoryTableNum
+  private def getNumInMemoryTablesInSubquery(plan: SparkPlan): Int = {
+    plan.expressions.map(_.collect {
+      case sub: ExecSubqueryExpression => getNumInMemoryTablesRecursively(sub.plan)
+    }.sum).sum
   }
 
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
     plan.collect {
       case inMemoryTable @ InMemoryTableScanExec(_, _, relation) =>
         getNumInMemoryTablesRecursively(relation.cachedPlan) +
-          getExpressionSubqueryInMemoryTables(inMemoryTable) + 1
+          getNumInMemoryTablesInSubquery(inMemoryTable) + 1
       case p =>
-        getExpressionSubqueryInMemoryTables(p)
+        getNumInMemoryTablesInSubquery(p)
     }.sum
   }
 
