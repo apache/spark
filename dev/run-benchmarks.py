@@ -21,33 +21,35 @@ import os
 from sparktestsupport.shellutils import run_cmd
 
 benchmarks = [
-    'org.apache.spark.sql.execution.benchmark.AggregateBenchmark',
-    'org.apache.spark.sql.execution.benchmark.AvroReadBenchmark',
-    'org.apache.spark.sql.execution.benchmark.BloomFilterBenchmark',
-    'org.apache.spark.sql.execution.benchmark.DataSourceReadBenchmark',
-    'org.apache.spark.sql.execution.benchmark.DateTimeBenchmark',
-    'org.apache.spark.sql.execution.benchmark.ExtractBenchmark',
-    'org.apache.spark.sql.execution.benchmark.FilterPushdownBenchmark',
-    'org.apache.spark.sql.execution.benchmark.InExpressionBenchmark',
-    'org.apache.spark.sql.execution.benchmark.IntervalBenchmark',
-    'org.apache.spark.sql.execution.benchmark.JoinBenchmark',
-    'org.apache.spark.sql.execution.benchmark.MakeDateTimeBenchmark',
-    'org.apache.spark.sql.execution.benchmark.MiscBenchmark',
-    'org.apache.spark.sql.execution.benchmark.NestedSchemaPruningBenchmark',
-    'org.apache.spark.sql.execution.benchmark.ObjectHashAggregateExecBenchmark',
-    'org.apache.spark.sql.execution.benchmark.RangeBenchmark',
-    'org.apache.spark.sql.execution.benchmark.TPCDSQueryBenchmark',
-    'org.apache.spark.sql.execution.benchmark.UDFBenchmark',
-    'org.apache.spark.sql.execution.benchmark.WideSchemaBenchmark',
-    'org.apache.spark.sql.execution.benchmark.WideTableBenchmark',
-    'org.apache.spark.sql.hive.orc.OrcReadBenchmark',
-    'org.apache.spark.sql.execution.datasources.csv.CSVBenchmark',
-    'org.apache.spark.sql.execution.datasources.json.JsonBenchmark'
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.AggregateBenchmark'],
+    ['avro/test', 'org.apache.spark.sql.execution.benchmark.AvroReadBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.BloomFilterBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.DataSourceReadBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.DateTimeBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.ExtractBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.FilterPushdownBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.InExpressionBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.IntervalBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.JoinBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.MakeDateTimeBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.MiscBenchmark'],
+    ['hive/test', 'org.apache.spark.sql.execution.benchmark.ObjectHashAggregateExecBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.OrcNestedSchemaPruningBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.OrcV2NestedSchemaPruningBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.ParquetNestedSchemaPruningBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.RangeBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.TPCDSQueryBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.UDFBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.WideSchemaBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.benchmark.WideTableBenchmark'],
+    ['hive/test', 'org.apache.spark.sql.hive.orc.OrcReadBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.datasources.csv.CSVBenchmark'],
+    ['sql/test', 'org.apache.spark.sql.execution.datasources.json.JsonBenchmark']
 ]
 
 print('Set SPARK_GENERATE_BENCHMARK_FILES=1')
 os.environ['SPARK_GENERATE_BENCHMARK_FILES'] = '1'
 
-for benchmark in benchmarks:
-    print("Run benchmark: %s" % benchmark)
-    run_cmd(['build/sbt', 'sql/test:runMain %s' % benchmark])
+for b in benchmarks:
+    print("Run benchmark: %s" % b[1])
+    run_cmd(['build/sbt', '%s:runMain %s' % (b[0], b[1])])
