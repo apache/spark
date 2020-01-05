@@ -517,14 +517,17 @@ case class ScalaAggregator[IN, BUF, OUT](
     if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
   }
 
-  private[this] lazy val bufferSerializer = bufferEncoder.namedExpressions
-  private[this] lazy val bufferDeserializer = bufferEncoder.resolveAndBind().deserializer
-  private[this] lazy val bufferObjToRow = UnsafeProjection.create(bufferSerializer)
-  private[this] lazy val bufferRow = new UnsafeRow(bufferSerializer.length)
-  private[this] lazy val bufferRowToObject =
+  private[this] lazy val bufferRow = {
+    val bufferSerializer = bufferEncoder.namedExpressions
+    new UnsafeRow(bufferSerializer.length)
+  }
+  private[this] lazy val bufferRowToObject = {
+    val bufferDeserializer = bufferEncoder.resolveAndBind().deserializer
     GenerateSafeProjection.generate(bufferDeserializer :: Nil)
+  }
 
-  def serialize(agg: BUF): Array[Byte] = bufferObjToRow(InternalRow(agg)).getBytes
+  def serialize(agg: BUF): Array[Byte] =
+    bufferEncoder.toRow(agg).asInstanceOf[UnsafeRow].getBytes()
 
   def deserialize(storageFormat: Array[Byte]): BUF = {
     bufferRow.pointTo(storageFormat, storageFormat.length)
