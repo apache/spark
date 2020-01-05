@@ -2,14 +2,14 @@
 range
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 range:                                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-full scan                                         20357          21595        1692         25.8          38.8       1.0X
-limit after range                                   115            130          15       4563.9           0.2     177.2X
-filter after range                                 1890           1906          21        277.5           3.6      10.8X
-count after range                                    85             87           3       6200.7           0.2     240.8X
-count after limit after range                       101            109           9       5213.9           0.2     202.4X
+full scan                                          8302           8836        1059         63.2          15.8       1.0X
+limit after range                                    35             38           5      14924.4           0.1     236.3X
+filter after range                                 1140           1143           3        459.8           2.2       7.3X
+count after range                                    45             46           1      11729.5           0.1     185.7X
+count after limit after range                        36             37           1      14764.1           0.1     233.8X
 
 

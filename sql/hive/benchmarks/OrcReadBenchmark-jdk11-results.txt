@@ -6,37 +6,49 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 SQL Single TINYINT Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2111           2136          36          7.5         134.2       1.0X
+Native ORC MR                                      1524           1527           3         10.3          96.9       1.0X
+Native ORC Vectorized                               208            231          28         75.5          13.2       7.3X
+Hive built-in ORC                                  2144           2145           2          7.3         136.3       0.7X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 SQL Single SMALLINT Column Scan:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2140           2150          14          7.3         136.1       1.0X
+Native ORC MR                                      1866           1892          37          8.4         118.6       1.0X
+Native ORC Vectorized                               195            198           3         80.9          12.4       9.6X
+Hive built-in ORC                                  2347           2373          38          6.7         149.2       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 SQL Single INT Column Scan:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2281           2297          23          6.9         145.0       1.0X
+Native ORC MR                                      1827           1833           8          8.6         116.2       1.0X
+Native ORC Vectorized                               234            250          26         67.2          14.9       7.8X
+Hive built-in ORC                                  2440           2461          31          6.4         155.1       0.7X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 SQL Single BIGINT Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2635           2681          65          6.0         167.5       1.0X
+Native ORC MR                                      1939           1946          11          8.1         123.3       1.0X
+Native ORC Vectorized                               342            382          29         46.1          21.7       5.7X
+Hive built-in ORC                                  2558           2586          40          6.1         162.6       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 SQL Single FLOAT Column Scan:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2095           2098           5          7.5         133.2       1.0X
+Native ORC MR                                      1965           1987          31          8.0         125.0       1.0X
+Native ORC Vectorized                               432            434           2         36.4          27.5       4.5X
+Hive built-in ORC                                  2613           2642          41          6.0         166.1       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 SQL Single DOUBLE Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2340           2360          28          6.7         148.8       1.0X
+Native ORC MR                                      2060           2080          28          7.6         131.0       1.0X
+Native ORC Vectorized                               508            512           3         31.0          32.3       4.1X
+Hive built-in ORC                                  2773           2803          42          5.7         176.3       0.7X
 
 
 ================================================================================================
@@ -47,7 +59,9 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Int and String Scan:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of columns                                     3909           3940          45          2.7         372.8       1.0X
+Native ORC MR                                      3933           3969          50          2.7         375.1       1.0X
+Native ORC Vectorized                              2119           2119           1          4.9         202.1       1.9X
+Hive built-in ORC                                  4881           4927          65          2.1         465.5       0.8X
 
 
 ================================================================================================
@@ -58,9 +72,15 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Partitioned Table:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Data column                                        2628           2646          26          6.0         167.1       1.0X
-Partition column                                   2399           2406           9          6.6         152.5       1.1X
-Both columns                                       2801           2815          20          5.6         178.1       0.9X
+Data column - Native ORC MR                        2147           2179          45          7.3         136.5       1.0X
+Data column - Native ORC Vectorized                 385            388           3         40.8          24.5       5.6X
+Data column - Hive built-in ORC                    2840           2844           6          5.5         180.6       0.8X
+Partition column - Native ORC MR                   1492           1500          11         10.5          94.9       1.4X
+Partition column - Native ORC Vectorized             66             68           3        237.9           4.2      32.5X
+Partition column - Hive built-in ORC               1921           1944          33          8.2         122.2       1.1X
+Both columns - Native ORC MR                       2387           2391           7          6.6         151.7       0.9X
+Both columns - Native ORC Vectorized                391            402          18         40.2          24.9       5.5X
+Both columns - Hive built-in ORC                   2838           2867          41          5.5         180.4       0.8X
 
 
 ================================================================================================
@@ -71,7 +91,9 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Repeated String:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               2746           2754          11          3.8         261.9       1.0X
+Native ORC MR                                      1847           1854          11          5.7         176.1       1.0X
+Native ORC Vectorized                               335            347          12         31.3          32.0       5.5X
+Hive built-in ORC                                  2584           2590           8          4.1         246.5       0.7X
 
 
 ================================================================================================
@@ -82,19 +104,25 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 String with Nulls Scan (0.0%):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               4715           4742          38          2.2         449.7       1.0X
+Native ORC MR                                      3372           3374           3          3.1         321.6       1.0X
+Native ORC Vectorized                              1049           1053           7         10.0         100.0       3.2X
+Hive built-in ORC                                  4665           4672          10          2.2         444.9       0.7X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 String with Nulls Scan (50.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               3927           3942          20          2.7         374.5       1.0X
+Native ORC MR                                      3104           3117          18          3.4         296.0       1.0X
+Native ORC Vectorized                              1225           1225           0          8.6         116.8       2.5X
+Hive built-in ORC                                  4060           4079          27          2.6         387.2       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 String with Nulls Scan (95.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               2753           2757           6          3.8         262.5       1.0X
+Native ORC MR                                      1732           1733           1          6.1         165.2       1.0X
+Native ORC Vectorized                               390            391           0         26.9          37.2       4.4X
+Hive built-in ORC                                  2352           2357           7          4.5         224.3       0.7X
 
 
 ================================================================================================
@@ -105,18 +133,24 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Single Column Scan from 100 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                               4326           4340          20          0.2        4125.7       1.0X
+Native ORC MR                                       236            238           2          4.4         225.0       1.0X
+Native ORC Vectorized                               114            119           5          9.2         109.2       2.1X
+Hive built-in ORC                                  1297           1297           0          0.8        1237.0       0.2X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Single Column Scan from 200 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                               8559           8569          15          0.1        8162.1       1.0X
+Native ORC MR                                       312            315           3          3.4         297.4       1.0X
+Native ORC Vectorized                               194            197           3          5.4         184.9       1.6X
+Hive built-in ORC                                  2340           2358          26          0.4        2231.7       0.1X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
 Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Single Column Scan from 300 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                              13200          13328         181          0.1       12588.4       1.0X
+Native ORC MR                                       440            442           2          2.4         419.2       1.0X
+Native ORC Vectorized                               319            320           2          3.3         303.8       1.4X
+Hive built-in ORC                                  3440           3471          43          0.3        3280.6       0.1X
 
 

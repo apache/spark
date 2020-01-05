@@ -2,74 +2,74 @@
 Join Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Join w long:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w long wholestage off                         4872           4888          24          4.3         232.3       1.0X
-Join w long wholestage on                           337            425          61         62.3          16.1      14.5X
+Join w long wholestage off                         3567           3689         172          5.9         170.1       1.0X
+Join w long wholestage on                          1118           1134          11         18.8          53.3       3.2X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Join w long duplicated:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w long duplicated wholestage off              6290           6346          79          3.3         299.9       1.0X
-Join w long duplicated wholestage on                328            347          17         64.0          15.6      19.2X
+Join w long duplicated wholestage off              4436           4443           9          4.7         211.5       1.0X
+Join w long duplicated wholestage on               1178           1187           7         17.8          56.2       3.8X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Join w 2 ints:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w 2 ints wholestage off                     174475         174532          82          0.1        8319.6       1.0X
-Join w 2 ints wholestage on                      165490         167355        1507          0.1        7891.2       1.1X
+Join w 2 ints wholestage off                     132395         132458          88          0.2        6313.1       1.0X
+Join w 2 ints wholestage on                      229504         229539          31          0.1       10943.6       0.6X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Join w 2 longs:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w 2 longs wholestage off                      7025           7121         135          3.0         335.0       1.0X
-Join w 2 longs wholestage on                       1878           1954         103         11.2          89.5       3.7X
+Join w 2 longs wholestage off                      5522           5555          47          3.8         263.3       1.0X
+Join w 2 longs wholestage on                       2734           2804          68          7.7         130.4       2.0X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 Join w 2 longs duplicated:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w 2 longs duplicated wholestage off          20822          20879          81          1.0         992.9       1.0X
-Join w 2 longs duplicated wholestage on            2454           2512          60          8.5         117.0       8.5X
+Join w 2 longs duplicated wholestage off          12116          12131          21          1.7         577.7       1.0X
+Join w 2 longs duplicated wholestage on            6439           6474          28          3.3         307.0       1.9X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 outer join w long:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-outer join w long wholestage off                   3900           3907          10          5.4         186.0       1.0X
-outer join w long wholestage on                     226            235          10         92.6          10.8      17.2X
+outer join w long wholestage off                   3142           3149          10          6.7         149.8       1.0X
+outer join w long wholestage on                    1135           1142           7         18.5          54.1       2.8X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 semi join w long:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-semi join w long wholestage off                    2560           2621          87          8.2         122.1       1.0X
-semi join w long wholestage on                      209            219          15        100.5          10.0      12.3X
+semi join w long wholestage off                    1584           1589           7         13.2          75.6       1.0X
+semi join w long wholestage on                      651            655           5         32.2          31.0       2.4X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 sort merge join:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-sort merge join wholestage off                     1707           1712           7          1.2         814.0       1.0X
-sort merge join wholestage on                      1447           1482          43          1.4         690.0       1.2X
+sort merge join wholestage off                      896            954          83          2.3         427.3       1.0X
+sort merge join wholestage on                       858            868          10          2.4         409.0       1.0X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 sort merge join with duplicates:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-sort merge join with duplicates wholestage off           2293           2307          19          0.9        1093.4       1.0X
-sort merge join with duplicates wholestage on           2018           2061          66          1.0         962.1       1.1X
+sort merge join with duplicates wholestage off           1527           1531           5          1.4         728.3       1.0X
+sort merge join with duplicates wholestage on           1336           1354          26          1.6         636.9       1.1X
 
-OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Linux 4.15.0-1051-aws
+Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
 shuffle hash join:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-shuffle hash join wholestage off                   1424           1458          47          2.9         339.6       1.0X
-shuffle hash join wholestage on                    1203           1227          28          3.5         286.9       1.2X
+shuffle hash join wholestage off                   1113           1116           5          3.8         265.4       1.0X
+shuffle hash join wholestage on                    1080           1085           4          3.9         257.4       1.0X
 
 
