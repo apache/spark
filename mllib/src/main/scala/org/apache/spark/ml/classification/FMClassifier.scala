@@ -204,7 +204,7 @@ class FMClassifier @Since("3.0.0") (
     instr.logNumFeatures(numFeatures)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val labeledPoint = extractLabeledPoints (dataset, numClasses)
+    val labeledPoint = extractLabeledPoints(dataset, numClasses)
     val data: RDD[(Double, OldVector)] = labeledPoint.map(x => (x.label, x.features))
 
     if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
