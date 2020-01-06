@@ -64,24 +64,16 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       relation.tableMeta.identifier,
       partitionFilters)
     val sizeInBytes = try {
-      val partitionsWithSize = prunedPartitions.map { part =>
-        val rawDataSize = part.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
-        val totalSize = part.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+      val sizeOfPartitions = prunedPartitions.map { partition =>
+        val rawDataSize = partition.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
+        val totalSize = partition.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
         if (rawDataSize.isDefined && rawDataSize.get > 0) {
-          (part, rawDataSize.get)
+          rawDataSize.get
         } else if (totalSize.isDefined && totalSize.get > 0L) {
-          (part, totalSize.get)
+          totalSize.get
         } else {
-          (part, 0L)
-        }
-      }
-      val sizeOfPartitions = partitionsWithSize.map{ pair =>
-        val (partition, size) = (pair._1, pair._2)
-        if (size == 0) {
           CommandUtils.calculateLocationSize(
             session.sessionState, relation.tableMeta.identifier, partition.storage.locationUri)
-        } else {
-          size
         }
       }.sum
       // If size of partitions is zero fall back to the default size.
