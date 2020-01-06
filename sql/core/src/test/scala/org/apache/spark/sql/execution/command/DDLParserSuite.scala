@@ -504,7 +504,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       assert(desc.comment == Some("This is the staging page view table"))
       // TODO will be SQLText
       assert(desc.viewText.isEmpty)
-      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewCatalogAndNamespace.isEmpty)
       assert(desc.viewQueryColumnNames.isEmpty)
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
@@ -556,7 +556,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       // TODO will be SQLText
       assert(desc.comment == Some("This is the staging page view table"))
       assert(desc.viewText.isEmpty)
-      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewCatalogAndNamespace.isEmpty)
       assert(desc.viewQueryColumnNames.isEmpty)
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.storage.properties == Map())
@@ -609,7 +609,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewCatalogAndNamespace.isEmpty)
     assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
@@ -921,7 +921,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.partitionColumnNames == Seq("month"))
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewCatalogAndNamespace.isEmpty)
     assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.locationUri == Some(new URI("/path/to/mercury")))
     assert(desc.storage.inputFormat == Some("winput"))

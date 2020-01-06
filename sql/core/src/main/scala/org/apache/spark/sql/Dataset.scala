@@ -3472,9 +3472,7 @@ class Dataset[T] private[sql](
    */
   private def withNewRDDExecutionId[U](body: => U): U = {
     SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
-      rddQueryExecution.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
+      rddQueryExecution.executedPlan.resetMetrics()
       body
     }
   }
@@ -3485,9 +3483,7 @@ class Dataset[T] private[sql](
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(sparkSession, qe, Some(name)) {
-      qe.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
+      qe.executedPlan.resetMetrics()
       action(qe.executedPlan)
     }
   }

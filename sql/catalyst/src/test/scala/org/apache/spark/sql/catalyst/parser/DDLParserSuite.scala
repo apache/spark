@@ -20,13 +20,12 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -662,6 +661,46 @@ class DDLParserSuite extends AnalysisTest {
           Seq("table_name"),
           Seq(Seq("x"), Seq("y"), Seq("a", "b", "c"))))
     }
+  }
+
+  test("alter table: hive style") {
+    val sql1 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT"
+    val sql2 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT COMMENT 'new_comment'"
+    val sql3 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT AFTER other_col"
+
+    comparePlans(
+      parsePlan(sql1),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        Some(IntegerType),
+        None,
+        None))
+
+    comparePlans(
+      parsePlan(sql2),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        Some(IntegerType),
+        Some("new_comment"),
+        None))
+
+    comparePlans(
+      parsePlan(sql3),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        Some(IntegerType),
+        None,
+        Some(after("other_col"))))
+
+    // renaming column not supported in hive style ALTER COLUMN.
+    intercept("ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT",
+      "please run RENAME COLUMN instead")
+
+    // ALTER COLUMN for a partition is not supported.
+    intercept("ALTER TABLE table_name PARTITION (a='1') CHANGE COLUMN a.b.c c INT")
   }
 
   test("alter table/view: rename table/view") {
@@ -1942,5 +1981,23 @@ class DDLParserSuite extends AnalysisTest {
             s" from query, got ${other.getClass.getName}.")
       }
     }
+  }
+
+  test("comment on") {
+    comparePlans(
+      parsePlan("COMMENT ON DATABASE a.b.c IS NULL"),
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
+
+    comparePlans(
+      parsePlan("COMMENT ON DATABASE a.b.c IS 'NULL'"),
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), "NULL"))
+
+    comparePlans(
+      parsePlan("COMMENT ON NAMESPACE a.b.c IS ''"),
+      CommentOnNamespace(UnresolvedNamespace(Seq("a", "b", "c")), ""))
+
+    comparePlans(
+      parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
+      CommentOnTable(UnresolvedTable(Seq("a", "b", "c")), "xYz"))
   }
 }

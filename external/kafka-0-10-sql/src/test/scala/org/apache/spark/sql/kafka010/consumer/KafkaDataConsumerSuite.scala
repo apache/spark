@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.kafka010.consumer
 
 import java.{util => ju}
 import java.nio.charset.StandardCharsets
@@ -32,7 +32,8 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{TaskContext, TaskContextImpl}
 import org.apache.spark.kafka010.KafkaDelegationTokenTest
-import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
+import org.apache.spark.sql.kafka010.{KafkaTestUtils, RecordBuilder}
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
 
 class KafkaDataConsumerSuite

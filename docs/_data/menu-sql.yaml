@@ -172,6 +172,8 @@
                   url: sql-ref-syntax-aux-cache-clear-cache.html
                 - text: REFRESH TABLE
                   url: sql-ref-syntax-aux-refresh-table.html
+                - text: REFRESH
+                  url: sql-ref-syntax-aux-cache-refresh.md
             - text: Describe Commands
               url: sql-ref-syntax-aux-describe.html
               subitems:

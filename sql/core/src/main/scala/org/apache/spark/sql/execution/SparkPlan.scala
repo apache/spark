@@ -125,6 +125,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
+    children.foreach(_.resetMetrics())
   }
 
   /**

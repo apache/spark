@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
@@ -43,17 +44,19 @@ private[spark] object GradientBoostedTrees extends Logging {
       input: RDD[Instance],
       boostingStrategy: OldBoostingStrategy,
       seed: Long,
-      featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      featureSubsetStrategy: String,
+      instr: Option[Instrumentation] = None):
+        (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
         GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false,
-          seed, featureSubsetStrategy)
+          seed, featureSubsetStrategy, instr)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => Instance((x.label * 2) - 1, x.weight, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false,
-          seed, featureSubsetStrategy)
+          seed, featureSubsetStrategy, instr)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by gradient boosting.")
     }
@@ -76,12 +79,14 @@ private[spark] object GradientBoostedTrees extends Logging {
       validationInput: RDD[Instance],
       boostingStrategy: OldBoostingStrategy,
       seed: Long,
-      featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      featureSubsetStrategy: String,
+      instr: Option[Instrumentation] = None):
+        (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
         GradientBoostedTrees.boost(input, validationInput, boostingStrategy,
-          validate = true, seed, featureSubsetStrategy)
+          validate = true, seed, featureSubsetStrategy, instr)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(
@@ -89,7 +94,7 @@ private[spark] object GradientBoostedTrees extends Logging {
         val remappedValidationInput = validationInput.map(
           x => Instance((x.label * 2) - 1, x.weight, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedValidationInput, boostingStrategy,
-          validate = true, seed, featureSubsetStrategy)
+          validate = true, seed, featureSubsetStrategy, instr)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -261,7 +266,9 @@ private[spark] object GradientBoostedTrees extends Logging {
       boostingStrategy: OldBoostingStrategy,
       validate: Boolean,
       seed: Long,
-      featureSubsetStrategy: String): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      featureSubsetStrategy: String,
+      instr: Option[Instrumentation] = None):
+        (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
@@ -306,11 +313,12 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val metadata = RandomForest.buildMetadata(input, treeStrategy,
-      numTrees = 1, featureSubsetStrategy)
-    val firstTreeModel = RandomForest.run(input, treeStrategy, numTrees = 1,
-      featureSubsetStrategy, seed = seed, instr = None,
-      parentUID = None, precomputedMetadata = Some(metadata))
+    val metadata = DecisionTreeMetadata.buildMetadata(
+      input.retag(classOf[Instance]), treeStrategy, numTrees = 1,
+      featureSubsetStrategy)
+    val firstTreeModel = RandomForest.runWithMetadata(input, metadata, treeStrategy,
+      numTrees = 1, featureSubsetStrategy, seed = seed, instr = instr,
+      parentUID = None)
       .head.asInstanceOf[DecisionTreeRegressionModel]
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
@@ -346,9 +354,9 @@ private[spark] object GradientBoostedTrees extends Logging {
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
 
-      val model = RandomForest.run(data, treeStrategy, numTrees = 1,
-        featureSubsetStrategy, seed = seed + m, instr = None,
-        parentUID = None, precomputedMetadata = Some(metadata))
+      val model = RandomForest.runWithMetadata(data, metadata, treeStrategy,
+        numTrees = 1, featureSubsetStrategy, seed = seed + m,
+        instr = None, parentUID = None)
         .head.asInstanceOf[DecisionTreeRegressionModel]
       timer.stop(s"building tree $m")
       // Update partial model
