@@ -362,6 +362,13 @@ pyspark_sql = Module(
         "pyspark.sql.udf",
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
+        "pyspark.sql.pandas.conversion",
+        "pyspark.sql.pandas.map_ops",
+        "pyspark.sql.pandas.functions",
+        "pyspark.sql.pandas.group_ops",
+        "pyspark.sql.pandas.types",
+        "pyspark.sql.pandas.serializers",
+        "pyspark.sql.pandas.utils",
         # unittests
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",

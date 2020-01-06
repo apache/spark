@@ -24,7 +24,7 @@ Run with:
 from __future__ import print_function
 
 from pyspark.sql import SparkSession
-from pyspark.sql.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 require_minimum_pandas_version()
 require_minimum_pyarrow_version()
