@@ -2527,7 +2527,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
 
-    if (properties.keySet.intersect(RESERVED_PROPERTIES.asScala.toSet).nonEmpty) {
+    if (properties.keySet.exists(RESERVED_PROPERTIES.contains)) {
       throw new ParseException(s"Disallow to specify reserved properties, including" +
         s" ${RESERVED_PROPERTIES.asScala.mkString("(", ",", ")")}.", ctx)
     }
