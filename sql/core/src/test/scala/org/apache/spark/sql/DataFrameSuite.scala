@@ -2280,6 +2280,15 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     }
     assert(err.getMessage.contains("cannot resolve '`d`'"))
   }
+
+  test("SPARK-30421") {
+    val df = Seq((1, 2), (3, 4)).toDF("a", "b")
+
+    val err = intercept[AnalysisException] {
+      df.drop("a").where($"a" === 1)
+    }
+    assert(err.getMessage.contains("cannot resolve"))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
