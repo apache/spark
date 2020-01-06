@@ -219,7 +219,7 @@ object SQLConf {
   val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
       DeprecatedConfig("spark.sql.hive.verifyPartitionPath", "3.0.0",
-        "This config will be replaced by spark.files.ignoreMissingFiles."),
+        "This config is replaced by spark.files.ignoreMissingFiles."),
       DeprecatedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "2.3",
         "Behavior for `false` config value is considered as a bug, and " +
         "it will be prohibited in the future releases."),
