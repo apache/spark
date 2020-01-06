@@ -1294,17 +1294,171 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
-  public boolean toIntExact(IntWrapper intWrapper, boolean ansiEnabled, String integralType, UTF8String c) {
-      if ((integralType.equals("short") && toShort(intWrapper)) ||
-              (integralType.equals("byte") && toByte(intWrapper)) ||
-              (integralType.equals("int") && toInt(intWrapper)) ) {
-        return true;
+  /**
+   * Parses this UTF8String(trimmed if needed) to long.
+   *
+   * This method is almost similar to `toLong` defined above. It is used for parsing the UTF8String
+   * when ANSI mode is enabled.
+   * @return If string contains valid numeric value then it returns the long value otherwise a
+   * NumberFormatException  is thrown.
+   */
+
+  public long toLongExact() {
+    int offset = 0;
+    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
+    if (offset == this.numBytes) {
+      throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    }
+
+    int end = this.numBytes - 1;
+    while (end > offset && getByte(end) <= ' ') end--;
+
+    byte b = getByte(offset);
+    final boolean negative = b == '-';
+    if (negative || b == '+') {
+      if (end - offset == 0) {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
       }
-      if (ansiEnabled) {
-        throw new NumberFormatException("invalid input syntax for type numeric: " + c);
+      offset++;
+    }
+
+    final byte separator = '.';
+    final int radix = 10;
+    final long stopValue = Long.MIN_VALUE / radix;
+    long result = 0;
+
+    while (offset <= end) {
+      b = getByte(offset);
+      offset++;
+      if (b == separator) {
+        break;
+      }
+
+      int digit;
+      if (b >= '0' && b <= '9') {
+        digit = b - '0';
       } else {
-        return false;
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
       }
+
+      if (result < stopValue) {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+
+      result = result * radix - digit;
+      if (result > 0) {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+    }
+
+    while (offset <= end) {
+      byte currentByte = getByte(offset);
+      if (currentByte < '0' || currentByte > '9') {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+      offset++;
+    }
+
+    if (!negative) {
+      result = -result;
+      if (result < 0) {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Parses this UTF8String(trimmed if needed) to Int.
+   *
+   * This method is almost similar to `toInt` defined above. It is used for parsing the UTF8String
+   * when ANSI mode is enabled.
+   * @return If string contains valid numeric value then it returns the int value otherwise a
+   * NumberFormatException  is thrown.
+   */
+
+  public int toIntExact() {
+    int offset = 0;
+    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
+    if (offset == this.numBytes) {
+      throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    }
+
+    int end = this.numBytes - 1;
+    while (end > offset && getByte(end) <= ' ') end--;
+
+    byte b = getByte(offset);
+    final boolean negative = b == '-';
+    if (negative || b == '+') {
+      if (end - offset == 0) {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+      offset++;
+    }
+
+    final byte separator = '.';
+    final int radix = 10;
+    final int stopValue = Integer.MIN_VALUE / radix;
+    int result = 0;
+
+    while (offset <= end) {
+      b = getByte(offset);
+      offset++;
+      if (b == separator) {
+        break;
+      }
+
+      int digit;
+      if (b >= '0' && b <= '9') {
+        digit = b - '0';
+      } else {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+
+      if (result < stopValue) {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+
+      result = result * radix - digit;
+      if (result > 0) {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+    }
+
+    while (offset <= end) {
+      byte currentByte = getByte(offset);
+      if (currentByte < '0' || currentByte > '9') {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+      offset++;
+    }
+
+    if (!negative) {
+      result = -result;
+      if (result < 0) {
+        throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+      }
+    }
+    return result;
+  }
+
+  public short toShortExact() {
+    int value = this.toIntExact();
+    short result = (short) value;
+    if (result == value) {
+      return result;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  public byte toByteExact() {
+    int value = this.toIntExact();
+    byte result = (byte) value;
+    if (result == value) {
+      return result;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
   }
 
   @Override

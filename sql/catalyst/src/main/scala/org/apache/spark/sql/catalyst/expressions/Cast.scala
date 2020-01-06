@@ -483,14 +483,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      val result = new LongWrapper()
-      buildCast[UTF8String](_, s => {
-        if (s.toLong(result)) {
-          result.value
-        } else {
-          throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
-        }
-      })
+      buildCast[UTF8String](_, _.toLongExact())
     case StringType =>
       val result = new LongWrapper()
       buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
@@ -508,15 +501,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
+    case StringType if ansiEnabled =>
+      buildCast[UTF8String](_, _.toIntExact())
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => {
-        if (s.toIntExact(result, ansiEnabled, "int", s)) {
-          result.value
-        } else {
-          null
-        }
-      })
+      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
@@ -533,9 +522,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // ShortConverter
   private[this] def castToShort(from: DataType): Any => Any = from match {
+    case StringType if ansiEnabled =>
+      buildCast[UTF8String](_, _.toShortExact())
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toIntExact(result, ansiEnabled, "short", s)) {
+      buildCast[UTF8String](_, s => if (s.toShort(result)) {
         result.value.toShort
       } else {
         null
@@ -574,9 +565,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
+    case StringType if ansiEnabled =>
+      buildCast[UTF8String](_, _.toByteExact())
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toIntExact(result, ansiEnabled, "byte", s)) {
+      buildCast[UTF8String](_, s => if (s.toByte(result)) {
         result.value.toByte
       } else {
         null
@@ -1410,13 +1403,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
+        val casting = if (ansiEnabled) {
+          s"$evPrim = $c.toByteExact();"
+        } else {
+          s"""
+            if ($c.toByte($wrapper)) {
+              $evPrim = (byte) $wrapper.value;
+            } else {
+              $evNull = true;
+            }
+          """
+        }
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toIntExact($wrapper, $ansiEnabled, "byte", $c)) {
-            $evPrim = (byte) $wrapper.value;
-          } else {
-            $evNull = true;
-          }
+          $casting
           $wrapper = null;
         """
     case BooleanType =>
@@ -1441,13 +1441,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
+        val casting = if (ansiEnabled) {
+          s"$evPrim = $c.toShortExact();"
+        } else {
+          s"""
+            if ($c.toShort($wrapper)) {
+              $evPrim = (short) $wrapper.value;
+            } else {
+              $evNull = true;
+            }
+          """
+        }
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toIntExact($wrapper, $ansiEnabled, "short", $c)) {
-            $evPrim = (short) $wrapper.value;
-          } else {
-            $evNull = true;
-          }
+          $casting
           $wrapper = null;
         """
     case BooleanType =>
@@ -1472,13 +1479,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
+        val casting = if (ansiEnabled) {
+          s"$evPrim = $c.toIntExact();"
+        } else {
+          s"""
+            if ($c.toInt($wrapper)) {
+              $evPrim = $wrapper.value;
+            } else {
+              $evNull = true;
+            }
+          """
+        }
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toIntExact($wrapper, $ansiEnabled, "int", $c)) {
-            $evPrim = $wrapper.value;
-          } else {
-            $evNull = true;
-          }
+          $casting
           $wrapper = null;
         """
     case BooleanType =>
@@ -1502,17 +1516,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
       (c, evPrim, evNull) =>
-        code"""
-          UTF8String.LongWrapper $wrapper = new UTF8String.LongWrapper();
-          if ($c.toLong($wrapper)) {
-            $evPrim = $wrapper.value;
-          } else {
-            if ($ansiEnabled) {
-              throw new NumberFormatException("invalid input syntax for type numeric: $c");
+        val casting = if (ansiEnabled) {
+          s"$evPrim = $c.toLongExact();"
+        } else {
+          s"""
+            if ($c.toLong($wrapper)) {
+              $evPrim = $wrapper.value;
             } else {
               $evNull = true;
             }
-          }
+          """
+        }
+        code"""
+          UTF8String.LongWrapper $wrapper = new UTF8String.LongWrapper();
+          $casting
           $wrapper = null;
         """
     case BooleanType =>
