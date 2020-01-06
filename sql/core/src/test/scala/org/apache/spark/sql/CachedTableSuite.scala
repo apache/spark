@@ -90,9 +90,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
   }
 
   private def getNumInMemoryTablesInSubquery(plan: SparkPlan): Int = {
-    plan.expressions.map(_.collect {
+    plan.expressions.flatMap(_.collect {
       case sub: ExecSubqueryExpression => getNumInMemoryTablesRecursively(sub.plan)
-    }.sum).sum
+    }).sum
   }
 
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {

@@ -62,7 +62,8 @@ abstract class SubqueryExpression(
 
 object SubqueryExpression {
   /**
-   * Returns true when an expression contains an IN or EXISTS subquery and false otherwise.
+   * Returns true when an expression contains an IN or correlated EXISTS subquery
+   * and false otherwise.
    */
   def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
     e.find {
@@ -303,7 +304,10 @@ case class ListQuery(
 }
 
 /**
- * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition.
+ * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition
+ * or some uncorrelated condition.
+ *
+ * 1. correlated condition:
  *
  * For example (SQL):
  * {{{
@@ -312,6 +316,17 @@ case class ListQuery(
  *   WHERE   EXISTS (SELECT  *
  *                   FROM    b
  *                   WHERE   b.id = a.id)
+ * }}}
+ *
+ * 2. uncorrelated condition example:
+ *
+ * For example (SQL):
+ * {{{
+ *   SELECT  *
+ *   FROM    a
+ *   WHERE   EXISTS (SELECT  *
+ *                   FROM    b
+ *                   WHERE   b.id > 10)
  * }}}
  */
 case class Exists(

@@ -53,7 +53,7 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
 }
 
 /**
- * Rewrite non correlated exists subquery to use ScalarSubquery
+ * Rewritten uncorrelated exists subquery to use ScalarSubquery
  *   WHERE EXISTS (SELECT A FROM TABLE B WHERE COL1 > 10)
  * will be rewrite to
  *   WHERE (SELECT 1 FROM (SELECT A FROM TABLE B WHERE COL1 > 10) LIMIT 1) IS NOT NULL
