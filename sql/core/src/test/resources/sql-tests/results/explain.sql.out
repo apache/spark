@@ -67,12 +67,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
-Input     : [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
+Input: [key#x, val#x]
+Condition: (isnotnull(key#x) AND (key#x > 0))
      
 (4) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (5) HashAggregate [codegen id : 1]
 Input: [key#x, val#x]
@@ -123,12 +123,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
-Input     : [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
+Input: [key#x, val#x]
+Condition: (isnotnull(key#x) AND (key#x > 0))
      
 (4) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (5) HashAggregate [codegen id : 1]
 Input: [key#x, val#x]
@@ -140,12 +140,12 @@ Input: [key#x, max#x]
 Input: [key#x, max#x]
      
 (8) Filter [codegen id : 2]
-Input     : [key#x, max(val)#x, max(val#x)#x]
-Condition : (isnotnull(max(val#x)#x) AND (max(val#x)#x > 0))
+Input: [key#x, max(val)#x, max(val#x)#x]
+Condition: (isnotnull(max(val#x)#x) AND (max(val#x)#x > 0))
      
 (9) Project [codegen id : 2]
-Output    : [key#x, max(val)#x]
-Input     : [key#x, max(val)#x, max(val#x)#x]
+Output: [key#x, max(val)#x]
+Input: [key#x, max(val)#x, max(val#x)#x]
 
 
 -- !query 6
@@ -182,12 +182,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
-Input     : [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
+Input: [key#x, val#x]
+Condition: (isnotnull(key#x) AND (key#x > 0))
      
 (4) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (5) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
@@ -200,12 +200,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (7) Filter [codegen id : 2]
-Input     : [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
+Input: [key#x, val#x]
+Condition: (isnotnull(key#x) AND (key#x > 0))
      
 (8) Project [codegen id : 2]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (9) Union 
      
@@ -252,12 +252,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (3) Filter [codegen id : 2]
-Input     : [key#x, val#x]
-Condition : isnotnull(key#x)
+Input: [key#x, val#x]
+Condition: isnotnull(key#x)
      
 (4) Project [codegen id : 2]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (5) Scan parquet default.explain_temp2 
 Output: [key#x, val#x]
@@ -270,12 +270,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (7) Filter [codegen id : 1]
-Input     : [key#x, val#x]
-Condition : isnotnull(key#x)
+Input: [key#x, val#x]
+Condition: isnotnull(key#x)
      
 (8) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (9) BroadcastExchange 
 Input: [key#x, val#x]
@@ -326,12 +326,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (5) Filter [codegen id : 1]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : isnotnull(key#x)
      
 (6) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (7) BroadcastExchange 
 Input: [key#x, val#x]
@@ -374,12 +374,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x > 3))
      
 (4) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 ===== Subqueries =====
 
@@ -404,12 +404,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (7) Filter [codegen id : 1]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x = 2))
      
 (8) Project [codegen id : 1]
-Output    : [key#x]
-Input     : [key#x, val#x]
+Output: [key#x]
+Input: [key#x, val#x]
      
 (9) HashAggregate [codegen id : 1]
 Input: [key#x]
@@ -441,12 +441,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (14) Filter [codegen id : 1]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : (isnotnull(val#x) AND (val#x > 0))
      
 (15) Project [codegen id : 1]
-Output    : [key#x]
-Input     : [key#x, val#x]
+Output: [key#x]
+Input: [key#x, val#x]
      
 (16) HashAggregate [codegen id : 1]
 Input: [key#x]
@@ -488,7 +488,7 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : ((key#x = Subquery scalar-subquery#x, [id=#x]) OR (key#x = Subquery scalar-subquery#x, [id=#x]))
      
 ===== Subqueries =====
@@ -514,12 +514,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (6) Filter [codegen id : 1]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : (isnotnull(val#x) AND (val#x > 0))
      
 (7) Project [codegen id : 1]
-Output    : [key#x]
-Input     : [key#x, val#x]
+Output: [key#x]
+Input: [key#x, val#x]
      
 (8) HashAggregate [codegen id : 1]
 Input: [key#x]
@@ -551,12 +551,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (13) Filter [codegen id : 1]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : (isnotnull(val#x) AND (val#x > 0))
      
 (14) Project [codegen id : 1]
-Output    : [key#x]
-Input     : [key#x, val#x]
+Output: [key#x]
+Input: [key#x, val#x]
      
 (15) HashAggregate [codegen id : 1]
 Input: [key#x]
@@ -591,8 +591,8 @@ ReadSchema: struct<>
 Input: []
      
 (3) Project [codegen id : 1]
-Output    : [(Subquery scalar-subquery#x, [id=#x] + ReusedSubquery Subquery scalar-subquery#x, [id=#x]) AS (scalarsubquery() + scalarsubquery())#x]
-Input     : []
+Output: [(Subquery scalar-subquery#x, [id=#x] + ReusedSubquery Subquery scalar-subquery#x, [id=#x]) AS (scalarsubquery() + scalarsubquery())#x]
+Input: []
      
 ===== Subqueries =====
 
@@ -660,12 +660,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (3) Filter [codegen id : 2]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
      
 (4) Project [codegen id : 2]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (5) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
@@ -678,12 +678,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (7) Filter [codegen id : 1]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
      
 (8) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (9) BroadcastExchange 
 Input: [key#x, val#x]
@@ -731,12 +731,12 @@ ReadSchema: struct<key:int,val:int>
 Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
-Input     : [key#x, val#x]
+Input: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
      
 (4) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
+Output: [key#x, val#x]
+Input: [key#x, val#x]
      
 (5) HashAggregate [codegen id : 1]
 Input: [key#x, val#x]
@@ -748,7 +748,7 @@ Input: [key#x, max#x]
 Input: [key#x, max#x]
      
 (8) ReusedExchange  [Reuses operator id: 6]
-Output : ArrayBuffer(key#x, max#x)
+Output: ArrayBuffer(key#x, max#x)
      
 (9) HashAggregate [codegen id : 3]
 Input: [key#x, max#x]

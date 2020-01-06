@@ -85,8 +85,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   override def verboseStringWithOperatorId(): String = {
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Output    : ${projectList.mkString("[", ", ", "]")}
-       |Input     : ${child.output.mkString("[", ", ", "]")}
+       |Output: ${projectList.mkString("[", ", ", "]")}
+       |Input: ${child.output.mkString("[", ", ", "]")}
      """.stripMargin
   }
 }
@@ -243,8 +243,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def verboseStringWithOperatorId(): String = {
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Input     : ${child.output.mkString("[", ", ", "]")}
-       |Condition : ${condition}
+       |Input: ${child.output.mkString("[", ", ", "]")}
+       |Condition: ${condition}
      """.stripMargin
   }
 }
