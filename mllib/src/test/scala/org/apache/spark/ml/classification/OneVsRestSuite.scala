@@ -81,6 +81,8 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
 
     assert(ovaModel.numClasses === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
+    checkNominalOnDF(transformedDataset, "prediction", ovaModel.numClasses)
+    checkVectorSizeOnDF(transformedDataset, "rawPrediction", ovaModel.numClasses)
 
     // check for label metadata in prediction col
     val predictionColSchema = transformedDataset.schema(ovaModel.getPredictionCol)

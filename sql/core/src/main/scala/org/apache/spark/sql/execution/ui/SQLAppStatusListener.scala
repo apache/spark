@@ -53,7 +53,7 @@ class SQLAppStatusListener(
     liveExecutions.isEmpty && stageMetrics.isEmpty
   }
 
-  kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get(UI_RETAINED_EXECUTIONS)) { count =>
+  kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get[Int](UI_RETAINED_EXECUTIONS)) { count =>
     cleanupExecutions(count)
   }
 
@@ -103,12 +103,13 @@ class SQLAppStatusListener(
         }
       }.getOrElse(getOrCreateExecution(executionId))
 
-    // Record the accumulator IDs for the stages of this job, so that the code that keeps
-    // track of the metrics knows which accumulators to look at.
-    val accumIds = exec.metrics.map(_.accumulatorId).toSet
-    if (accumIds.nonEmpty) {
+    // Record the accumulator IDs and metric types for the stages of this job, so that the code
+    // that keeps track of the metrics knows which accumulators to look at.
+    val accumIdsAndType = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
+    if (accumIdsAndType.nonEmpty) {
       event.stageInfos.foreach { stage =>
-        stageMetrics.put(stage.stageId, new LiveStageMetrics(0, stage.numTasks, accumIds))
+        stageMetrics.put(stage.stageId, new LiveStageMetrics(stage.stageId, 0,
+          stage.numTasks, accumIdsAndType))
       }
     }
 
@@ -126,7 +127,8 @@ class SQLAppStatusListener(
     Option(stageMetrics.get(event.stageInfo.stageId)).foreach { stage =>
       if (stage.attemptId != event.stageInfo.attemptNumber) {
         stageMetrics.put(event.stageInfo.stageId,
-          new LiveStageMetrics(event.stageInfo.attemptNumber, stage.numTasks, stage.accumulatorIds))
+          new LiveStageMetrics(event.stageInfo.stageId, event.stageInfo.attemptNumber,
+            stage.numTasks, stage.accumIdsToMetricType))
       }
     }
   }
@@ -198,11 +200,16 @@ class SQLAppStatusListener(
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
     val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
 
-    val taskMetrics = exec.stages.toSeq
+    val liveStageMetrics = exec.stages.toSeq
       .flatMap { stageId => Option(stageMetrics.get(stageId)) }
-      .flatMap(_.metricValues())
+
+    val taskMetrics = liveStageMetrics.flatMap(_.metricValues())
+
+    val maxMetrics = liveStageMetrics.flatMap(_.maxMetricValues())
 
     val allMetrics = new mutable.HashMap[Long, Array[Long]]()
+
+    val maxMetricsFromAllStages = new mutable.HashMap[Long, Array[Long]]()
 
     taskMetrics.foreach { case (id, values) =>
       val prev = allMetrics.getOrElse(id, null)
@@ -214,10 +221,28 @@ class SQLAppStatusListener(
       allMetrics(id) = updated
     }
 
+    // Find the max for each metric id between all stages.
+    maxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
+      val updated = maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
+      if (value > updated(0)) {
+        updated(0) = value
+        updated(1) = stageId
+        updated(2) = attemptId
+        updated(3) = taskId
+      }
+      maxMetricsFromAllStages(id) = updated
+    }
+
     exec.driverAccumUpdates.foreach { case (id, value) =>
       if (metricTypes.contains(id)) {
         val prev = allMetrics.getOrElse(id, null)
         val updated = if (prev != null) {
+          // If the driver updates same metrics as tasks and has higher value then remove
+          // that entry from maxMetricsFromAllStage. This would make stringValue function default
+          // to "driver" that would be displayed on UI.
+          if (maxMetricsFromAllStages.contains(id) && value > maxMetricsFromAllStages(id)(0)) {
+            maxMetricsFromAllStages.remove(id)
+          }
           val _copy = Arrays.copyOf(prev, prev.length + 1)
           _copy(prev.length) = value
           _copy
@@ -229,7 +254,8 @@ class SQLAppStatusListener(
     }
 
     val aggregatedMetrics = allMetrics.map { case (id, values) =>
-      id -> SQLMetrics.stringValue(metricTypes(id), values)
+      id -> SQLMetrics.stringValue(metricTypes(id), values, maxMetricsFromAllStages.getOrElse(id,
+        Array.empty[Long]))
     }.toMap
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
@@ -440,9 +466,10 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 }
 
 private class LiveStageMetrics(
+    val stageId: Int,
     val attemptId: Int,
     val numTasks: Int,
-    val accumulatorIds: Set[Long]) {
+    val accumIdsToMetricType: Map[Long, String]) {
 
   /**
    * Mapping of task IDs to their respective index. Note this may contain more elements than the
@@ -460,6 +487,8 @@ private class LiveStageMetrics(
    * independent of the actual metric type.
    */
   private val taskMetrics = new ConcurrentHashMap[Long, Array[Long]]()
+
+  private val  metricsIdToMaxTaskValue = new ConcurrentHashMap[Long, Array[Long]]()
 
   def registerTask(taskId: Long, taskIdx: Int): Unit = {
     taskIndices.update(taskId, taskIdx)
@@ -487,7 +516,7 @@ private class LiveStageMetrics(
     }
 
     accumUpdates
-      .filter { acc => acc.update.isDefined && accumulatorIds.contains(acc.id) }
+      .filter { acc => acc.update.isDefined && accumIdsToMetricType.contains(acc.id) }
       .foreach { acc =>
         // In a live application, accumulators have Long values, but when reading from event
         // logs, they have String values. For now, assume all accumulators are Long and convert
@@ -500,14 +529,30 @@ private class LiveStageMetrics(
 
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
         metricValues(taskIdx) = value
-      }
 
+        if (SQLMetrics.metricNeedsMax(accumIdsToMetricType(acc.id))) {
+          val maxMetricsTaskId = metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value,
+            taskId))
+
+          if (value > maxMetricsTaskId.head) {
+            maxMetricsTaskId(0) = value
+            maxMetricsTaskId(1) = taskId
+          }
+        }
+      }
     if (finished) {
       completedIndices += taskIdx
     }
   }
 
   def metricValues(): Seq[(Long, Array[Long])] = taskMetrics.asScala.toSeq
+
+  // Return Seq of metric id, value, taskId, stageId, attemptId for this stage
+  def maxMetricValues(): Seq[(Long, Long, Long, Int, Int)] = {
+    metricsIdToMaxTaskValue.asScala.toSeq.map { case (id, maxMetrics) => (id, maxMetrics(0),
+      maxMetrics(1), stageId, attemptId)
+    }
+  }
 }
 
 private object SQLAppStatusListener {

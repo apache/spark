@@ -21,7 +21,6 @@ import scala.math.Numeric._
 import scala.math.Ordering
 
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
-import org.apache.spark.util.OrderingUtil
 
 object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
   private def checkOverflow(res: Int, x: Byte, y: Byte, op: String): Unit = {
@@ -149,7 +148,7 @@ object FloatExactNumeric extends FloatIsFractional {
     }
   }
 
-  override def compare(x: Float, y: Float): Int = OrderingUtil.compareFloat(x, y)
+  override def compare(x: Float, y: Float): Int = java.lang.Float.compare(x, y)
 }
 
 object DoubleExactNumeric extends DoubleIsFractional {
@@ -177,7 +176,7 @@ object DoubleExactNumeric extends DoubleIsFractional {
     }
   }
 
-  override def compare(x: Double, y: Double): Int = OrderingUtil.compareDouble(x, y)
+  override def compare(x: Double, y: Double): Int = java.lang.Double.compare(x, y)
 }
 
 object DecimalExactNumeric extends DecimalIsConflicted {

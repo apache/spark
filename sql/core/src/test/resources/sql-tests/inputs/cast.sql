@@ -70,3 +70,8 @@ select cast(' 1' as bigint);
 select cast(' 1' as float);
 select cast(' 1 ' as DOUBLE);
 select cast('1.0 ' as DEC);
+
+-- trim string before cast to boolean
+select cast('\t\t true \n\r ' as boolean);
+select cast('\t\n false \t\r' as boolean);
+select cast('\t\n xyz \t\r' as boolean);

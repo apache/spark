@@ -27,7 +27,8 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
-import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.execution.{ExecSubqueryExpression, RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
@@ -36,6 +37,7 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 private case class BigData(s: String)
@@ -87,16 +89,25 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
     sum
   }
 
+  private def getNumInMemoryTablesInSubquery(plan: SparkPlan): Int = {
+    plan.expressions.flatMap(_.collect {
+      case sub: ExecSubqueryExpression => getNumInMemoryTablesRecursively(sub.plan)
+    }).sum
+  }
+
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
     plan.collect {
-      case InMemoryTableScanExec(_, _, relation) =>
-        getNumInMemoryTablesRecursively(relation.cachedPlan) + 1
+      case inMemoryTable @ InMemoryTableScanExec(_, _, relation) =>
+        getNumInMemoryTablesRecursively(relation.cachedPlan) +
+          getNumInMemoryTablesInSubquery(inMemoryTable) + 1
+      case p =>
+        getNumInMemoryTablesInSubquery(p)
     }.sum
   }
 
   test("cache temp table") {
     withTempView("tempTable") {
-      testData.select('key).createOrReplaceTempView("tempTable")
+      testData.select("key").createOrReplaceTempView("tempTable")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
       spark.catalog.cacheTable("tempTable")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"))
@@ -127,8 +138,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
   }
 
   test("uncaching temp table") {
-    testData.select('key).createOrReplaceTempView("tempTable1")
-    testData.select('key).createOrReplaceTempView("tempTable2")
+    testData.select("key").createOrReplaceTempView("tempTable1")
+    testData.select("key").createOrReplaceTempView("tempTable2")
     spark.catalog.cacheTable("tempTable1")
 
     assertCached(sql("SELECT COUNT(*) FROM tempTable1"))
@@ -361,15 +372,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
   }
 
   test("Drops temporary table") {
-    testData.select('key).createOrReplaceTempView("t1")
+    testData.select("key").createOrReplaceTempView("t1")
     spark.table("t1")
     spark.catalog.dropTempView("t1")
     intercept[AnalysisException](spark.table("t1"))
   }
 
   test("Drops cached temporary table") {
-    testData.select('key).createOrReplaceTempView("t1")
-    testData.select('key).createOrReplaceTempView("t2")
+    testData.select("key").createOrReplaceTempView("t1")
+    testData.select("key").createOrReplaceTempView("t2")
     spark.catalog.cacheTable("t1")
 
     assert(spark.catalog.isCached("t1"))
@@ -859,7 +870,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
   test("SPARK-23880 table cache should be lazy and don't trigger any jobs") {
     val cachedData = checkIfNoJobTriggered {
-      spark.range(1002).filter('id > 1000).orderBy('id.desc).cache()
+      spark.range(1002).filter($"id" > 1000).orderBy($"id".desc).cache()
     }
     assert(cachedData.collect === Seq(1001))
   }
@@ -891,7 +902,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
   test("SPARK-24596 Non-cascading Cache Invalidation - drop persistent view") {
     withTable("t") {
-      spark.range(1, 10).toDF("key").withColumn("value", 'key * 2)
+      spark.range(1, 10).toDF("key").withColumn("value", $"key" * 2)
         .write.format("json").saveAsTable("t")
       withView("t1") {
         withTempView("t2") {
@@ -911,7 +922,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
 
   test("SPARK-24596 Non-cascading Cache Invalidation - uncache table") {
     withTable("t") {
-      spark.range(1, 10).toDF("key").withColumn("value", 'key * 2)
+      spark.range(1, 10).toDF("key").withColumn("value", $"key" * 2)
         .write.format("json").saveAsTable("t")
       withTempView("t1", "t2") {
         sql("CACHE TABLE t")
@@ -1092,6 +1103,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
           }
         }
       }
+    }
+  }
+
+  test("cache supports for intervals") {
+    withTable("interval_cache") {
+      Seq((1, "1 second"), (2, "2 seconds"), (2, null))
+        .toDF("k", "v").write.saveAsTable("interval_cache")
+      sql("CACHE TABLE t1 AS SELECT k, cast(v as interval) FROM interval_cache")
+      assert(spark.catalog.isCached("t1"))
+      checkAnswer(sql("SELECT * FROM t1 WHERE k = 1"),
+        Row(1, new CalendarInterval(0, 0, DateTimeConstants.MICROS_PER_SECOND)))
+      sql("UNCACHE TABLE t1")
+      assert(!spark.catalog.isCached("t1"))
     }
   }
 }

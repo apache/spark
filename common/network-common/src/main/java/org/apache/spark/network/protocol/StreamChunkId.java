@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 /**
 * Encapsulates a request for a particular chunk of a stream.
@@ -51,7 +54,7 @@ public final class StreamChunkId implements Encodable {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamId, chunkIndex);
+    return Objects.hash(streamId, chunkIndex);
   }
 
   @Override
@@ -65,9 +68,9 @@ public final class StreamChunkId implements Encodable {
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamId", streamId)
-      .add("chunkIndex", chunkIndex)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("streamId", streamId)
+      .append("chunkIndex", chunkIndex)
       .toString();
   }
 }

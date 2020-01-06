@@ -27,7 +27,7 @@ import org.mockito.Mockito._
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.joins._
@@ -238,7 +238,9 @@ class JoinSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       bigDataX.join(bigDataY).where($"x.key" === $"y.key"),
-      testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
+      testData.rdd.flatMap { row =>
+        Seq.fill(16)(new GenericRow(Seq(row, row).flatMap(_.toSeq).toArray))
+      }.collect().toSeq)
   }
 
   test("cartesian product join") {
@@ -522,10 +524,10 @@ class JoinSuite extends QueryTest with SharedSparkSession {
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
 
       assert(statisticSizeInByte(spark.table("testData2")) >
-        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+        spark.conf.get[Long](SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
 
       assert(statisticSizeInByte(spark.table("testData")) <
-        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+        spark.conf.get[Long](SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
 
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",

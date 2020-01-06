@@ -95,8 +95,8 @@ class InMemoryTable(
     override def createReaderFactory(): PartitionReaderFactory = BufferedRowsReaderFactory
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-    InMemoryTable.maybeSimulateFailedTableWrite(options)
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    InMemoryTable.maybeSimulateFailedTableWrite(info.options)
 
     new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
       private var writer: BatchWrite = Append
@@ -252,4 +252,6 @@ private class BufferWriter extends DataWriter[InternalRow] {
   override def commit(): WriterCommitMessage = buffer
 
   override def abort(): Unit = {}
+
+  override def close(): Unit = {}
 }

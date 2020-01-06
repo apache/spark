@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, PhysicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -84,9 +84,11 @@ case class CreateTableAsSelectExec(
       catalog.createTable(
         ident, schema, partitioning.toArray, properties.asJava) match {
         case table: SupportsWrite =>
-          val writeBuilder = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(schema)
-            .withQueryId(UUID.randomUUID().toString)
+          val info = LogicalWriteInfoImpl(
+            queryId = UUID.randomUUID().toString,
+            schema,
+            writeOptions)
+          val writeBuilder = table.newWriteBuilder(info)
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
@@ -179,9 +181,11 @@ case class ReplaceTableAsSelectExec(
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       createdTable match {
         case table: SupportsWrite =>
-          val writeBuilder = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(schema)
-            .withQueryId(UUID.randomUUID().toString)
+          val info = LogicalWriteInfoImpl(
+            queryId = UUID.randomUUID().toString,
+            schema,
+            writeOptions)
+          val writeBuilder = table.newWriteBuilder(info)
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
@@ -335,9 +339,11 @@ trait BatchWriteHelper {
   def writeOptions: CaseInsensitiveStringMap
 
   def newWriteBuilder(): WriteBuilder = {
-    table.newWriteBuilder(writeOptions)
-      .withInputDataSchema(query.schema)
-      .withQueryId(UUID.randomUUID().toString)
+    val info = LogicalWriteInfoImpl(
+      queryId = UUID.randomUUID().toString,
+      query.schema,
+      writeOptions)
+    table.newWriteBuilder(info)
   }
 }
 
@@ -467,6 +473,8 @@ object DataWritingSparkTask extends Logging {
       dataWriter.abort()
       logError(s"Aborted commit for partition $partId (task $taskId, attempt $attemptId, " +
             s"stage $stageId.$stageAttempt)")
+    }, finallyBlock = {
+      dataWriter.close()
     })
   }
 }
@@ -481,9 +489,11 @@ private[v2] trait AtomicTableWriteExec extends V2TableWriteExec with SupportsV1W
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       stagedTable match {
         case table: SupportsWrite =>
-          val writeBuilder = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(query.schema)
-            .withQueryId(UUID.randomUUID().toString)
+          val info = LogicalWriteInfoImpl(
+            queryId = UUID.randomUUID().toString,
+            query.schema,
+            writeOptions)
+          val writeBuilder = table.newWriteBuilder(info)
 
           val writtenRows = writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())

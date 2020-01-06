@@ -17,8 +17,11 @@
 
 package org.apache.spark.status
 
+import java.util.Arrays
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.{AccumulatorMetadata, CollectionAccumulator}
 
 class LiveEntitySuite extends SparkFunSuite {
 
@@ -50,6 +53,17 @@ class LiveEntitySuite extends SparkFunSuite {
     seq.removePartition(items(5))
     checkSize(seq, 8)
     assert(!seq.exists(_.blockName == items(5).blockName))
+  }
+
+  test("Only show few elements of CollectionAccumulator when converting to v1.AccumulableInfo") {
+    val acc = new CollectionAccumulator[Int]()
+    val value = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    acc.setValue(value)
+    acc.metadata = AccumulatorMetadata(0L, None, false)
+    val accuInfo = LiveEntityHelpers
+      .newAccumulatorInfos(Seq(acc.toInfo(Some(acc.value), Some(acc.value))))(0)
+    assert(accuInfo.update.get == "[1,2,3,4,5,... 5 more items]")
+    assert(accuInfo.value == "[1,2,3,4,5,... 5 more items]")
   }
 
   private def checkSize(seq: Seq[_], expected: Int): Unit = {

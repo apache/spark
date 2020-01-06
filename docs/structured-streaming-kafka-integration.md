@@ -367,7 +367,7 @@ The following configurations are optional:
   <td>json string
   """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
   </td>
-  <td>none (the value of <code>startingOffsets<code/> will apply)</td>
+  <td>none (the value of <code>startingOffsets</code> will apply)</td>
   <td>streaming and batch</td>
   <td>The start point of timestamp when a query is started, a json string specifying a starting timestamp for
   each TopicPartition. The returned offset for each partition is the earliest offset whose timestamp is greater than or
@@ -405,7 +405,7 @@ The following configurations are optional:
   </td>
   <td>latest</td>
   <td>batch query</td>
-  <td>The end point when a batch query is ended, a json string specifying an ending timesamp for each TopicPartition.
+  <td>The end point when a batch query is ended, a json string specifying an ending timestamp for each TopicPartition.
   The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to
   the given timestamp in the corresponding partition. If the matched offset doesn't exist, the offset will
   be set to latest.<p/>
@@ -469,7 +469,7 @@ The following configurations are optional:
   <td>minPartitions</td>
   <td>int</td>
   <td>none</td>
-  <td>streaming and batch</td>
+  <td>streaming</td>
   <td>Desired minimum number of partitions to read from Kafka.
   By default, Spark has a 1-1 mapping of topicPartitions to Spark partitions consuming from Kafka.
   If you set this option to a value greater than your topicPartitions, Spark will divvy up large

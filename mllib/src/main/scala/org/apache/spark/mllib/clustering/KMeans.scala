@@ -209,40 +209,39 @@ class KMeans private (
    */
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
-    run(data, None)
+    val instances: RDD[(Vector, Double)] = data.map {
+      case (point) => (point, 1.0)
+    }
+    runWithWeight(instances, None)
   }
 
-  private[spark] def run(
-      data: RDD[Vector],
+  private[spark] def runWithWeight(
+      data: RDD[(Vector, Double)],
       instr: Option[Instrumentation]): KMeansModel = {
 
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data is not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
+    // Compute squared norms and cache them.
+    val norms = data.map { case (v, _) =>
+      Vectors.norm(v, 2.0)
     }
 
-    // Compute squared norms and cache them.
-    val norms = data.map(Vectors.norm(_, 2.0))
-    val zippedData = data.zip(norms).map { case (v, norm) =>
-      new VectorWithNorm(v, norm)
+    val zippedData = data.zip(norms).map { case ((v, w), norm) =>
+      (new VectorWithNorm(v, norm), w)
     }
-    zippedData.persist()
-    val model = runAlgorithm(zippedData, instr)
+
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      zippedData.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+    val model = runAlgorithmWithWeight(zippedData, instr)
     zippedData.unpersist()
 
-    // Warn at the end of the run as well, for increased visibility.
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data was not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
     model
   }
 
   /**
    * Implementation of K-Means algorithm.
    */
-  private def runAlgorithm(
-      data: RDD[VectorWithNorm],
+  private def runAlgorithmWithWeight(
+      data: RDD[(VectorWithNorm, Double)],
       instr: Option[Instrumentation]): KMeansModel = {
 
     val sc = data.sparkContext
@@ -251,14 +250,16 @@ class KMeans private (
 
     val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
+    val dataVectorWithNorm = data.map(d => d._1)
+
     val centers = initialModel match {
       case Some(kMeansCenters) =>
         kMeansCenters.clusterCenters.map(new VectorWithNorm(_))
       case None =>
         if (initializationMode == KMeans.RANDOM) {
-          initRandom(data)
+          initRandom(dataVectorWithNorm)
         } else {
-          initKMeansParallel(data, distanceMeasureInstance)
+          initKMeansParallel(dataVectorWithNorm, distanceMeasureInstance)
         }
     }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
@@ -278,32 +279,38 @@ class KMeans private (
       val bcCenters = sc.broadcast(centers)
 
       // Find the new centers
-      val collected = data.mapPartitions { points =>
+      val collected = data.mapPartitions { pointsAndWeights =>
         val thisCenters = bcCenters.value
         val dims = thisCenters.head.vector.size
 
         val sums = Array.fill(thisCenters.length)(Vectors.zeros(dims))
-        val counts = Array.fill(thisCenters.length)(0L)
 
-        points.foreach { point =>
+        // clusterWeightSum is needed to calculate cluster center
+        // cluster center =
+        //     sample1 * weight1/clusterWeightSum + sample2 * weight2/clusterWeightSum + ...
+        val clusterWeightSum = Array.ofDim[Double](thisCenters.length)
+
+        pointsAndWeights.foreach { case (point, weight) =>
           val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
-          costAccum.add(cost)
-          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter))
-          counts(bestCenter) += 1
+          costAccum.add(cost * weight)
+          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter), weight)
+          clusterWeightSum(bestCenter) += weight
         }
 
-        counts.indices.filter(counts(_) > 0).map(j => (j, (sums(j), counts(j)))).iterator
-      }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
-        axpy(1.0, sum2, sum1)
-        (sum1, count1 + count2)
+        clusterWeightSum.indices.filter(clusterWeightSum(_) > 0)
+          .map(j => (j, (sums(j), clusterWeightSum(j)))).iterator
+      }.reduceByKey { (sumweight1, sumweight2) =>
+        axpy(1.0, sumweight2._1, sumweight1._1)
+        (sumweight1._1, sumweight1._2 + sumweight2._2)
       }.collectAsMap()
 
       if (iteration == 0) {
-        instr.foreach(_.logNumExamples(collected.values.map(_._2).sum))
+        instr.foreach(_.logNumExamples(costAccum.count))
+        instr.foreach(_.logSumOfWeights(collected.values.map(_._2).sum))
       }
 
-      val newCenters = collected.mapValues { case (sum, count) =>
-        distanceMeasureInstance.centroid(sum, count)
+      val newCenters = collected.mapValues { case (sum, weightSum) =>
+        distanceMeasureInstance.centroid(sum, weightSum)
       }
 
       bcCenters.destroy()

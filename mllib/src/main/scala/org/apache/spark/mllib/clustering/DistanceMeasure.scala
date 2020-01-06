@@ -84,8 +84,8 @@ private[spark] abstract class DistanceMeasure extends Serializable {
    * @param point a `VectorWithNorm` to be added to `sum` of a cluster
    * @param sum the `sum` for a cluster to be updated
    */
-  def updateClusterSum(point: VectorWithNorm, sum: Vector): Unit = {
-    axpy(1.0, point.vector, sum)
+  def updateClusterSum(point: VectorWithNorm, sum: Vector, weight: Double = 1.0): Unit = {
+    axpy(weight, point.vector, sum)
   }
 
   /**
@@ -97,6 +97,18 @@ private[spark] abstract class DistanceMeasure extends Serializable {
    */
   def centroid(sum: Vector, count: Long): VectorWithNorm = {
     scal(1.0 / count, sum)
+    new VectorWithNorm(sum)
+  }
+
+  /**
+   * Returns a centroid for a cluster given its `sum` vector and the weightSum of points.
+   *
+   * @param sum   the `sum` for a cluster
+   * @param weightSum the weightSum of points in the cluster
+   * @return the centroid of the cluster
+   */
+  def centroid(sum: Vector, weightSum: Double): VectorWithNorm = {
+    scal(1.0 / weightSum, sum)
     new VectorWithNorm(sum)
   }
 
@@ -249,9 +261,9 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
    * @param point a `VectorWithNorm` to be added to `sum` of a cluster
    * @param sum the `sum` for a cluster to be updated
    */
-  override def updateClusterSum(point: VectorWithNorm, sum: Vector): Unit = {
+  override def updateClusterSum(point: VectorWithNorm, sum: Vector, weight: Double = 1.0): Unit = {
     assert(point.norm > 0, "Cosine distance is not defined for zero-length vectors.")
-    axpy(1.0 / point.norm, point.vector, sum)
+    axpy(weight / point.norm, point.vector, sum)
   }
 
   /**

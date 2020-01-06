@@ -255,8 +255,10 @@ private[spark] class EventLoggingListener(
     // ...
     // where jvmInformation, sparkProperties, etc. are sequence of tuples.
     // We go through the various  of properties and redact sensitive information from them.
-    val redactedProps = event.environmentDetails.map{ case (name, props) =>
-      name -> Utils.redact(sparkConf, props)
+    val noRedactProps = Seq("Classpath Entries")
+    val redactedProps = event.environmentDetails.map {
+      case (name, props) if noRedactProps.contains(name) => name -> props
+      case (name, props) => name -> Utils.redact(sparkConf, props)
     }
     SparkListenerEnvironmentUpdate(redactedProps)
   }

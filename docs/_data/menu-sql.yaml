@@ -15,6 +15,8 @@
       url: sql-getting-started.html#creating-datasets
     - text: Interoperating with RDDs
       url: sql-getting-started.html#interoperating-with-rdds
+    - text: Scalar Functions
+      url: sql-getting-started.html#scalar-functions
     - text: Aggregations
       url: sql-getting-started.html#aggregations
 - text: Data Sources
@@ -34,6 +36,8 @@
       url: sql-data-sources-jdbc.html
     - text: Avro Files
       url: sql-data-sources-avro.html
+    - text: Whole Binary Files
+      url: sql-data-sources-binaryFile.html
     - text: Troubleshooting
       url: sql-data-sources-troubleshooting.html
 - text: Performance Tuning
@@ -43,8 +47,8 @@
       url: sql-performance-tuning.html#caching-data-in-memory
     - text: Other Configuration Options
       url: sql-performance-tuning.html#other-configuration-options
-    - text: Broadcast Hint for SQL Queries
-      url: sql-performance-tuning.html#broadcast-hint-for-sql-queries
+    - text: Join Strategy Hints for SQL Queries
+      url: sql-performance-tuning.html#join-strategy-hints-for-sql-queries
 - text: Distributed SQL Engine
   url: sql-distributed-sql-engine.html
   subitems:
@@ -168,6 +172,8 @@
                   url: sql-ref-syntax-aux-cache-clear-cache.html
                 - text: REFRESH TABLE
                   url: sql-ref-syntax-aux-refresh-table.html
+                - text: REFRESH
+                  url: sql-ref-syntax-aux-cache-refresh.md
             - text: Describe Commands
               url: sql-ref-syntax-aux-describe.html
               subitems:
@@ -233,5 +239,5 @@
               url: sql-ref-functions-udf-scalar.html
             - text: Aggregate functions
               url: sql-ref-functions-udf-aggregate.html
-    - text: Arthmetic operations
+    - text: Arithmetic operations
       url: sql-ref-arithmetic-ops.html

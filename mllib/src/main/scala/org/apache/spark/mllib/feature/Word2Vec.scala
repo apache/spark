@@ -439,9 +439,20 @@ class Word2Vec extends Serializable with Logging {
           }
         }.flatten
       }
-      val synAgg = partial.reduceByKey { case (v1, v2) =>
-          blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
-          v1
+      // SPARK-24666: do normalization for aggregating weights from partitions.
+      // Original Word2Vec either single-thread or multi-thread which do Hogwild-style aggregation.
+      // Our approach needs to do extra normalization, otherwise adding weights continuously may
+      // cause overflow on float and lead to infinity/-infinity weights.
+      val synAgg = partial.mapPartitions { iter =>
+        iter.map { case (id, vec) =>
+          (id, (vec, 1))
+        }
+      }.reduceByKey { (vc1, vc2) =>
+        blas.saxpy(vectorSize, 1.0f, vc2._1, 1, vc1._1, 1)
+        (vc1._1, vc1._2 + vc2._2)
+      }.map { case (id, (vec, count)) =>
+        blas.sscal(vectorSize, 1.0f / count, vec, 1)
+        (id, vec)
       }.collect()
       var i = 0
       while (i < synAgg.length) {

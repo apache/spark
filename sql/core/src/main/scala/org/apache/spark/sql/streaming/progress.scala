@@ -24,12 +24,15 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
@@ -106,7 +109,9 @@ class StreamingQueryProgress private[sql](
   val eventTime: ju.Map[String, String],
   val stateOperators: Array[StateOperatorProgress],
   val sources: Array[SourceProgress],
-  val sink: SinkProgress) extends Serializable {
+  val sink: SinkProgress,
+  @JsonDeserialize(contentAs = classOf[GenericRowWithSchema])
+  val observedMetrics: ju.Map[String, Row]) extends Serializable {
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum
@@ -149,7 +154,8 @@ class StreamingQueryProgress private[sql](
     ("eventTime" -> safeMapToJValue[String](eventTime, s => JString(s))) ~
     ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
     ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
-    ("sink" -> sink.jsonValue)
+    ("sink" -> sink.jsonValue) ~
+    ("observedMetrics" -> safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
   }
 }
 

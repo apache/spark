@@ -27,30 +27,33 @@ license: |
 
 #### Syntax
 {% highlight sql %}
-ALTER TABLE [db_name.]old_table_name RENAME TO [db_name.]new_table_name
+ALTER TABLE table_identifier RENAME TO table_identifier
 
-ALTER TABLE table_name PARTITION partition_spec RENAME TO PARTITION partition_spec;
+ALTER TABLE table_identifier partition_spec RENAME TO partition_spec
 
 {% endhighlight %}
 
 #### Parameters
 <dl>
-  <dt><code><em>old_table_name</em></code></dt>
-  <dd>Name of an existing table.</dd>
-</dl>
-<dl>
-  <dt><code><em>db_name</em></code></dt>
-  <dd>Name of the existing database.</dd>
-</dl>
-
-<dl>
-  <dt><code><em>new_table_name</em></code></dt>
-  <dd>New name using which the table has to be renamed.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 <dl>
   <dt><code><em>partition_spec</em></code></dt>
-  <dd>Partition to be renamed.</dd>
+  <dd>
+    Partition to be renamed. <br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
+      </code>
+  </dd>
 </dl>
 
 
@@ -59,18 +62,23 @@ ALTER TABLE table_name PARTITION partition_spec RENAME TO PARTITION partition_sp
 
 #### Syntax
 {% highlight sql %}
-ALTER TABLE table_name ADD COLUMNS (col_spec[, col_spec ...])
+ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , col_spec ... ] )
 {% endhighlight %}
 
 #### Parameters
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>The name of an existing table.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
-
 <dl>
-  <dt><code><em>COLUMNS (col_spec)</em></code></dt>
+  <dt><code><em>COLUMNS ( col_spec )</em></code></dt>
   <dd>Specifies the columns to be added to be renamed.</dd>
 </dl>
 
@@ -87,10 +95,10 @@ this overrides the old value with the new one.
 {% highlight sql %}
 
 --Set Table Properties 
-ALTER TABLE table_name SET TBLPROPERTIES (key1=val1, key2=val2, ...)
+ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
 
 --Unset Table Properties
-ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] (key1, key2, ...)
+ALTER TABLE table_identifier UNSET TBLPROPERTIES [ IF EXISTS ] ( key1, key2, ... )
   
 {% endhighlight %}
 
@@ -102,42 +110,54 @@ this overrides the old value with the new one.
 {% highlight sql %}
 
 --Set SERDE Properties
-ALTER TABLE table_name [PARTITION part_spec]
-    SET SERDEPROPERTIES (key1=val1, key2=val2, ...)
+ALTER TABLE table_identifier [ partition_spec ]
+    SET SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )
 
-ALTER TABLE table_name [PARTITION part_spec] SET SERDE serde_class_name
-    [WITH SERDEPROPERTIES (key1=val1, key2=val2, ...)]
+ALTER TABLE table_identifier [ partition_spec ] SET SERDE serde_class_name
+    [ WITH SERDEPROPERTIES ( key1 = val1, key2 = val2, ... ) ]
 
 {% endhighlight %}
 
 #### SET LOCATION And SET FILE FORMAT
 `ALTER TABLE SET` command can also be used for changing the file location and file format for 
-exsisting tables. 
+existing tables. 
 
 ##### Syntax
 {% highlight sql %}
 
 --Changing File Format
-ALTER TABLE table_name [PARTITION partition_spec] SET FILEFORMAT file_format;
+ALTER TABLE table_identifier [ partition_spec ] SET FILEFORMAT file_format
 
 --Changing File Location
-ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION 'new_location';
+ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 
 {% endhighlight %}
 
 #### Parameters
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>The name of an existing table.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 <dl>
-  <dt><code><em>PARTITION (part_spec)</em></code></dt>
-  <dd>Specifies the partition on which the property has to be set.</dd>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    Specifies the partition on which the property has to be set.<br><br>
+    <b>Syntax:</b>
+      <code>
+        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
+      </code>
+  </dd>
 </dl>
 
 <dl>
-  <dt><code><em>SERDEPROPERTIES (key1=val1, key2=val2, ...)</em></code></dt>
+  <dt><code><em>SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )</em></code></dt>
   <dd>Specifies the SERDE properties to be set.</dd>
 </dl>
 

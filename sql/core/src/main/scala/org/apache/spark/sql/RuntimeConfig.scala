@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.RemovedConfig
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
@@ -38,6 +39,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   def set(key: String, value: String): Unit = {
     requireNonStaticConf(key)
+    requireDefaultValueOfRemovedConf(key, value)
     sqlConf.setConfString(key, value)
   }
 
@@ -47,7 +49,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Boolean): Unit = {
-    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
@@ -57,7 +58,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Long): Unit = {
-    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
@@ -156,6 +156,16 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
     if (sqlConf.setCommandRejectsSparkCoreConfs &&
         ConfigEntry.findEntry(key) != null && !SQLConf.sqlConfEntries.containsKey(key)) {
       throw new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+    }
+  }
+
+  private def requireDefaultValueOfRemovedConf(key: String, value: String): Unit = {
+    SQLConf.removedSQLConfigs.get(key).foreach {
+      case RemovedConfig(configName, version, defaultValue, comment) =>
+        if (value != defaultValue) {
+          throw new AnalysisException(
+            s"The SQL config '$configName' was removed in the version $version. $comment")
+        }
     }
   }
 }
