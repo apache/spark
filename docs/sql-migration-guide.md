@@ -845,6 +845,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `SELECT`
   * `GROUP BY`
   * `ORDER BY`
+  * `DISTRIBUTE BY`
   * `CLUSTER BY`
   * `SORT BY`
 * All Hive operators, including:
@@ -862,6 +863,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `JOIN`
   * `{LEFT|RIGHT|FULL} OUTER JOIN`
   * `LEFT SEMI JOIN`
+  * `LEFT ANTI JOIN`
   * `CROSS JOIN`
 * Unions
 * Sub-queries
