@@ -1091,7 +1091,7 @@ class Analyzer(
       }
 
       /*
-       * Note that it's possible for conflictPlans to be empty while it implies that there
+       * Note that it's possible `conflictPlans` can be empty which implies that there
        * is a logical plan node that produces new references that this rule cannot handle.
        * When that is the case, there must be another rule that resolves these conflicts.
        * Otherwise, the analysis will fail.
@@ -1103,9 +1103,9 @@ class Analyzer(
           case (oldRelation, newRelation) => oldRelation.output.zip(newRelation.output)})
         val conflictPlanMap = conflictPlans.toMap
         // transformDown so that we can replace all the old Relations in one turn due to
-        // the reason that conflictPlans are also collected in pre-order.
+        // the reason that `conflictPlans` are also collected in pre-order.
         right transformDown {
-          case r if conflictPlanMap.contains(r) => conflictPlanMap(r)
+          case r => conflictPlanMap.getOrElse(r, r)
         } transformUp {
           case other => other transformExpressions {
             case a: Attribute =>
